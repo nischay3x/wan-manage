@@ -1,0 +1,35 @@
+image: node:latest
+
+services:
+  - redis:latest
+
+variables:
+  REDIS_URL: redis://redis:6379
+
+# This folder is cached between builds
+cache:
+  paths:
+  - node_modules/
+
+#### Unit Tests ####
+test_backend:
+  script:
+   - cd backend
+   - npm ci
+   - npm test
+  timeout: 5m
+
+#### Package security auditing ####
+backend_npm_audit:
+  variables:
+    BACKEND_PACKAGE_WHITE_LIST: "extend mongodb"
+  script:
+   - cd backend
+   - npm ci audit-ci
+   - npx audit-ci --moderate --package-manager npm --whitelist $BACKEND_PACKAGE_WHITE_LIST >> backend_npm_audit.log
+  timeout: 5m
+  artifacts:
+    when: always
+    paths:
+     - ./backend/backend_npm_audit.log
+    expire_in: 1 days

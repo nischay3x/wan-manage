@@ -1,0 +1,7 @@
+{
+  "billing": {
+    "subscription": {
+      "max_devices": 999999
+    }
+  }
+}

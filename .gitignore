@@ -1,0 +1,23 @@
+# Logs
+*.log
+
+# tars
+*.tar.gz
+
+# Node modules
+node_modules/
+
+# production
+build
+
+# Operating systems related files
+.DS_Store
+
+# debian build
+debian/fleximanage
+
+# IDE files
+.vscode*
+
+# Jest coverage report
+coverage/

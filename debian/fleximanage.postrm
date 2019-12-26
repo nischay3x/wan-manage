@@ -1,0 +1,17 @@
+#!/bin/bash
+
+if [ $1 = "remove" ]; then
+
+    if [ -e /var/run/fleximanage.pid ]; then
+        PID=`cat /var/run/fleximanage.pid`
+        if ps -p $PID > /dev/null
+        then
+          sudo systemctl stop fleximanage.service 
+        fi
+    fi
+	
+    sudo systemctl disable fleximanage.service >> /dev/null 2>&1
+    /usr/bin/mongo flexiwan --eval "db.runCommand( { dropDatabase: 1 } )" >> /dev/null 2>&1
+
+fi
+

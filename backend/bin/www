@@ -1,0 +1,100 @@
+#!/usr/bin/env node
+
+// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// Copyright (C) 2019  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+var app = require('../app');
+var debug = require('debug')('flexiwansite:server');
+var http = require('http');
+var https = require('https');
+var fs = require('fs');
+var WebSocketServer = require('ws').Server;
+var connections = require('../websocket/Connections')();
+var broker = require('../broker/broker.js');
+const logger = require('../logging/logging')({module: module.filename, type: 'req'});
+
+// Get global config
+const configs = require('../configs')();
+
+/**
+ * Create HTTP & HTTPS server.
+ */
+var server = http.createServer(app);
+var options = {
+    key: fs.readFileSync(__dirname+configs.get('httpsCertKey')),
+    cert: fs.readFileSync(__dirname+configs.get('httpsCert'))
+};
+var secureServer = https.createServer(options,app);
+
+// Open WebSocket
+var wss = new WebSocketServer({server: configs.get('shouldRedirectHTTPS')?secureServer:server, 
+    verifyClient:connections.verifyDevice});
+connections.registerConnectCallback('broker',broker.deviceConnectionOpened);
+connections.registerCloseCallback('broker',broker.deviceConnectionClosed);
+wss.on('connection', connections.createConnection);
+
+/**
+ * Listen on provided ports, on all network interfaces.
+ */
+server.listen(configs.get('httpPort'), () => {
+    logger.info('HTTP server listening on port', {params: {port: configs.get('httpPort')}});
+});
+server.on('error', onError(configs.get('httpPort')));
+server.on('listening', onListening);
+
+secureServer.listen(configs.get('httpsPort'), () => {
+    logger.info('HTTPS server listening on port',{params: {port: configs.get('httpsPort')}});
+});
+secureServer.on('error', onError(configs.get('httpsPort')));
+secureServer.on('listening', onListening);
+
+/**
+ * Event listener for HTTP/HTTPS server "error" event.
+ */
+ function onError(port) {
+    return function (error) {
+        if (error.syscall !== 'listen') {
+            throw error;
+        }
+
+    var bind = 'Port ' + port;
+
+    // handle specific listen errors with friendly messages
+    switch (error.code) {
+      case 'EACCES':
+        console.error(bind + ' requires elevated privileges');
+        process.exit(1);
+        break;
+      case 'EADDRINUSE':
+        console.error(bind + ' is already in use');
+         process.exit(1);
+        break;
+      default:
+        throw error;
+    }
+  };
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+function onListening() {
+    var addr = server.address();
+    var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+    debug('Listening on ' + bind);
+}
