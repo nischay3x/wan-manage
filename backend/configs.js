@@ -197,45 +197,7 @@ const config_env = {
         'logLevel': 'info',
         'logUserName': true,
         'corsWhiteList': ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
-    },
-
-    // Override for apptelefonica01 environment
-    'apptelefonica01': {
-        'restServerURL': 'https://apptelefonica01.flexiwan.com:443',
-        'UIServerURL': 'https://apptelefonica01.flexiwan.com:443',
-        'shouldRedirectHTTPS': false,
-        'redirectHttpsPort': 443,
-        'agentBroker': 'apptelefonica01.flexiwan.com:443',
-        'clientStaticDir': 'client/build',
-        'logFilePath': '/var/log/flexiwan/flexiwan.log',
-        'reqLogFilePath': '/var/log/flexiwan/flexiwanReq.log',
-        //'billingConfigSite': 'flexiwan-test',
-        //'billingDefaultPlan': 'enterprise',
-        //'useFlexiBilling': true,
-        'billingRedirectOkUrl': 'https://apptelefonica01.flexiwan.com/ok.html',
-        'logLevel': 'info',
-        'logUserName': true,
-        'corsWhiteList': ['https://apptelefonica01.flexiwan.com:443', 'http://apptelefonica01.flexiwan.com:80']
-    },
-
-    // Override for apppoc01 environment
-    'apppoc01': {
-        'restServerURL': 'https://apppoc01.flexiwan.com:443',
-        'UIServerURL': 'https://apppoc01.flexiwan.com:443',
-        'shouldRedirectHTTPS': false,
-        'redirectHttpsPort': 443,
-        'agentBroker': 'apppoc01.flexiwan.com:443',
-        'clientStaticDir': 'client/build',
-        'logFilePath': '/var/log/flexiwan/flexiwan.log',
-        'reqLogFilePath': '/var/log/flexiwan/flexiwanReq.log',
-        //'billingConfigSite': 'flexiwan-test',
-        //'billingDefaultPlan': 'enterprise',
-        //'useFlexiBilling': true,
-        'billingRedirectOkUrl': 'https://apppoc01.flexiwan.com/ok.html',
-        'logLevel': 'info',
-        'logUserName': true,
-        'corsWhiteList': ['https://apppoc01.flexiwan.com:443', 'http://apppoc01.flexiwan.com:80']
-    },
+    }
 };
 
 class Configs {
