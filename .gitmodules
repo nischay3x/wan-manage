@@ -1,8 +1,6 @@
 [submodule "client"]
 	path = client
 	url = git@gitlab.com:flexiwangroup/fleximanageui.git
-	branch = master
 [submodule "backend/billing"]
 	path = backend/billing
 	url = git@gitlab.com:flexiwangroup/flexibilling.git
-	branch = master
