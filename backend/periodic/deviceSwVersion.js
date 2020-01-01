@@ -15,67 +15,67 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const periodic = require('./periodic')();
-const DevSwUpdater= require('../deviceLogic/DevSwVersionUpdateManager');
-const logger = require('../logging/logging')({module: module.filename, type: 'periodic'});
+const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
+const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 
 /***
  * This class periodically checks if the latest device software has changed
  * and if so, updates the database with the new latest version
  ***/
 class DeviceSwVersion {
-    /**
+  /**
      * Creates an instance of the DeviceSwVersion class
      */
-    constructor() {
-        this.devSwUpd = null;
-        this.start = this.start.bind(this);
-        this.periodicCheckSwVersion = this.periodicCheckSwVersion.bind(this);
+  constructor () {
+    this.devSwUpd = null;
+    this.start = this.start.bind(this);
+    this.periodicCheckSwVersion = this.periodicCheckSwVersion.bind(this);
 
-        this.taskInfo = {
-            name: 'check_device_sw_version',
-            func: this.periodicCheckSwVersion,
-            handle :null,
-            period : 3600000 // Runs once an hour
-        };
-    }
+    this.taskInfo = {
+      name: 'check_device_sw_version',
+      func: this.periodicCheckSwVersion,
+      handle: null,
+      period: 3600000 // Runs once an hour
+    };
+  }
 
-    /**
+  /**
     * Starts the check_device_sw_version periodic task.
     * @return {void}
     */
-    async start() {
-        try {
-            this.devSwUpd = await DevSwUpdater.createSwVerUpdater();
-        } catch(err) {
-            logger.error("Device software version periodic task failed to start", {
-                params: { err: err.message },
-                periodic: {task: this.taskInfo}
-            });
-            return;
-        }
-
-        // Get the version upon starting up
-        this.periodicCheckSwVersion();
-
-        // Runs once every hour
-        const {name, func, period} = this.taskInfo;
-        periodic.registerTask(name, func, period);
-        periodic.startTask(name);
+  async start () {
+    try {
+      this.devSwUpd = await DevSwUpdater.createSwVerUpdater();
+    } catch (err) {
+      logger.error('Device software version periodic task failed to start', {
+        params: { err: err.message },
+        periodic: { task: this.taskInfo }
+      });
+      return;
     }
 
-    /**
+    // Get the version upon starting up
+    this.periodicCheckSwVersion();
+
+    // Runs once every hour
+    const { name, func, period } = this.taskInfo;
+    periodic.registerTask(name, func, period);
+    periodic.startTask(name);
+  }
+
+  /**
      * Polls device software repository to check if
      * a new software version has been released.
      * @return {void}
      */
-    periodicCheckSwVersion() {
-        this.devSwUpd.pollDevSwRepo();
-    }
+  periodicCheckSwVersion () {
+    this.devSwUpd.pollDevSwRepo();
+  }
 }
 
 let checkDevSw = null;
 module.exports = function () {
-    if (checkDevSw) return checkDevSw;
-    checkDevSw = new DeviceSwVersion();
-    return checkDevSw;
+  if (checkDevSw) return checkDevSw;
+  checkDevSw = new DeviceSwVersion();
+  return checkDevSw;
 };

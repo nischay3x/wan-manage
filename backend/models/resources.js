@@ -21,69 +21,69 @@ const mongoConns = require('../mongoConns.js')();
 
 // This table holds the shared file links
 const resourcesSchema = new Schema({
-    // User who created this resource
-    username: {
-        type: String,
-        required: true,
-        validate: {
-            validator: validators.validateUserName,
-            message: "should be a valid email address or contain English characters, digits and ."
-        },
-    },	
-    // Key as part of the URL
-    key: {
-        type: String,
-        required: true,
-        unique: true,
-        maxlength: [50, "Key length must be exactly 50"],
-        minlength: [50, "Key length must be exactly 50"],
-        match: [/^[a-zA-Z0-9]{50}$/, 'Key must be letters or numbers only']
-    },
-    // URL for downloading the resource
-    link: {
-        type: String,
-        required: true,
-        maxlength: [255, "Link length must be at most 255"],
-        validate: {
-            validator: validators.validateURL,
-            message: "should be a valid url"
-        },
-    },	
-    // Object referred by this resource
-    downloadObject: {
-        type: mongoose.Schema.Types.ObjectId,
-        unique: true,		// Allow only one resource for each object ID
-        required: [true, "Download object must be set"]
-    },
-    // Type of resource
-    type: {
-        type: String,	// e.g. "token"
-        required: true,
-        match: [/^token$/, "Only token types supported"],
-        maxlength: [20, "Type length must be at most 20"]
-    },
-    // File name to return
-    fileName: {
-        type: String,	// e.g. token.txt
-        default: "unknown",
-        maxlength: [100, "File name length must be at most 100"],
-        validate: {
-            validator: validators.validateFileName,
-            message: "should be a valid file name"
-        },
-    },	
-    // Field to export as text
-    fieldName: {
-        type: String,	// e.g. token generated
-        default: "",	
-        maxlength: [100, "Field name length must be at most 100"],
-        validate: {
-            validator: validators.validateFieldName,
-            message: "should be a valid field name"
-        },
+  // User who created this resource
+  username: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateUserName,
+      message: 'should be a valid email address or contain English characters, digits and .'
     }
-},{
-    timestamps: true
+  },
+  // Key as part of the URL
+  key: {
+    type: String,
+    required: true,
+    unique: true,
+    maxlength: [50, 'Key length must be exactly 50'],
+    minlength: [50, 'Key length must be exactly 50'],
+    match: [/^[a-zA-Z0-9]{50}$/, 'Key must be letters or numbers only']
+  },
+  // URL for downloading the resource
+  link: {
+    type: String,
+    required: true,
+    maxlength: [255, 'Link length must be at most 255'],
+    validate: {
+      validator: validators.validateURL,
+      message: 'should be a valid url'
+    }
+  },
+  // Object referred by this resource
+  downloadObject: {
+    type: mongoose.Schema.Types.ObjectId,
+    unique: true,		// Allow only one resource for each object ID
+    required: [true, 'Download object must be set']
+  },
+  // Type of resource
+  type: {
+    type: String,	// e.g. "token"
+    required: true,
+    match: [/^token$/, 'Only token types supported'],
+    maxlength: [20, 'Type length must be at most 20']
+  },
+  // File name to return
+  fileName: {
+    type: String,	// e.g. token.txt
+    default: 'unknown',
+    maxlength: [100, 'File name length must be at most 100'],
+    validate: {
+      validator: validators.validateFileName,
+      message: 'should be a valid file name'
+    }
+  },
+  // Field to export as text
+  fieldName: {
+    type: String,	// e.g. token generated
+    default: '',
+    maxlength: [100, 'Field name length must be at most 100'],
+    validate: {
+      validator: validators.validateFieldName,
+      message: 'should be a valid field name'
+    }
+  }
+}, {
+  timestamps: true
 });
 
 // Default exports

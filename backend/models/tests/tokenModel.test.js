@@ -20,66 +20,66 @@ const mongoose = require('mongoose');
 let tokenFullSchema;
 
 beforeEach(() => {
-    tokenFullSchema = new tokens({
-        org: mongoose.Types.ObjectId('4edd40c86762e0fb12000001'),
-        name: 'Token name',
-        token: 'some JWT token'
-    });
+  tokenFullSchema = new tokens({
+    org: mongoose.Types.ObjectId('4edd40c86762e0fb12000001'),
+    name: 'Token name',
+    token: 'some JWT token'
+  });
 });
 
 describe('Minimal required token schema', () => {
-    it('Should be a valid token model if all required fields are present', () => {        
-        tokenFullSchema.validate((err) => {
-            expect(err).toBe(null);
-         });
+  it('Should be a valid token model if all required fields are present', () => {
+    tokenFullSchema.validate((err) => {
+      expect(err).toBe(null);
     });
+  });
 
-    it('Should be an invalid token model if org field is missing', () => {   
-        tokenFullSchema.org = null;     
-        
-        tokenFullSchema.validate((err) => {
-            expect(err.message).toBe('tokens validation failed: org: Path `org` is required.');
-        });
-    });
+  it('Should be an invalid token model if org field is missing', () => {
+    tokenFullSchema.org = null;
 
-    it('Should be an invalid token model if token name field is missing', () => {   
-        tokenFullSchema.name = null;     
-        
-        tokenFullSchema.validate((err) => {
-            expect(err.message).toBe('tokens validation failed: name: Path `name` is required.');
-        });
+    tokenFullSchema.validate((err) => {
+      expect(err.message).toBe('tokens validation failed: org: Path `org` is required.');
     });
+  });
 
-    it('Should be an invalid token model if token field is missing', () => {   
-        tokenFullSchema.token = null;     
-        
-        tokenFullSchema.validate((err) => {
-            expect(err.message).toBe('tokens validation failed: token: Path `token` is required.');
-        });
+  it('Should be an invalid token model if token name field is missing', () => {
+    tokenFullSchema.name = null;
+
+    tokenFullSchema.validate((err) => {
+      expect(err.message).toBe('tokens validation failed: name: Path `name` is required.');
     });
+  });
+
+  it('Should be an invalid token model if token field is missing', () => {
+    tokenFullSchema.token = null;
+
+    tokenFullSchema.validate((err) => {
+      expect(err.message).toBe('tokens validation failed: token: Path `token` is required.');
+    });
+  });
 });
 
 describe('Token schema', () => {
-    it('Should be a valid token model if all required fields are valid', () => {        
-        tokenFullSchema.validate((err) => {
-            expect(err).toBe(null);
-         });
+  it('Should be a valid token model if all required fields are valid', () => {
+    tokenFullSchema.validate((err) => {
+      expect(err).toBe(null);
     });
+  });
 
-    it('Should be an invalid token model if org field is invalid', () => {   
-        tokenFullSchema.org = 'invalid-org';     
-        
-        tokenFullSchema.validate((err) => {
-            expect(err.message).toBe('tokens validation failed: org: Cast to ObjectID failed ' +
+  it('Should be an invalid token model if org field is invalid', () => {
+    tokenFullSchema.org = 'invalid-org';
+
+    tokenFullSchema.validate((err) => {
+      expect(err.message).toBe('tokens validation failed: org: Cast to ObjectID failed ' +
             'for value \"invalid-org\" at path \"org\"');
-        });
     });
+  });
 
-    it('Should be an invalid token model if token name field is invalid', () => {   
-        tokenFullSchema.name = 'invalid^token^name';     
-        
-        tokenFullSchema.validate((err) => {
-            expect(err.message).toBe('tokens validation failed: name: Token name format is invalid');
-        });
+  it('Should be an invalid token model if token name field is invalid', () => {
+    tokenFullSchema.name = 'invalid^token^name';
+
+    tokenFullSchema.validate((err) => {
+      expect(err.message).toBe('tokens validation failed: name: Token name format is invalid');
     });
+  });
 });

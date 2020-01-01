@@ -15,7 +15,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const connections = require('../websocket/Connections')();
-const logger = require('../logging/logging')({module: module.filename, type: 'job'});
+const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 /**
  * Handler function for sending a message to the the device
@@ -30,28 +30,28 @@ const logger = require('../logging/logging')({module: module.filename, type: 'jo
  * @return {void}
  */
 const sendMsg = (org, machineID, msg, job, curTask, tasksLength) => (inp, done) => {
-    logger.info('Starting new task', {params: {message: msg, input: inp}, job: job});
-    connections.deviceSendMessage(org, machineID, msg)
+  logger.info('Starting new task', { params: { message: msg, input: inp }, job: job });
+  connections.deviceSendMessage(org, machineID, msg)
     .then((rmsg) => {
-        if (rmsg != null && rmsg.ok == 1) {
-            logger.info('Finished task', {params: {message: msg, reply: rmsg}, job: job});
-            job.progress(curTask, tasksLength);
-            done(null, rmsg.message);
-        } else {
-            const err = new Error(JSON.stringify(rmsg.message));
-            done(err, false);
-        }
-    }, (err) => {
-        logger.error('Task failed', {params: {message: msg, err: err.message}, job: job});
+      if (rmsg != null && rmsg.ok == 1) {
+        logger.info('Finished task', { params: { message: msg, reply: rmsg }, job: job });
+        job.progress(curTask, tasksLength);
+        done(null, rmsg.message);
+      } else {
+        const err = new Error(JSON.stringify(rmsg.message));
         done(err, false);
+      }
+    }, (err) => {
+      logger.error('Task failed', { params: { message: msg, err: err.message }, job: job });
+      done(err, false);
     })
     .catch((err) => {
-        logger.error('Task failed', {params: {message: msg, err: err.message}, job: job});
-        done(err, false);
+      logger.error('Task failed', { params: { message: msg, err: err.message }, job: job });
+      done(err, false);
     });
 };
 
 // Default exports
 module.exports = {
-    sendMsg: sendMsg
+  sendMsg: sendMsg
 };

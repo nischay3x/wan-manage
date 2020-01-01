@@ -21,74 +21,73 @@ const {
   verifyAgentVersion,
   checkDeviceVersion,
   routerVersionsCompatible
-} = require("./versioning");
+} = require('./versioning');
 const configs = require('./configs')();
 const httpMocks = require('node-mocks-http');
 const createError = require('http-errors');
 
 describe('isAgentVersionCompatible', () => {
-    // Different variations of compatible versions. Majors are equal.
-    it.each([
-        '2.0.0',
-        '2.1.0',
-        '2.0.1',
-        '2.1.1'
-    ])(
-        'Should return true if MGMT and agent major version are equal (agent version=%s)',
-        (version) => {
-            expect(isAgentVersionCompatible(version)).toBeTruthy();
-        },
-    );
+  // Different variations of compatible versions. Majors are equal.
+  it.each([
+    '2.0.0',
+    '2.1.0',
+    '2.0.1',
+    '2.1.1'
+  ])(
+    'Should return true if MGMT and agent major version are equal (agent version=%s)',
+    (version) => {
+      expect(isAgentVersionCompatible(version)).toBeTruthy();
+    }
+  );
 
-    // Different variations of compatible versions. 
-    // MGMT version is greater than agent version by 1
-    it.each([
-        '1.0.0',
-        '1.1.0',
-        '1.0.1',
-        '1.1.1',
-    ])(
-        'Should return true if MGMT major version is greater by 1 ' + 
+  // Different variations of compatible versions.
+  // MGMT version is greater than agent version by 1
+  it.each([
+    '1.0.0',
+    '1.1.0',
+    '1.0.1',
+    '1.1.1'
+  ])(
+    'Should return true if MGMT major version is greater by 1 ' +
         'than agent major version (agent version=%s)',
-        (version) => {
-            expect(isAgentVersionCompatible(version)).toBeTruthy();
-        },
-    );
+    (version) => {
+      expect(isAgentVersionCompatible(version)).toBeTruthy();
+    }
+  );
 
-    // Different variations of incompatible versions.
-    // MGMT version is greater than agent version by more than 1
-    it.each([
-        '0.0.0',
-        '0.1.0',
-        '0.0.1',
-        '0.1.1'
-    ])(
-        'Should return false if MGMT major version is greater by more than 1 ' + 
+  // Different variations of incompatible versions.
+  // MGMT version is greater than agent version by more than 1
+  it.each([
+    '0.0.0',
+    '0.1.0',
+    '0.0.1',
+    '0.1.1'
+  ])(
+    'Should return false if MGMT major version is greater by more than 1 ' +
         'than agent major version (agent version=%s)',
-        (version) => {
-            expect(isAgentVersionCompatible(version)).toBeFalsy();
-        },
-    );
+    (version) => {
+      expect(isAgentVersionCompatible(version)).toBeFalsy();
+    }
+  );
 
-    // Different variations of incompatible versions.
-    // MGMT is older than agent version
-    it.each([
-        '3.0.0',
-        '3.1.0',
-        '3.0.1',
-        '3.1.1',
-    ])(
-        'Should return false if MGMT major version is older than agent major version (agent version=%s)',
-        (version) => {
-            expect(isAgentVersionCompatible(version)).toBeFalsy();
-        },
-    );
+  // Different variations of incompatible versions.
+  // MGMT is older than agent version
+  it.each([
+    '3.0.0',
+    '3.1.0',
+    '3.0.1',
+    '3.1.1'
+  ])(
+    'Should return false if MGMT major version is older than agent major version (agent version=%s)',
+    (version) => {
+      expect(isAgentVersionCompatible(version)).toBeFalsy();
+    }
+  );
 });
 
 // Validates that the version complies with semantic version format
 describe('isSemVer', () => {
-    it.each
-        `
+  it.each`
         version           | result
         ${'1.0.0'}        | ${true}
         ${'11.1.0'}       | ${true}
@@ -111,17 +110,15 @@ describe('isSemVer', () => {
         ${''}             | ${false}
         ${null}           | ${false}
         ${undefined}      | ${false}
-        `
-        ('Should return $result if version is $version', ({version, result}) => {
-            expect(isSemVer(version)).toEqual(result);
-        });
+  `('Should return $result if version is $version', ({ version, result }) => {
+    expect(isSemVer(version)).toEqual(result);
+  });
 });
 
 describe('isVppVersion', () => {
-    const tooLongVppVersion = '1.0.0-thisstringistoolong';
-    const maxLenVppVersion = '1.0.0-stable1234';
-    it.each
-        `
+  const tooLongVppVersion = '1.0.0-thisstringistoolong';
+  const maxLenVppVersion = '1.0.0-stable1234';
+  it.each`
         version                 | result
         ${'1.0.0'}              | ${true}
         ${'1.1'}                | ${true}
@@ -138,15 +135,13 @@ describe('isVppVersion', () => {
         ${''}                   | ${false}
         ${null}                 | ${false}
         ${undefined}            | ${false}
-        `
-        ('Should return $result if version is $version', ({version, result}) => {
-            expect(isVppVersion(version)).toEqual(result);
-        });
+  `('Should return $result if version is $version', ({ version, result }) => {
+    expect(isVppVersion(version)).toEqual(result);
+  });
 });
 
 describe('routerVersionsCompatible', () => {
-    it.each
-        `
+  it.each`
         ver1        | ver2          | result
         ${'1.0.0'}  | ${'1.0.0'}    | ${true}
         ${'1.0.0'}  | ${'1.1.0'}    | ${true}
@@ -154,74 +149,72 @@ describe('routerVersionsCompatible', () => {
         ${'1.0.0'}  | ${'0.0.0'}    | ${false}
         ${'1.0.0'}  | ${'0.1.0'}    | ${false}
         ${'1.0.0'}  | ${'0.0.1'}    | ${false}
-        
-        `
-        ('Should return $result if ver1 is $ver1 and ver2 is $ver2', ({ver1, ver2, result}) => {
-            expect(routerVersionsCompatible(ver1, ver2)).toEqual(result);
-        });
+ `('Should return $result if ver1 is $ver1 and ver2 is $ver2', ({ ver1, ver2, result }) => {
+    expect(routerVersionsCompatible(ver1, ver2)).toEqual(result);
+  });
 });
 
 describe('verifyAgentVersion', () => {
-    it('Should return success object if agent version is valid', () => {
-        const result = verifyAgentVersion(configs.get("agentApiVersion"));
-        expect(result).toMatchObject({ 
-            valid: true, 
-            statusCode: 200,
-            err: ""
-        });
+  it('Should return success object if agent version is valid', () => {
+    const result = verifyAgentVersion(configs.get('agentApiVersion'));
+    expect(result).toMatchObject({
+      valid: true,
+      statusCode: 200,
+      err: ''
     });
+  });
 
-    it('Should return failure object if agent version is missing', () => {
-        const result = verifyAgentVersion(undefined);
-        expect(result).toMatchObject({ 
-            valid: false, 
-            statusCode: 400,
-            err: 'Invalid device version: none'
-        });
+  it('Should return failure object if agent version is missing', () => {
+    const result = verifyAgentVersion(undefined);
+    expect(result).toMatchObject({
+      valid: false,
+      statusCode: 400,
+      err: 'Invalid device version: none'
     });
+  });
 
-    it('Should return failure object if agent version is invalid', () => {
-        const result = verifyAgentVersion('invalid-version');
-        expect(result).toMatchObject({ 
-            valid: false, 
-            statusCode: 400,
-            err: 'Invalid device version: invalid-version'
-        });
+  it('Should return failure object if agent version is invalid', () => {
+    const result = verifyAgentVersion('invalid-version');
+    expect(result).toMatchObject({
+      valid: false,
+      statusCode: 400,
+      err: 'Invalid device version: invalid-version'
     });
+  });
 
-    it('Should return failure object if agent version is incompatible', () => {
-        const result = verifyAgentVersion('0.1.0');
-        expect(result).toMatchObject({ 
-            valid: false, 
-            statusCode: 400,
-            err: 'Incompatible versions: management version: 2.0.0 agent version: 0.1.0'
-        });
+  it('Should return failure object if agent version is incompatible', () => {
+    const result = verifyAgentVersion('0.1.0');
+    expect(result).toMatchObject({
+      valid: false,
+      statusCode: 400,
+      err: 'Incompatible versions: management version: 2.0.0 agent version: 0.1.0'
     });
+  });
 });
 
 describe('checkDeviceVersion', () => {
-    it('Should call next() if versions are compatible', () => {
-        req = httpMocks.createRequest({
-          body: { fwagent_version: configs.get("agentApiVersion") }
-        });
-        const res = httpMocks.createResponse({});
-        const next = jest.fn();
-    
-        checkDeviceVersion(req, res, next);
-    
-        expect(next).toHaveBeenCalledTimes(1);
-        expect(next).toBeCalledWith();
+  it('Should call next() if versions are compatible', () => {
+    const req = httpMocks.createRequest({
+      body: { fwagent_version: configs.get('agentApiVersion') }
     });
+    const res = httpMocks.createResponse({});
+    const next = jest.fn();
 
-    it('Should call next() with error object if fwagent_version is invalid', () => {
-        req  = httpMocks.createRequest({ body: undefined });        
-        const res = httpMocks.createResponse({});
-        const next = jest.fn();
-        const err = createError(400, 'Invalid device version: none');
-    
-        checkDeviceVersion(req, res, next);
+    checkDeviceVersion(req, res, next);
 
-        expect(next).toHaveBeenCalledTimes(1);
-        expect(next).toBeCalledWith(err);
-    });
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(next).toBeCalledWith();
+  });
+
+  it('Should call next() with error object if fwagent_version is invalid', () => {
+    const req = httpMocks.createRequest({ body: undefined });
+    const res = httpMocks.createResponse({});
+    const next = jest.fn();
+    const err = createError(400, 'Invalid device version: none');
+
+    checkDeviceVersion(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(next).toBeCalledWith(err);
+  });
 });

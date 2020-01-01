@@ -14,26 +14,28 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"use strict";
+'use strict';
 
-const config = require("./flexibillingconfig.json");
+const config = require('./flexibillingconfig.json');
 
 /**
  * flexiBillingStub class used only for development
  */
 class flexiBilling {
-  async getMaxDevicesRegisteredSummmary(account) {
-    return { current: "N/A", max: "N/A" };
+  async getMaxDevicesRegisteredSummmary (account) {
+    return { current: 'N/A', max: 'N/A' };
   }
-  async getMaxDevicesAllowed(id) {
+
+  async getMaxDevicesAllowed (id) {
     return config.billing.subscription.max_devices;
   }
+
   /**
    * Registers device
    * @param {Object} device Device object
    * @async
    */
-  async registerDevice(device) {
+  async registerDevice (device) {
     return true;
   }
 
@@ -41,7 +43,7 @@ class flexiBilling {
    * Unregister device
    * @param {Object} device Device object
    */
-  async unregisterDevice(device) {
+  async unregisterDevice (device) {
     return true;
   }
 
@@ -49,15 +51,15 @@ class flexiBilling {
    * Create customer in a billing system
    * @param {Object} options Options
    */
-  async createCustomer(options) {
-    return "";
+  async createCustomer (options) {
+    return '';
   }
 
   /**
    * Delete customer from a billing system
    * @param {Object} options Options
    */
-  async removeCustomer(options) {
+  async removeCustomer (options) {
     return true;
   }
 
@@ -67,8 +69,8 @@ class flexiBilling {
    * @returns URL
    * @async
    */
-  async createPortalSession(options) {
-    return "";
+  async createPortalSession (options) {
+    return '';
   }
 
   /**
@@ -77,7 +79,7 @@ class flexiBilling {
    * @returns List of invoices
    * @async
    */
-  async retrieveInvoices(options) {
+  async retrieveInvoices (options) {
     return [];
   }
 
@@ -85,15 +87,15 @@ class flexiBilling {
    * Generate downloadable invoices in PDF format
    * @param {Object} options Options
    */
-  async retrieveInvoiceDownloadLink(options) {
-    return "";
+  async retrieveInvoiceDownloadLink (options) {
+    return '';
   }
 
   /**
    * Apply coupons (discounts)
    * @param {Object} options Options
    */
-  async applyCoupon(options) {
+  async applyCoupon (options) {
     return true;
   }
 
@@ -101,7 +103,7 @@ class flexiBilling {
    * Return current device usage
    * @param {Object} options Options
    */
-  async getCurrentUsage(options) {
+  async getCurrentUsage (options) {
     return { amount: 0, quantity: 0 }
   }
 
@@ -109,7 +111,7 @@ class flexiBilling {
    * Validate subscription by device ID
    * @param {string} machineId Unique device ID
    */
-  async validateSubscription(machineId) {
+  async validateSubscription (machineId) {
     return true;
   }
 
@@ -117,14 +119,14 @@ class flexiBilling {
    * Get Subscription status
    * @param {Object} options Options
    */
-  async getSubscriptionStatus(options) {
-    return "active";
+  async getSubscriptionStatus (options) {
+    return 'active';
   }
 
   /**
    * Singleton-like implementaion in js
    */
-  static GetInstance() {
+  static GetInstance () {
     if (!this.Instance) {
       this.Instance = new flexiBilling();
     }
@@ -134,10 +136,10 @@ class flexiBilling {
 
 // check if flexibilling is required
 let billing;
-const useFlexiBilling = require('./configs')().get("useFlexiBilling") || false;
+const useFlexiBilling = require('./configs')().get('useFlexiBilling') || false;
 
 if (useFlexiBilling) {
-  billing = require("./billing");
+  billing = require('./billing');
 } else {
   billing = flexiBilling.GetInstance();
 }

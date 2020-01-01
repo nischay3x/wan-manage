@@ -25,17 +25,16 @@ var baseCharsHex = '0123456789abcdef';
  * @param  {number|string} base=62 Chars to use. If == 'hex', uses a hex base
  * @return {string} a random string
  */
-function getRandom(size, base=62) {
+function getRandom (size, base = 62) {
+  if (base === 16) baseChars = baseCharsHex;
+  else baseChars = baseChars62;
 
-    if (base === 16) baseChars = baseCharsHex;
-    else baseChars = baseChars62;
-
-    len = size? Number.isInteger(size)? Math.abs(size) : 1 : 1;
-    res = "";
-    while (len--) {
-        res += baseChars.charAt(parseInt(crandom() * baseChars.length, 10));
-      }
-      return res;
+  len = size ? Number.isInteger(size) ? Math.abs(size) : 1 : 1;
+  res = '';
+  while (len--) {
+    res += baseChars.charAt(parseInt(crandom() * baseChars.length, 10));
+  }
+  return res;
 }
 
 module.exports = getRandom;

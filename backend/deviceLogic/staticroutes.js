@@ -31,49 +31,49 @@ const { getMajorVersion } = require('../versioning');
  * @return {void}
  */
 const apply = async (device, req, res, next) => {
-    const user = req.user.username;
-    const org = req.user.defaultOrg._id.toString();
-    const machineId = device.machineId;
-    const majorAgentVersion = getMajorVersion(device.versions.agent);
+  const user = req.user.username;
+  const org = req.user.defaultOrg._id.toString();
+  const machineId = device.machineId;
+  const majorAgentVersion = getMajorVersion(device.versions.agent);
 
-    if (majorAgentVersion === 0) {    // version 0.X.X
-        return next(createError(400, "Command is not supported for the current agent version"));
-    } else if (majorAgentVersion >= 1) {    // version 1.X.X+
-        const tasks = [];
-        const routeId = req.body.id;
+  if (majorAgentVersion === 0) { // version 0.X.X
+    return next(createError(400, 'Command is not supported for the current agent version'));
+  } else if (majorAgentVersion >= 1) { // version 1.X.X+
+    const tasks = [];
+    const routeId = req.body.id;
 
-        let message = 'add-route';
-        let titlePrefix = 'Add';
-        let params = { addr: req.body.destination_network, via: req.body.gateway_ip };
+    let message = 'add-route';
+    let titlePrefix = 'Add';
+    const params = { addr: req.body.destination_network, via: req.body.gateway_ip };
 
-        if (req.body.ifname) {
-            params.pci = req.body.ifname;
-        }
-
-        if (req.body.action === 'del') {
-            titlePrefix = 'Delete';
-            message = 'remove-route';
-        }
-
-        tasks.push({ "entity": "agent", message, params });
-
-        try {
-            const job = await deviceQueues.addJob(machineId, user, org,
-                // Data
-                { 'title': `${titlePrefix} Static Route in device ${device.hostname}`, 'tasks': tasks },
-                // Response data
-                { method: 'staticroutes', data: { deviceId: device.id, 'routeId': routeId, message } },
-                // Metadata
-                { priority: 'low', attempts: 1, removeOnComplete: false },
-                // Complete callback
-                null);
-
-                logger.info("Add static route job queued", { job: job, req: req });
-            } catch (error) {
-                // handle an error here
-                next(error);
-            }
+    if (req.body.ifname) {
+      params.pci = req.body.ifname;
     }
+
+    if (req.body.action === 'del') {
+      titlePrefix = 'Delete';
+      message = 'remove-route';
+    }
+
+    tasks.push({ entity: 'agent', message, params });
+
+    try {
+      const job = await deviceQueues.addJob(machineId, user, org,
+        // Data
+        { title: `${titlePrefix} Static Route in device ${device.hostname}`, tasks: tasks },
+        // Response data
+        { method: 'staticroutes', data: { deviceId: device.id, routeId: routeId, message } },
+        // Metadata
+        { priority: 'low', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null);
+
+      logger.info('Add static route job queued', { job: job, req: req });
+    } catch (error) {
+      // handle an error here
+      next(error);
+    }
+  }
 };
 
 /**
@@ -85,36 +85,36 @@ const apply = async (device, req, res, next) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-    logger.info("Add static route job complete", { params: { result: res, jobId: jobId } });
+  logger.info('Add static route job complete', { params: { result: res, jobId: jobId } });
 
-    if (!res || !res.deviceId || !res.message || !res.routeId) {
-        logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
-        return;
-    }
-    try {
-        if (res.message === "remove-route") {
-            await devices.findOneAndUpdate(
-                { _id: mongoose.Types.ObjectId(res.deviceId) },
-                    {
-                    $pull: {
-                        'staticroutes': {
-                        _id: mongoose.Types.ObjectId(res.routeId)
-                        }
-                    }
-                }
-            );
-        } else {
-            await devices.findOneAndUpdate(
-                { _id: mongoose.Types.ObjectId(res.deviceId) },
-                { $set: { "staticroutes.$[elem].status": "complete" } },
-                {
-                    arrayFilters: [{ "elem._id": mongoose.Types.ObjectId(res.routeId) }]
-                }
-            );
+  if (!res || !res.deviceId || !res.message || !res.routeId) {
+    logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
+    return;
+  }
+  try {
+    if (res.message === 'remove-route') {
+      await devices.findOneAndUpdate(
+        { _id: mongoose.Types.ObjectId(res.deviceId) },
+        {
+          $pull: {
+            staticroutes: {
+              _id: mongoose.Types.ObjectId(res.routeId)
+            }
+          }
         }
-    } catch (error) {
-        logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
+      );
+    } else {
+      await devices.findOneAndUpdate(
+        { _id: mongoose.Types.ObjectId(res.deviceId) },
+        { $set: { 'staticroutes.$[elem].status': 'complete' } },
+        {
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.routeId) }]
+        }
+      );
     }
+  } catch (error) {
+    logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
+  }
 };
 
 /**
@@ -126,29 +126,29 @@ const complete = async (jobId, res) => {
  * @return {void}
  */
 const error = async (jobId, res) => {
-    logger.info("Static route job failed", { params: { result: res, jobId: jobId } });
+  logger.info('Static route job failed', { params: { result: res, jobId: jobId } });
 
-    try {
-        if (res.message === "remove-route") {
-            await devices.findOneAndUpdate(
-                { _id: mongoose.Types.ObjectId(res.deviceId) },
-                { $set: { "staticroutes.$[elem].status": "remove-failed" } },
-                {
-                    arrayFilters: [{ "elem._id": mongoose.Types.ObjectId(res.routeId) }]
-                }
-            );
-        } else {
-            await devices.findOneAndUpdate(
-                { _id: mongoose.Types.ObjectId(res.deviceId) },
-                { $set: { "staticroutes.$[elem].status": "add-failed" } },
-                {
-                    arrayFilters: [{ "elem._id": mongoose.Types.ObjectId(res.routeId) }]
-                }
-            );
+  try {
+    if (res.message === 'remove-route') {
+      await devices.findOneAndUpdate(
+        { _id: mongoose.Types.ObjectId(res.deviceId) },
+        { $set: { 'staticroutes.$[elem].status': 'remove-failed' } },
+        {
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.routeId) }]
         }
-    } catch (error) {
-        logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
+      );
+    } else {
+      await devices.findOneAndUpdate(
+        { _id: mongoose.Types.ObjectId(res.deviceId) },
+        { $set: { 'staticroutes.$[elem].status': 'add-failed' } },
+        {
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.routeId) }]
+        }
+      );
     }
+  } catch (error) {
+    logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
+  }
 };
 
 /**
@@ -160,22 +160,22 @@ const error = async (jobId, res) => {
  */
 const remove = async (job) => {
   if (['inactive', 'delayed', 'active'].includes(job._state)) {
-        logger.info('Rolling back device changes for removed task', { params: { job: job } });
-        const deviceId = job.data.response.data.deviceId;
-        const routeId = job.data.response.data.routeId;
+    logger.info('Rolling back device changes for removed task', { params: { job: job } });
+    const deviceId = job.data.response.data.deviceId;
+    const routeId = job.data.response.data.routeId;
 
-        try {
-            await devices.findOneAndUpdate(
-                { _id: mongoose.Types.ObjectId(deviceId) },
-                { $set: { "staticroutes.$[elem].status": "job-deleted" } },
-                {
-                    arrayFilters: [{ "elem._id": mongoose.Types.ObjectId(routeId) }]
-                }
-            );
-        } catch (error) {
-            logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
+    try {
+      await devices.findOneAndUpdate(
+        { _id: mongoose.Types.ObjectId(deviceId) },
+        { $set: { 'staticroutes.$[elem].status': 'job-deleted' } },
+        {
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(routeId) }]
         }
+      );
+    } catch (error) {
+      logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
     }
+  }
 };
 
 module.exports = {

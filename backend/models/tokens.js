@@ -23,29 +23,29 @@ const validators = require('./validators');
  * Token Database Schema
  */
 const tokenSchema = new Schema({
-    // Organization
-    org: {
-        type: Schema.Types.ObjectId,
-        ref: 'organizations',
-        required: true
-    },
-    // description
-    name: {
-        type: String,
-        required: true,
-        validate: {
-            validator: validators.validateTokenName,
-            message: "Token name format is invalid"
-        },
-    },
-    // token itself
-    token: {
-        type: String,
-        required: true,
-        maxlength: [1024, "Token length must be at most 1024"],
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true
+  },
+  // description
+  name: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateTokenName,
+      message: 'Token name format is invalid'
     }
-},{
-    timestamps: true
+  },
+  // token itself
+  token: {
+    type: String,
+    required: true,
+    maxlength: [1024, 'Token length must be at most 1024']
+  }
+}, {
+  timestamps: true
 });
 
 // indexing

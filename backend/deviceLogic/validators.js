@@ -30,12 +30,12 @@ const isEmpty = (val) => { return val === null || val === undefined || val === '
  * @return {boolean}      true if mask is valid, false otherwise
  */
 const validateIPv4Mask = mask => {
-    return (
-        !isEmpty(mask) &&
+  return (
+    !isEmpty(mask) &&
         mask.length < 3 &&
         !isNaN(Number(mask)) &&
         (mask >= 0 && mask <= 32)
-    );
+  );
 };
 
 /**
@@ -45,47 +45,47 @@ const validateIPv4Mask = mask => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateDevice = (device) => {
-    // Get all assigned interface. There should be exactly
-    // two such interfaces - one LAN and the other WAN
-    const interfaces = device.interfaces;
-    const assignedIfs = interfaces.filter(ifc => {return ifc.isAssigned; });
-    const [wanIf, lanIf] = [
-        assignedIfs.find(ifc => { return ifc.type === 'WAN'; }),
-        assignedIfs.find(ifc => { return ifc.type === 'LAN'; })
-    ];
+  // Get all assigned interface. There should be exactly
+  // two such interfaces - one LAN and the other WAN
+  const interfaces = device.interfaces;
+  const assignedIfs = interfaces.filter(ifc => { return ifc.isAssigned; });
+  const [wanIf, lanIf] = [
+    assignedIfs.find(ifc => { return ifc.type === 'WAN'; }),
+    assignedIfs.find(ifc => { return ifc.type === 'LAN'; })
+  ];
 
-    if(assignedIfs.length !== 2 || (!wanIf || !lanIf)) {
-        return {
-            valid: false,
-            err: 'There should be exactly one LAN and one WAN interfaces'
-        };
+  if (assignedIfs.length !== 2 || (!wanIf || !lanIf)) {
+    return {
+      valid: false,
+      err: 'There should be exactly one LAN and one WAN interfaces'
+    };
+  }
+
+  // Check that both interfaces have valid IP addresses and masks
+  for (const ifc of assignedIfs) {
+    if (!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') {
+      return {
+        valid: false,
+        err: `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
+                      ? 'IPv4 mask' : 'IP address'}`
+      };
     }
+  }
 
-    // Check that both interfaces have valid IP addresses and masks
-    for(let ifc of assignedIfs) {
-        if (!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') {
-            return {
-                valid: false,
-                err: `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === '' ?
-                      'IPv4 mask' : 'IP address'}`
-            };
-        }
-    }
+  // LAN and WAN interfaces must not be on the same subnet
+  // WAN IP address and default GW IP addresses must be on the same subnet
+  const wanSubnet = `${wanIf.IPv4}/${wanIf.IPv4Mask}`;
+  const lanSubnet = `${lanIf.IPv4}/${lanIf.IPv4Mask}`;
+  const defaultGwSubnet = `${device.defaultRoute}/32`;
 
-    // LAN and WAN interfaces must not be on the same subnet
-    // WAN IP address and default GW IP addresses must be on the same subnet
-    const wanSubnet = `${wanIf.IPv4}/${wanIf.IPv4Mask}`;
-    const lanSubnet = `${lanIf.IPv4}/${lanIf.IPv4Mask}`;
-    const defaultGwSubnet = `${device.defaultRoute}/32`;
+  if (cidr.overlap(wanSubnet, lanSubnet)) {
+    return {
+      valid: false,
+      err: 'WAN and LAN IP addresses have an overlap'
+    };
+  }
 
-    if(cidr.overlap(wanSubnet, lanSubnet)) {
-        return {
-            valid: false,
-            err: 'WAN and LAN IP addresses have an overlap'
-        };
-    }
-
-    /*
+  /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
             valid: false,
@@ -94,15 +94,15 @@ const validateDevice = (device) => {
     }
     */
 
-    // Currently, we do not support routing on the WAN interface
-    if(wanIf.routing === 'OSPF') {
-       return {
-           valid: false,
-           err: 'OSPF should not be configured on WAN interface'
-       };
-    }
+  // Currently, we do not support routing on the WAN interface
+  if (wanIf.routing === 'OSPF') {
+    return {
+      valid: false,
+      err: 'OSPF should not be configured on WAN interface'
+    };
+  }
 
-    return { valid: true, err: '' };
+  return { valid: true, err: '' };
 };
 
 /**
@@ -112,21 +112,21 @@ const validateDevice = (device) => {
  * @return {{valid: boolean, err: string}}  test result + error if message is invalid
  */
 const validateModifyDeviceMsg = (modifyDeviceMsg) => {
-    // Support both arrays and single interface
-    const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
-    for(let ifc of msg) {
-        const [ip, mask] = (ifc.addr || "/").split('/');
-        if (!net.isIPv4(ip) || !validateIPv4Mask(mask)) {
-            return {
-                valid: false,
-                err: `Bad request: Invalid IP address ${ifc.addr}`
-            };
-        }
+  // Support both arrays and single interface
+  const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
+  for (const ifc of msg) {
+    const [ip, mask] = (ifc.addr || '/').split('/');
+    if (!net.isIPv4(ip) || !validateIPv4Mask(mask)) {
+      return {
+        valid: false,
+        err: `Bad request: Invalid IP address ${ifc.addr}`
+      };
     }
-    return { valid: true, err: '' };
+  }
+  return { valid: true, err: '' };
 };
 
 module.exports = {
-    validateDevice: validateDevice,
-    validateModifyDeviceMsg: validateModifyDeviceMsg
+  validateDevice: validateDevice,
+  validateModifyDeviceMsg: validateModifyDeviceMsg
 };

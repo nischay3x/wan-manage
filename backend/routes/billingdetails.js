@@ -18,9 +18,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('./cors');
 const createError = require('http-errors');
-const {verifyPermission} = require('../authenticate');
+const { verifyPermission } = require('../authenticate');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const flexibilling = require("../flexibilling");
+const flexibilling = require('../flexibilling');
 
 const router = express.Router();
 router.use(bodyParser.json());
@@ -31,7 +31,7 @@ router.route('/')
     const customer_id = req.user.defaultAccount.billingCustomerId;
 
     if (!customer_id) {
-      return next(createError(500, "Unknown account error"));
+      return next(createError(500, 'Unknown account error'));
     }
 
     const usage = await flexibilling.getCurrentUsage({ customer_id });

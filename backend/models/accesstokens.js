@@ -23,41 +23,41 @@ const validators = require('./validators');
  * Access Tokens Schema
  */
 const accessTokenSchema = new Schema({
-    // account
-    account: {
-        type: Schema.Types.ObjectId,
-        ref: 'accounts',
-        required: true
-    },
-    // organization
-    organization: {
-        type: Schema.Types.ObjectId,
-        ref: 'organizations',
-        required: true
-    },
-    // access token description
-    name: {
-        type: String,
-        required: true,
-        validate: {
-            validator: validators.validateTokenName,
-            message: "Token name format is invalid"
-        },
-    },
-    // token itself
-    token: {
-        type: String,
-        required: true,
-        maxlength: [1024, "Token length must be at most 1024"]
-    },
-    // is valid. Reserved for future use
-    isValid: {
-        type: Boolean,
-        required: true,
-        default: true
+  // account
+  account: {
+    type: Schema.Types.ObjectId,
+    ref: 'accounts',
+    required: true
+  },
+  // organization
+  organization: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true
+  },
+  // access token description
+  name: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateTokenName,
+      message: 'Token name format is invalid'
     }
+  },
+  // token itself
+  token: {
+    type: String,
+    required: true,
+    maxlength: [1024, 'Token length must be at most 1024']
+  },
+  // is valid. Reserved for future use
+  isValid: {
+    type: Boolean,
+    required: true,
+    default: true
+  }
 }, {
-    timestamps: true
+  timestamps: true
 });
 
 // indexing

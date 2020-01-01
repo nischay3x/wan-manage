@@ -20,7 +20,7 @@ const cors = require('./cors');
 const createError = require('http-errors');
 const { verifyPermission } = require('../authenticate');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const flexibilling = require("../flexibilling");
+const flexibilling = require('../flexibilling');
 
 const router = express.Router();
 router.use(bodyParser.json());
@@ -31,16 +31,16 @@ router.route('/')
     const customer_id = req.user.defaultAccount.billingCustomerId;
 
     if (!customer_id) {
-      return next(createError(500, "Unknown account error"));
+      return next(createError(500, 'Unknown account error'));
     }
 
     const invoices = await flexibilling.retrieveInvoices({ customer_id });
 
-    let _invoices = invoices.list.map(value => {
+    const _invoices = invoices.list.map(value => {
       return {
         id: value.invoice.id,
-        type: "card",
-        payment_method: "card",
+        type: 'card',
+        payment_method: 'card',
         amount: value.invoice.amount_paid,
         base_currency_code: value.invoice.base_currency_code,
         status: value.invoice.status,
@@ -65,7 +65,7 @@ router.route('/')
     if (result) {
       return res.status(200).json({ name: code });
     } else {
-      return next(createError(500, "Invalid coupon code."));
+      return next(createError(500, 'Invalid coupon code.'));
     }
   });
 

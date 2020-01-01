@@ -22,39 +22,39 @@ const tunnels = require('../deviceLogic/tunnels');
  * If tunnel is active but not connected, reconnect it
  *
  ***/
- class CheckTunnels {
-    /**
+class CheckTunnels {
+  /**
      * Creates an instance of the CheckTunnels class.
      */
-    constructor() {
-        this.start = this.start.bind(this);
-        this.periodicCheckTunnels = this.periodicCheckTunnels.bind(this);
-    }
+  constructor () {
+    this.start = this.start.bind(this);
+    this.periodicCheckTunnels = this.periodicCheckTunnels.bind(this);
+  }
 
-    /**
+  /**
      * Starts the check-tunnels task
      * @return {void}
      */
-    start() {
-        periodic.registerTask('check_tunnels', this.periodicCheckTunnels, 30000);
-        periodic.startTask('check_tunnels');
-    }
+  start () {
+    periodic.registerTask('check_tunnels', this.periodicCheckTunnels, 30000);
+    periodic.startTask('check_tunnels');
+  }
 
-    /**
+  /**
      * Calls checkAndReconnectTunnels() to
      * periodically check all tunnels.
      * @return {void}
      */
-    periodicCheckTunnels() {
-        tunnels.tasks.checkAndReconnectTunnels();
-    }
+  periodicCheckTunnels () {
+    tunnels.tasks.checkAndReconnectTunnels();
+  }
 }
 
 var checkTunnels = null;
 module.exports = function () {
-    if (checkTunnels) return checkTunnels;
-    else {
-        checkTunnels = new CheckTunnels();
-        return checkTunnels;
-    }
+  if (checkTunnels) return checkTunnels;
+  else {
+    checkTunnels = new CheckTunnels();
+    return checkTunnels;
+  }
 };

@@ -19,8 +19,8 @@ const bodyParser = require('body-parser');
 const cors = require('./cors');
 const createError = require('http-errors');
 const { getUserOrganizations } = require('./membershipUtils');
-const {verifyPermission} = require('../authenticate');
-const flexibilling = require("../flexibilling");
+const { verifyPermission } = require('../authenticate');
+const flexibilling = require('../flexibilling');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 const router = express.Router();
@@ -33,17 +33,17 @@ router.route('/')
     const customer_id = req.user.defaultAccount.billingCustomerId;
 
     if (!customer_id) {
-      logger.error("Account does not have link to billing system", { params: {} })
-      return next(createError(500, "Unknown account error"));
+      logger.error('Account does not have link to billing system', { params: {} })
+      return next(createError(500, 'Unknown account error'));
     }
 
     const invoices = await flexibilling.retrieveInvoices({ customer_id });
 
-    let _invoices = invoices.map(value => {
+    const _invoices = invoices.map(value => {
       return {
         id: value.invoice.id,
-        type: "card",
-        payment_method: "card",
+        type: 'card',
+        payment_method: 'card',
         amount: value.invoice.total,
         base_currency_code: value.invoice.base_currency_code,
         status: value.invoice.status,
@@ -55,7 +55,7 @@ router.route('/')
       _invoices[idx].download_url = await flexibilling.retrieveInvoiceDownloadLink({ invoice_id: _invoices[idx].id })
     }
 
-    let summary = await flexibilling.getMaxDevicesRegisteredSummmary(req.user.defaultAccount.id);
+    const summary = await flexibilling.getMaxDevicesRegisteredSummmary(req.user.defaultAccount.id);
 
     const amount = await flexibilling.getCurrentUsage({ customer_id });
     const status = await flexibilling.getSubscriptionStatus({ customer_id });

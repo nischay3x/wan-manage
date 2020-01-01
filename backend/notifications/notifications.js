@@ -18,7 +18,7 @@ const configs = require('../configs')();
 const notificationsDb = require('../models/notifications');
 const organizations = require('../models/organizations');
 const { membership } = require('../models/membership');
-const logger = require('../logging/logging')({module: module.filename, type: 'notifications'});
+const logger = require('../logging/logging')({ module: module.filename, type: 'notifications' });
 const mailer = require('../utils/mailer')(configs.get('mailerHost'), configs.get('mailerPort'), configs.get('mailerBypassCert'));
 const mongoose = require('mongoose');
 
@@ -26,131 +26,142 @@ const mongoose = require('mongoose');
  * Notification Manager class
  */
 class NotificationsManager {
-    /**
+  /**
      * Saves notifications in the database
      * @async
      * @param  {Array} notifications an array of notification objects
      * @return {void}
      */
-    async sendNotifications(notifications) {
-        try {
-            // Get the accounts of the notifications by the organization
-            // Since we can have notification with different organization IDs
-            // We have to fist create a map that maps an organization to all
-            // the notifications that belongs to it, which we'll use later
-            // to add the proper account ID to each of the notifications.
-            const orgsMap = new Map();
-            notifications.forEach(notification => {
-                const key = notification.org.toString();
-                const notificationList = orgsMap.get(key);
-                if(!notificationList) orgsMap.set(key, []);
-                orgsMap.get(key).push(notification);
-            });
+  async sendNotifications (notifications) {
+    try {
+      // Get the accounts of the notifications by the organization
+      // Since we can have notification with different organization IDs
+      // We have to fist create a map that maps an organization to all
+      // the notifications that belongs to it, which we'll use later
+      // to add the proper account ID to each of the notifications.
+      const orgsMap = new Map();
+      notifications.forEach(notification => {
+        const key = notification.org.toString();
+        const notificationList = orgsMap.get(key);
+        if (!notificationList) orgsMap.set(key, []);
+        orgsMap.get(key).push(notification);
+      });
 
-            // Create an array of org ID and account ID pairs
-            const orgIDs = Array.from(orgsMap.keys()).map(key => {
-                return mongoose.Types.ObjectId(key);
-            });
-            const accounts = await organizations.aggregate([
-                { $match: { _id: { $in: orgIDs }} },
-                { $group: {
-                    _id: "$_id",
-                    accountID: { $push: "$$ROOT.account" }}
-                }
-            ]);
-
-            // Go over all accounts and update all notifications that
-            // belong to the organization to which the account belongs.
-            accounts.forEach(account => {
-                const notificationList = orgsMap.get(account._id.toString());
-                notificationList.forEach(notification => notification.account = account.accountID);
-            });
-
-            await notificationsDb.insertMany(notifications);
-        } catch (err) {
-            logger.warn("Failed to store notifications in database", {
-                params: { notifications: notifications, err: err.message }
-            });
+      // Create an array of org ID and account ID pairs
+      const orgIDs = Array.from(orgsMap.keys()).map(key => {
+        return mongoose.Types.ObjectId(key);
+      });
+      const accounts = await organizations.aggregate([
+        { $match: { _id: { $in: orgIDs } } },
+        {
+          $group: {
+            _id: '$_id',
+            accountID: { $push: '$$ROOT.account' }
+          }
         }
+      ]);
+
+      // Go over all accounts and update all notifications that
+      // belong to the organization to which the account belongs.
+      accounts.forEach(account => {
+        const notificationList = orgsMap.get(account._id.toString());
+        notificationList.forEach(notification => notification.account = account.accountID);
+      });
+
+      await notificationsDb.insertMany(notifications);
+    } catch (err) {
+      logger.warn('Failed to store notifications in database', {
+        params: { notifications: notifications, err: err.message }
+      });
     }
-    /**
+  }
+
+  /**
      * Sends emails to notify users with
      * pending unread notifications.
      * @async
      * @return {void}
      */
-    async notifyUsersByEmail() {
-        // Extract email addresses of users with pending unread notifications.
-        // This has to be done in two phases, as mongodb does not
-        // support the 'lookup' command across different databases:
-        // 1. Get the list of account IDs with pending notifications.
-        // 2. Go over the list, populate the users and send them emails.
-        try {
-            let accountIDs = await notificationsDb.aggregate([
-                { $match: { status: 'unread' }},
-                { $group: { _id: '$account' }},
-            ]);
+  async notifyUsersByEmail () {
+    // Extract email addresses of users with pending unread notifications.
+    // This has to be done in two phases, as mongodb does not
+    // support the 'lookup' command across different databases:
+    // 1. Get the list of account IDs with pending notifications.
+    // 2. Go over the list, populate the users and send them emails.
+    try {
+      const accountIDs = await notificationsDb.aggregate([
+        { $match: { status: 'unread' } },
+        { $group: { _id: '$account' } }
+      ]);
 
-            // Notify users only if there are unread notifications
-            for (const accountID of accountIDs) {
-                const res = await membership.aggregate([
-                    { $match: { $and :[
-                        { account: accountID._id },
-                        { to: "account" },
-                        { role: "owner" }
-                    ]}},
-                    { $lookup: {
-                        from: "users",
-                        localField: "user",
-                        foreignField: "_id",
-                        as: "users"
-                    }},
-                    {$unwind: "$users"},
-                    {"$addFields": {"email": "$users.email"}},
-                    { $lookup: {
-                        from: "accounts",
-                        localField: "account",
-                        foreignField: "_id",
-                        as: "accounts"
-                    }},
-                    {$unwind: "$accounts"},
-                    {"$addFields": {"notify": "$accounts.enableNotifications"}},
-                ]);
+      // Notify users only if there are unread notifications
+      for (const accountID of accountIDs) {
+        const res = await membership.aggregate([
+          {
+            $match: {
+              $and: [
+                { account: accountID._id },
+                { to: 'account' },
+                { role: 'owner' }
+              ]
+            }
+          },
+          {
+            $lookup: {
+              from: 'users',
+              localField: 'user',
+              foreignField: '_id',
+              as: 'users'
+            }
+          },
+          { $unwind: '$users' },
+          { $addFields: { email: '$users.email' } },
+          {
+            $lookup: {
+              from: 'accounts',
+              localField: 'account',
+              foreignField: '_id',
+              as: 'accounts'
+            }
+          },
+          { $unwind: '$accounts' },
+          { $addFields: { notify: '$accounts.enableNotifications' } }
+        ]);
 
-                // Send a reminder email to each email address that belongs to the account
-                const emailAddresses = res.reduce(
-                    (result, { email, notify }) =>
-                        notify ? result.concat(email) : result,
-                    []
-                );
-                if(emailAddresses.length) {
-                    await mailer.sendMailHTML(
-                        "noreply@flexiwan.com",
-                        emailAddresses,
-                        "Pending unread notifications",
+        // Send a reminder email to each email address that belongs to the account
+        const emailAddresses = res.reduce(
+          (result, { email, notify }) =>
+            notify ? result.concat(email) : result,
+          []
+        );
+        if (emailAddresses.length) {
+          await mailer.sendMailHTML(
+            'noreply@flexiwan.com',
+            emailAddresses,
+            'Pending unread notifications',
                         `<h2>flexiWAN Notification Reminder</h2>
                             <p>This email was sent to you since you have pending unread notifications.
                                 <br>To view the notifications, login to your account and check the 'Notifications' page.</br>
                                 <br>Your friends @ flexiWAN</br>
                             </p>`
-                    );
+          );
 
-                    logger.info("User notifications reminder email sent", {
-                        params: { emailAddresses: emailAddresses}
-                    });
-                }
-            }
-        } catch (err) {
-            logger.warn("Failed to notify users about pending notifications", {
-                params: { err: err.message }
-            });
+          logger.info('User notifications reminder email sent', {
+            params: { emailAddresses: emailAddresses }
+          });
         }
+      }
+    } catch (err) {
+      logger.warn('Failed to notify users about pending notifications', {
+        params: { err: err.message }
+      });
     }
+  }
 }
 
 let notificationsMgr = null;
 module.exports = function () {
-    if (notificationsMgr) return notificationsMgr;
-    notificationsMgr = new NotificationsManager();
-    return notificationsMgr;
+  if (notificationsMgr) return notificationsMgr;
+  notificationsMgr = new NotificationsManager();
+  return notificationsMgr;
 };

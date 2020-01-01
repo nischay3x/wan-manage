@@ -16,76 +16,76 @@
 
 // TBD: use memory based devices now, add to Redis in future
 class Devices {
-    constructor() {
-        this.devices = {}
-        this.setDeviceInfo = this.setDeviceInfo.bind(this);
-        this.getDeviceInfo = this.getDeviceInfo.bind(this);
-        this.disconnectDevice = this.disconnectDevice.bind(this);
-        this.removeDeviceInfo = this.removeDeviceInfo.bind(this);
-        this.getAllDevices = this.getAllDevices.bind(this);
-        this.updateDeviceInfo = this.updateDeviceInfo.bind(this);
-    }
+  constructor () {
+    this.devices = {}
+    this.setDeviceInfo = this.setDeviceInfo.bind(this);
+    this.getDeviceInfo = this.getDeviceInfo.bind(this);
+    this.disconnectDevice = this.disconnectDevice.bind(this);
+    this.removeDeviceInfo = this.removeDeviceInfo.bind(this);
+    this.getAllDevices = this.getAllDevices.bind(this);
+    this.updateDeviceInfo = this.updateDeviceInfo.bind(this);
+  }
 
-    /**
+  /**
      * Sets the device information for a
      * device with deviceID machine id.
      * @param  {string} deviceID device machine id
      * @param  {Object} info     device info
      * @return {void}
      */
-    setDeviceInfo(deviceID, info) {
-        this.devices[deviceID] = info;
-    }
+  setDeviceInfo (deviceID, info) {
+    this.devices[deviceID] = info;
+  }
 
-    /**
+  /**
      * Sets a field by its name in the device info object.
      * @param  {string} deviceID device machine id
      * @param  {string} key      name of the filed to be set
      * @param  {*}      value    value to be set
      * @return {void}
      */
-    updateDeviceInfo(deviceID, key, value) {
-        if(this.devices[deviceID]) {
-            this.devices[deviceID][key] = value;
-        }
+  updateDeviceInfo (deviceID, key, value) {
+    if (this.devices[deviceID]) {
+      this.devices[deviceID][key] = value;
     }
+  }
 
-    /**
+  /**
      * Gets a field by its name from the device info.
      * @param  {string} deviceID device machine id
      * @return {Object}          device info object
      */
-    getDeviceInfo(deviceID) {
-        return this.devices[deviceID];
-    }
+  getDeviceInfo (deviceID) {
+    return this.devices[deviceID];
+  }
 
-    /**
+  /**
      * Deletes device information object for a specific device.
      * @param  {string} deviceID the device machine id
      * @return {void}
      */
-    removeDeviceInfo(deviceID) {
-        delete this.devices[deviceID];
-    }
+  removeDeviceInfo (deviceID) {
+    delete this.devices[deviceID];
+  }
 
-    /**
+  /**
      * Gets all connected devices.
      * @return {Array} an array of all connected devices
      */
-    getAllDevices() {
-        return Object.keys(this.devices);
-    }
+  getAllDevices () {
+    return Object.keys(this.devices);
+  }
 
-    /**
+  /**
      * Closes a device socket.
      * @param  {string} deviceID device machine id
      * @return {void}
      */
-    disconnectDevice(deviceID) {
-        if (deviceID && this.devices[deviceID] && this.devices[deviceID].socket) {
-            this.devices[deviceID].socket.close();
-        }
+  disconnectDevice (deviceID) {
+    if (deviceID && this.devices[deviceID] && this.devices[deviceID].socket) {
+      this.devices[deviceID].socket.close();
     }
+  }
 }
 
 module.exports = Devices;

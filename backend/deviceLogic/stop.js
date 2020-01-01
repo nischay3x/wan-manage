@@ -16,11 +16,11 @@
 
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'),configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
 const tunnelsModel = require('../models/tunnels');
 const mongoose = require('mongoose');
-const logger = require('../logging/logging')({module: module.filename, type: 'req'});
-const {getMajorVersion} = require('../versioning');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const { getMajorVersion } = require('../versioning');
 
 /**
  * Creates and queues the stop-router job.
@@ -31,37 +31,36 @@ const {getMajorVersion} = require('../versioning');
  * @param  {Callback} next   express next() callback
  * @return {void}
  */
-const apply = async(device, req, res, next) => {
-    logger.info("Stopping device:", {params: {machineId: device[0].machineId}, req: req});
-    deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
+const apply = async (device, req, res, next) => {
+  logger.info('Stopping device:', { params: { machineId: device[0].machineId }, req: req });
+  deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
 
-    const user = req.user.username;
-    const org = req.user.defaultOrg._id.toString();
-    const machineID = device[0].machineId;
-    const majorAgentVersion = getMajorVersion(device[0].versions.agent);
+  const user = req.user.username;
+  const org = req.user.defaultOrg._id.toString();
+  const machineID = device[0].machineId;
+  const majorAgentVersion = getMajorVersion(device[0].versions.agent);
 
+  // Stop router command might change IP address of the
+  // interface connected to the MGMT. Tell the agent to
+  // reconnect to the MGMT after processing this command.
+  const stopParams = { reconnect: true };
+  const tasks = [{ entity: 'agent', message: 'stop-router', params: stopParams }];
 
-    // Stop router command might change IP address of the
-    // interface connected to the MGMT. Tell the agent to
-    // reconnect to the MGMT after processing this command.
-    const stopParams = { reconnect: true };
-    const tasks = [{ 'entity': 'agent', 'message': 'stop-router', params: stopParams}];
-
-    deviceQueues.addJob(machineID, user, org,
-        // Data
-        {'title':'Stop device '+device[0].hostname, 'tasks':tasks},
-        // Response data
-        {method:'stop', data:{'device':device[0]._id, 'org':org, 'shouldUpdateTunnel':(majorAgentVersion===0)}},
-        // Metadata
-        {priority:'medium', attempts:1, removeOnComplete:false},
-        // Complete callback
-        null)
+  deviceQueues.addJob(machineID, user, org,
+    // Data
+    { title: 'Stop device ' + device[0].hostname, tasks: tasks },
+    // Response data
+    { method: 'stop', data: { device: device[0]._id, org: org, shouldUpdateTunnel: (majorAgentVersion === 0) } },
+    // Metadata
+    { priority: 'medium', attempts: 1, removeOnComplete: false },
+    // Complete callback
+    null)
     .then((job) => {
-        logger.info("Stop device job queued", {job: job, req: req});
-        res.status(200).send({'ok':1});
+      logger.info('Stop device job queued', { job: job, req: req });
+      res.status(200).send({ ok: 1 });
     })
     .catch((err) => {
-        next(err);
+      next(err);
     });
 };
 
@@ -73,48 +72,49 @@ const apply = async(device, req, res, next) => {
  * @return {void}
  */
 const complete = (jobId, res) => {
-    logger.info("Stop Machine complete", {params: {result: res, jobId: jobId}});
-    if (!res || !res.device || !res.org) {
-        logger.warn('Got an invalid job result', {params: {result: res, jobId: jobId}});
-        return;
-    }
-    // Get all device tunnels and mark them as not connected.
-    // shouldUpdateTunnel is set for agent v0.X.X where tunnel
-    // status is not checked, therefore updating according to
-    // the DB status
-    if (res.shouldUpdateTunnel) {
-        tunnelsModel
-        .updateMany(
-            // Query
-            { 'isActive':true,
-              $or: [{'deviceAconf':true}, {'deviceBconf':true}],
-              $or: [{'deviceA':mongoose.Types.ObjectId(res.device)},
-                    {'deviceB':mongoose.Types.ObjectId(res.device)}],
-              'org':res.org},
-            // Update
-            {'deviceAconf':false, 'deviceBconf':false},
-            // Options
-            {upsert: false})
-        .then((resp) => {
-            logger.debug('Updated tunnels info in db', {params:{jobId: jobId, response: resp}});
-            if (resp != null) {
-                logger.info("Updated device tunnels status to not-connected", {
-                    params: {jobId: jobId, device: res.device}
-                });
-                return;
-            } else {
-                throw new Error("Update tunnel connected status failure");
-            }
-        }, (err) => {
-            logger.error('Stop device callback failed', {params: {jobId: jobId, err: err.message}});
-        })
-        .catch((err) => {
-            logger.error('Stop device callback failed', {params: {jobId: jobId, err: err.message}});
-        });
-    }
+  logger.info('Stop Machine complete', { params: { result: res, jobId: jobId } });
+  if (!res || !res.device || !res.org) {
+    logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
+    return;
+  }
+  // Get all device tunnels and mark them as not connected.
+  // shouldUpdateTunnel is set for agent v0.X.X where tunnel
+  // status is not checked, therefore updating according to
+  // the DB status
+  if (res.shouldUpdateTunnel) {
+    tunnelsModel
+      .updateMany(
+        // Query
+        {
+          isActive: true,
+          $or: [{ deviceAconf: true }, { deviceBconf: true }],
+          $or: [{ deviceA: mongoose.Types.ObjectId(res.device) },
+            { deviceB: mongoose.Types.ObjectId(res.device) }],
+          org: res.org
+        },
+        // Update
+        { deviceAconf: false, deviceBconf: false },
+        // Options
+        { upsert: false })
+      .then((resp) => {
+        logger.debug('Updated tunnels info in db', { params: { jobId: jobId, response: resp } });
+        if (resp != null) {
+          logger.info('Updated device tunnels status to not-connected', {
+            params: { jobId: jobId, device: res.device }
+          });
+        } else {
+          throw new Error('Update tunnel connected status failure');
+        }
+      }, (err) => {
+        logger.error('Stop device callback failed', { params: { jobId: jobId, err: err.message } });
+      })
+      .catch((err) => {
+        logger.error('Stop device callback failed', { params: { jobId: jobId, err: err.message } });
+      });
+  }
 };
 
 module.exports = {
-    apply: apply,
-    complete: complete
+  apply: apply,
+  complete: complete
 };

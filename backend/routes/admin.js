@@ -22,8 +22,8 @@ const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const usersModel = require('../models/users');
 const tunnelsModel = require('../models/tunnels');
-const {devices:devicesModel} = require('../models/devices');
-const {deviceAggregateStats} = require('../models/analytics/deviceStats');
+const { devices: devicesModel } = require('../models/devices');
+const { deviceAggregateStats } = require('../models/analytics/deviceStats');
 
 const adminRouter = express.Router();
 adminRouter.use(bodyParser.json());
@@ -33,93 +33,107 @@ adminRouter.use(bodyParser.json());
  * Return internal information
  */
 adminRouter
-    .route('/')
-    // When options message received, reply origin based on whitelist
-    .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-    .get(cors.corsWithOptions, auth.verifyAdmin, async (req,res,next) => {
+  .route('/')
+// When options message received, reply origin based on whitelist
+  .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
+  .get(cors.corsWithOptions, auth.verifyAdmin, async (req, res, next) => {
+    // Get users info
+    let registeredUsers = 'No info';
+    try {
+      registeredUsers = await usersModel
+        .aggregate([{ $project: { username: 1 } }, { $count: 'num_registered_users' }])
+        .allowDiskUse(true);
+    } catch (e) {
+      registeredUsers = 'Error getting registered users info, error=' + e.message;
+    }
 
-        // Get users info
-        let registeredUsers = "No info";
-        try {
-            registeredUsers = await usersModel
-            .aggregate([{'$project':{'username':1}},{'$count':'num_registered_users'}])
-            .allowDiskUse(true);
-        } catch (e) {
-            registeredUsers = "Error getting registered users info, error=" + e.message;
-        }
+    // Get Installed Devices
+    let installedDevices = 'No info';
+    try {
+      installedDevices = await devicesModel
+        .aggregate([{ $project: { org: 1 } },
+          { $group: { _id: { org: '$org' }, num_devices: { $sum: 1 } } },
+          { $project: { _id: 0, org: '$_id.org', num_devices: '$num_devices' } }])
+        .allowDiskUse(true);
+    } catch (e) {
+      installedDevices = 'Error getting installed devices info, error=' + e.message;
+    }
 
-        // Get Installed Devices
-        let installedDevices = "No info";
-        try {
-            installedDevices = await devicesModel
-            .aggregate([{'$project':{'org':1}},
-                {'$group':{'_id':{'org':'$org'},'num_devices':{'$sum':1}}},
-                {'$project':{'_id':0,'org':'$_id.org','num_devices':'$num_devices'}}])
-            .allowDiskUse(true);
-        } catch (e) {
-            installedDevices = "Error getting installed devices info, error=" + e.message;
-        }
+    // Get Installed Tunnels
+    let installedTunnels = 'No info';
+    try {
+      installedTunnels = await tunnelsModel
+        .aggregate([{ $project: { org: 1, active: { $cond: [{ $eq: ['$isActive', true] }, 1, 0] } } },
+          { $group: { _id: { org: '$org' }, created: { $sum: 1 }, active: { $sum: '$active' } } },
+          { $project: { _id: 0, org: '$_id.org', created: '$created', active: '$active' } }])
+        .allowDiskUse(true);
+    } catch (e) {
+      installedTunnels = 'Error getting installed tunnels info, error=' + e.message;
+    }
 
-        // Get Installed Tunnels
-        let installedTunnels = "No info";
-        try {
-            installedTunnels = await tunnelsModel
-            .aggregate([{'$project':{'org':1,active:{$cond:[{$eq:['$isActive',true]},1,0]}}},
-                {'$group':{'_id':{'org':'$org'},'created':{'$sum':1},'active':{'$sum':'$active'}}},
-                {'$project':{'_id':0,'org':'$_id.org','created':'$created','active':'$active'}}])
-            .allowDiskUse(true);
-        } catch (e) {
-            installedTunnels = "Error getting installed tunnels info, error=" + e.message;
-        }
+    // Get Monthly Stats
+    let monthlyStats = 'No info';
+    try {
+      monthlyStats = await deviceAggregateStats
+        .aggregate([{ $project: { month: 1, orgs: { $objectToArray: '$stats.orgs' } } },
+          { $unwind: '$orgs' },
+          { $project: { month: 1, org: '$org.k', devices: { $objectToArray: '$orgs.v.devices' } } },
+          { $unwind: '$devices' },
+          { $project: { month: 1, org: 1, device: '$devices.k', bytes: '$devices.v.bytes' } },
+          {
+            $group: {
+              _id: { month: '$month' },
+              active_orgs: { $addToSet: '$org' },
+              active_devices: { $addToSet: '$device' },
+              total_bytes: { $sum: '$bytes' }
+            }
+          },
+          {
+            $project: {
+              _id: 0,
+              month: '$_id.month',
+              activeOrgs: { $size: '$active_orgs' },
+              activeDevices: { $size: '$active_devices' },
+              totalBytes: '$total_bytes'
+            }
+          },
+          { $sort: { month: -1 } }])
+        .allowDiskUse(true);
+      monthlyStats.forEach((result) => {
+        result.month = (new Date(result.month)).toLocaleDateString();
+        result.totalBytes = result.totalBytes.valueOf();
+      });
+    } catch (e) {
+      monthlyStats = 'Error getting installed tunnels info, error=' + e.message;
+    }
 
-        // Get Monthly Stats
-        let monthlyStats = "No info";
-        try {
-            monthlyStats = await deviceAggregateStats
-            .aggregate([{'$project':{'month':1, orgs:{$objectToArray:"$stats.orgs" }}},
-                {'$unwind':'$orgs'},
-                {'$project':{'month':1,'org':'$org.k','devices':{$objectToArray:"$orgs.v.devices" }}},
-                {'$unwind':'$devices'},
-                {'$project':{'month':1,'org':1,'device':'$devices.k','bytes':'$devices.v.bytes'}},
-                {'$group':{'_id':{'month':'$month'},'active_orgs':{'$addToSet':'$org'},
-                    'active_devices':{'$addToSet':'$device'},'total_bytes':{'$sum':'$bytes'}}},
-                {'$project':{'_id':0,'month':'$_id.month','activeOrgs':{'$size':'$active_orgs'},
-                    'activeDevices':{'$size':'$active_devices'},'totalBytes':'$total_bytes'}},
-                {'$sort':{'month':-1}}])
-            .allowDiskUse(true);
-            monthlyStats.forEach((result) => {
-                result.month = (new Date(result.month)).toLocaleDateString();
-                result.totalBytes = result.totalBytes.valueOf();
-            });
-        } catch (e) {
-            monthlyStats = "Error getting installed tunnels info, error=" + e.message;
-        }
+    // Return  static info from:
+    const result = {
+      ...registeredUsers[0],
+      installedDevices: installedDevices,
+      installedTunnels: installedTunnels,
+      monthlyStats: monthlyStats,
+      connectedOrgs: {}
+    };
 
-        // Return  static info from:
-        const result = {...registeredUsers[0],
-            'installedDevices':installedDevices,
-            'installedTunnels':installedTunnels,
-            'monthlyStats':monthlyStats,
-            'connectedOrgs':{}
-        };
+    // 1. Open websocket connections and connection info
+    const devices = connections.getAllDevices();
+    result.numConnectedDevices = devices.length;
+    devices.forEach((device) => {
+      const deviceInfo = connections.getDeviceInfo(device);
+      if (result.connectedOrgs[deviceInfo.org] === undefined) result.connectedOrgs[deviceInfo.org] = [];
+      result.connectedOrgs[deviceInfo.org].push({
+        machineID: device,
+        status: (deviceStatus.getDeviceStatus(device).state || 0)
+        // ip:(deviceInfo.socket._sender._socket._peername.address || 'unknown'),
+        // port:(deviceInfo.socket._sender._socket._peername.port || 'unknown')
+      });
+    })
 
-        // 1. Open websocket connections and connection info
-        const devices = connections.getAllDevices();
-        result['numConnectedDevices']=devices.length;
-        devices.forEach((device) => {
-            const deviceInfo = connections.getDeviceInfo(device);
-            if (result.connectedOrgs[deviceInfo.org] === undefined) result.connectedOrgs[deviceInfo.org] = [];
-            result.connectedOrgs[deviceInfo.org].push({machineID:device,
-                status:(deviceStatus.getDeviceStatus(device).state || 0)
-                //ip:(deviceInfo.socket._sender._socket._peername.address || 'unknown'),
-                //port:(deviceInfo.socket._sender._socket._peername.port || 'unknown')
-            });
-        })
-
-        res.statusCode = 200;
-        res.setHeader('Content-Type', 'application/json');
-        return res.json(result);
-    });
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    return res.json(result);
+  });
 
 // Default exports
 module.exports = adminRouter;

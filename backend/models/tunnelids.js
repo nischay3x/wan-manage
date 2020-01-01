@@ -22,20 +22,20 @@ const mongoConns = require('../mongoConns.js')();
 // This table holds unique ids per organization
 // This number is translsated into the IP address of a device
 const tunnelIDSchema = new Schema({
-    // Organization
-    org: {
-        type: Schema.Types.ObjectId,
-        ref: 'organizations',
-        required: true,
-        unique: true
-    },
-    // Next available ID per org
-    nextAvailID: {
-        type: Number,
-        required: [true, "Next available number must be set"]
-    }
-},{
-    timestamps: true
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true,
+    unique: true
+  },
+  // Next available ID per org
+  nextAvailID: {
+    type: Number,
+    required: [true, 'Next available number must be set']
+  }
+}, {
+  timestamps: true
 });
 
 // Default exports

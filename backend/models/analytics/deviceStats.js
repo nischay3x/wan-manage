@@ -23,52 +23,52 @@ const mongoConns = require('../../mongoConns.js')();
  * Device statistics Database Schema
  */
 const deviceStatsSchema = new Schema({
-    // Organization
-    org: {
-        type: Schema.Types.ObjectId,
-        ref: 'organizations',
-        required: true
-    },
-    // Device Object ID
-    device: {
-        type: Schema.Types.ObjectId,
-        ref: 'devices'
-    },
-    // Epoc time in UTC
-    time: {
-        type: Number,
-        default: 0
-    },
-    // Free form, not schema based
-    stats: Schema.Types.Mixed,
-},{
-    timestamps: true
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true
+  },
+  // Device Object ID
+  device: {
+    type: Schema.Types.ObjectId,
+    ref: 'devices'
+  },
+  // Epoc time in UTC
+  time: {
+    type: Number,
+    default: 0
+  },
+  // Free form, not schema based
+  stats: Schema.Types.Mixed
+}, {
+  timestamps: true
 });
 
 /**
  * Aggregated Device Statistics Database Schema
  */
 const deviceAggregateStatsSchema = new Schema({
-    // month
-    month: {
-        type: Number,
-        default: 0,
-        required: true
-    },
-    // statistics mixed shema
-    stats: Schema.Types.Mixed
+  // month
+  month: {
+    type: Number,
+    default: 0,
+    required: true
+  },
+  // statistics mixed shema
+  stats: Schema.Types.Mixed
 }, {
-    timestamps: true
+  timestamps: true
 });
 
 // Remove documents created more than a hour ago
-deviceStatsSchema.index({createdAt: 1},{expireAfterSeconds:7200});
+deviceStatsSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7200 });
 
 const deviceStats = mongoConns.getAnalyticsDB().model('deviceStats', deviceStatsSchema);
 const deviceAggregateStats = mongoConns.getAnalyticsDB().model('deviceAggregatedStats', deviceAggregateStatsSchema);
 
 // Default exports
 module.exports = {
-    deviceStats,
-    deviceAggregateStats
+  deviceStats,
+  deviceAggregateStats
 };

@@ -24,20 +24,20 @@ const mongoConns = require('../mongoConns.js')();
  * A schema for the documents that stores device latest software version
  */
 const deviceSwVersionSchema = new Schema({
-    // device version
-    versions: {
-        type: Object,
-        required: true,
-    },
-    // version support end
-    versionDeadline: {
-        type: Date,
-        required: true,
-        default: Date.now
-    }
+  // device version
+  versions: {
+    type: Object,
+    required: true
+  },
+  // version support end
+  versionDeadline: {
+    type: Date,
+    required: true,
+    default: Date.now
+  }
 
-},{
-    timestamps: true
+}, {
+  timestamps: true
 });
 
 // Default exports

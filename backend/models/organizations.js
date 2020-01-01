@@ -22,25 +22,25 @@ const mongoConns = require('../mongoConns.js')();
  * Organizations Database Schema
  */
 const OrgSchema = new Schema({
-    // organization name
-    name: {
-        type: String,
-        required: true,
-        match: [/^[a-z0-9- ]{1,50}$/i, "Name should contain English characters, digits or spaces"],
-        maxlength: [50, "Name length must be at most 50"]
-    },
-    // group name
-    group: {
-        type: String,
-        required: true,
-        unique: false,
-        maxlength: [50, "Group length must be at most 50"],
-    },
-    // account Id
-    account: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'accounts'
-    }
+  // organization name
+  name: {
+    type: String,
+    required: true,
+    match: [/^[a-z0-9- ]{1,50}$/i, 'Name should contain English characters, digits or spaces'],
+    maxlength: [50, 'Name length must be at most 50']
+  },
+  // group name
+  group: {
+    type: String,
+    required: true,
+    unique: false,
+    maxlength: [50, 'Group length must be at most 50']
+  },
+  // account Id
+  account: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'accounts'
+  }
 });
 
 // Default exports

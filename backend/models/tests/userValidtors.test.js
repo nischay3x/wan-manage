@@ -17,8 +17,7 @@
 const validators = require('../validators');
 
 describe('validateUserName', () => {
-    it.each
-        `
+  it.each`
         name                    | result
         ${'usera'}              | ${true}
         ${'UserA'}              | ${true}
@@ -37,14 +36,13 @@ describe('validateUserName', () => {
         ${null}                 | ${false}
         ${undefined}            | ${false}
         `
-        ('Should return $result if user name is $name', ({name, result}) => {
-            expect(validators.validateUserName(name)).toEqual(result);
-        });
+  ('Should return $result if user name is $name', ({ name, result }) => {
+    expect(validators.validateUserName(name)).toEqual(result);
+  });
 });
 
 describe('validateEmail', () => {
-    it.each
-        `
+  it.each`
         email                   | result     
         ${'user@mail.com'}      | ${true}
         ${'@mail'}              | ${false}
@@ -53,21 +51,20 @@ describe('validateEmail', () => {
         ${null}                 | ${false}
         ${undefined}            | ${false}
         `
-        ('Should return $result if email is $email', ({email, result}) => {
-            expect(validators.validateEmail(email)).toEqual(result);
-        });
+  ('Should return $result if email is $email', ({ email, result }) => {
+    expect(validators.validateEmail(email)).toEqual(result);
+  });
 });
 
 describe('validatePhoneNumber', () => {
-    it.each
-        `
+  it.each`
         phoneNumber              | result     
         ${'+1-208-7979791'}      | ${true}
         ${'+1(208)7979791'}      | ${true}
         ${'+1-208-797991'}       | ${false}
         ${''}                    | ${false}
         `
-        ('Should return $result if phoneNumber is $phoneNumber', ({phoneNumber, result}) => {
-            expect(validators.validateIsPhoneNumber(phoneNumber)).toEqual(result);
-        });
+  ('Should return $result if phoneNumber is $phoneNumber', ({ phoneNumber, result }) => {
+    expect(validators.validateIsPhoneNumber(phoneNumber)).toEqual(result);
+  });
 });

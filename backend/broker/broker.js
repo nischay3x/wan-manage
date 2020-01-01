@@ -16,10 +16,10 @@
 
 // Logic to start/stop a device
 var configs = require('../configs')();
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'),configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
 const devUtils = require('./utils');
 const async = require('async');
-const logger = require('../logging/logging')({module: module.filename, type: 'job'});
+const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 var dispatcher = require('../deviceLogic/dispatcher');
 
 /**
@@ -29,14 +29,13 @@ var dispatcher = require('../deviceLogic/dispatcher');
  * @return {void}
  */
 exports.deviceConnectionOpened = async (deviceId) => {
-    logger.info("Broker: device connection opened", {params: {deviceID: deviceId}});
-    try {
-        await deviceQueues.startQueue(deviceId, deviceProcessor);
-    } catch (err) {
-        logger.error("Broker starting queue error", {params: {err: err.message}});
-    }
+  logger.info('Broker: device connection opened', { params: { deviceID: deviceId } });
+  try {
+    await deviceQueues.startQueue(deviceId, deviceProcessor);
+  } catch (err) {
+    logger.error('Broker starting queue error', { params: { err: err.message } });
+  }
 };
-
 
 /**
  * A callback that is called when a device disconnects from the MGMT
@@ -45,12 +44,12 @@ exports.deviceConnectionOpened = async (deviceId) => {
  * @return {void}
  */
 exports.deviceConnectionClosed = async (deviceId) => {
-    logger.info("Broker: device connection closed", {params: {deviceID: deviceId}});
-    try {
-        await deviceQueues.pauseQueue(deviceId);
-    } catch (err) {
-        logger.error("Broker pausing queue error", {params: {err: err.message}});
-    }
+  logger.info('Broker: device connection closed', { params: { deviceID: deviceId } });
+  try {
+    await deviceQueues.pauseQueue(deviceId);
+  } catch (err) {
+    logger.error('Broker pausing queue error', { params: { err: err.message } });
+  }
 };
 
 /**
@@ -60,45 +59,45 @@ exports.deviceConnectionClosed = async (deviceId) => {
  * @return {Promise}     a promise for processing the job
  */
 deviceProcessor = async (job) => {
-    // Job is passed twice - for event data and event header.
-    logger.info("Processing job", {params:{job: job}, job: job});
+  // Job is passed twice - for event data and event header.
+  logger.info('Processing job', { params: { job: job }, job: job });
 
-    // Get tasks
-    const tasks = job.data.message.tasks;
-    const tasksLength = tasks.length;
-    let curTask = 0;
-    // Build operations from tasks
-    const operations = [];
-    const mId = job.data.metadata.target;
-    const org = job.data.metadata.org;
-    return new Promise((resolve, reject) => {
-        operations.push((callback) => {callback(null, 'Start Job Tasks, job ID=' + job.id);});
-        tasks.forEach((task) => {
-            operations.push(devUtils.sendMsg(org, mId, task, job, ++curTask, tasksLength));
-        });
-        // Execute all tasks
-        // 1. Loop on all job transaction messages
-        // 2. Send to device over a web socket
-        // 3. Update transaction job progress
-        async.waterfall(operations, (error, results) => {
-            if (error) {
-                logger.error("Job operation error",{params:{job: job, err: error.message}, job: job});
-                // Call error callback only if the job reached maximal retries
-                // We check if the remaining attempts are less than 1 instead of 0
-                // since this code runs before the number of attempts is decreased.
-                const { remaining } = job.toJSON().attempts;
-                if(remaining <= 1) {
-                    dispatcher.error(job.id, job.data.response);
-                }
-                reject(error);
-            } else {
-                logger.info("Job completed", {params: {job: job, results: results}, job: job});
-                // Dispatch the response for Job completion
-                // In the past this was called from job complete event but there were some missing events
-                // So moved the dispatcher to here
-                dispatcher.complete(job.id, job.data.response);
-                resolve();
-            }
-        });
+  // Get tasks
+  const tasks = job.data.message.tasks;
+  const tasksLength = tasks.length;
+  let curTask = 0;
+  // Build operations from tasks
+  const operations = [];
+  const mId = job.data.metadata.target;
+  const org = job.data.metadata.org;
+  return new Promise((resolve, reject) => {
+    operations.push((callback) => { callback(null, 'Start Job Tasks, job ID=' + job.id); });
+    tasks.forEach((task) => {
+      operations.push(devUtils.sendMsg(org, mId, task, job, ++curTask, tasksLength));
     });
+    // Execute all tasks
+    // 1. Loop on all job transaction messages
+    // 2. Send to device over a web socket
+    // 3. Update transaction job progress
+    async.waterfall(operations, (error, results) => {
+      if (error) {
+        logger.error('Job operation error', { params: { job: job, err: error.message }, job: job });
+        // Call error callback only if the job reached maximal retries
+        // We check if the remaining attempts are less than 1 instead of 0
+        // since this code runs before the number of attempts is decreased.
+        const { remaining } = job.toJSON().attempts;
+        if (remaining <= 1) {
+          dispatcher.error(job.id, job.data.response);
+        }
+        reject(error);
+      } else {
+        logger.info('Job completed', { params: { job: job, results: results }, job: job });
+        // Dispatch the response for Job completion
+        // In the past this was called from job complete event but there were some missing events
+        // So moved the dispatcher to here
+        dispatcher.complete(job.id, job.data.response);
+        resolve();
+      }
+    });
+  });
 };

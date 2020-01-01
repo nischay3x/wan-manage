@@ -23,50 +23,50 @@ const mongoConns = require('../mongoConns.js')();
  * Tunnels Database Schema
  */
 const tunnelSchema = new Schema({
-    // Organization
-    org: {
-        type: Schema.Types.ObjectId,
-        ref: 'organizations',
-        required: true
-    },
-    // Unique tunnel number. This number is used to generate the tunnel parameters
-    num: {
-        type: Number,
-        default: 0
-    },
-    // Indicate if the tunnel is used or deleted
-    isActive: {
-        type: Boolean,
-        default: false
-    },	
-    // device A participate in the tunnel
-    deviceA: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'devices'
-    },
-    interfaceA: {
-        type: mongoose.Schema.Types.ObjectId,
-    },
-    // device B participate in the tunnel
-    deviceB: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'devices'
-    },
-    interfaceB: {
-        type: mongoose.Schema.Types.ObjectId,
-    },
-    // Indicate if the tunnel is configured for deviceA
-    deviceAconf: {
-        type: Boolean,
-        default: false
-    },
-    // Indicate if the tunnel is configured for deviceB
-    deviceBconf: {
-        type: Boolean,
-        default: false
-    }
-},{
-    timestamps: true
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true
+  },
+  // Unique tunnel number. This number is used to generate the tunnel parameters
+  num: {
+    type: Number,
+    default: 0
+  },
+  // Indicate if the tunnel is used or deleted
+  isActive: {
+    type: Boolean,
+    default: false
+  },
+  // device A participate in the tunnel
+  deviceA: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'devices'
+  },
+  interfaceA: {
+    type: mongoose.Schema.Types.ObjectId
+  },
+  // device B participate in the tunnel
+  deviceB: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'devices'
+  },
+  interfaceB: {
+    type: mongoose.Schema.Types.ObjectId
+  },
+  // Indicate if the tunnel is configured for deviceA
+  deviceAconf: {
+    type: Boolean,
+    default: false
+  },
+  // Indicate if the tunnel is configured for deviceB
+  deviceBconf: {
+    type: Boolean,
+    default: false
+  }
+}, {
+  timestamps: true
 });
 
 // tunnel number per org must be unique

@@ -17,9 +17,9 @@
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const DevSwUpdater = require('./DevSwVersionUpdateManager');
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'),configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
 const { devices } = require('../models/devices');
-const logger = require('../logging/logging')({module: module.filename, type: 'req'});
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 /**
  * Queues upgrade jobs to a list of devices.
@@ -30,34 +30,34 @@ const logger = require('../logging/logging')({module: module.filename, type: 're
  * @return {Promise}               a promise for queuing an upgrade job
  */
 const queueUpgradeJobs = (devices, user, org, targetVersion) => {
-    const tasks = [{
-        entity: "agent",
-        message: "upgrade-device-sw",
-        params: { version: targetVersion }
-    }];
-    const jobs = [];
-    devices.forEach(dev => {
-        deviceStatus.setDeviceStatsField(dev.machineId, 'state', 'pending');
-        jobs.push(
-            deviceQueues.addJob(dev.machineId, user, org,
-                // Data
-                {'title': `Upgrade device ${dev.hostname}`, 'tasks': tasks},
-                // Response data
-                {method: 'upgrade', data: {'device': dev._id, 'org': org}},
-                // Metadata
-                {priority: 'high', attempts: 1, removeOnComplete: false},
-                // Complete callback
-                null)
-        );
-    });
-    return new Promise(async(resolve, reject) => {
-        try {
-            const jobResults = await Promise.all(jobs);
-            resolve(jobResults);
-        } catch (err) {
-            reject(err);
-        }
-    });
+  const tasks = [{
+    entity: 'agent',
+    message: 'upgrade-device-sw',
+    params: { version: targetVersion }
+  }];
+  const jobs = [];
+  devices.forEach(dev => {
+    deviceStatus.setDeviceStatsField(dev.machineId, 'state', 'pending');
+    jobs.push(
+      deviceQueues.addJob(dev.machineId, user, org,
+        // Data
+        { title: `Upgrade device ${dev.hostname}`, tasks: tasks },
+        // Response data
+        { method: 'upgrade', data: { device: dev._id, org: org } },
+        // Metadata
+        { priority: 'high', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null)
+    );
+  });
+  return new Promise(async (resolve, reject) => {
+    try {
+      const jobResults = await Promise.all(jobs);
+      resolve(jobResults);
+    } catch (err) {
+      reject(err);
+    }
+  });
 };
 
 /**
@@ -69,56 +69,57 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
  * @param  {Callback} next       express next() callback
  * @return {void}
  */
-const apply = async(deviceList, req, res, next) => {
-    // If the apply method was called for multiple devices, extract
-    // only the devices that appear in the body. If it was called for
-    // a single device, simply used the first device in the devices array.
-    let op_devices;
-    if(req.body.devices) {
-        selected_devices = req.body.devices;
-        op_devices = (deviceList && selected_devices) ?
-            deviceList.filter((device) => {
-                const in_selected = selected_devices.hasOwnProperty(device._id);
-                return in_selected ? true : false;
-            }) : [];
-    } else {
-        op_devices = deviceList;
-    }
+const apply = async (deviceList, req, res, next) => {
+  // If the apply method was called for multiple devices, extract
+  // only the devices that appear in the body. If it was called for
+  // a single device, simply used the first device in the devices array.
+  let op_devices;
+  if (req.body.devices) {
+    selected_devices = req.body.devices;
+    op_devices = (deviceList && selected_devices)
+      ? deviceList.filter((device) => {
+        const in_selected = selected_devices.hasOwnProperty(device._id);
+        return !!in_selected;
+      }) : [];
+  } else {
+    op_devices = deviceList;
+  }
 
-    try {
-        // Filter out devices that already have
-        // a pending upgrade job in the queue.
-        op_devices = await devices.find({
-            $and: [
-                { _id: { $in: op_devices } },
-                { "upgradeSchedule.jobQueued": { $ne: true } }
-            ]},
-            '_id machineId hostname'
-        );
+  try {
+    // Filter out devices that already have
+    // a pending upgrade job in the queue.
+    op_devices = await devices.find({
+      $and: [
+        { _id: { $in: op_devices } },
+        { 'upgradeSchedule.jobQueued': { $ne: true } }
+      ]
+    },
+    '_id machineId hostname'
+    );
 
-        const swUpdater = await DevSwUpdater.createSwVerUpdater();
-        const version = swUpdater.getLatestDevSwVersion();
-        const user = req.user.username;
-        const org = req.user.defaultOrg._id.toString();
-        const jobResults = await queueUpgradeJobs(op_devices, user, org, version);
-        jobResults.forEach(job => {
-            logger.info("Upgrade device job queued", {
-                params: { jobId: job.id, version: version },
-                job: job,
-                req: req
-            });
-        });
+    const swUpdater = await DevSwUpdater.createSwVerUpdater();
+    const version = swUpdater.getLatestDevSwVersion();
+    const user = req.user.username;
+    const org = req.user.defaultOrg._id.toString();
+    const jobResults = await queueUpgradeJobs(op_devices, user, org, version);
+    jobResults.forEach(job => {
+      logger.info('Upgrade device job queued', {
+        params: { jobId: job.id, version: version },
+        job: job,
+        req: req
+      });
+    });
 
-        // Set the upgrade job pending flag for all devices.
-        // This prevents queuing additional upgrade tasks as long
-        // as there's a pending upgrade task in a device's queue.
-        const deviceIDs = op_devices.map(dev => { return dev._id; });
-        await setQueuedUpgradeFlag(deviceIDs, org, true);
+    // Set the upgrade job pending flag for all devices.
+    // This prevents queuing additional upgrade tasks as long
+    // as there's a pending upgrade task in a device's queue.
+    const deviceIDs = op_devices.map(dev => { return dev._id; });
+    await setQueuedUpgradeFlag(deviceIDs, org, true);
 
-        return res.status(200).send({});
-    } catch (err) {
-        return next(err);
-    }
+    return res.status(200).send({});
+  } catch (err) {
+    return next(err);
+  }
 };
 /**
  * Sets the value of the pending upgrade flag in the database.
@@ -130,18 +131,18 @@ const apply = async(deviceList, req, res, next) => {
  * @return {Promise}
  */
 const setQueuedUpgradeFlag = (deviceID, org, flag) => {
-    return new Promise(async(resolve, reject) => {
-        try {
-            await devices.update(
-                { _id: { $in: deviceID }, org: org },
-                { $set: { "upgradeSchedule.jobQueued": flag } },
-                { upsert: false }
-            );
-        } catch (err) {
-            return reject(err);
-        }
-        return resolve();
-    });
+  return new Promise(async (resolve, reject) => {
+    try {
+      await devices.update(
+        { _id: { $in: deviceID }, org: org },
+        { $set: { 'upgradeSchedule.jobQueued': flag } },
+        { upsert: false }
+      );
+    } catch (err) {
+      return reject(err);
+    }
+    return resolve();
+  });
 };
 
 /**
@@ -152,13 +153,13 @@ const setQueuedUpgradeFlag = (deviceID, org, flag) => {
  * @param  {string} res   device object ID and username
  * @return {void}
  */
-const complete = async(jobId, res) => {
-    logger.info("Device Upgrade complete", {params: {result: res, jobId: jobId}});
-    try {
-        await setQueuedUpgradeFlag([res.device], res.org, false);
-    } catch (err) {
-        logger.warn("Failed to update jobQueued field in database", {params: {result: res, jobId: jobId}});
-    }
+const complete = async (jobId, res) => {
+  logger.info('Device Upgrade complete', { params: { result: res, jobId: jobId } });
+  try {
+    await setQueuedUpgradeFlag([res.device], res.org, false);
+  } catch (err) {
+    logger.warn('Failed to update jobQueued field in database', { params: { result: res, jobId: jobId } });
+  }
 };
 
 /**
@@ -169,13 +170,13 @@ const complete = async(jobId, res) => {
  * @param  {Object} res
  * @return {void}
  */
-const error = async(jobId, res) => {
-    logger.warn("Device Upgrade failed", {params: {result: res, jobId: jobId}});
-    try {
-        await setQueuedUpgradeFlag([res.device], res.org, false);
-    } catch (err) {
-        logger.warn("Failed to update jobQueued field in database", {params: {result: res, jobId: jobId}});
-    }
+const error = async (jobId, res) => {
+  logger.warn('Device Upgrade failed', { params: { result: res, jobId: jobId } });
+  try {
+    await setQueuedUpgradeFlag([res.device], res.org, false);
+  } catch (err) {
+    logger.warn('Failed to update jobQueued field in database', { params: { result: res, jobId: jobId } });
+  }
 };
 
 /**
@@ -186,24 +187,24 @@ const error = async(jobId, res) => {
  * @param  {Object} res
  * @return {void}
  */
-const remove = async(job) => {
-    if(['inactive', 'delayed', 'active'].includes(job._state)) {
-        logger.info('Device Upgrade job removed', {params: {job: job}});
-        try {
-            const { org, device } = job.data.response.data;
-            await setQueuedUpgradeFlag([device], org, false);
-        } catch (err) {
-            logger.error("Failed to update jobQueued field in database", {
-                params: { job: job, err: err.message }
-            });
-        }
+const remove = async (job) => {
+  if (['inactive', 'delayed', 'active'].includes(job._state)) {
+    logger.info('Device Upgrade job removed', { params: { job: job } });
+    try {
+      const { org, device } = job.data.response.data;
+      await setQueuedUpgradeFlag([device], org, false);
+    } catch (err) {
+      logger.error('Failed to update jobQueued field in database', {
+        params: { job: job, err: err.message }
+      });
     }
+  }
 };
 
 module.exports = {
-    apply: apply,
-    complete: complete,
-    queueUpgradeJobs: queueUpgradeJobs,
-    error: error,
-    remove: remove
+  apply: apply,
+  complete: complete,
+  queueUpgradeJobs: queueUpgradeJobs,
+  error: error,
+  remove: remove
 };

@@ -34,10 +34,10 @@ router.route('/')
   .get(cors.corsWithOptions, verifyPermission('accesstokens', 'get'), (req, res, next) => {
     AccessToken
       .find({ account: req.user.defaultAccount._id })
-      .populate("organization")
+      .populate('organization')
       .then((resp) => {
         // Organization.findById(resp.organization).then(organizations => {
-        const result = resp.map((record => {
+        const result = resp.map(record => {
           return {
             id: record.id,
             name: record.name,
@@ -45,11 +45,11 @@ router.route('/')
             token: record.token,
             isValid: record.isValid
           }
-        }));
+        });
 
         return res.status(200).json(result);
       }, (err) => {
-        return next(createError(404, "Error retrieving token."));
+        return next(createError(404, 'Error retrieving token.'));
       })
       .catch((err) => {
         return next(createError(500));
@@ -64,16 +64,16 @@ router.route('/')
         return record._id.toString() === req.body.organization;
       });
 
-      if (!tokenIsValid) return next(createError(403, "Error generating token."));
+      if (!tokenIsValid) return next(createError(403, 'Error generating token.'));
 
       const accessToken = new AccessToken({
         account: req.user.defaultAccount._id,
         organization: req.body.organization,
         name: req.body.name,
-        token: "",
+        token: '',
         isValid: true
       });
-      const token = await getToken(req, { type: "app_access_token", id: accessToken._id.toString(), org: req.body.organization }, false);
+      const token = await getToken(req, { type: 'app_access_token', id: accessToken._id.toString(), org: req.body.organization }, false);
       accessToken.token = token;
       await accessToken.save();
 
@@ -90,12 +90,12 @@ router.route('/:accesstokenId')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .delete(cors.corsWithOptions, verifyPermission('accesstokens', 'del'), (req, res, next) => {
     AccessToken
-      .deleteOne({ _id: mongoose.Types.ObjectId(req.params.accesstokenId), account: req.user.defaultAccount._id, })
+      .deleteOne({ _id: mongoose.Types.ObjectId(req.params.accesstokenId), account: req.user.defaultAccount._id })
       .then((resp) => {
         if (resp != null) {
           return res.status(200).json({});
         } else {
-          return next(createError(404, "Access Token not found"));
+          return next(createError(404, 'Access Token not found'));
         }
       }, (err) => {
         return next(createError(500));
