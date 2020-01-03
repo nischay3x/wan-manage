@@ -10,6 +10,15 @@ This repository contains the flexiManage backend component from flexiWAN. flexiM
 
 Our hosted service https://manage.flexiwan.com provides a free UI access to the flexiManage service where users can create an account and use up to 3 flexiEdge devices for free.
 
+## What is included in this repository
+
+The flexiManage backend component provides REST API for managing the flexiWAN network, configuring and connecting to flexiWAN flexiEdge devices. 
+The repository includes two git submodules which are used by the flexiWAN SaaS service and are not open. When pulling the flexiManage repository, 
+these submodules would be seen as an empty direcory:
+* client - a git submodule for the flexiWAN SaaS UI. The UI provides the user side logic and design for managing the network. It uses REST to access flexiManage
+* backend/billing - a git submodule for managing the flexiWAN SaaS billing
+These submodules are not required for running the backend serivce and used for the UI and Billing additions on top of flexiManage.
+
 ## Install and use flexiManage locally
 
 ### Prerequisites
