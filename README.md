@@ -21,7 +21,7 @@ these submodules would be seen as an empty direcory:
 * backend/billing - a git submodule for managing the flexiWAN SaaS billing
 
 These submodules are not required for running the backend serivce and are used for the UI and Billing additions on top of flexiManage.
-To experience the complete flexiWAN system, open a free account on our [hosted system(https://flexiwan.com/pricing).
+To experience the complete flexiWAN system, open a free account on our [hosted system](https://flexiwan.com/pricing).
 
 ## Install and use flexiManage locally
 
