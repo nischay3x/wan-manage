@@ -124,7 +124,7 @@ const config_env = {
         'mongoBillingUrl': `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexibilling?replicaSet=rs`,
         'mongoAnalyticsUrl': `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwanAnalytics?replicaSet=rs`,
         'mailerBypassCert': true,
-        'SwRepositoryUrl': 'https://deb.flexiwan.com/info/flexiwan-router/latest-unstable',
+        'SwRepositoryUrl': 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
         'userTokenExpiration': 604800,
         'useFlexiBilling': false,
         'logLevel': 'debug',

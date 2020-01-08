@@ -202,96 +202,6 @@ const errorTunnelAdd = (jobId, res) => {
 };
 
 /**
- * Checks if tunnels are active but not connected, and
- * reconnects them. This method is called periodically.
- *
- * @return {void}
- */
-//TBD: delete this when we don't support v0.X.X any longer. When mgmt version upgrade to 2.X.X
-const checkAndReconnectTunnels = () => {
-    // Get all device tunnels and mark them as not connected
-    tunnelsModel
-    .find({'isActive':true, $or: [{'deviceAconf':false}, {'deviceBconf':false}]})
-    .populate('deviceA')
-    .populate('deviceB')
-    .then((tunnelsToConnect) => {
-        if (tunnelsToConnect && tunnelsToConnect.length > 0) {
-            logger.info("Periodic tunnels check", {params: {tunnels: tunnelsToConnect.length}});
-
-            const dbTasks = [];
-            const now = new Date();
-
-            tunnelsToConnect.forEach((tunnel) => {
-
-                // Only handle tunnels updated enough time before
-                // to rate limit the create/update and prevent update in the middle of configuration
-                if (now-tunnel.updatedAt > 60000) {
-
-                    // TBD: Make sure devices are connected and running
-                    if (connections.isConnected(tunnel.deviceA.machineId) &&
-                        connections.isConnected(tunnel.deviceB.machineId) &&
-                        deviceStatus.getDeviceStatus(tunnel.deviceA.machineId).state === 'running' &&
-                        deviceStatus.getDeviceStatus(tunnel.deviceB.machineId).state === 'running') {
-
-                        // Define devices
-                        const deviceA = tunnel.deviceA;
-                        const deviceB = tunnel.deviceB;
-
-                        // Only update tunnels for old versions. New version store/restore feature takes care of it
-                        const deviceAMajorAgentVersion = getMajorVersion(deviceA.versions.agent);
-                        const deviceBMajorAgentVersion = getMajorVersion(deviceB.versions.agent);
-                        if (deviceAMajorAgentVersion === 0 || deviceBMajorAgentVersion === 0) {    // version 0.X.X
-                            // Populate interface details
-                            const deviceA_intf = tunnel.deviceA.interfaces
-                                .filter((interface)=>{return interface._id == ""+tunnel.interfaceA})[0];
-                            const deviceB_intf = tunnel.deviceB.interfaces
-                                .filter((interface)=>{return interface._id == ""+tunnel.interfaceB})[0];
-
-                            // Configure tunnel
-                            dbTasks.push(new Promise(function(resolve, reject) {
-                                delTunnel("System", tunnel.org, tunnel.num,
-                                    deviceA, deviceB, deviceA_intf, deviceB_intf,
-                                    (msg)=>{logger.info("Deleting tunnel", {params: {message: msg}});}
-                                );
-                                addTunnel("System", tunnel.org, tunnel.num,
-                                    deviceA, deviceB, deviceA_intf, deviceB_intf,
-                                    (msg)=>{logger.info("Adding tunnel", {params: {message: msg}});},
-                                    resolve,
-                                    reject
-                                );
-                            }));
-                        }
-                    } else {
-                        logger.info("Waiting for devices to be running and connected",{params:{tunnel: tunnel.num}});
-                    }
-                } else {
-                    logger.info("Waiting enough time since last update for tunnel", {
-                        params:{tunnel: tunnel.num, period: now-tunnel.updatedAt}});
-                }
-            });
-
-            // Execute all promises
-            logger.debug("Running tunnel promises", {params: {tunnels: dbTasks.length}});
-            Promise.all(dbTasks)
-            .then((values) => {
-                // Run all device configuration operations
-                logger.info("Operations completed", {params: {promise: values}});
-            }, (err) => {
-                logger.error('Update tunnels failed', {params: {err: err.message}});
-            })
-            .catch((err) => {
-                logger.error('Update tunnels failed', {params: {err: err.message}});
-            });
-        }
-    }, (err) => {
-        logger.error("Periodic Check Tunnels failed", {params: {err: err.message}});
-    })
-    .catch((err) => {
-        logger.error("Periodic Check Tunnels failed", {params: {err: err.message}});
-    });
-};
-
-/**
  * This function generates one tunnel promise including all configurations for the tunnel into the device
  * @param  {string}   user         user id of the requesting user
  * @param  {string}   org          organization id the user belongs to
@@ -905,9 +815,6 @@ module.exports = {
     },
     error: {
         errorTunnelAdd:errorTunnelAdd
-    },
-    tasks: {
-        checkAndReconnectTunnels: checkAndReconnectTunnels
     },
     prepareTunnelRemoveJob: prepareTunnelRemoveJob,
     prepareTunnelAddJob: prepareTunnelAddJob,
