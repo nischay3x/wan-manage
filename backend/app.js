@@ -25,7 +25,6 @@ var cookieParser = require('cookie-parser');
 var passport = require('passport');
 var auth = require('./authenticate');
 var deviceStatus = require('./periodic/deviceStatus')();
-var checkTunnels = require('./periodic/checkTunnels')();
 var deviceQueues = require('./periodic/deviceQueue')();
 const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
@@ -122,7 +121,6 @@ app.disable('x-powered-by');
 
 // Start periodic device tasks
 deviceStatus.start();
-checkTunnels.start();
 deviceQueues.start();
 deviceSwVersion.start();
 deviceSwUpgrade.start();
