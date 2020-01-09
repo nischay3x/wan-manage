@@ -167,11 +167,11 @@ const config_env = {
         'clientStaticDir': 'client/build',
         'logFilePath': '/var/log/flexiwan/flexiwan.log',
         'reqLogFilePath': '/var/log/flexiwan/flexiwanReq.log',
-        'billingConfigSite': 'flexiwan',   // TBD: Modify
-        'billingDefaultPlan': 'enterprise-test',   // TBD: Modify
+        'billingConfigSite': 'flexiwan',
+        'billingDefaultPlan': 'enterprise',
         'useFlexiBilling': true,
         'billingRedirectOkUrl': 'https://manage.flexiwan.com/ok.html',
-        'SwRepositoryUrl': 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',   // TBD: Modify
+        'SwRepositoryUrl': 'https://deb.flexiwan.com/info/flexiwan-router/latest',
         'logLevel': 'info',
         'logUserName': true,
         'corsWhiteList': ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80']
