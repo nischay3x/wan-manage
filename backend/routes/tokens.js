@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -43,7 +44,10 @@ const genToken = function (data) {
 // check update
 const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
   if (qtype === 'POST') {
-    req.body.token = genToken({ org: req.user.defaultOrg._id.toString(), account: req.user.defaultAccount._id });
+    req.body.token = genToken({
+      org: req.user.defaultOrg._id.toString(),
+      account: req.user.defaultAccount._id
+    });
     req.body.org = req.user.defaultOrg._id.toString();
   } else {
     // Don't allow to update the token

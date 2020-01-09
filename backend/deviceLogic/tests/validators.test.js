@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -185,12 +186,13 @@ describe('validateDevice', () => {
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an valid device if WAN and default GW IP addresses are not on the same subnet', () => {
-    device.interfaces[1].IPv4 = '10.0.0.2';
-    // failureObject.err = 'WAN and default route IP addresses are not on the same subnet';
-    const result = validateDevice(device);
-    expect(result).toMatchObject(successObject);
-  });
+  it('Should be an valid device if WAN and default GW IP addresses are not on the same subnet',
+    () => {
+      device.interfaces[1].IPv4 = '10.0.0.2';
+      // failureObject.err = 'WAN and default route IP addresses are not on the same subnet';
+      const result = validateDevice(device);
+      expect(result).toMatchObject(successObject);
+    });
 
   it('Should be an invalid device if OSPF is configured on the WAN interface', () => {
     device.interfaces[1].routing = 'OSPF';

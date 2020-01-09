@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -25,7 +26,6 @@ describe('Initialization', () => {
   });
 
   test('Starting queue, adding and processing a job, remove on complete', async (done) => {
-    let job;
     let err;
     try {
       await deviceQueues.startQueue('AAA', async (rjob) => {
@@ -41,18 +41,17 @@ describe('Initialization', () => {
       err = e;
     }
     expect(err).toEqual(undefined);
-    job = await deviceQueues.addJob('AAA', null, null, { testdata: 'AAA1' }, { resp: 'RRR1' },
+    const job = await deviceQueues.addJob('AAA', null, null, { testdata: 'AAA1' }, { resp: 'RRR1' },
       { priority: 'normal', attempts: 1, removeOnComplete: true },
       (jobid, res) => {
         logger.verbose('Job completed, res=' + JSON.stringify(res));
         expect(res).toEqual({ resp: 'RRR1' });
-        done()
+        done();
       });
     logger.verbose('Job ID = ' + job.id);
   });
 
   test('Starting queue, adding and processing a job, keep on complete', async (done) => {
-    let job;
     let err;
     try {
       await deviceQueues.startQueue('BBB', async (rjob) => {
@@ -60,7 +59,12 @@ describe('Initialization', () => {
         expect(job.data).toEqual({
           message: { testdata: 'BBB1' },
           response: 1,
-          metadata: { target: 'BBB', username: 'user1', org: '4edd40c86762e0fb12000001', init: false }
+          metadata: {
+            target: 'BBB',
+            username: 'user1',
+            org: '4edd40c86762e0fb12000001',
+            init: false
+          }
         });
         expect(rjob.id).toBe(job.id);
       });
@@ -68,13 +72,19 @@ describe('Initialization', () => {
       err = e;
     }
     expect(err).toEqual(undefined);
-    job = await deviceQueues.addJob('BBB', 'user1', '4edd40c86762e0fb12000001', { testdata: 'BBB1' }, 1,
+    const job = await deviceQueues.addJob(
+      'BBB',
+      'user1',
+      '4edd40c86762e0fb12000001',
+      { testdata: 'BBB1' },
+      1,
       { priority: 'normal', attempts: 1, removeOnComplete: false },
       (jobid, res) => {
         logger.verbose('Job completed, res=' + JSON.stringify(res));
         expect(res).toBe(1);
-        done()
-      });
+        done();
+      }
+    );
     logger.verbose('Job ID = ' + job.id);
   });
 
@@ -95,13 +105,12 @@ describe('Initialization', () => {
   });
 
   test('Removing completed jobs', async () => {
-    await deviceQueues.removeJobs('complete', olderThan = 0);
+    await deviceQueues.removeJobs('complete', 0);
     const c = await deviceQueues.getCount('complete');
     expect(c).toBe(0);
   });
 
   test('Pause / Resume', async (done) => {
-    let job;
     let err;
     try {
       await deviceQueues.startQueue('CCC', async (rjob) => {
@@ -109,7 +118,12 @@ describe('Initialization', () => {
         expect(job.data).toEqual({
           message: { testdata: 'CCC1' },
           response: true,
-          metadata: { target: 'CCC', username: 'user2', org: '4edd40c86762e0fb12000002', init: false }
+          metadata: {
+            target: 'CCC',
+            username: 'user2',
+            org: '4edd40c86762e0fb12000002',
+            init: false
+          }
         });
         expect(rjob.id).toBe(job.id);
       });
@@ -118,13 +132,19 @@ describe('Initialization', () => {
     }
     expect(err).toEqual(undefined);
     deviceQueues.pauseQueue('CCC');
-    job = await deviceQueues.addJob('CCC', 'user2', '4edd40c86762e0fb12000002', { testdata: 'CCC1' }, true,
+    const job = await deviceQueues.addJob(
+      'CCC',
+      'user2',
+      '4edd40c86762e0fb12000002',
+      { testdata: 'CCC1' },
+      true,
       { priority: 'normal', attempts: 1, removeOnComplete: true },
       (jobid, res) => {
         logger.verbose('Job completed, res=' + JSON.stringify(res));
         expect(res).toBe(true);
-        done()
-      });
+        done();
+      }
+    );
     logger.verbose('Job ID = ' + job.id);
     const c = await deviceQueues.getCount('inactive');
     expect(c).toBe(1);

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -47,15 +48,20 @@ accountsRouter.route('/select')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
 // No need to check permission. User can see all the accounts he's registered to
   .post(cors.corsWithOptions, (req, res, next) => {
-    if (!req.user.defaultAccount || !req.user.defaultAccount._id || !req.user._id) { return next(createError(500, 'Error in selecting account')); }
+    if (!req.user.defaultAccount || !req.user.defaultAccount._id || !req.user._id) {
+      return next(createError(500, 'Error in selecting account'));
+    }
     // If current account not changed, return OK
-    if (req.user.defaultAccount._id == req.body.account) return res.status(200).json({ _id: req.user.defaultAccount._id });
+    if (req.user.defaultAccount._id.toString() === req.body.account) {
+      return res.status(200).json({ _id: req.user.defaultAccount._id });
+    }
 
     // Get organizations for the new account
     User.findOneAndUpdate(
       // Query, use the email and account
       { _id: req.user._id },
-      // Update account, set default org to null so the system will choose an organization on login if something failed
+      // Update account, set default org to null so the system
+      // will choose an organization on login if something failed
       { defaultAccount: req.body.account, defaultOrg: null },
       // Options
       { upsert: false, new: true }
@@ -80,14 +86,27 @@ accountsRouter.route('/:accountId')
   .get(cors.corsWithOptions, verifyPermission('accounts', 'get'), (req, res, next) => {
     Accounts.findOne({ _id: req.user.defaultAccount._id })
       .then((account) => {
-        const { logoFile, organizations, companySize, serviceType, numSites, __v, ...rest } = account.toObject();
+        const {
+          logoFile,
+          organizations,
+          companySize,
+          serviceType,
+          numSites,
+          __v,
+          ...rest
+        } = account.toObject();
         return res.status(200).json(rest);
-      }, (err) => { throw err })
+      }, (err) => { throw err; })
       .catch((err) => {
-        logger.error('Error getting account', { params: { accountId: req.user.defaultAccount._id, reason: err.message } });
+        logger.error('Error getting account', {
+          params: {
+            accountId: req.user.defaultAccount._id,
+            reason: err.message
+          }
+        });
         return next(createError('Error getting account'));
       });
-  })
+  });
 
 // Retrieves a list of users in the system
 accountsRouter.route('/:accountId')
@@ -109,10 +128,20 @@ accountsRouter.route('/:accountId')
       res.setHeader('Refresh-JWT', token);
 
       // Return organization
-      const { logoFile, organizations, companySize, serviceType, numSites, __v, ...rest } = account.toObject();
+      const {
+        logoFile,
+        organizations,
+        companySize,
+        serviceType,
+        numSites,
+        __v,
+        ...rest
+      } = account.toObject();
       return res.status(200).json(rest);
     } catch (err) {
-      logger.error('Error updating account', { params: { accountId: req.params.accountId, reason: err.message } });
+      logger.error('Error updating account', {
+        params: { accountId: req.params.accountId, reason: err.message }
+      });
       return next(createError(400, err.message));
     }
   });
@@ -120,4 +149,4 @@ accountsRouter.route('/:accountId')
 // Default exports
 module.exports = {
   accountsRouter: accountsRouter
-}
+};

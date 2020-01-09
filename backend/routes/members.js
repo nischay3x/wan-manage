@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -27,7 +28,11 @@ const mongoConns = require('../mongoConns.js')();
 const cors = require('./cors');
 const { verifyPermission } = require('../authenticate');
 const randomKey = require('../utils/random-key');
-const mailer = require('../utils/mailer')(configs.get('mailerHost'), configs.get('mailerPort'), configs.get('mailerBypassCert'));
+const mailer = require('../utils/mailer')(
+  configs.get('mailerHost'),
+  configs.get('mailerPort'),
+  configs.get('mailerBypassCert')
+);
 const webHooks = require('../utils/webhooks')();
 const createError = require('http-errors');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -38,10 +43,10 @@ membersRouter.use(bodyParser.json());
 const pick = (...keys) => obj => keys.reduce((a, e) => {
   const objKeys = e.split('.');
   let val = obj[objKeys[0]];
-  for (i = 1; i < objKeys.length; i++) {
+  for (let i = 1; i < objKeys.length; i++) {
     if (val && val[objKeys[i]]) val = val[objKeys[i]]; else val = null;
   };
-  return { ...a, [objKeys.join('_')]: val }
+  return { ...a, [objKeys.join('_')]: val };
 }, {});
 
 // Error formatter
@@ -56,8 +61,14 @@ const formatErr = (err, msg) => {
 
 // check user parameters
 const checkMemberParameters = (req) => {
-  if (!req.user._id || !req.user.defaultAccount || !req.user.defaultOrg || !req.body.userPermissionTo ||
-        !req.body.userRole || !req.body.userEntity) return { status: false, error: 'Invitation Fields Error' };
+  if (
+    !req.user._id ||
+    !req.user.defaultAccount ||
+    !req.user.defaultOrg ||
+    !req.body.userPermissionTo ||
+    !req.body.userRole ||
+    !req.body.userEntity
+  ) { return { status: false, error: 'Invitation Fields Error' }; }
   // Account permissions could be owner, manager or viewer
   // Group and organization permissions could be manager or viewer
   if (req.body.userRole !== 'owner' &&
@@ -65,12 +76,20 @@ const checkMemberParameters = (req) => {
         req.body.userRole !== 'viewer') return { status: false, error: 'Illegal role' };
   if ((req.body.userPermissionTo === 'group' || req.body.userPermissionTo === 'organization') &&
         req.body.userRole !== 'manager' &&
-        req.body.userRole !== 'viewer') return { status: false, error: 'Illegal permission combination' };
+        req.body.userRole !== 'viewer') {
+    return { status: false, error: 'Illegal permission combination' };
+  }
   return { status: true, error: '' };
-}
+};
 
 // check levels and relationships
-const checkMemberLevel = async (permissionTo, permissionRole, permissionEntity, userId, accountId) => {
+const checkMemberLevel = async (
+  permissionTo,
+  permissionRole,
+  permissionEntity,
+  userId,
+  accountId
+) => {
   // make sure user is only allow to define membership under his view
   try {
     let verifyPromise = null;
@@ -81,11 +100,14 @@ const checkMemberLevel = async (permissionTo, permissionRole, permissionEntity, 
         user: userId,
         account: accountId,
         to: 'account',
-        ...(permissionRole === 'owner') && { role: 'owner' },
-        ...(permissionRole !== 'owner') && { $or: [{ role: 'owner' }, { role: 'manager' }] }
+        ...(permissionRole === 'owner' && { role: 'owner' }),
+        ...(permissionRole !== 'owner' && {
+          $or: [{ role: 'owner' }, { role: 'manager' }]
+        })
       });
     }
-    // to=group, role=(manager or viewer) => user must be this group manager or account owner/manager
+    // to=group, role=(manager or viewer) => user must be this
+    // group manager or account owner/manager
     if (permissionTo === 'group') {
       verifyPromise = membership.findOne({
         user: userId,
@@ -96,16 +118,22 @@ const checkMemberLevel = async (permissionTo, permissionRole, permissionEntity, 
         ]
       });
     }
-    // to=organization, role=(manager or viewer) => user must be this organization manager or group manager for that organization
-    //    or account owner/manager
+    // to=organization, role=(manager or viewer) => user must be this organization
+    // manager or group manager for that organizatio or account owner/manager
     if (permissionTo === 'organization') {
-      const org = await Organization.findOne({ _id: mongoose.Types.ObjectId(permissionEntity) });
+      const org = await Organization.findOne({
+        _id: mongoose.Types.ObjectId(permissionEntity)
+      });
       if (!org) return null;
       verifyPromise = membership.findOne({
         user: userId,
         account: accountId,
         $or: [
-          { to: 'organization', organization: permissionEntity, role: 'manager' },
+          {
+            to: 'organization',
+            organization: permissionEntity,
+            role: 'manager'
+          },
           { to: 'group', group: org.group, role: 'manager' },
           { to: 'account', $or: [{ role: 'owner' }, { role: 'manager' }] }
         ]
@@ -119,7 +147,7 @@ const checkMemberLevel = async (permissionTo, permissionRole, permissionEntity, 
   } catch (err) {
     return null;
   }
-}
+};
 
 // Retireves the list of users
 membersRouter.route('/')
@@ -127,14 +155,18 @@ membersRouter.route('/')
   .get(cors.corsWithOptions, verifyPermission('members', 'get'), async (req, res, next) => {
     let userPromise = null;
     // Check the user permission:
-    // Account owners or members should be able to see all account users + groups + all organizations users
-    // Organization members should be able to see all organization users
-    if (req.user.perms.accounts & permissionMasks.get) userPromise = membership.find({ account: req.user.defaultAccount._id });
-    else if (req.user.perms.organizations & permissionMasks.get) {
+    // Account owners or members should be able to see all account users + groups +
+    // all organizations users. Organization members should be
+    // able to see all organization users
+    if (req.user.perms.accounts & permissionMasks.get) {
+      userPromise = membership.find({ account: req.user.defaultAccount._id });
+    } else if (req.user.perms.organizations & permissionMasks.get) {
       userPromise = membership.find({
         account: req.user.defaultAccount._id,
-        $or: [{ to: 'organization', organization: req.user.defaultOrg._id },
-          { to: 'group', group: req.user.defaultOrg.group }]
+        $or: [
+          { to: 'organization', organization: req.user.defaultOrg._id },
+          { to: 'group', group: req.user.defaultOrg.group }
+        ]
       });
     }
 
@@ -144,14 +176,27 @@ membersRouter.route('/')
         .populate('account')
         .populate('organization')
         .then((memList) => {
-          const response = memList.map(mem => pick('_id', 'user._id', 'user.name', 'user.email',
-            'to', 'account.name', 'account._id', 'group', 'organization.name', 'organization._id', 'role')(mem));
+          const response = memList.map(mem =>
+            pick(
+              '_id',
+              'user._id',
+              'user.name',
+              'user.email',
+              'to',
+              'account.name',
+              'account._id',
+              'group',
+              'organization.name',
+              'organization._id',
+              'role'
+            )(mem)
+          );
           return res.status(200).json(response);
         })
         .catch((err) => {
           logger.error('Error getting members', { params: { reason: err.message } });
           return next(createError(500, 'Error getting members'));
-        })
+        });
     } else {
       return res.status(200).json([]);
     }
@@ -164,11 +209,18 @@ membersRouter.route('/')
     if (checkParams.status === false) return next(createError(400, checkParams.error));
 
     // Check if user don't add itself
-    if (req.user.email === req.body.email) return next(createError(500, 'You can not add yourself'));
+    if (req.user.email === req.body.email) {
+      return next(createError(500, 'You can not add yourself'));
+    }
 
     // make sure user is only allow to define membership under his view
-    const verified = await checkMemberLevel(req.body.userPermissionTo, req.body.userRole, req.body.userEntity,
-      req.user._id, req.user.defaultAccount._id);
+    const verified = await checkMemberLevel(
+      req.body.userPermissionTo,
+      req.body.userRole,
+      req.body.userEntity,
+      req.user._id,
+      req.user.defaultAccount._id
+    );
     if (!verified) return next(createError(400, 'No sufficient permissions for this operation'));
 
     // Add user
@@ -231,14 +283,23 @@ membersRouter.route('/')
       })
     // Send email
       .then(() => {
-        const p = mailer.sendMailHTML('noreply@flexiwan.com', req.body.email, 'You are invited to a flexiWAN Account',
+        const p = mailer.sendMailHTML(
+          'noreply@flexiwan.com',
+          req.body.email,
+          'You are invited to a flexiWAN Account',
           (`<h2>flexiWAN Account Invitation</h2>
-        <b>You have been invited to a flexiWAN ${req.body.userPermissionTo}. </b>`) +
-        ((registerUser)
-          ? `<b>Click below to set your password</b>
-        <p><a href="${configs.get('UIServerURL')}/reset-password?email=${req.body.email}&t=${resetPWKey}"><button style="color:#fff;background-color:#F99E5B;border-color:#F99E5B;font-weight:400;text-align:center;vertical-align:middle;border:1px solid transparent;padding:.375rem .75rem;font-size:1rem;line-height:1.5;border-radius:.25rem;
-        cursor:pointer">Set Password</button></a></p>`
-          : '<b>You can use your current account credentials to access it</b>') +
+          <b>You have been invited to a flexiWAN
+          ${req.body.userPermissionTo}. </b>`) + ((registerUser)
+            ? `<b>Click below to set your password</b>
+          <p><a href="${configs.get('UIServerURL')}/reset-password?
+            email=${req.body.email}&t=${resetPWKey}">
+            <button style="color:#fff;background-color:#F99E5B;
+            border-color:#F99E5B;font-weight:400;text-align:center;
+            vertical-align:middle;border:1px solid transparent;
+            padding:.375rem .75rem;font-size:1rem;
+            line-height:1.5;border-radius:.25rem;
+            cursor:pointer">Set Password</button></a></p>`
+            : '<b>You can use your current account credentials to access it</b>') +
         ('<p>Your friends @ flexiWAN</p>'));
         return p;
       })
@@ -273,7 +334,11 @@ membersRouter.route('/')
         return Promise.resolve(true);
       })
       .then(() => {
-        return res.status(200).json({ name: req.body.userFirstName, email: req.body.email, status: 'user invited' });
+        return res.status(200).json({
+          name: req.body.userFirstName,
+          email: req.body.email,
+          status: 'user invited'
+        });
       })
       .catch((err) => {
         if (session) session.abortTransaction();
@@ -286,7 +351,12 @@ membersRouter.route('/')
 membersRouter.route('/options/:optionsType')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, verifyPermission('members', 'get'), async (req, res, next) => {
-    if (req.params.optionsType === 'account') { return res.status(200).json([{ id: req.user.defaultAccount._id, value: req.user.defaultAccount.name }]); }
+    if (req.params.optionsType === 'account') {
+      return res.status(200).json([{
+        id: req.user.defaultAccount._id,
+        value: req.user.defaultAccount.name
+      }]);
+    }
 
     let optionFiled = '';
     if (req.params.optionsType === 'group') optionFiled = 'group';
@@ -300,16 +370,23 @@ membersRouter.route('/options/:optionsType')
       .populate('organizations')
       .then((account) => {
         const uniques = {};
-        account[0].organizations.forEach((org) => uniques[req.params.optionsType === 'organization' ? org._id : org[optionFiled]] =
-            org[optionFiled]);
-        const result = Object.keys(uniques).map((key) => { return { id: key, value: uniques[key] } });
+        account[0].organizations.forEach((org) => {
+          uniques[req.params.optionsType === 'organization' ? org._id : org[optionFiled]] =
+            org[optionFiled];
+        });
+        const result = Object.keys(uniques).map((key) => {
+          return {
+            id: key,
+            value: uniques[key]
+          };
+        });
         return res.status(200).json(result);
       })
       .catch((err) => {
         logger.error('Error getting member options', { params: { reason: err.message } });
         return next(createError(500, 'Error getting member options'));
       });
-  })
+  });
 
 // Retrieves user information
 membersRouter.route('/:memberId')
@@ -317,8 +394,9 @@ membersRouter.route('/:memberId')
   .get(cors.corsWithOptions, verifyPermission('members', 'get'), async (req, res, next) => {
     let userPromise = null;
     // Check the user permission:
-    // Account owners or members should be able to see all account users + groups + all organizations users
-    // Organization members should be able to see all organization users
+    // Account owners or members should be able to see all account users
+    // + groups + all organizations users. Organization members should
+    //  be able to see all organization users
     if (req.user.perms.accounts & permissionMasks.get) {
       userPromise = membership.find({
         _id: req.params.memberId,
@@ -328,7 +406,13 @@ membersRouter.route('/:memberId')
       userPromise = membership.find({
         _id: req.params.memberId,
         account: req.user.defaultAccount._id,
-        $or: [{ to: 'organization', organization: req.user.defaultOrg._id }, { to: 'group', group: req.user.defaultOrg.group }]
+        $or: [{
+          to: 'organization',
+          organization: req.user.defaultOrg._id
+        }, {
+          to: 'group',
+          group: req.user.defaultOrg.group
+        }]
       });
     }
 
@@ -338,14 +422,27 @@ membersRouter.route('/:memberId')
         .populate('account')
         .populate('organization')
         .then((memList) => {
-          const response = memList.map(mem => pick('_id', 'user._id', 'user.name', 'user.email',
-            'to', 'account.name', 'account._id', 'group', 'organization.name', 'organization._id', 'role')(mem));
+          const response = memList.map(mem =>
+            pick(
+              '_id',
+              'user._id',
+              'user.name',
+              'user.email',
+              'to',
+              'account.name',
+              'account._id',
+              'group',
+              'organization.name',
+              'organization._id',
+              'role'
+            )(mem)
+          );
           return res.status(200).json(response);
         })
         .catch((err) => {
           logger.error('Error getting member', { params: { reason: err.message } });
           return next(createError(500, 'Error getting member'));
-        })
+        });
     } else {
       return res.status(200).json([]);
     }
@@ -354,10 +451,15 @@ membersRouter.route('/:memberId')
   .delete(cors.corsWithOptions, verifyPermission('members', 'del'), async (req, res, next) => {
     try {
       // Find member id data
-      membershipData = await membership.findOne({ _id: req.params.memberId, account: req.user.defaultAccount._id });
+      const membershipData = await membership.findOne({
+        _id: req.params.memberId,
+        account: req.user.defaultAccount._id
+      });
 
       // Don't allow to delete self
-      if (req.user._id.toString() === membershipData.user.toString()) { return next(createError(400, 'User cannot delete itself')); }
+      if (req.user._id.toString() === membershipData.user.toString()) {
+        return next(createError(400, 'User cannot delete itself'));
+      }
 
       // Check that current user is allowed to delete member
       const verified = await checkMemberLevel(membershipData.to, membershipData.role,
@@ -372,13 +474,18 @@ membersRouter.route('/:memberId')
           to: 'account',
           role: 'owner'
         });
-        if (numAccountOwners < 2) return next(createError(400, 'Account must have at least one owner'));
+        if (numAccountOwners < 2) {
+          return next(createError(400, 'Account must have at least one owner'));
+        }
       }
 
       // TBD: Should we also remove defaultAccount and defaultOrg?
 
       // Delete member
-      await membership.deleteOne({ _id: req.params.memberId, account: req.user.defaultAccount._id });
+      await membership.deleteOne({
+        _id: req.params.memberId,
+        account: req.user.defaultAccount._id
+      });
 
       return res.status(200).json({ ok: 1 });
     } catch (err) {
@@ -394,8 +501,13 @@ membersRouter.route('/:memberId')
       if (checkParams.status === false) return next(createError(400, checkParams.error));
 
       // make sure user is only allow to define membership under his view
-      const verified = await checkMemberLevel(req.body.userPermissionTo, req.body.userRole, req.body.userEntity,
-        req.user._id, req.user.defaultAccount._id);
+      const verified = await checkMemberLevel(
+        req.body.userPermissionTo,
+        req.body.userRole,
+        req.body.userEntity,
+        req.user._id,
+        req.user.defaultAccount._id
+      );
       if (!verified) return next(createError(400, 'No sufficient permissions for this operation'));
 
       // Update
@@ -415,7 +527,8 @@ membersRouter.route('/:memberId')
         .populate('account')
         .populate('organization');
 
-      // Verify if default organization still accessible by the user after the change, if not switch to another org
+      // Verify if default organization still accessible by the
+      // user after the change, if not switch to another org
       const user = await User.findOne({ _id: req.body.userId }).populate('defaultAccount');
       if (user.defaultAccount._id.toString() === req.user.defaultAccount._id.toString()) {
         const orgs = await getUserOrganizations(user);
@@ -427,13 +540,33 @@ membersRouter.route('/:memberId')
         }
       }
 
-      return res.status(200).json(pick('_id', 'user._id', 'user.name', 'user.email',
-        'to', 'account.name', 'account._id', 'group', 'organization.name', 'organization._id', 'role')(member));
+      return res
+        .status(200)
+        .json(
+          pick(
+            '_id',
+            'user._id',
+            'user.name',
+            'user.email',
+            'to',
+            'account.name',
+            'account._id',
+            'group',
+            'organization.name',
+            'organization._id',
+            'role'
+          )(member)
+        );
     } catch (err) {
-      logger.error('Error updating user', { params: { memberId: req.params.memberId, reason: err.message } });
+      logger.error('Error updating user', {
+        params: {
+          memberId: req.params.memberId,
+          reason: err.message
+        }
+      });
       return next(createError(400, err.message));
     }
-  })
+  });
 
 // Default exports
 module.exports = membersRouter;

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -22,7 +23,10 @@ const cors = require('./cors');
 const { verifyPermission } = require('../authenticate');
 const deviceQueueRouter = express.Router();
 deviceQueueRouter.use(bodyParser.json());
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 // Get stats operation for all devices
@@ -32,16 +36,18 @@ deviceQueueRouter.route('/:state')
 // Retrieve the list of devices
   .get(cors.corsWithOptions, verifyPermission('devices', 'get'), async (req, res, next) => {
     const state = req.params.state;
-    const state_opts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
+    const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
     // Check state provided is allowed
-    if (!state_opts.includes(state) && state !== 'all') { return next(createError(400, 'Unsupported query state')); }
+    if (!stateOpts.includes(state) && state !== 'all') {
+      return next(createError(400, 'Unsupported query state'));
+    }
 
     // Generate and send the result
     const result = [];
     try {
       if (state === 'all') {
         await Promise.all(
-          state_opts.map(async (s) => {
+          stateOpts.map(async (s) => {
             await deviceQueues.iterateJobsByOrg(req.user.defaultOrg._id.toString(), s,
               (job) => result.push(job));
           })
@@ -58,9 +64,11 @@ deviceQueueRouter.route('/:state')
 // delete device and create a new job for this
   .delete(cors.corsWithOptions, verifyPermission('devices', 'del'), async (req, res, next) => {
     const state = req.params.state;
-    const state_opts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
+    const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
     // Check state provided is allowed
-    if (!state_opts.includes(state) && state !== 'all') { return next(createError(400, 'Unsupported query state')); }
+    if (!stateOpts.includes(state) && state !== 'all') {
+      return next(createError(400, 'Unsupported query state'));
+    }
 
     logger.info('Deleting jobs',
       {

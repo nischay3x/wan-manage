@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -19,7 +20,10 @@ const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { validateDevice } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 const mongoose = require('mongoose');
 const createError = require('http-errors');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -60,7 +64,9 @@ const apply = (device, req, res, next) => {
         ifParams.pci = intf.pciaddr;
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') { startParams['default-route'] = device[0].defaultRoute; }
+        if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
+          startParams['default-route'] = device[0].defaultRoute;
+        }
         startParams['iface' + (ifnum)] = ifParams;
       }
     }
@@ -76,7 +82,8 @@ const apply = (device, req, res, next) => {
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         ifParams.type = intf.type;
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') { // Only if WAN defined and no other routing defined
+        // Only if WAN defined and no other routing defined
+        if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
           routeParams.addr = 'default';
           routeParams.via = device[0].defaultRoute;
           routes.push(routeParams);
@@ -100,20 +107,32 @@ const apply = (device, req, res, next) => {
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
 
-  deviceQueues.addJob(mId, user, org,
-    // Data
-    { title: 'Start device ' + device[0].hostname, tasks: tasks },
-    // Response data
-    { method: 'start', data: { device: device[0]._id, org: org, shouldUpdateTunnel: (majorAgentVersion === 0) } },
-    // Metadata
-    { priority: 'medium', attempts: 1, removeOnComplete: false },
-    // Complete callback
-    null)
-    .then((job) => {
+  deviceQueues
+    .addJob(
+      mId,
+      user,
+      org,
+      // Data
+      { title: 'Start device ' + device[0].hostname, tasks: tasks },
+      // Response data
+      {
+        method: 'start',
+        data: {
+          device: device[0]._id,
+          org: org,
+          shouldUpdateTunnel: majorAgentVersion === 0
+        }
+      },
+      // Metadata
+      { priority: 'medium', attempts: 1, removeOnComplete: false },
+      // Complete callback
+      null
+    )
+    .then(job => {
       logger.info('Start device job queued', { job: job, req: req });
       res.status(200).send({ ok: 1 });
     })
-    .catch((err) => {
+    .catch(err => {
       next(err);
     });
 };
@@ -132,7 +151,8 @@ const complete = (jobId, res) => {
     return;
   }
   // Get all device tunnels and mark them as not connected
-  // shouldUpdateTunnel is set for agent v0.X.X where tunnel status is not checked, therefore updating according to the DB status
+  // shouldUpdateTunnel is set for agent v0.X.X where tunnel status
+  // is not checked, therefore updating according to the DB status
   if (res.shouldUpdateTunnel) {
     tunnelsModel
       .updateMany(
@@ -140,6 +160,7 @@ const complete = (jobId, res) => {
         {
           isActive: true,
           $or: [{ deviceAconf: true }, { deviceBconf: true }],
+          // eslint-disable-next-line no-dupe-keys
           $or: [{ deviceA: mongoose.Types.ObjectId(res.device) },
             { deviceB: mongoose.Types.ObjectId(res.device) }],
           org: res.org
@@ -158,10 +179,14 @@ const complete = (jobId, res) => {
           throw new Error('Update tunnel connected status failure');
         }
       }, (err) => {
-        logger.error('Start device callback failed', { params: { jobId: jobId, err: err.message } });
+        logger.error('Start device callback failed', {
+          params: { jobId: jobId, err: err.message }
+        });
       })
       .catch((err) => {
-        logger.error('Start device callback failed', { params: { jobId: jobId, err: err.message } });
+        logger.error('Start device callback failed', {
+          params: { jobId: jobId, err: err.message }
+        });
       });
   }
 };

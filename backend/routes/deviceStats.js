@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -33,15 +34,17 @@ deviceStatsRouter.use(bodyParser.json());
  * @param  {Epoc (sec in UTC)} startTime - returns stats from that time, if null ignores
  * @param  {Epoc (sec in UTC)} endTime - returns stats to that time, if null ignores
  * @return {Array}  Returns express response,
- *                  If deviceID==null, returns stats for all devices per time aggregated for all interfaces,
- *                  For specific device returns stats per time listed per interface
+ *                  If deviceID==null, returns stats for all devices per time
+ *                  aggregated for all interfaces, for specific device returns
+ *                  stats per time listed per interface
  */
 const queryDeviceStats = (req, res, next, org, deviceID, startTime, endTime) => {
   // Defind match statement
   const match = { org: mongoose.Types.ObjectId(org) };
   if (deviceID) match.device = mongoose.Types.ObjectId(deviceID);
-  if (startTime && endTime) match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
-  else if (startTime) match.time = { $gte: startTime };
+  if (startTime && endTime) {
+    match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
+  } else if (startTime) match.time = { $gte: startTime };
   else if (endTime) match.time = { $lte: endTime };
 
   const pipeline = [
@@ -76,7 +79,7 @@ const queryDeviceStats = (req, res, next, org, deviceID, startTime, endTime) => 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     return res.json(stats);
-  }, (err) => { next(err) })
+  }, (err) => { next(err); })
     .catch((err) => {
       logger.warn('Failed to get device stats', { params: { err: err.message }, req: req });
       return next(createError(500, 'Getting device stats'));
@@ -87,7 +90,15 @@ deviceStatsRouter.route('/')
 // When options message received, reply origin based on whitelist
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, verifyPermission('devices', 'get'), (req, res, next) => {
-    queryDeviceStats(req, res, next, req.user.defaultOrg._id.toString(), null, Math.floor(new Date().getTime() / 1000) - 7200, null);
+    queryDeviceStats(
+      req,
+      res,
+      next,
+      req.user.defaultOrg._id.toString(),
+      null,
+      Math.floor(new Date().getTime() / 1000) - 7200,
+      null
+    );
     // queryDeviceStats(req, res, next, req.user.defaultOrg._id.toString(), null, null, null);
   });
 
@@ -96,8 +107,17 @@ deviceStatsRouter.route('/:deviceId')
 // When options message received, reply origin based on whitelist
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, verifyPermission('devices', 'get'), (req, res, next) => {
-    queryDeviceStats(req, res, next, req.user.defaultOrg._id.toString(), req.params.deviceId, Math.floor(new Date().getTime() / 1000) - 7200, null);
-    // queryDeviceStats(req, res, next, req.user.defaultOrg._id.toString(), req.params.deviceId, null, null);
+    queryDeviceStats(
+      req,
+      res,
+      next,
+      req.user.defaultOrg._id.toString(),
+      req.params.deviceId,
+      Math.floor(new Date().getTime() / 1000) - 7200,
+      null
+    );
+    // queryDeviceStats(req, res, next, req.user.defaultOrg._id.toString(),
+    // req.params.deviceId, null, null);
   });
 
 // Default exports

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -49,12 +50,12 @@ var deviceStatsRouter = require('./routes/deviceStats');
 var deviceQueueRouter = require('./routes/deviceQueue');
 const notificationsRouter = require('./routes/notifications');
 const accesstokensRouter = require('./routes/accesstokens');
-var mongo_express = require('mongo-express/lib/middleware');
-var mongo_express_config = require('./mongo_express_config');
+const mongoExpress = require('mongo-express/lib/middleware');
+const mongoExpressConfig = require('./mongo_express_config');
 const morgan = require('morgan');
 const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 const { reqLogger, errLogger } = require('./logging/request-logging');
-const rateLimitStore = require('./rateLimitStore');
+const RateLimitStore = require('./rateLimitStore');
 const uuid = require('uuid/v4');
 
 // Create a resource for download
@@ -92,6 +93,7 @@ const swaggerDefinition = {
     version: '1.0.0',
     description:
       'This is the REST API for flexiWAN management. ' +
+      // eslint-disable-next-line max-len
       'Full swagger.json file: <a href="./swagger.json" target="_blank" rel="noopener noreferrer">' +
       'swagger.json</a>'
   },
@@ -110,7 +112,7 @@ const swaggerDefinition = {
 
 const options = {
   swaggerDefinition,
-  apis: [__dirname + '/swagger/**/*.yaml']
+  apis: [`${__dirname}/swagger/**/*.yaml`]
 };
 const swaggerUiOptions = {
   docExpansion: 'none'
@@ -131,16 +133,19 @@ notifyUsers.start();
 // Secure traffic only
 app.all('*', (req, res, next) => {
   // Allow Let's encrypt certbot to access its certificate dirctory
-  if (!configs.get('shouldRedirectHTTPS') || req.secure || req.url.startsWith('/.well-known/acme-challenge')) {
+  if (!configs.get('shouldRedirectHTTPS') ||
+      req.secure || req.url.startsWith('/.well-known/acme-challenge')) {
     return next();
   } else {
-    return res.redirect(307, 'https://' + req.hostname + ':' + configs.get('redirectHttpsPort') + req.url);
+    return res.redirect(
+      307, 'https://' + req.hostname + ':' + configs.get('redirectHttpsPort') + req.url
+    );
   }
 });
 
 // Global rate limiter to protect against DoS attacks
 // Windows size of 5 minutes
-const inMemoryStore = new rateLimitStore(5 * 60 * 1000);
+const inMemoryStore = new RateLimitStore(5 * 60 * 1000);
 const rateLimiter = rateLimit({
   store: inMemoryStore,
   max: 300, // Up to 300 request per IP address
@@ -165,7 +170,7 @@ app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
 // Enable db admin only in development mode
 if (configs.get('environment') === 'development') {
   logger.warn('Warning: Enabling UI database access');
-  app.use('/admindb', mongo_express(mongo_express_config));
+  app.use('/admindb', mongoExpress(mongoExpressConfig));
 }
 
 // Add swagger api docs, url api-docs is the latest version.
@@ -246,7 +251,10 @@ app.use(function (err, req, res, next) {
     // Remove redundant spaces and newline characters
     const stack = sendErr.stack.replace(/[\r\n ]+/gm, ' ');
     const origStack = err.stack.replace(/[\r\n ]+/gm, ' ');
-    logger.error('Caught an unhandled express exception', { params: { stack: stack, originalStack: origStack }, req: req });
+    logger.error('Caught an unhandled express exception', {
+      params: { stack: stack, originalStack: origStack },
+      req: req
+    });
   }
 });
 

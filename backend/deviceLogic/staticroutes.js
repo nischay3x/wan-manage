@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -15,9 +16,13 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const configs = require('../configs')();
-const { devices, staticroutes } = require('../models/devices');
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
+const { devices } = require('../models/devices');
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 const mongoose = require('mongoose');
+const createError = require('http-errors');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getMajorVersion } = require('../versioning');
 
@@ -173,7 +178,7 @@ const remove = async (job) => {
         }
       );
     } catch (error) {
-      logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
+      logger.warn('Failed to update database', { params: { job: job } });
     }
   }
 };

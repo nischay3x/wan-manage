@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -17,7 +18,7 @@
 // TBD: use memory based devices now, add to Redis in future
 class Devices {
   constructor () {
-    this.devices = {}
+    this.devices = {};
     this.setDeviceInfo = this.setDeviceInfo.bind(this);
     this.getDeviceInfo = this.getDeviceInfo.bind(this);
     this.disconnectDevice = this.disconnectDevice.bind(this);

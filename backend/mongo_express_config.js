@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -21,9 +22,12 @@ const hostname = os.hostname();
 
 var mongo = {
   // setting the connection string will only give access to that database
-  // to see more databases you need to set mongodb.admin to true or add databases to the mongodb.auth list
+  // to see more databases you need to set mongodb.admin to true or add
+  // databases to the mongodb.auth list
+  // eslint-disable-next-line max-len
   connectionString: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwan?replicaSet=rs`
-  // connectionString: process.env.ME_CONFIG_MONGODB_SERVER ? '' : process.env.ME_CONFIG_MONGODB_URL,
+  // connectionString: process.env.ME_CONFIG_MONGODB_SERVER
+  // ? '' : process.env.ME_CONFIG_MONGODB_URL,
 };
 
 // Accesing Bluemix variable to get MongoDB info
@@ -66,17 +70,22 @@ function getFileEnv (envVariable) {
   }
 }
 
-var meConfigMongodbServer = process.env.ME_CONFIG_MONGODB_SERVER ? process.env.ME_CONFIG_MONGODB_SERVER.split(',') : false;
+var meConfigMongodbServer = process.env.ME_CONFIG_MONGODB_SERVER
+  ? process.env.ME_CONFIG_MONGODB_SERVER.split(',')
+  : false;
 
 module.exports = {
   mongodb: {
     // if a connection string options such as server/port/etc are ignored
-    connectionString: mongo.connectionString ||
+    connectionString:
+      mongo.connectionString ||
       `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwan?replicaSet=rs`,
 
     // server: mongodb hostname or IP address
     // for replica set, use array of string instead
-    server: (meConfigMongodbServer.length > 1 ? meConfigMongodbServer : meConfigMongodbServer[0]) || mongo.host,
+    server: (meConfigMongodbServer.length > 1
+      ? meConfigMongodbServer
+      : meConfigMongodbServer[0]) || mongo.host,
     port: process.env.ME_CONFIG_MONGODB_PORT || mongo.port,
 
     // ssl: connect to the server using secure SSL
@@ -98,7 +107,8 @@ module.exports = {
     // if admin is true, the auth list below will be ignored
     // if admin is true, you will need to enter an admin username/password below (if it is needed)
     admin: true,
-    // process.env.ME_CONFIG_MONGODB_ENABLE_ADMIN ? process.env.ME_CONFIG_MONGODB_ENABLE_ADMIN.toLowerCase() === 'true' : false,
+    // process.env.ME_CONFIG_MONGODB_ENABLE_ADMIN ?
+    // process.env.ME_CONFIG_MONGODB_ENABLE_ADMIN.toLowerCase() === 'true' : false,
 
     // >>>>  If you are using regular accounts, fill out auth details in the section below
     // >>>>  If you have admin auth, leave this section empty and skip to the next section
@@ -114,8 +124,8 @@ module.exports = {
       }
     ],
 
-    //  >>>>  If you are using an admin mongodb account, or no admin account exists, fill out section below
-    //  >>>>  Using an admin account allows you to view and edit all databases, and view stats
+    // If you are using an admin mongodb account or no admin account exists, fill out section below
+    // Using an admin account allows you to view and edit all databases, and view stats
     // leave username and password empty if no admin account exists
     adminUsername: getFileEnv(adminUsername) || '',
     adminPassword: getFileEnv(adminPassword) || '',
@@ -128,7 +138,8 @@ module.exports = {
   },
 
   site: {
-    // baseUrl: the URL that mongo express will be located at - Remember to add the forward slash at the start and end!
+    // baseUrl: the URL that mongo express will be located at -
+    // Remember to add the forward slash at the start and end!
     baseUrl: process.env.ME_CONFIG_SITE_BASEURL || '/',
     cookieKeyName: 'mongo-express',
     cookieSecret: process.env.ME_CONFIG_SITE_COOKIESECRET || 'cookiesecret',
@@ -164,8 +175,8 @@ module.exports = {
 
     // Maximum size of a single property & single row
     // Reduces the risk of sending a huge amount of data when viewing collections
-    maxPropSize: (100 * 1000), // default 100KB
-    maxRowSize: (1000 * 1000), // default 1MB
+    maxPropSize: 100 * 1000, // default 100KB
+    maxRowSize: 1000 * 1000, // default 1MB
 
     // The options below aren't being used yet
 
@@ -188,20 +199,23 @@ module.exports = {
     //  to which JSONs are displayed unfolded; use number or "all" to unfold all levels
     collapsibleJSONDefaultUnfold: 1,
 
-    // gridFSEnabled: if gridFSEnabled is set to 'true', you will be able to manage uploaded files ( ak. grids, gridFS )
+    // gridFSEnabled: if gridFSEnabled is set to 'true', you will
+    // be able to manage uploaded files ( ak. grids, gridFS )
     gridFSEnabled: process.env.ME_CONFIG_SITE_GRIDFS_ENABLED || false,
 
     // logger: this object will be used to initialize router logger (morgan)
     logger: {},
 
-    // confirmDelete: if confirmDelete is set to 'true', a modal for confirming deletion is displayed before deleting a document/collection
+    // confirmDelete: if confirmDelete is set to 'true', a modal for
+    // confirming deletion is displayed before deleting a document/collection
     confirmDelete: false,
 
     // noExport: if noExport is set to true, we won't show export buttons
     noExport: false
   },
 
-  // Specify the default keyname that should be picked from a document to display in collections list.
+  // Specify the default keyname that should be picked from a
+  // document to display in collections list.
   // Keynames can be specified for every database and collection.
   // If no keyname is specified, it defaults to '_id', which is a mandatory field.
   // For Example :
@@ -212,7 +226,5 @@ module.exports = {
   //     "city":"name"
   //   }
   // }
-  defaultKeyNames: {
-
-  }
+  defaultKeyNames: {}
 };

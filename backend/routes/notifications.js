@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -52,7 +53,9 @@ const validateGetRequest = (req, res, next) => {
 const validatePutRequest = (req, res, next) => {
   // Validate id for single object route only
   if (req.params.id) {
-    if (!/^[0-9a-fA-F]{24}$/i.test(req.params.id)) { return next(createError(400, 'Invalid ID format')); }
+    if (!/^[0-9a-fA-F]{24}$/i.test(req.params.id)) {
+      return next(createError(400, 'Invalid ID format'));
+    }
   }
 
   // Validate request body

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -14,12 +15,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+/* eslint-disable max-len */
 const resources = require('../resources');
 const mongoose = require('mongoose');
 
 let resourcesFullSchema;
 
 beforeEach(() => {
+  // eslint-disable-next-line new-cap
   resourcesFullSchema = new resources({
     username: 'user1',
     key: 'kfir4ksif4psom1jdos0i93id02nski40oskri203is94iswjf',

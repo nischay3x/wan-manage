@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -28,19 +29,28 @@ exports.getToken = async function (req, override = {}, shouldExpire = true) {
     perms = await getUserPermissions(req.user);
   } catch (err) {
     perms = { ...preDefinedPermissions.none };
-    logger.error('Could not get user permissions', { params: { user: req.user, message: err.message }, req: req })
+    logger.error('Could not get user permissions', {
+      params: { user: req.user, message: err.message },
+      req: req
+    });
   }
 
-  return jwt.sign({
-    _id: req.user._id,
-    username: req.user.username,
-    org: req.user.defaultOrg ? req.user.defaultOrg._id : null,
-    orgName: req.user.defaultOrg ? req.user.defaultOrg.name : null,
-    account: req.user.defaultAccount ? req.user.defaultAccount._id : null,
-    accountName: req.user.defaultAccount ? req.user.defaultAccount.name : null,
-    perms: perms,
-    ...override
-  }, configs.get('userTokenSecretKey'), shouldExpire ? { expiresIn: configs.get('userTokenExpiration') } : null);
+  return jwt.sign(
+    {
+      _id: req.user._id,
+      username: req.user.username,
+      org: req.user.defaultOrg ? req.user.defaultOrg._id : null,
+      orgName: req.user.defaultOrg ? req.user.defaultOrg.name : null,
+      account: req.user.defaultAccount ? req.user.defaultAccount._id : null,
+      accountName: req.user.defaultAccount
+        ? req.user.defaultAccount.name
+        : null,
+      perms: perms,
+      ...override
+    },
+    configs.get('userTokenSecretKey'),
+    shouldExpire ? { expiresIn: configs.get('userTokenExpiration') } : null
+  );
 };
 
 exports.getRefreshToken = async (req, override = {}) => {

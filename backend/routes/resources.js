@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -49,18 +50,17 @@ resourcesRouter
     res.sendStatus(200);
   })
   .post(cors.corsWithOptions, verifyPermission('organizations', 'post'), (req, res, next) => {
-    checkUpdReq('POST', req);
-    const random_key = randomNum(50);
+    const randomKey = randomNum(50);
 
     // TBD: Check that OID exists and belong to the user
     resourcesModel
       .create({
         username: req.user.username,
-        key: random_key,
+        key: randomKey,
         link:
                       configs.get('restServerURL') +
                       '/download/' +
-                      random_key +
+                      randomKey +
                       '/' +
                       req.body.fileName,
         downloadObject: req.body.oid,

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge,flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -27,7 +28,11 @@ const { getToken, getRefreshToken } = require('../tokens');
 const cors = require('./cors');
 const mongoConns = require('../mongoConns.js')();
 const randomKey = require('../utils/random-key');
-const mailer = require('../utils/mailer')(configs.get('mailerHost'), configs.get('mailerPort'), configs.get('mailerBypassCert'));
+const mailer = require('../utils/mailer')(
+  configs.get('mailerHost'),
+  configs.get('mailerPort'),
+  configs.get('mailerBypassCert')
+);
 const reCaptcha = require('../utils/recaptcha')(configs.get('captchaKey'));
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -78,7 +83,9 @@ router.route('/register')
     if (!auth.validatePassword(req.body.password)) return next(createError(500, 'Bad Password'));
 
     // Verify captcha
-    if (!await reCaptcha.verifyReCaptcha(req.body.captcha)) return next(createError(500, 'Wrong Captcha'));
+    if (!await reCaptcha.verifyReCaptcha(req.body.captcha)) {
+      return next(createError(500, 'Wrong Captcha'));
+    }
 
     // Continue with registration
     let registerCustomerId;
@@ -147,16 +154,28 @@ router.route('/register')
           to: 'account',
           role: 'owner',
           perms: preDefinedPermissions.account_owner
-        }
+        };
         return membership.create([mem], { session: session });
       })
       .then(() => {
-        const p = mailer.sendMailHTML('noreply@flexiwan.com', req.body.email, 'Verify Your flexiWAN Account',
-            `<h2>Thank you for joining flexiWAN</h2>
+        const p = mailer.sendMailHTML(
+          'noreply@flexiwan.com',
+          req.body.email,
+          'Verify Your flexiWAN Account',
+          `<h2>Thank you for joining flexiWAN</h2>
             <b>Click below to verify your account:</b>
-            <p><a href="${configs.get('UIServerURL')}/verify-account?email=${req.body.email}&t=${registerUser.emailTokens.verify}"><button style="color:#fff;background-color:#F99E5B;border-color:#F99E5B;font-weight:400;text-align:center;vertical-align:middle;border:1px solid transparent;padding:.375rem .75rem;font-size:1rem;line-height:1.5;border-radius:.25rem;
+            <p><a href="${configs.get('UIServerURL')}/verify-account?email=${
+            req.body.email
+          }&t=${
+            registerUser.emailTokens.verify
+          }"><button style="color:#fff;background-color:#F99E5B;
+            border-color:#F99E5B;font-weight:400;text-align:center;
+            vertical-align:middle;border:1px solid transparent;
+            padding:.375rem .75rem;font-size:1rem;line-height:1.5;
+            border-radius:.25rem;
             cursor:pointer">Verify Account</button></a></p>
-            <p>Your friends @ flexiWAN</p>`);
+            <p>Your friends @ flexiWAN</p>`
+        );
         return p;
       })
       .then(() => {
@@ -199,9 +218,13 @@ router.route('/register')
         // need to remove billing account
         if (registerCustomerId) {
           if (await flexibilling.removeCustomer({ id: registerCustomerId })) {
-            logger.error('Deleted billing account', { params: { registerCustomerId: registerCustomerId } });
+            logger.error('Deleted billing account', {
+              params: { registerCustomerId: registerCustomerId }
+            });
           } else {
-            logger.error('Deleted billing account failed', { params: { registerCustomerId: registerCustomerId } });
+            logger.error('Deleted billing account failed', {
+              params: { registerCustomerId: registerCustomerId }
+            });
           }
         }
 
@@ -228,12 +251,26 @@ router.route('/reverify-account')
       .then((resp) => {
         // Send email if user found
         if (resp) {
-          const p = mailer.sendMailHTML('noreply@flexiwan.com', req.body.email, 'Re-Verify Your flexiWAN Account',
-                `<h2>Re-Verify Your flexiWAN Account</h2>
-                <b>It has been requested to re-verify your account. If it is asked by yourself, click below to re-verify your account. If you do not know who this is, ignore this message.</b>
-                <p><a href="${configs.get('UIServerURL')}/verify-account?email=${req.body.email}&t=${validateKey}"><button style="color:#fff;background-color:#F99E5B;border-color:#F99E5B;font-weight:400;text-align:center;vertical-align:middle;border:1px solid transparent;padding:.375rem .75rem;font-size:1rem;line-height:1.5;border-radius:.25rem;
+          const p = mailer.sendMailHTML(
+            'noreply@flexiwan.com',
+            req.body.email,
+            'Re-Verify Your flexiWAN Account',
+            `<h2>Re-Verify Your flexiWAN Account</h2>
+                <b>It has been requested to re-verify your account. If it is asked by yourself,
+                   click below to re-verify your account. If you do not know who this is,
+                   ignore this message.</b>
+                <p><a href="${configs.get(
+                  'UIServerURL'
+                )}/verify-account?email=${
+              req.body.email
+            }&t=${validateKey}"><button style="color:#fff;background-color:#F99E5B;
+                 border-color:#F99E5B;font-weight:400;text-align:center;
+                 vertical-align:middle;border:1px solid transparent;
+                 padding:.375rem .75rem;font-size:1rem;line-height:1.5;
+                 border-radius:.25rem;
                 cursor:pointer">Re-Verify Account</button></a></p>
-                <p>Your friends @ flexiWAN</p>`);
+                <p>Your friends @ flexiWAN</p>`
+          );
           return p;
         }
       })
@@ -251,7 +288,9 @@ router.route('/reverify-account')
 router.route('/verify-account')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.cors, async (req, res, next) => {
-    if (!req.body.email || !req.body.token || req.body.email === '' || req.body.token === '') { return next(createError(500, 'Verification Error')); }
+    if (!req.body.email || !req.body.token || req.body.email === '' || req.body.token === '') {
+      return next(createError(500, 'Verification Error'));
+    }
 
     User.findOneAndUpdate(
       // Query, use the email and verification token
@@ -298,12 +337,27 @@ const resetPassword = (req, res, next) => {
     .then((resp) => {
       // Send email if user found
       if (resp) {
-        const p = mailer.sendMailHTML('noreply@flexiwan.com', req.body.email, 'Reset Password for Your flexiWAN Account',
-                `<h2>Reset Password for your flexiWAN Account</h2>
-                <b>It has been requested to reset your account password. If it is asked by yourself, click below to reset your password. If you do not know who this is, ignore this message.</b>
-                <p><a href="${configs.get('UIServerURL')}/reset-password?email=${req.body.email}&t=${validateKey}"><button style="color:#fff;background-color:#F99E5B;border-color:#F99E5B;font-weight:400;text-align:center;vertical-align:middle;border:1px solid transparent;padding:.375rem .75rem;font-size:1rem;line-height:1.5;border-radius:.25rem;
+        const p = mailer.sendMailHTML(
+          'noreply@flexiwan.com',
+          req.body.email,
+          'Reset Password for Your flexiWAN Account',
+          `<h2>Reset Password for your flexiWAN Account</h2>
+                <b>It has been requested to reset your account password. If it is asked by yourself,
+                   click below to reset your password. If you do not know who this is,
+                   ignore this message.</b>
+                <p><a href="${configs.get(
+                  'UIServerURL'
+                )}/reset-password?email=${
+            req.body.email
+          }&t=${validateKey}"><button style="color:#fff;
+          background-color:#F99E5B;border-color:#F99E5B;
+          font-weight:400;text-align:center;
+          vertical-align:middle;border:1px solid transparent;
+          padding:.375rem .75rem;font-size:1rem;line-height:1.5;
+          border-radius:.25rem;
                 cursor:pointer">Reset Password</button></a></p>
-                <p>Your friends @ flexiWAN</p>`);
+                <p>Your friends @ flexiWAN</p>`
+        );
         return p;
       }
     })
@@ -315,7 +369,7 @@ const resetPassword = (req, res, next) => {
       logger.error('Account Password Reset process failed', { params: { reason: err.message } });
       return next(createError(500, 'Password Reset process failed'));
     });
-}
+};
 
 /**
  * Update password using email and token
@@ -325,7 +379,9 @@ const resetPassword = (req, res, next) => {
  */
 const updatePassword = (req, res, next) => {
   if (!req.body.email || !req.body.token || !req.body.password ||
-        req.body.email === '' || req.body.token === '') { return next(createError(500, 'Password Reset Error')); }
+    req.body.email === '' || req.body.token === '') {
+    return next(createError(500, 'Password Reset Error'));
+  }
 
   // Validate password
   if (!auth.validatePassword(req.body.password)) return next(createError(500, 'Bad Password'));
@@ -362,7 +418,7 @@ const updatePassword = (req, res, next) => {
       logger.error('Password Reset Error', { params: { reason: err.message } });
       return next(createError(500, 'Password Reset Error'));
     });
-}
+};
 
 /**
  * Reset password API

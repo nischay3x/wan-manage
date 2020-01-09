@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -14,7 +15,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const validators = require('../validators');
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../../mongoConns.js')();
@@ -65,7 +65,9 @@ const deviceAggregateStatsSchema = new Schema({
 deviceStatsSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7200 });
 
 const deviceStats = mongoConns.getAnalyticsDB().model('deviceStats', deviceStatsSchema);
-const deviceAggregateStats = mongoConns.getAnalyticsDB().model('deviceAggregatedStats', deviceAggregateStatsSchema);
+const deviceAggregateStats = mongoConns
+  .getAnalyticsDB()
+  .model('deviceAggregatedStats', deviceAggregateStatsSchema);
 
 // Default exports
 module.exports = {

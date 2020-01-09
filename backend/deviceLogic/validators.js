@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -76,7 +77,7 @@ const validateDevice = (device) => {
   // WAN IP address and default GW IP addresses must be on the same subnet
   const wanSubnet = `${wanIf.IPv4}/${wanIf.IPv4Mask}`;
   const lanSubnet = `${lanIf.IPv4}/${lanIf.IPv4Mask}`;
-  const defaultGwSubnet = `${device.defaultRoute}/32`;
+  // const defaultGwSubnet = `${device.defaultRoute}/32`;
 
   if (cidr.overlap(wanSubnet, lanSubnet)) {
     return {

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -63,9 +64,29 @@ adminRouter
     let installedTunnels = 'No info';
     try {
       installedTunnels = await tunnelsModel
-        .aggregate([{ $project: { org: 1, active: { $cond: [{ $eq: ['$isActive', true] }, 1, 0] } } },
-          { $group: { _id: { org: '$org' }, created: { $sum: 1 }, active: { $sum: '$active' } } },
-          { $project: { _id: 0, org: '$_id.org', created: '$created', active: '$active' } }])
+        .aggregate([
+          {
+            $project: {
+              org: 1,
+              active: { $cond: [{ $eq: ['$isActive', true] }, 1, 0] }
+            }
+          },
+          {
+            $group: {
+              _id: { org: '$org' },
+              created: { $sum: 1 },
+              active: { $sum: '$active' }
+            }
+          },
+          {
+            $project: {
+              _id: 0,
+              org: '$_id.org',
+              created: '$created',
+              active: '$active'
+            }
+          }
+        ])
         .allowDiskUse(true);
     } catch (e) {
       installedTunnels = 'Error getting installed tunnels info, error=' + e.message;
@@ -121,14 +142,16 @@ adminRouter
     result.numConnectedDevices = devices.length;
     devices.forEach((device) => {
       const deviceInfo = connections.getDeviceInfo(device);
-      if (result.connectedOrgs[deviceInfo.org] === undefined) result.connectedOrgs[deviceInfo.org] = [];
+      if (result.connectedOrgs[deviceInfo.org] === undefined) {
+        result.connectedOrgs[deviceInfo.org] = [];
+      }
       result.connectedOrgs[deviceInfo.org].push({
         machineID: device,
         status: (deviceStatus.getDeviceStatus(device).state || 0)
         // ip:(deviceInfo.socket._sender._socket._peername.address || 'unknown'),
         // port:(deviceInfo.socket._sender._socket._peername.port || 'unknown')
       });
-    })
+    });
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');

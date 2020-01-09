@@ -15,8 +15,12 @@ module.exports = {
     ecmaVersion: 2018
   },
   rules: {
-    "semi": ["off", "always"],
+    "semi": ["error", "always"],
     "no-constant-condition": ["off", "always"],
+    "handle-callback-err": ["warn", "always"],
+    "no-trailing-spaces": ["error"],
+    "no-prototype-builtins": ["off"],
+    "max-len": ["error", { "code": 100 }]
   },
   "plugins": ["jest"],
   "env": {

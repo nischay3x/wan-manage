@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -30,7 +31,8 @@ class DeviceQueues {
      * Creates a DeviceQueues. Multiple DeviceQueues per system
      * are allowed. The broker creates a queue per connected device.
      * @param  {string} prefix    prefix used for the queue
-     * @param  {object} redis     redis connection object, if not provided use default redis host/port
+     * @param  {object} redis     redis connection object,
+     *                            if not provided use default redis host/port
      */
   constructor (prefix, redis) {
     // Bind class functions
@@ -144,7 +146,7 @@ class DeviceQueues {
         { priority: 'critical', attempts: 1, init: true, removeOnComplete: true });
     } catch (err) {
       logger.warn('Failed to start device queue',
-        { params: { deviceId: deviceID, err: err.message } });
+        { params: { deviceId: deviceId, err: err.message } });
     }
   }
 
@@ -166,12 +168,12 @@ class DeviceQueues {
      * @param {string}  org                      Organization the transaction belongs to
      * @param {Object}  message                  Data to be sent
      * @param {Object}  response                 Data to be sent when the job completed
-     * @param {string}  options.priority         Priority of the Job (low, normal, medium, high, critical)
+     * @param {string}  options.priority         Job priority (low, normal, medium, high, critical)
      * @param {number}  options.attempts         Number of attempts in case of errors
      * @param {boolean} options.init             Whether this is a special init message
      * @param {boolean} options.removeOnComplete Should job be removed on completion
-     * @param {Callback} OnComplete              Function (jobid, result) - executed on job complete
-     *                                                           (Careful!!! seen some missing events)
+     * @param {Callback} OnComplete              Function (jobid, result) executed on job complete
+     *                                           (Careful!!! seen some missing events)
      * @return {Promise}                         Promise of new job
      */
   addJob (deviceId, username, org, message, response = true,
@@ -260,16 +262,21 @@ class DeviceQueues {
   resumeQueue (deviceId) {
     logger.info('Resuming device queue',
       { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
-    if (!this.deviceQueues[deviceId]) { throw new Error('DeviceQueues: Trying to resume an undefined queue, deviceID=' + deviceId); }
+    if (!this.deviceQueues[deviceId]) {
+      throw new Error('DeviceQueues: Trying to resume an undefined queue, deviceID=' + deviceId);
+    }
     if (!this.deviceQueues[deviceId].paused) return; // Already resumed
-    if (!this.deviceQueues[deviceId].context) { throw new Error('DeviceQueues: Resuming a queue with no context, deviceID=' + deviceId); }
+    if (!this.deviceQueues[deviceId].context) {
+      throw new Error('DeviceQueues: Resuming a queue with no context, deviceID=' + deviceId);
+    }
     this.deviceQueues[deviceId].context.resume();
     this.deviceQueues[deviceId].paused = false;
   }
 
   /**
      * Iterates over jobs of specific state
-     * @param  {string}   state    queue state ('complete', 'failed', 'inactive', 'delayed', 'active')
+     * @param  {string}   state    queue state ('complete', 'failed',
+     *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
      * @return {void}
      */
@@ -291,11 +298,14 @@ class DeviceQueues {
      * The current implementation get all jobs and filter the org specific ones
      * This implementation doesn't scale for a large system
      * TBD: For a large deployment, two improvements could be done:
-     *   a) Manage a separate redis queue holding the jobs for a org, the job can be added when adding the
-     *      job in kue, and delete it using the periodic kue management
-     *   b) Get partial jobs and not all, when org get more, get more messages from the queue
+     *   a) Manage a separate redis queue holding the jobs for a org,
+     *      the job can be added when adding the job in kue, and
+     *      delete it using the periodic kue management
+     *   b) Get partial jobs and not all, when org get more,
+     *      get more messages from the queue
      * @param  {string}   org      organization to iterate jobs for
-     * @param  {string}   state    queue state ('complete', 'failed', 'inactive', 'delayed', 'active')
+     * @param  {string}   state    queue state ('complete', 'failed',
+     *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
      * @return {void}
      */
@@ -332,7 +342,9 @@ class DeviceQueues {
           await kue.Job.get(id, async (err, job) => {
             if (err) reject(err);
             if (!job) reject(new Error('DeviceQueues: Iterated job not found for ID=' + id));
-            if (!job.data.metadata.org === org) { reject(new Error('DeviceQueues: Iteration org not authorized, org=' + org)); }
+            if (!job.data.metadata.org === org) {
+              reject(new Error('DeviceQueues: Iteration org not authorized, org=' + org));
+            }
             callback(job);
           });
         });
@@ -357,6 +369,9 @@ class DeviceQueues {
         this.callRegisteredCallback(method, removedJob);
       });
     } catch (err) {
+      logger.warn('Encountered an error while removing jobs', {
+        params: { org: org, jobIDs: jobIDs, err: err.message }
+      });
       throw err;
     }
   }
@@ -393,6 +408,9 @@ class DeviceQueues {
         }
       });
     } catch (err) {
+      logger.warn('Encountered an error while removing old jobs', {
+        params: { state: state, createdBefore: createdBefore, err: err.message }
+      });
       throw err;
     }
   }

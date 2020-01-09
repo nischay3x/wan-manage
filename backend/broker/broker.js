@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -16,7 +17,10 @@
 
 // Logic to start/stop a device
 var configs = require('../configs')();
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 const devUtils = require('./utils');
 const async = require('async');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
@@ -58,7 +62,7 @@ exports.deviceConnectionClosed = async (deviceId) => {
  * @param  {Object}  job job to be processed
  * @return {Promise}     a promise for processing the job
  */
-deviceProcessor = async (job) => {
+const deviceProcessor = async (job) => {
   // Job is passed twice - for event data and event header.
   logger.info('Processing job', { params: { job: job }, job: job });
 

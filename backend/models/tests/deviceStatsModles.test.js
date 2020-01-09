@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -20,6 +21,7 @@ const mongoose = require('mongoose');
 let deviceStatsFullSchema;
 
 beforeEach(() => {
+  // eslint-disable-next-line new-cap
   deviceStatsFullSchema = new deviceStats({
     org: mongoose.Types.ObjectId('4edd40c86762e0fb12000001'),
     device: mongoose.Types.ObjectId('4edd40c86762e0fb12000003'),

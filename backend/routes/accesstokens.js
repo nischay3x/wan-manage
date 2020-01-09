@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -17,7 +18,6 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const AccessToken = require('../models/accesstokens');
-const Organization = require('../models/organizations');
 const cors = require('./cors');
 const { verifyPermission } = require('../authenticate');
 const mongoose = require('mongoose');
@@ -44,7 +44,7 @@ router.route('/')
             organization: record.organization.name,
             token: record.token,
             isValid: record.isValid
-          }
+          };
         });
 
         return res.status(200).json(result);
@@ -73,13 +73,24 @@ router.route('/')
         token: '',
         isValid: true
       });
-      const token = await getToken(req, { type: 'app_access_token', id: accessToken._id.toString(), org: req.body.organization }, false);
+      const token = await getToken(
+        req,
+        {
+          type: 'app_access_token',
+          id: accessToken._id.toString(),
+          org: req.body.organization
+        },
+        false
+      );
       accessToken.token = token;
       await accessToken.save();
 
       return res.status(201).json({ id: accessToken.id, name: accessToken.name });
     } catch (error) {
-      logger.error('Could not generate token', { params: { user: req.user, message: error.message }, req: req })
+      logger.error('Could not generate token', {
+        params: { user: req.user, message: error.message },
+        req: req
+      });
       return next(createError(500));
     }
   });
@@ -89,18 +100,23 @@ router.route('/:accesstokenId')
   // When options message received, reply origin based on whitelist
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .delete(cors.corsWithOptions, verifyPermission('accesstokens', 'del'), (req, res, next) => {
-    AccessToken
-      .deleteOne({ _id: mongoose.Types.ObjectId(req.params.accesstokenId), account: req.user.defaultAccount._id })
-      .then((resp) => {
-        if (resp != null) {
-          return res.status(200).json({});
-        } else {
-          return next(createError(404, 'Access Token not found'));
+    AccessToken.deleteOne({
+      _id: mongoose.Types.ObjectId(req.params.accesstokenId),
+      account: req.user.defaultAccount._id
+    })
+      .then(
+        resp => {
+          if (resp != null) {
+            return res.status(200).json({});
+          } else {
+            return next(createError(404, 'Access Token not found'));
+          }
+        },
+        err => {
+          return next(createError(500));
         }
-      }, (err) => {
-        return next(createError(500));
-      })
-      .catch((err) => {
+      )
+      .catch(err => {
         return next(createError(500));
       });
   });

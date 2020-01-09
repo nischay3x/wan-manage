@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -49,7 +50,7 @@ class DeviceSwUpgrade {
      */
   async start () {
     try {
-      this.devSwUpd = await DevSwUpdater.createSwVerUpdater();
+      this.devSwUpd = await DevSwUpdater.getSwVerUpdaterInstance();
     } catch (err) {
       logger.error('Device software version upgrade periodic task failed to start', {
         params: { err: err.message },

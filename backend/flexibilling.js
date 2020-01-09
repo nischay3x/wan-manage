@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -21,7 +22,7 @@ const config = require('./flexibillingconfig.json');
 /**
  * flexiBillingStub class used only for development
  */
-class flexiBilling {
+class FlexiBilling {
   async getMaxDevicesRegisteredSummmary (account) {
     return { current: 'N/A', max: 'N/A' };
   }
@@ -104,7 +105,7 @@ class flexiBilling {
    * @param {Object} options Options
    */
   async getCurrentUsage (options) {
-    return { amount: 0, quantity: 0 }
+    return { amount: 0, quantity: 0 };
   }
 
   /**
@@ -128,7 +129,7 @@ class flexiBilling {
    */
   static GetInstance () {
     if (!this.Instance) {
-      this.Instance = new flexiBilling();
+      this.Instance = new FlexiBilling();
     }
     return this.Instance;
   }
@@ -141,7 +142,7 @@ const useFlexiBilling = require('./configs')().get('useFlexiBilling') || false;
 if (useFlexiBilling) {
   billing = require('./billing');
 } else {
-  billing = flexiBilling.GetInstance();
+  billing = FlexiBilling.GetInstance();
 }
 
 // Conditional exports

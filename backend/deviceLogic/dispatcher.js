@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -23,7 +24,10 @@ const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
 const configs = require('../configs')();
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
@@ -110,8 +114,12 @@ const apply = (devices, req, res, next, data = null) => {
  * @return {void}
  */
 const complete = (jobId, jobResult) => {
-  logger.info('Dispatcher complete callback called', { params: { jobId: jobId, result: jobResult } });
-  const method = methods.hasOwnProperty(jobResult.method) ? methods[jobResult.method].complete : null;
+  logger.info('Dispatcher complete callback called', {
+    params: { jobId: jobId, result: jobResult }
+  });
+  const method = methods.hasOwnProperty(jobResult.method)
+    ? methods[jobResult.method].complete
+    : null;
   if (method != null) {
     return method(jobId, jobResult.data);
   } else {

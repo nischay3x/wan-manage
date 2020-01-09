@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -107,7 +108,7 @@ const User = new Schema({
   phoneNumber: {
     type: String,
     validate: {
-      validator: (number) => { return number == '' || validators.validateIsPhoneNumber(number) },
+      validator: (number) => { return number === '' || validators.validateIsPhoneNumber(number); },
       message: 'should be a valid phone number'
     },
     maxlength: [20, 'Phone number length must be at most 20']
@@ -138,6 +139,7 @@ const options = {
   limitAttempts: true,
   maxInterval: maxInterval,
   errorMessages: {
+    // eslint-disable-next-line max-len
     AttemptTooSoonError: `Too many login attempts. try again in ${Math.floor(maxInterval / 6000)} minutes`
   }
 };

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -14,12 +15,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+/* eslint-disable max-len */
 const tunnelids = require('../tunnelids');
 const mongoose = require('mongoose');
 
 let tunnelIdsFullSchema;
 
 beforeEach(() => {
+  // eslint-disable-next-line new-cap
   tunnelIdsFullSchema = new tunnelids({
     org: mongoose.Types.ObjectId('4edd40c86762e0fb12000001'),
     nextAvailID: '1'
@@ -62,7 +65,7 @@ describe('TunnelIDs schema', () => {
 
     tunnelIdsFullSchema.validate((err) => {
       expect(err.message).toBe('tunnelID validation failed: org: Cast to ObjectID failed ' +
-            'for value \"invalid-org\" at path \"org\"');
+            'for value "invalid-org" at path "org"');
     });
   });
 
@@ -71,7 +74,7 @@ describe('TunnelIDs schema', () => {
 
     tunnelIdsFullSchema.validate((err) => {
       expect(err.message).toBe('tunnelID validation failed: nextAvailID: Cast to Number failed ' +
-                                     'for value \"not a number\" at path \"nextAvailID\"');
+                               'for value "not a number" at path "nextAvailID"');
     });
   });
 });

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -43,11 +44,11 @@ exports.localPassport = passport.use(new LocalStrategy(User.authenticate()));
 var opts = {};
 opts.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
 opts.secretOrKey = configs.get('userTokenSecretKey');
-exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwt_payload, done) => {
+exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done) => {
   // check if token exists
-  if (jwt_payload.type === 'app_access_token') {
+  if (jwtPayload.type === 'app_access_token') {
     try {
-      const token = await Accesstoken.findOne({ _id: jwt_payload.id });
+      const token = await Accesstoken.findOne({ _id: jwtPayload.id });
       if (!token) {
         return done(null, false, { message: 'Invalid token used' });
       }
@@ -57,14 +58,14 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwt_payload, don
   }
 
   User
-    .findOne({ _id: jwt_payload._id })
+    .findOne({ _id: jwtPayload._id })
     .populate('defaultOrg')
     .populate('defaultAccount')
     .exec((err, user) => {
       if (err) {
         return done(err, false);
       } else if (user) {
-        const res = setUserPerms(user, jwt_payload);
+        const res = setUserPerms(user, jwtPayload);
         return res === true
           ? done(null, user)
           : done(null, false, { message: 'Invalid Token' });
@@ -74,9 +75,9 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwt_payload, don
     });
 }));
 
-const setUserPerms = (user, jwt_payload) => {
-  if (user.defaultAccount && user.defaultAccount._id.toString() === jwt_payload.account) {
-    user.perms = jwt_payload.perms;
+const setUserPerms = (user, jwtPayload) => {
+  if (user.defaultAccount && user.defaultAccount._id.toString() === jwtPayload.account) {
+    user.perms = jwtPayload.perms;
     return true;
   }
   return false;
@@ -96,7 +97,9 @@ const setUserPerms = (user, jwt_payload) => {
 // Authentication verification for local and JWT strategy, and populate req.user
 exports.verifyUserLocal = async function (req, res, next) {
   // Verify captcha
-  if (!await reCaptcha.verifyReCaptcha(req.body.captcha)) return next(createError(401, 'Wrong Captcha'));
+  if (!await reCaptcha.verifyReCaptcha(req.body.captcha)) {
+    return next(createError(401, 'Wrong Captcha'));
+  }
 
   // Continue with verifying password
   passport.authenticate('local', { session: false }, async (err, user, info) => {
@@ -105,8 +108,14 @@ exports.verifyUserLocal = async function (req, res, next) {
         ? [err.message, 500, 'Internal server error']
         : [info.message, 401, info.message];
 
-      logger.warn('User authentication failed', { params: { user: req.body.username, err: (err || info).name, message: errMsg }, req: req }
-      );
+      logger.warn('User authentication failed', {
+        params: {
+          user: req.body.username,
+          err: (err || info).name,
+          message: errMsg
+        },
+        req: req
+      });
       return next(createError(status, responseMsg));
     } else {
       if (user.state !== 'verified') {
@@ -115,7 +124,10 @@ exports.verifyUserLocal = async function (req, res, next) {
         try {
           await user.populate('defaultOrg').populate('defaultAccount').execPopulate();
         } catch (err) {
-          logger.error('Could not get user info', { params: { user: req.body.username, message: err.message }, req: req });
+          logger.error('Could not get user info', {
+            params: { user: req.body.username, message: err.message },
+            req: req
+          });
           return next(createError(500, 'Could not get user info'));
         }
         req.user = user;
@@ -228,9 +240,9 @@ exports.verifyPermission = function (accessType, restCommand) {
   return function (req, res, next) {
     if (req.user.perms[accessType] & permissionMasks[restCommand]) return next();
     next(createError(403, "You don't have permission to perform this operation"));
-  }
+  };
 };
 
 exports.validatePassword = function (password) {
   return (password !== null && password !== undefined && password.length >= 8);
-}
+};

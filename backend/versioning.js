@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -48,7 +49,7 @@ const isAgentVersionCompatible = (agentVersion) => {
 };
 
 const routerVersionsCompatible = (ver1, ver2) => {
-  [majorVer1, majorVer2] = [ver1, ver2].map(ver => {
+  const [majorVer1, majorVer2] = [ver1, ver2].map(ver => {
     return parseInt((ver || '').split('.')[0], 10);
   });
   return (isNaN(majorVer1) || isNaN(majorVer2))

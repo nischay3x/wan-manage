@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -14,11 +15,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+/* eslint-disable max-len */
 const users = require('../users');
 
 let userFullSchema;
 
 beforeEach(() => {
+  // eslint-disable-next-line new-cap
   userFullSchema = new users({
     admin: true,
     name: 'Jean Marc',

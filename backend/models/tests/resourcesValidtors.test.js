@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -27,8 +28,7 @@ describe('validateURL', () => {
         ${''}                                   | ${false}
         ${null}                                 | ${false}
         ${undefined}                            | ${false}
-        `
-  ('Should return $result if url is $url', ({ url, result }) => {
+  `('Should return $result if url is $url', ({ url, result }) => {
     expect(validators.validateURL(url)).toEqual(result);
   });
 });
@@ -46,8 +46,7 @@ describe('validateFileName', () => {
         ${''}                       | ${false}
         ${null}                     | ${false}
         ${undefined}                | ${false}
-        `
-  ('Should return $result if file name is $name', ({ name, result }) => {
+  `('Should return $result if file name is $name', ({ name, result }) => {
     expect(validators.validateFileName(name)).toEqual(result);
   });
 });
@@ -63,8 +62,7 @@ describe('validateFieldName', () => {
         ${''}                       | ${false}
         ${null}                     | ${false}
         ${undefined}                | ${false}
-        `
-  ('Should return $result if file name is $name', ({ name, result }) => {
+  `('Should return $result if file name is $name', ({ name, result }) => {
     expect(validators.validateFieldName(name)).toEqual(result);
   });
 });

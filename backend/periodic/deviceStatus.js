@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -68,9 +69,11 @@ class DeviceStatus {
     const devStatsSchema = Joi.object().keys({
       ok: Joi.number().integer().required(),
       running: Joi.boolean().optional(),
-      state: Joi.string().valid('running', 'stopped', 'failed').optional(), // TBD : when v0.X.X not supported, change to required
+      // TBD : when v0.X.X not supported, change to required
+      state: Joi.string().valid('running', 'stopped', 'failed').optional(),
       // stateReason:  Joi.string().regex(/^[a-zA-Z0-9]{0,200}$/i).allow('').optional(),
-      stateReason: Joi.string().allow('').optional(), // TBD: Now no validation, need to fix on agent
+      // TBD: Now no validation, need to fix on agent
+      stateReason: Joi.string().allow('').optional(),
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().required(),
@@ -139,32 +142,38 @@ class DeviceStatus {
             this.setDeviceStatsField(deviceID, 'state', 'stopped');
           }
         } else {
-          logger.warn('Failed to get device status', { params: { deviceID: deviceID, message: msg }, periodic: { task: this.taskInfo } }
-          );
+          logger.warn('Failed to get device status', {
+            params: { deviceID: deviceID, message: msg },
+            periodic: { task: this.taskInfo }
+          });
         }
       }, (err) => {
-        logger.warn('Failed to get device status', { params: { deviceID: deviceID, err: err.message }, periodic: { task: this.taskInfo } }
-        );
+        logger.warn('Failed to get device status', {
+          params: { deviceID: deviceID, err: err.message },
+          periodic: { task: this.taskInfo }
+        });
         return err;
       })
       .catch((err) => {
-        logger.warn('Failed to get device status', { params: { deviceID: deviceID, err: err.message }, periodic: { task: this.taskInfo } }
-        );
+        logger.warn('Failed to get device status', {
+          params: { deviceID: deviceID, err: err.message },
+          periodic: { task: this.taskInfo }
+        });
       });
   }
 
   /**
      * Updates the interface stats per device in the database
      * @param  {string} deviceID   device UUID
-     * @param  {Object} stats      contains the interface stats, per interface there are rx/tx bps/pps
-     * @param  {Object} deviceInfo device info stored per connection (org, mongo device oid, socket)
+     * @param  {Object} stats      contains the per-interface stats: rx/tx bps/pps
+     * @param  {Object} deviceInfo device info stored per connection (org, mongo device id, socket)
      * @return {void}
      */
   updateAnalyticsInterfaceStats (deviceID, deviceInfo, statsList) {
     statsList.forEach((statsEntry) => {
       // Update the database once every 5 minutes
       const msgTime = Math.floor(statsEntry.utc / 300) * 300;
-      if (this.getDeviceLastUpdateTime(deviceID) == msgTime) return;
+      if (this.getDeviceLastUpdateTime(deviceID) === msgTime) return;
 
       // Build DB updates
       const dbStats = {};
@@ -192,7 +201,10 @@ class DeviceStatus {
         // Options
         { upsert: true })
         .then((resp) => {
-          logger.info('Storing interfaces statistics in DB', { params: { deviceId: deviceID, stats: statsEntry }, periodic: { task: this.taskInfo } });
+          logger.info('Storing interfaces statistics in DB', {
+            params: { deviceId: deviceID, stats: statsEntry },
+            periodic: { task: this.taskInfo }
+          });
         }, (err) => {
           logger.warn('Failed to store interface statistics', {
             params: { deviceId: deviceID, stats: statsEntry, err: err.message },
@@ -218,7 +230,8 @@ class DeviceStatus {
     let devStatus = 'failed';
     if (rawStats.hasOwnProperty('state')) { // Agent v1.X.X
       devStatus = rawStats.state;
-    } else if (rawStats.hasOwnProperty('running')) { // v0.X.X TBD: remove when v0.X.X is not supported, e.g. mgmt=2.X.X
+    // v0.X.X TBD: remove when v0.X.X is not supported, e.g. mgmt=2.X.X
+    } else if (rawStats.hasOwnProperty('running')) {
       devStatus = rawStats.running === true ? 'running' : 'stopped';
     }
 
@@ -257,8 +270,8 @@ class DeviceStatus {
         // Generate a notification if tunnel status has changed since
         // the last update, and only if the new status is 'down'
         if ((firstTunnelUpdate ||
-                    tunnelState.status !== this.status[deviceID].tunnelStatus[tunnelID].status) &&
-                    tunnelState.status === 'down') {
+            tunnelState.status !== this.status[deviceID].tunnelStatus[tunnelID].status) &&
+            tunnelState.status === 'down') {
           this.events.push({
             org: org,
             title: 'Tunnel change',
@@ -271,8 +284,8 @@ class DeviceStatus {
         // Generate a notification only if drop rate has
         // changed, and the new drop rate is higher than 50%
         if ((firstTunnelUpdate ||
-                    tunnelState.drop_rate !== this.status[deviceID].tunnelStatus[tunnelID].drop_rate) &&
-                    tunnelState.drop_rate > 50) {
+            tunnelState.drop_rate !== this.status[deviceID].tunnelStatus[tunnelID].drop_rate) &&
+            tunnelState.drop_rate > 50) {
           this.events.push({
             org: org,
             title: 'Tunnel drop rate',
@@ -310,7 +323,7 @@ class DeviceStatus {
       });
     });
 
-    if (Object.entries(devStats).length != 0) {
+    if (Object.entries(devStats).length !== 0) {
       this.setDeviceStatsField(deviceID, 'ifStats', devStats);
     }
   }
@@ -405,7 +418,10 @@ class DeviceStatus {
 
     try {
       const inc = { $inc: { [`stats.orgs.${org}.devices.${device}.bytes`]: bytes } };
-      const res = await deviceAggregateStats.findOneAndUpdate({ month: month }, inc, { upsert: true, useFindAndModify: false });
+      await deviceAggregateStats.findOneAndUpdate({ month: month }, inc, {
+        upsert: true,
+        useFindAndModify: false
+      });
     } catch (err) {
       logger.warn('Error storing aggregated device statistics to db',
         {

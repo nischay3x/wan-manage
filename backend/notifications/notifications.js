@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -19,7 +20,11 @@ const notificationsDb = require('../models/notifications');
 const organizations = require('../models/organizations');
 const { membership } = require('../models/membership');
 const logger = require('../logging/logging')({ module: module.filename, type: 'notifications' });
-const mailer = require('../utils/mailer')(configs.get('mailerHost'), configs.get('mailerPort'), configs.get('mailerBypassCert'));
+const mailer = require('../utils/mailer')(
+  configs.get('mailerHost'),
+  configs.get('mailerPort'),
+  configs.get('mailerBypassCert')
+);
 const mongoose = require('mongoose');
 
 /**
@@ -65,7 +70,7 @@ class NotificationsManager {
       // belong to the organization to which the account belongs.
       accounts.forEach(account => {
         const notificationList = orgsMap.get(account._id.toString());
-        notificationList.forEach(notification => notification.account = account.accountID);
+        notificationList.forEach(notification => { notification.account = account.accountID; });
       });
 
       await notificationsDb.insertMany(notifications);
@@ -139,11 +144,12 @@ class NotificationsManager {
             'noreply@flexiwan.com',
             emailAddresses,
             'Pending unread notifications',
-                        `<h2>flexiWAN Notification Reminder</h2>
-                            <p>This email was sent to you since you have pending unread notifications.
-                                <br>To view the notifications, login to your account and check the 'Notifications' page.</br>
-                                <br>Your friends @ flexiWAN</br>
-                            </p>`
+            `<h2>flexiWAN Notification Reminder</h2>
+                <p>This email was sent to you since you have pending unread notifications.
+                    <br>To view the notifications, login to your
+                    account and check the 'Notifications' page.</br>
+                    <br>Your friends @ flexiWAN</br>
+                </p>`
           );
 
           logger.info('User notifications reminder email sent', {

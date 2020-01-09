@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -14,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+/* eslint-disable max-len */
 const deviceStatus = require('../deviceStatus')();
 
 let deviceStatsMsg;
@@ -88,6 +90,7 @@ describe('validateDevStatsMessage', () => {
   });
 
   it('Should be an invalid message if message `stats` field is missing one of its fields', () => {
+    // eslint-disable-next-line camelcase
     const { rx_bytes, ...invalidStats } = deviceStatsMsg[0].stats['GigabitEthernet0/8/0'];
     deviceStatsMsg[0].stats = invalidStats;
     const result = deviceStatus.validateDevStatsMessage(deviceStatsMsg);

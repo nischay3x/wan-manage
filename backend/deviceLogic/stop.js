@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -16,7 +17,10 @@
 
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 const tunnelsModel = require('../models/tunnels');
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -46,20 +50,32 @@ const apply = async (device, req, res, next) => {
   const stopParams = { reconnect: true };
   const tasks = [{ entity: 'agent', message: 'stop-router', params: stopParams }];
 
-  deviceQueues.addJob(machineID, user, org,
-    // Data
-    { title: 'Stop device ' + device[0].hostname, tasks: tasks },
-    // Response data
-    { method: 'stop', data: { device: device[0]._id, org: org, shouldUpdateTunnel: (majorAgentVersion === 0) } },
-    // Metadata
-    { priority: 'medium', attempts: 1, removeOnComplete: false },
-    // Complete callback
-    null)
-    .then((job) => {
+  deviceQueues
+    .addJob(
+      machineID,
+      user,
+      org,
+      // Data
+      { title: 'Stop device ' + device[0].hostname, tasks: tasks },
+      // Response data
+      {
+        method: 'stop',
+        data: {
+          device: device[0]._id,
+          org: org,
+          shouldUpdateTunnel: majorAgentVersion === 0
+        }
+      },
+      // Metadata
+      { priority: 'medium', attempts: 1, removeOnComplete: false },
+      // Complete callback
+      null
+    )
+    .then(job => {
       logger.info('Stop device job queued', { job: job, req: req });
       res.status(200).send({ ok: 1 });
     })
-    .catch((err) => {
+    .catch(err => {
       next(err);
     });
 };
@@ -88,6 +104,7 @@ const complete = (jobId, res) => {
         {
           isActive: true,
           $or: [{ deviceAconf: true }, { deviceBconf: true }],
+          // eslint-disable-next-line no-dupe-keys
           $or: [{ deviceA: mongoose.Types.ObjectId(res.device) },
             { deviceB: mongoose.Types.ObjectId(res.device) }],
           org: res.org

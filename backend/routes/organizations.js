@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -54,7 +55,7 @@ organizationsRouter.route('/')
   .get(cors.corsWithOptions, verifyPermission('organizations', 'get'), async (req, res, next) => {
     try {
       const orgs = await getUserOrganizations(req.user);
-      const result = Object.keys(orgs).map((key) => { return orgs[key] });
+      const result = Object.keys(orgs).map((key) => { return orgs[key]; });
       return res.status(200).json(result);
     } catch (err) {
       logger.error('Error getting account organizations', { params: { reason: err.message } });
@@ -71,8 +72,8 @@ organizationsRouter.route('/')
         return session.startTransaction();
       })
       .then(() => {
-        const orgBody = { ...req.body, account: req.user.defaultAccount }
-        return organizations.create([orgBody], { session: session })
+        const orgBody = { ...req.body, account: req.user.defaultAccount };
+        return organizations.create([orgBody], { session: session });
       })
       .then((_org) => {
         org = _org[0];
@@ -83,7 +84,7 @@ organizationsRouter.route('/')
           { defaultOrg: org._id },
           // Options
           { upsert: false, new: true, session: session }
-        )
+        );
       })
       .then((updUser) => {
         if (!updUser) throw new Error('Error updating default organization');
@@ -92,7 +93,7 @@ organizationsRouter.route('/')
           { _id: updUser.defaultAccount },
           { $addToSet: { organizations: org._id } },
           { upsert: false, new: true, session: session }
-        )
+        );
       })
       .then((updAccount) => {
         if (!updAccount) throw new Error('Error adding organization to account');
@@ -117,7 +118,9 @@ organizationsRouter.route('/')
 organizationsRouter.route('/select')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.corsWithOptions, verifyPermission('organizations', 'get'), async (req, res, next) => {
-    if (!req.user._id || !req.user.defaultAccount) return next(createError(500, 'Error in selecting organization'));
+    if (!req.user._id || !req.user.defaultAccount) {
+      return next(createError(500, 'Error in selecting organization'));
+    }
     // Check first that user is allowed for this organization
     let org = [];
     try {
@@ -139,7 +142,10 @@ organizationsRouter.route('/select')
         .then(async (updUser) => {
           // Success, return OK and refresh JWT with new values
           req.user.defaultOrg = updUser.defaultOrg;
-          const token = await getToken(req, { org: updUser.defaultOrg._id, orgName: updUser.defaultOrg.name });
+          const token = await getToken(req, {
+            org: updUser.defaultOrg._id,
+            orgName: updUser.defaultOrg.name
+          });
           res.setHeader('Refresh-JWT', token);
           return res.status(200).json(updUser.defaultOrg);
         })
@@ -148,7 +154,7 @@ organizationsRouter.route('/select')
           return next(createError(500, 'Error selecting organization'));
         });
     } else {
-      logger.error('Organization not found for user', { params: { reason: err.message } });
+      logger.error('Organization not found for user');
       return next(createError(500, 'Error selecting organization'));
     }
   });
@@ -176,14 +182,15 @@ organizationsRouter.route('/:orgId')
       })
     // Find and remove organization from account
       .then(async () => {
-        // Only allow to delete current default org, this is required to make sure the API permissions
+        // Only allow to delete current default org, this
+        // is required to make sure the API permissions
         // are set properly for updating this organization
         if (req.user.defaultOrg._id.toString() === req.params.orgId) {
           return accounts.findOneAndUpdate(
             { _id: req.user.defaultAccount },
             { $pull: { organizations: req.params.orgId } },
             { upsert: false, new: true, session: session }
-          )
+          );
         } else {
           throw new Error('Please select an organization to delete it');
         }
@@ -197,7 +204,12 @@ organizationsRouter.route('/:orgId')
       })
     // Remove organization
       .then(() => {
-        return organizations.findOneAndRemove({ _id: req.params.orgId, account: req.user.defaultAccount }, { session: session });
+        return organizations.findOneAndRemove({
+          _id: req.params.orgId,
+          account: req.user.defaultAccount
+        }, {
+          session: session
+        });
       })
     // Remove all memberships that belong to the organization, but keep group even if empty
       .then(() => {
@@ -217,25 +229,27 @@ organizationsRouter.route('/:orgId')
         return AccessToken.deleteMany({ organization: req.params.orgId }, { session: session });
       })
       .then(async () => {
-        try {
-          // Find all devices for organization
-          const orgDevices = await devices.find({ org: req.params.orgId }, { machineId: 1, _id: 0 }, { session: session });
-          // Get the account total device count
-          const deviceCount = await devices.countDocuments({ account: req.user.defaultAccount._id }).session(session);
-          // Delete all devices
-          await devices.deleteMany({ org: req.params.orgId }, { session: session });
-          // Unregister a device (by removing the removed org number)
-          await flexibilling.registerDevice({
-            account: req.user.defaultAccount._id,
-            count: deviceCount,
-            increment: -orgDevices.length
-          }, session);
-          // Disconnect all devices
-          orgDevices.forEach((device) => connections.deviceDisconnect(device.machineId));
-          return Promise.resolve(true);
-        } catch (err) {
-          throw err;
-        }
+        // Find all devices for organization
+        const orgDevices = await devices.find(
+          { org: req.params.orgId },
+          { machineId: 1, _id: 0 },
+          { session: session }
+        );
+        // Get the account total device count
+        const deviceCount = await devices
+          .countDocuments({ account: req.user.defaultAccount._id })
+          .session(session);
+        // Delete all devices
+        await devices.deleteMany({ org: req.params.orgId }, { session: session });
+        // Unregister a device (by removing the removed org number)
+        await flexibilling.registerDevice({
+          account: req.user.defaultAccount._id,
+          count: deviceCount,
+          increment: -orgDevices.length
+        }, session);
+        // Disconnect all devices
+        orgDevices.forEach((device) => connections.deviceDisconnect(device.machineId));
+        return Promise.resolve(true);
       })
       .then(() => {
         return session.commitTransaction();
@@ -272,9 +286,9 @@ organizationsRouter.route('/:orgId')
       logger.error('Error updating organization', { params: { reason: err.message } });
       return next(createError(400, err.message));
     }
-  })
+  });
 
 // Default exports
 module.exports = {
   organizationsRouter: organizationsRouter
-}
+};

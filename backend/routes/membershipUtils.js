@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -44,7 +45,7 @@ const getUserOrganizations = async (user) => {
     });
     if (account) {
       await user.defaultAccount.populate('organizations').execPopulate();
-      user.defaultAccount.organizations.forEach((org) => resultSet[org._id] = org);
+      user.defaultAccount.organizations.forEach((org) => { resultSet[org._id] = org; });
       return resultSet;
     }
 
@@ -54,8 +55,11 @@ const getUserOrganizations = async (user) => {
       account: user.defaultAccount._id,
       to: 'group'
     });
-    groupOrgs = await organizations.find({ account: user.defaultAccount._id, group: { $in: groups } });
-    groupOrgs.forEach((entry) => resultSet[entry._id] = entry);
+    const groupOrgs = await organizations.find({
+      account: user.defaultAccount._id,
+      group: { $in: groups }
+    });
+    groupOrgs.forEach((entry) => { resultSet[entry._id] = entry; });
 
     // Add all organizations permitted for user
     const orgs = await membership.find({
@@ -64,14 +68,14 @@ const getUserOrganizations = async (user) => {
       to: 'organization'
     })
       .populate('organization');
-    orgs.forEach((org) => resultSet[org.organization._id] = org.organization);
+    orgs.forEach((org) => { resultSet[org.organization._id] = org.organization; });
     return resultSet;
   } catch (err) {
     logger.error('Error getting user organizations', { params: { reason: err.message } });
   }
 
   return [];
-}
+};
 
 /**
  * Get user organization by organization id
@@ -88,7 +92,7 @@ const getUserOrgByID = async (user, orgId) => {
     logger.error('Error getting organization', { params: { reason: err.message } });
     throw new Error('Error getting organization');
   }
-}
+};
 
 /**
  * Get all accounts available for a user
@@ -104,15 +108,16 @@ const getUserAccounts = async (user) => {
       user: user._id
     })
       .populate('account');
-    accounts.forEach((entry) => resultSet[entry.account._id] = entry.account.name);
-    const result = Object.keys(resultSet).map((key) => { return { _id: key, name: resultSet[key] } });
+    accounts.forEach((entry) => { resultSet[entry.account._id] = entry.account.name; });
+    const result = Object.keys(resultSet).map(key => {
+      return { _id: key, name: resultSet[key] };
+    });
     return result;
   } catch (err) {
     logger.error('Error getting user accounts', { params: { reason: err.message } });
   }
-
   return [];
-}
+};
 
 /**
  * Update default organization when it's null and refresh token
@@ -153,4 +158,4 @@ module.exports = {
   getUserOrgByID: getUserOrgByID,
   getUserAccounts: getUserAccounts,
   orgUpdateFromNull: orgUpdateFromNull
-}
+};

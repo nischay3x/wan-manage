@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -33,8 +34,6 @@ const formatErr = (err, msg) => {
 // Get downloadable link
 downloadRouter.route('/:fileId/:fileName')
   .get(cors.cors, verifyPermission('organizations', 'get'), (req, res, next) => {
-    checkUpdReq('GET', req);
-
     resourcesModel.find({ key: req.params.fileId })
       .then((resp) => {
         const obj = resp[0];
@@ -57,9 +56,10 @@ downloadRouter.route('/:fileId/:fileName')
               })
               .catch((err) => next(err));
             break;
-          default:
+          default: {
             const error = new Error('Resource type ' + obj.type + ' not supported');
             return next(error);
+          }
         }
       }, (err) => {
         logger.warn('Failed to download token', { params: { err: err.message }, req: req });

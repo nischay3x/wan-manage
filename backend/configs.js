@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -20,9 +21,10 @@
  * The default configuration is overridden by running with the environment
  * variable in npm:  npm start <environment>
  ****************************************************************************/
+/* eslint-disable max-len */
 const os = require('os');
 const hostname = os.hostname();
-const config_env = {
+const configEnv = {
   // This is the default configuration, override by the following sections
   default: {
     // URL of the rest server
@@ -110,6 +112,7 @@ const config_env = {
     // Software version query link
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     // Software version update email link. ${version} is replaced in run time
+    // eslint-disable-next-line no-template-curly-in-string
     SwVersionUpdateUrl: 'https://sandbox.flexiwan.com/Templates/notification_email_${version}.json',
     // Web hooks add user URL, used to send for new uses, '' to bypass hook
     webHookAddUserURL: '',
@@ -204,20 +207,20 @@ class Configs {
   constructor () {
     const environment = this.getEnv();
     console.log('environment=' + environment);
-    const combined_config = { ...config_env.default, ...config_env[environment], environment: environment };
+    const combinedConfig = { ...configEnv.default, ...configEnv[environment], environment: environment };
     // Override with environment variables
-    combined_config.userTokenSecretKey = process.env.USER_SECRET_KEY || combined_config.userTokenSecretKey;
-    combined_config.deviceTokenSecretKey = process.env.DEVICE_SECRET_KEY || combined_config.deviceTokenSecretKey;
-    combined_config.captchaKey = process.env.CAPTCHA_KEY || combined_config.captchaKey;
-    combined_config.mongoUrl = process.env.MONGO_URL || combined_config.mongoUrl;
-    combined_config.mongoBillingUrl = process.env.MONGO_BILLING_URL || combined_config.mongoBillingUrl;
-    combined_config.mongoAnalyticsUrl = process.env.MONGO_ANALYTICS_URL || combined_config.mongoAnalyticsUrl;
-    combined_config.billingApiKey = process.env.FLEXIBILLING_API_KEY || combined_config.billingApiKey;
-    combined_config.redisUrl = process.env.REDIS_URL || combined_config.redisUrl;
-    combined_config.webHookAddUserURL = process.env.WEBHOOK_ADD_USER_URL || combined_config.webHookAddUserURL;
-    combined_config.webHookAddUserSecret = process.env.WEBHOOK_ADD_USER_KEY || combined_config.webHookAddUserSecret;
+    combinedConfig.userTokenSecretKey = process.env.USER_SECRET_KEY || combinedConfig.userTokenSecretKey;
+    combinedConfig.deviceTokenSecretKey = process.env.DEVICE_SECRET_KEY || combinedConfig.deviceTokenSecretKey;
+    combinedConfig.captchaKey = process.env.CAPTCHA_KEY || combinedConfig.captchaKey;
+    combinedConfig.mongoUrl = process.env.MONGO_URL || combinedConfig.mongoUrl;
+    combinedConfig.mongoBillingUrl = process.env.MONGO_BILLING_URL || combinedConfig.mongoBillingUrl;
+    combinedConfig.mongoAnalyticsUrl = process.env.MONGO_ANALYTICS_URL || combinedConfig.mongoAnalyticsUrl;
+    combinedConfig.billingApiKey = process.env.FLEXIBILLING_API_KEY || combinedConfig.billingApiKey;
+    combinedConfig.redisUrl = process.env.REDIS_URL || combinedConfig.redisUrl;
+    combinedConfig.webHookAddUserURL = process.env.WEBHOOK_ADD_USER_URL || combinedConfig.webHookAddUserURL;
+    combinedConfig.webHookAddUserSecret = process.env.WEBHOOK_ADD_USER_KEY || combinedConfig.webHookAddUserSecret;
 
-    this.config_values = combined_config;
+    this.config_values = combinedConfig;
     console.log('Configuration used:\n' + JSON.stringify(this.config_values, null, 2));
   }
 

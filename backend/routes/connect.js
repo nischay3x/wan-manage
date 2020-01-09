@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -36,7 +37,10 @@ connectRouter.use(bodyParser.json());
 const formatErr = (err, msg) => {
   // Check for unique error
   if (err.name === 'MongoError' && err.code === 11000) {
-    return ({ status: 407, error: 'Device ' + msg.machine_id + ' already exists, must be deleted first' });
+    return {
+      status: 407,
+      error: 'Device ' + msg.machine_id + ' already exists, must be deleted first'
+    };
   } else if (err.message) {
     return ({ status: 408, error: err.message });
   } else {
@@ -49,11 +53,12 @@ const genToken = function (data) {
   return jwt.sign(data, configs.get('deviceTokenSecretKey'));
 };
 
-// Register device. When device connects for the first time, it tries to authenticate by accessing this URL
+// Register device. When device connects for the first
+// time, it tries to authenticate by accessing this URL
 connectRouter.route('/register')
   .post(cors.cors, checkDeviceVersion, (req, res, next) => {
     var sourceIP = req.ip || 'Unknown';
-    if (sourceIP.substr(0, 7) == '::ffff:') sourceIP = sourceIP.substr(7);
+    if (sourceIP.substr(0, 7) === '::ffff:') sourceIP = sourceIP.substr(7);
     jwt.verify(req.body.token, configs.get('deviceTokenSecretKey'), function (err, decoded) {
       if (err) {
         return next(createError(401, 'Invalid token'));
@@ -61,7 +66,7 @@ connectRouter.route('/register')
         if (!decoded.org || !decoded.account) return next(createError(401, 'Invalid token'));
         tokens.find({ token: req.body.token, org: decoded.org })
           .then(async (resp) => {
-            if (resp.length == 1) { // exactly one token found
+            if (resp.length === 1) { // exactly one token found
               // create device and add token new token to the device
               const deviceToken = genToken({
                 machine_id: req.body.machine_id,
@@ -71,14 +76,14 @@ connectRouter.route('/register')
               // Try to auto populate interfaces parameters
               const ifs = JSON.parse(req.body.interfaces);
               ifs.forEach((intf) => {
-                if (intf.name == req.body.default_dev) {
+                if (intf.name === req.body.default_dev) {
                   intf.isAssigned = true;
                   intf.PublicIP = sourceIP;
                   intf.type = 'WAN';
                 } else {
                   intf.type = 'LAN';
                   intf.routing = 'OSPF';
-                  if (ifs.length == 2) {
+                  if (ifs.length === 2) {
                     intf.isAssigned = true;
                   }
                 }
@@ -168,10 +173,15 @@ connectRouter.route('/register')
                     });
                 }, (err) => next(err))
                 .catch((err) => next(err));
-            } else if (resp.length == 0) {
+            } else if (resp.length === 0) {
               return next(createError(404, 'Token not found'));
             } else {
-              return next(createError(500, 'general token error, please contact the administrator'));
+              return next(
+                createError(
+                  500,
+                  'general token error, please contact the administrator'
+                )
+              );
             }
           }, (err) => next(err))
           .catch((err) => next(err));

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -65,33 +66,44 @@ class SwVersionUpdateManager {
   }
 
   /**
-     * A static factory method that creates and initializes the
-     * SwVersionUpdateManager singleton. The method first retrieves
-     * The required data from the database (an async operation), and
-     * only once the data is available, it creates and populates the instance.
-     *
-     * @static
-     * @return {Promise} an instance of SwVersionUpdateManager class
-     */
-  static createSwVerUpdateManager () {
+   * A static factory method that creates and initializes the
+   * SwVersionUpdateManager instance. The method first retrieves
+   * The required data from the database (an async operation), and
+   * only once the data is available, it creates and populates the instance.
+   * If the promise is rejected, deviceUpdater is set to null, to allow to
+   * reset the singleton.
+   *
+   * @static
+   * @async
+   * @return {Promise} an instance of SwVersionUpdateManager class
+   */
+  static async createSwVerUpdateManager () {
+    // Get the values from the database and use them to
+    // initialize the SwVersionUpdateManager instance.
+    // Use a dummy object if the collection hasn't been created yet.
+    let versionsDoc;
+    try {
+      versionsDoc = await deviceSwVersion.findOne({}, 'versions versionDeadline');
+      if (!versionsDoc) versionsDoc = dummyVersionObject;
+    } catch (err) {
+      deviceUpdater = null;
+      throw err;
+    }
+    return new SwVersionUpdateManager(
+      versionsDoc.versions,
+      versionsDoc.versionDeadline
+    );
+  }
+
+  /**
+   * A static singleton that creates a SwVersionUpdateManager.
+   *
+   * @static
+   * @return {Promise} an instance of SwVersionUpdateManager class
+   */
+  static getSwVerUpdateManagerInstance () {
     if (deviceUpdater) return deviceUpdater;
-
-    deviceUpdater = new Promise(async (resolve, reject) => {
-      try {
-        // Get the values from the database and use them to
-        // initialize the SwVersionUpdateManager instance.
-        // Use a dummy object if the collection hasn't been created yet.
-        let versionsDoc = await deviceSwVersion.findOne({}, 'versions versionDeadline');
-        if (!versionsDoc) versionsDoc = dummyVersionObject;
-
-        return resolve(new SwVersionUpdateManager(
-          versionsDoc.versions,
-          versionsDoc.versionDeadline
-        ));
-      } catch (err) {
-        reject(err);
-      }
-    });
+    deviceUpdater = SwVersionUpdateManager.createSwVerUpdateManager();
     return deviceUpdater;
   }
 
@@ -103,20 +115,12 @@ class SwVersionUpdateManager {
      * @return {Promise}              the response from the uri
      */
   async fetchWithRetry (uri, numOfTrials) {
-    return new Promise(async (resolve, reject) => {
-      let res, error;
-      for (let trial = 0; trial < numOfTrials; trial++) {
-        try {
-          res = await fetch(uri);
-          if (res.ok) return resolve(res);
-          throw (new Error(res.statusText));
-        } catch (err) {
-          error = err;
-        }
-      }
-      error.message = 'failed to fetch uri: ' + error.message;
-      reject(error);
-    });
+    let res;
+    for (let trial = 0; trial < numOfTrials; trial++) {
+      res = await fetch(uri);
+      if (res.ok) return res;
+      throw (new Error(res.statusText));
+    }
   }
 
   /**
@@ -128,6 +132,7 @@ class SwVersionUpdateManager {
      */
   async notifyUsers (versions) {
     // Generate user notifications for the new sw version
+    const notifications = [];
     try {
       // Generate notification for each organization.
       // Group all devices not running the latest version
@@ -144,7 +149,6 @@ class SwVersionUpdateManager {
         }
       ]);
 
-      const notifications = [];
       orgDevicesList.forEach(orgDevices => {
         orgDevices.devices.forEach(device => {
           notifications.push({
@@ -167,6 +171,7 @@ class SwVersionUpdateManager {
     }
     // Send new release emails
     try {
+      // eslint-disable-next-line no-template-curly-in-string
       const emailUrl = this.notificationEmailUri.replace('${version}', versions.device);
       const res = await this.fetchWithRetry(emailUrl, 3);
       let { subject, body } = await res.json();
@@ -235,7 +240,12 @@ class SwVersionUpdateManager {
     try {
       const query = {};
       const set = { $set: { versions: versions, versionDeadline: this.pendingUpgradeDeadline } };
-      const options = { upsert: true, new: true, setDefaultsOnInsert: true, useFindAndModify: false };
+      const options = {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+        useFindAndModify: false
+      };
       await deviceSwVersion.findOneAndUpdate(query, set, options);
 
       logger.info('Device latest software versions updated in database', {
@@ -303,8 +313,10 @@ class SwVersionUpdateManager {
         this.updateSwLatestVersions(versions, deadline);
       }
     } catch (err) {
-      logger.error('Failed to query device software version', { params: { err: err.message }, periodic: { task: this.taskInfo } }
-      );
+      logger.error('Failed to query device software version', {
+        params: { err: err.message },
+        periodic: { task: this.taskInfo }
+      });
     }
   }
 
@@ -335,5 +347,5 @@ class SwVersionUpdateManager {
 
 let deviceUpdater = null;
 module.exports = {
-  createSwVerUpdater: SwVersionUpdateManager.createSwVerUpdateManager
+  getSwVerUpdaterInstance: SwVersionUpdateManager.getSwVerUpdateManagerInstance
 };

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -37,7 +38,9 @@ class MongoConns {
     });
     this.analyticsDB.then((db) => {
       logger.info('Connected to MongoDB analyticsDB');
-    }, (err) => { logger.error('Failed to connect to analyticsDB', { params: { err: err.message } }); });
+    }, (err) => {
+      logger.error('Failed to connect to analyticsDB', { params: { err: err.message } });
+    });
   }
 
   getMainDB () {

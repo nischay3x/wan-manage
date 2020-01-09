@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -28,7 +29,10 @@ const Accounts = new Schema({
   name: {
     type: String,
     required: true,
-    match: [/^[a-z0-9-_ ]{2,30}$/i, 'Name should contain English characters, digits, spaces or dash'],
+    match: [
+      /^[a-z0-9-_ ]{2,30}$/i,
+      'Name should contain English characters, digits, spaces or dash'
+    ],
     minlength: [2, 'Name length must be at least 2'],
     maxlength: [30, 'Name length must be at most 30']
   },
@@ -44,7 +48,10 @@ const Accounts = new Schema({
   companySize: {
     type: String,
     required: true,
-    match: [/^[0-9 +\-]{1,10}$/i, 'Company size should contain numbers, dash or plus characters'],
+    match: [
+      /^[0-9 +-]{1,10}$/i,
+      'Company size should contain numbers, dash or plus characters'
+    ],
     minlength: [2, 'Company size length must be at least 2'],
     maxlength: [15, 'Company size length must be at most 15']
   },
@@ -52,7 +59,10 @@ const Accounts = new Schema({
   serviceType: {
     type: String,
     required: true,
-    match: [/^[a-z0-9 \-]{1,20}$/i, 'Service type should contain letters digits space or dash characters'],
+    match: [
+      /^[a-z0-9 -]{1,20}$/i,
+      'Service type should contain letters digits space or dash characters'
+    ],
     minlength: [2, 'Service type length must be at least 2'],
     maxlength: [20, 'Service type length must be at most 20']
   },
@@ -69,7 +79,10 @@ const Accounts = new Schema({
     type: String,
     required: false,
     default: '',
-    match: [/^[a-z0-9 \\\-]{1,30}$/i, 'Company type should contain letters digits slash space or dash characters'],
+    match: [
+      /^[a-z0-9 \\-]{1,30}$/i,
+      'Company type should contain letters digits slash space or dash characters'
+    ],
     maxlength: [30, 'Company type length must be at most 30']
   },
   // company description
@@ -77,7 +90,10 @@ const Accounts = new Schema({
     type: String,
     required: false,
     default: '',
-    match: [/^[a-z0-9, \$\.\\\-]{1,30}$/i, 'Company description cannot contain characters'],
+    match: [
+      /^[a-z0-9, $.\\-]{1,30}$/i,
+      'Company description cannot contain characters'
+    ],
     maxlength: [255, 'Company description length must be at most 255']
   },
   // enable or disable notifications
@@ -93,7 +109,9 @@ const Accounts = new Schema({
     maxlength: [255, 'logoFile length must be at most 255']
   },
   // list of organizations
-  organizations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'organizations' }],
+  organizations: [
+    { type: mongoose.Schema.Types.ObjectId, ref: 'organizations' }
+  ],
   // Customer id used for billing
   billingCustomerId: {
     type: String,

@@ -1,4 +1,6 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+/* eslint-disable new-cap */
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -14,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+/* eslint-disable max-len */
 const { devices, interfaces, versions } = require('../devices.js');
 const mongoose = require('mongoose');
 
@@ -139,7 +142,9 @@ describe('Device schema', () => {
     deviceModel.description = null;
 
     deviceModel.validate((err) => {
-      expect(err.message).toBe('devices validation failed: description: Device description format is invalid');
+      expect(err.message).toBe(
+        'devices validation failed: description: Device description format is invalid'
+      );
     });
   });
 
@@ -155,8 +160,9 @@ describe('Device schema', () => {
     deviceModel.hostname = null;
 
     deviceModel.validate((err) => {
-      expect(err.message).toBe('devices validation failed: hostname: Device hostname should ' +
-                                     'contain English characters, digits, hyphens and dots');
+      expect(err.message).toBe(
+        'devices validation failed: hostname: Device hostname should ' +
+        'contain English characters, digits, hyphens and dots');
     });
   });
 
@@ -164,7 +170,9 @@ describe('Device schema', () => {
     deviceModel.defaultRoute = null;
 
     deviceModel.validate((err) => {
-      expect(err.message).toBe('devices validation failed: defaultRoute: defaultRoute should be a vaild ip address');
+      expect(err.message).toBe(
+        'devices validation failed: defaultRoute: defaultRoute should be a vaild ip address'
+      );
     });
   });
 
@@ -172,7 +180,9 @@ describe('Device schema', () => {
     deviceModel.ipList = 'invalid-ip-list';
 
     deviceModel.validate((err) => {
-      expect(err.message).toBe('devices validation failed: ipList: ipList should be a list of comma separated IP addresses');
+      expect(err.message).toBe(
+        'devices validation failed: ipList: ipList should be a list of comma separated IP addresses'
+      );
     });
   });
 
@@ -180,7 +190,9 @@ describe('Device schema', () => {
     deviceModel.machineId = 'invalid-machine-id';
 
     deviceModel.validate((err) => {
-      expect(err.message).toBe('devices validation failed: machineId: machineId should be a valid machine ID');
+      expect(err.message).toBe(
+        'devices validation failed: machineId: machineId should be a valid machine ID'
+      );
     });
   });
 
@@ -188,7 +200,9 @@ describe('Device schema', () => {
     deviceModel.fromToken = 'invalid^token';
 
     deviceModel.validate((err) => {
-      expect(err.message).toBe('devices validation failed: fromToken: Token name format is invalid');
+      expect(err.message).toBe(
+        'devices validation failed: fromToken: Token name format is invalid'
+      );
     });
   });
 });
@@ -218,7 +232,9 @@ describe('Interface schema', () => {
     interfaceModel.name = null;
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: name: Interface name must be set');
+      expect(err.message).toBe(
+        'interfaces validation failed: name: Interface name must be set'
+      );
     });
   });
 
@@ -226,7 +242,9 @@ describe('Interface schema', () => {
     interfaceModel.IPv4 = null;
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: IPv4: IPv4 should be a vaild ip address');
+      expect(err.message).toBe(
+        'interfaces validation failed: IPv4: IPv4 should be a vaild ip address'
+      );
     });
   });
 
@@ -234,7 +252,9 @@ describe('Interface schema', () => {
     interfaceModel.IPv4Mask = '/';
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: IPv4Mask: IPv4Mask should be a vaild mask');
+      expect(err.message).toBe(
+        'interfaces validation failed: IPv4Mask: IPv4Mask should be a vaild mask'
+      );
     });
   });
 
@@ -251,7 +271,9 @@ describe('Interface schema', () => {
     interfaceModel.IPv6 = null;
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: IPv6: IPv6 should be a vaild ip address');
+      expect(err.message).toBe(
+        'interfaces validation failed: IPv6: IPv6 should be a vaild ip address'
+      );
     });
   });
 
@@ -259,7 +281,9 @@ describe('Interface schema', () => {
     interfaceModel.IPv6Mask = '/';
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: IPv6Mask: IPv6Mask should be a vaild mask');
+      expect(err.message).toBe(
+        'interfaces validation failed: IPv6Mask: IPv6Mask should be a vaild mask'
+      );
     });
   });
 
@@ -267,7 +291,9 @@ describe('Interface schema', () => {
     interfaceModel.PublicIP = null;
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: PublicIP: PublicIP should be a valid IPv4 or IPv6 address');
+      expect(err.message).toBe(
+        'interfaces validation failed: PublicIP: PublicIP should be a valid IPv4 or IPv6 address'
+      );
     });
   });
 
@@ -275,7 +301,9 @@ describe('Interface schema', () => {
     interfaceModel.pciaddr = null;
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: pciaddr: pciaddr should be a vaild pci address');
+      expect(err.message).toBe(
+        'interfaces validation failed: pciaddr: pciaddr should be a vaild pci address'
+      );
     });
   });
 
@@ -283,7 +311,9 @@ describe('Interface schema', () => {
     interfaceModel.driver = '$%@^%!@#$';
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: driver: driver should be a valid driver name');
+      expect(err.message).toBe(
+        'interfaces validation failed: driver: driver should be a valid driver name'
+      );
     });
   });
 
@@ -291,7 +321,9 @@ describe('Interface schema', () => {
     interfaceModel.MAC = 'invali-mac';
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: MAC: MAC should be a valid MAC address');
+      expect(err.message).toBe(
+        'interfaces validation failed: MAC: MAC should be a valid MAC address'
+      );
     });
   });
 
@@ -299,7 +331,9 @@ describe('Interface schema', () => {
     interfaceModel.routing = 'invalid-routing-protocol-name';
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: routing: routing should be a valid protocol name');
+      expect(err.message).toBe(
+        'interfaces validation failed: routing: routing should be a valid protocol name'
+      );
     });
   });
 
@@ -307,7 +341,9 @@ describe('Interface schema', () => {
     interfaceModel.type = 'invalid-interface-type';
 
     interfaceModel.validate((err) => {
-      expect(err.message).toBe('interfaces validation failed: type: type should be a valid interface type');
+      expect(err.message).toBe(
+        'interfaces validation failed: type: type should be a valid interface type'
+      );
     });
   });
 });
@@ -338,35 +374,45 @@ describe('Versions schema', () => {
   it('Should be invalid if device version is invalid', () => {
     versionsModel.device = 'invalid-device-version';
     versionsModel.validate((err) => {
-      expect(err.message).toBe('versions validation failed: device: Version must be a valid Semver version');
+      expect(err.message).toBe(
+        'versions validation failed: device: Version must be a valid Semver version'
+      );
     });
   });
 
   it('Should be invalid if agent version is invalid', () => {
     versionsModel.agent = 'invalid-agent-version';
     versionsModel.validate((err) => {
-      expect(err.message).toBe('versions validation failed: agent: Version must be a valid Semver version');
+      expect(err.message).toBe(
+        'versions validation failed: agent: Version must be a valid Semver version'
+      );
     });
   });
 
   it('Should be invalid if router version is invalid', () => {
     versionsModel.router = 'invalid-router-version';
     versionsModel.validate((err) => {
-      expect(err.message).toBe('versions validation failed: router: Version must be a valid Semver version');
+      expect(err.message).toBe(
+        'versions validation failed: router: Version must be a valid Semver version'
+      );
     });
   });
 
   it('Should be invalid if vpp version is invalid', () => {
     versionsModel.vpp = 'invalid-vpp-version';
     versionsModel.validate((err) => {
-      expect(err.message).toBe('versions validation failed: vpp: Version must be a valid VPP version');
+      expect(err.message).toBe(
+        'versions validation failed: vpp: Version must be a valid VPP version'
+      );
     });
   });
 
   it('Should be invalid if frr version is invalid', () => {
     versionsModel.frr = 'invalid-frr-version';
     versionsModel.validate((err) => {
-      expect(err.message).toBe('versions validation failed: frr: Version must be a valid FRR version');
+      expect(err.message).toBe(
+        'versions validation failed: frr: Version must be a valid FRR version'
+      );
     });
   });
 });

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -210,8 +211,12 @@ const getUserPermissions = (user) => {
       user: user._id,
       $or: [
         { to: 'account' },
-        ...((user.defaultOrg && user.defaultOrg.group) ? [{ to: 'group', group: user.defaultOrg.group }] : []),
-        ...((user.defaultOrg && user.defaultOrg._id) ? [{ to: 'organization', organization: user.defaultOrg._id }] : [])
+        ...(user.defaultOrg && user.defaultOrg.group
+          ? [{ to: 'group', group: user.defaultOrg.group }]
+          : []),
+        ...(user.defaultOrg && user.defaultOrg._id
+          ? [{ to: 'organization', organization: user.defaultOrg._id }]
+          : [])
       ]
     };
 
@@ -231,9 +236,9 @@ const getUserPermissions = (user) => {
         logger.error('Unable to get user permissions', { params: { message: err.message } });
         return reject(new Error('Unable to get user permissions'));
       });
-  })
+  });
   return p;
-}
+};
 
 // Default exports
 module.exports = {
@@ -243,4 +248,4 @@ module.exports = {
   setPermission: setPermission,
   preDefinedPermissions: preDefinedPermissions,
   getUserPermissions: getUserPermissions
-}
+};

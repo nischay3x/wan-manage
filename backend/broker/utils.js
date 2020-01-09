@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -33,7 +34,7 @@ const sendMsg = (org, machineID, msg, job, curTask, tasksLength) => (inp, done) 
   logger.info('Starting new task', { params: { message: msg, input: inp }, job: job });
   connections.deviceSendMessage(org, machineID, msg)
     .then((rmsg) => {
-      if (rmsg != null && rmsg.ok == 1) {
+      if (rmsg !== null && rmsg.ok === 1) {
         logger.info('Finished task', { params: { message: msg, reply: rmsg }, job: job });
         job.progress(curTask, tasksLength);
         done(null, rmsg.message);

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -52,19 +53,19 @@ const resourcesSchema = new Schema({
   // Object referred by this resource
   downloadObject: {
     type: mongoose.Schema.Types.ObjectId,
-    unique: true,		// Allow only one resource for each object ID
+    unique: true, // Allow only one resource for each object ID
     required: [true, 'Download object must be set']
   },
   // Type of resource
   type: {
-    type: String,	// e.g. "token"
+    type: String, // e.g. "token"
     required: true,
     match: [/^token$/, 'Only token types supported'],
     maxlength: [20, 'Type length must be at most 20']
   },
   // File name to return
   fileName: {
-    type: String,	// e.g. token.txt
+    type: String, // e.g. token.txt
     default: 'unknown',
     maxlength: [100, 'File name length must be at most 100'],
     validate: {
@@ -74,7 +75,7 @@ const resourcesSchema = new Schema({
   },
   // Field to export as text
   fieldName: {
-    type: String,	// e.g. token generated
+    type: String, // e.g. token generated
     default: '',
     maxlength: [100, 'Field name length must be at most 100'],
     validate: {

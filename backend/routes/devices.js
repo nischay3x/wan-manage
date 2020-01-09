@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -38,16 +39,16 @@ const devicesRouter = express.Router();
 devicesRouter.use(bodyParser.json());
 
 // Routes supported under /devices
-// /                		- Operations on all devices (GET, POST, DELETE)
-// /apply 					- Apply logic operation for all devices, logic type in the message body
+// /                        - Operations on all devices (GET, POST, DELETE)
+// /apply                   - Apply logic operation for all devices, logic type in the message body
 // /latestVersions          - GET devices latest software versions
-// /:deviceID       		- Operations on a specific device (GET, PUT, DELETE)
-// /:deviceID/interfaces 	- Operations on device interfaces
-// /:deviceID/apply 		- Apply logic operation for a specific device
+// /:deviceID               - Operations on a specific device (GET, PUT, DELETE)
+// /:deviceID/interfaces    - Operations on device interfaces
+// /:deviceID/apply         - Apply logic operation for a specific device
 // /:deviceID/configuration - Get configuration of a specific device
 // /:deviceID/logs          - Get logs of a specific device
 // /:deviceID/routes        - Get routes of a specific device
-// /:deviceID/send  		- Send API message to a specific device, ** only for testing **
+// /:deviceID/send          - Send API message to a specific device, ** only for testing **
 
 const formatErr = (err, msg) => {
   // Check for unique error
@@ -60,7 +61,6 @@ const formatErr = (err, msg) => {
   }
 };
 
-//
 const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
   if (qtype === 'DELETE') {
     // Make sure no tunnels exist for a deleted device
@@ -76,16 +76,20 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
             { params: { deviceId: req.params.deviceId }, req: req });
           reject(new Error('All device tunnels must be deleted before deleting a device'));
         } else {
-          let session;
           // start session/transaction
-          session = await mongoConns.getMainDB().startSession();
+          const session = await mongoConns.getMainDB().startSession();
           await session.startTransaction();
           // Disconnect deleted device socket
-          devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId), org: req.user.defaultOrg._id }).session(session)
+          devices.find({
+            _id: mongoose.Types.ObjectId(req.params.deviceId),
+            org: req.user.defaultOrg._id
+          }).session(session)
             .then(async (mres) => {
               if (!mres.length) throw new Error('Device for deletion not found');
               connections.deviceDisconnect(mres[0].machineId);
-              const deviceCount = await devices.countDocuments({ account: mres[0].account }).session(session);
+              const deviceCount = await devices.countDocuments({
+                account: mres[0].account
+              }).session(session);
               // Unregister a device (by adding -1)
               await flexibilling.registerDevice({
                 account: mres[0].account,
@@ -94,13 +98,19 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
               }, session);
               resolve({ ok: 1, session });
             }, async (err) => {
-              if (session) { await session.abortTransaction() };
-              logger.warn('Error finding device', { params: { method: qtype, err: err.message }, req: req });
+              if (session) { await session.abortTransaction(); };
+              logger.warn('Error finding device', {
+                params: { method: qtype, err: err.message },
+                req: req
+              });
               reject(err);
             })
             .catch(async (err) => {
-              if (session) { await session.abortTransaction() };
-              logger.warn('Error finding device', { params: { method: qtype, err: err.message }, req: req });
+              if (session) { await session.abortTransaction(); };
+              logger.warn('Error finding device', {
+                params: { method: qtype, err: err.message },
+                req: req
+              });
               reject(err);
             });
         }
@@ -111,7 +121,10 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
         reject(new Error('Delete device, tunnels find error, please try again'));
       });
   } else if (qtype === 'PUT') {
-    devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId), org: req.user.defaultOrg._id })
+    devices.find({
+      _id: mongoose.Types.ObjectId(req.params.deviceId),
+      org: req.user.defaultOrg._id
+    })
       .then((mres) => {
         // Don't allow any changes if the device is not approved
         if (!mres[0].isApproved && !req.body.isApproved) {
@@ -154,11 +167,17 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
         }
         resolve({ ok: 1 });
       }, (err) => {
-        logger.warn('Error finding device', { params: { method: qtype, err: err.message }, req: req });
+        logger.warn('Error finding device', {
+          params: { method: qtype, err: err.message },
+          req: req
+        });
         reject(err);
       })
       .catch((err) => {
-        logger.warn('Error finding device', { params: { method: qtype, err: err.message }, req: req });
+        logger.warn('Error finding device', {
+          params: { method: qtype, err: err.message },
+          req: req
+        });
         reject(err);
       });
   } else {
@@ -166,52 +185,65 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
   }
 });
 
-const updResp = (qtype, req, res, next, resp, origDoc = null) => new Promise(async function (resolve, reject) {
-  if (qtype === 'DELETE') {
-    resolve({ ok: 1 });
-  } else if (qtype === 'GET') {
-    // Update connected property for all returned devices
-    resp.forEach((d) => {
-      d.isConnected = connections.isConnected(d.machineId);
-      // Add interface stats to mongoose response
-      d.set('deviceStatus',
-        d.isConnected ? (deviceStatus.getDeviceStatus(d.machineId) || 0) : 0,
-        { strict: false });
+const updResp = (qtype, req, res, next, resp, origDoc = null) =>
+  // Disabling this line assuming this code is about to be removed.
+  // eslint-disable-next-line no-async-promise-executor
+  new Promise(async function (resolve, reject) {
+    if (qtype === 'DELETE') {
+      resolve({ ok: 1 });
+    } else if (qtype === 'GET') {
+      // Update connected property for all returned devices
+      resp.forEach(d => {
+        d.isConnected = connections.isConnected(d.machineId);
+        // Add interface stats to mongoose response
+        d.set(
+          'deviceStatus',
+          d.isConnected ? deviceStatus.getDeviceStatus(d.machineId) || 0 : 0,
+          { strict: false }
+        );
 
-      // // Add tunnel status
-      // d.set("tunnelStatus",
-      //     d.isConnected ? (deviceStatus.getTunnelStatus(d.machineId) || null) : null,
-      //     { strict: false });
+        // // Add tunnel status
+        // d.set("tunnelStatus",
+        //     d.isConnected ? (deviceStatus.getTunnelStatus(d.machineId) || null) : null,
+        //     { strict: false });
 
-      // TBD: If no interfaces found try to read from device and update database
-      /*
+        // TBD: If no interfaces found try to read from device and update database
+        /*
             if (d.interfaces.length == 0) {
                 console.log("No, interfaces. Try reading from device...");
-                console.log(JSON.stringify(updDeviceInterfaces(req.user.defaultOrg._id, d.machineId)));
+                console.log(JSON.stringify(
+                  updDeviceInterfaces(req.user.defaultOrg._id, d.machineId)));
             } else {
                 console.log("Interfaces found...");
                 console.log(JSON.stringify(d.interfaces));
             }
             */
-    });
-    resolve({ ok: 1 });
-  } else if (qtype === 'PUT') {
-    // If the change made to the device fields requires a change on the
-    // device itself, add a 'modify' job to the device's queue.
-    if (origDoc) {
-      req.body.method = 'modify';
-      try {
-        await dispatcher.apply([origDoc], req, res, next, { newDevice: resp });
-      } catch (err) {
-        return reject(err);
+      });
+      resolve({ ok: 1 });
+    } else if (qtype === 'PUT') {
+      // If the change made to the device fields requires a change on the
+      // device itself, add a 'modify' job to the device's queue.
+      if (origDoc) {
+        req.body.method = 'modify';
+        // dispatcher.apply([origDoc], req, res, next, { newDevice: resp })
+        //   .then(() => { resolve({ ok: 1 }); })
+        //   .catch((err) => { console.log('here'); error = err; });
+        // console.log(error);
+        // if (error) return reject(error);
+        try {
+          await dispatcher.apply([origDoc], req, res, next, {
+            newDevice: resp
+          });
+        } catch (err) {
+          return reject(err);
+        }
       }
-    }
 
-    resolve({ ok: 1 });
-  } else {
-    resolve({ ok: 1 });
-  }
-});
+      resolve({ ok: 1 });
+    } else {
+      resolve({ ok: 1 });
+    }
+  });
 const checkDeviceBaseApi = (qtype, req) => new Promise(function (resolve, reject) {
   // Creating new devices should be done only via the /register API
   if (qtype === 'POST') {
@@ -219,14 +251,22 @@ const checkDeviceBaseApi = (qtype, req) => new Promise(function (resolve, reject
   }
 });
 
-wrapper.assignRoutes(devicesRouter, 'devices', '/', devices, formatErr, checkDeviceBaseApi, updResp);
+wrapper.assignRoutes(
+  devicesRouter,
+  'devices',
+  '/',
+  devices,
+  formatErr,
+  checkDeviceBaseApi,
+  updResp
+);
 
 // Get devices latest software version
 devicesRouter.route('/latestVersions')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, async (req, res, next) => {
     try {
-      const swUpdater = await DevSwUpdater.createSwVerUpdater();
+      const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
       return res
         .status(200)
         .send({
@@ -249,7 +289,9 @@ devicesRouter.route('/upgdSched')
       // The request is considered invalid if not all device IDs
       // are found in the database. This is done to prevent a partial
       // schedule of the devices in case of a user's mistake.
-      if (numOfIdsFound < req.body.devices.length) { return next(createError(404, 'Some devices were not found')); }
+      if (numOfIdsFound < req.body.devices.length) {
+        return next(createError(404, 'Some devices were not found'));
+      }
 
       const set = { $set: { upgradeSchedule: { time: req.body.date, jobQueued: false } } };
       const options = { upsert: false, useFindAndModify: false };
@@ -284,7 +326,7 @@ devicesRouter.route('/apply')
     devices.find({ org: req.user.defaultOrg._id })
       .then((devices) => {
         return dispatcher.apply(devices, req, res, next);
-      }, (err) => { next(err) })
+      }, (err) => { next(err); })
       .catch((err) => {
         logger.warn('Apply operation failed', { params: { err: err.message }, req: req });
         return next(createError(500, 'Device Sync'));
@@ -292,23 +334,51 @@ devicesRouter.route('/apply')
   });
 
 // wrapper routes
-wrapper.assignRoutes(devicesRouter, 'devices', '/:deviceId', devices, formatErr, checkUpdReq, updResp);
-wrapper.assignRoutes(devicesRouter, 'devices', '/:deviceId/interfaces', devices, formatErr, null, null);
+wrapper.assignRoutes(
+  devicesRouter,
+  'devices',
+  '/:deviceId',
+  devices,
+  formatErr,
+  checkUpdReq,
+  updResp
+);
+wrapper.assignRoutes(
+  devicesRouter,
+  'devices',
+  '/:deviceId/interfaces',
+  devices,
+  formatErr,
+  null,
+  null
+);
 
 // apply command handler
 devicesRouter.route('/:deviceId/apply')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.corsWithOptions, verifyPermission('devices', 'post'), (req, res, next) => {
-    devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId), org: req.user.defaultOrg._id })
-      .then((device) => {
-        if (device.length == 1) {
-          return dispatcher.apply(device, req, res, next);
-        } else {
-          return next(createError(500, 'Device error'));
+    devices
+      .find({
+        _id: mongoose.Types.ObjectId(req.params.deviceId),
+        org: req.user.defaultOrg._id
+      })
+      .then(
+        device => {
+          if (device.length === 1) {
+            return dispatcher.apply(device, req, res, next);
+          } else {
+            return next(createError(500, 'Device error'));
+          }
+        },
+        err => {
+          next(err);
         }
-      }, (err) => { next(err); })
-      .catch((err) => {
-        logger.warn('Apply operation failed', { params: { err: err.message }, req: req });
+      )
+      .catch(err => {
+        logger.warn('Apply operation failed', {
+          params: { err: err.message },
+          req: req
+        });
         return next(createError(500, 'Apply device'));
       });
   });
@@ -368,50 +438,53 @@ const verifyLogsRequest = (req, res, next) => {
 // Retrieves logs from device
 devicesRouter.route('/:deviceId/logs')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .get(cors.corsWithOptions, verifyLogsRequest, verifyPermission('devices', 'get'), async (req, res, next) => {
-    try {
-      const device = await devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId) });
-      if (!device || device.length === 0) return next(createError(404, 'Device not found'));
+  .get(cors.corsWithOptions,
+    verifyLogsRequest,
+    verifyPermission('devices', 'get'),
+    async (req, res, next) => {
+      try {
+        const device = await devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId) });
+        if (!device || device.length === 0) return next(createError(404, 'Device not found'));
 
-      if (!connections.isConnected(device[0].machineId)) {
-        return res.status(200).send({
-          status: 'disconnected',
-          log: []
-        });
-      }
-
-      const deviceLogs = await connections.deviceSendMessage(
-        null,
-        device[0].machineId,
-        {
-          entity: 'agent',
-          message: 'get-device-logs',
-          params: {
-            lines: req.query.lines || '100',
-            filter: req.query.filter || 'all'
-          }
+        if (!connections.isConnected(device[0].machineId)) {
+          return res.status(200).send({
+            status: 'disconnected',
+            log: []
+          });
         }
-      );
 
-      if (!deviceLogs.ok) {
-        logger.error('Failed to get device logs', {
-          params: {
-            deviceId: req.params.deviceId,
-            response: deviceLogs.message
-          },
-          req: req
+        const deviceLogs = await connections.deviceSendMessage(
+          null,
+          device[0].machineId,
+          {
+            entity: 'agent',
+            message: 'get-device-logs',
+            params: {
+              lines: req.query.lines || '100',
+              filter: req.query.filter || 'all'
+            }
+          }
+        );
+
+        if (!deviceLogs.ok) {
+          logger.error('Failed to get device logs', {
+            params: {
+              deviceId: req.params.deviceId,
+              response: deviceLogs.message
+            },
+            req: req
+          });
+          return next(createError(500, 'Failed to get device logs'));
+        }
+
+        return res.status(200).send({
+          status: 'connected',
+          logs: deviceLogs.message
         });
-        return next(createError(500, 'Failed to get device logs'));
+      } catch (err) {
+        return next(createError(500));
       }
-
-      return res.status(200).send({
-        status: 'connected',
-        logs: deviceLogs.message
-      });
-    } catch (err) {
-      return next(createError(500));
-    }
-  });
+    });
 
 // Retrieves the list of routes from device
 devicesRouter.route('/:deviceId/routes')
@@ -458,11 +531,17 @@ devicesRouter.route('/:deviceId/routes')
 
 // Retrieves the list of static routes from device
 devicesRouter.route('/:deviceId/staticroutes')
-  .options(cors.corsWithOptions, verifyPermission('devices', 'get'), async (req, res) => { res.sendStatus(200); })
+  .options(cors.corsWithOptions,
+    verifyPermission('devices', 'get'),
+    async (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, async (req, res, next) => {
     try {
-      const deviceObject = await devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId) });
-      if (!deviceObject || deviceObject.length === 0) return next(createError(404, 'Device not found'));
+      const deviceObject = await devices.find({
+        _id: mongoose.Types.ObjectId(req.params.deviceId)
+      });
+      if (!deviceObject || deviceObject.length === 0) {
+        return next(createError(404, 'Device not found'));
+      }
 
       const device = deviceObject[0];
       const routes = device.staticroutes.map(value => {
@@ -472,7 +551,7 @@ devicesRouter.route('/:deviceId/staticroutes')
           gateway_ip: value.gateway,
           ifname: value.ifname,
           status: value.status
-        }
+        };
       });
 
       return res.status(200).send(routes);
@@ -482,13 +561,16 @@ devicesRouter.route('/:deviceId/staticroutes')
   })
   .post(cors.corsWithOptions, verifyPermission('devices', 'post'), async (req, res, next) => {
     const deviceObject = await devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId) });
-    if (!deviceObject || deviceObject.length === 0) return next(createError(404, 'Device not found'));
+    if (!deviceObject || deviceObject.length === 0) {
+      return next(createError(404, 'Device not found'));
+    }
     if (!deviceObject[0].isApproved && !req.body.isApproved) {
       return next(createError(400, 'Device must be first approved'));
     }
     const device = deviceObject[0];
 
     try {
+      // eslint-disable-next-line new-cap
       const route = new staticroutes({
         destination: req.body.destination_network,
         gateway: req.body.gateway_ip,
@@ -518,10 +600,14 @@ devicesRouter.route('/:deviceId/staticroutes')
 
 // update static route
 devicesRouter.route('/:deviceId/staticroutes/:routeId')
-  .options(cors.corsWithOptions, verifyPermission('devices', 'get'), async (req, res) => { res.sendStatus(200); })
+  .options(cors.corsWithOptions,
+    verifyPermission('devices', 'get'),
+    async (req, res) => { res.sendStatus(200); })
   .patch(cors.corsWithOptions, verifyPermission('devices', 'post'), async (req, res, next) => {
     const deviceObject = await devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId) });
-    if (!deviceObject || deviceObject.length === 0) return next(createError(404, 'Device not found'));
+    if (!deviceObject || deviceObject.length === 0) {
+      return next(createError(404, 'Device not found'));
+    }
     if (!deviceObject[0].isApproved && !req.body.isApproved) {
       return next(createError(400, 'Device must be first approved'));
     }
@@ -536,7 +622,9 @@ devicesRouter.route('/:deviceId/staticroutes/:routeId')
 // delete static route
   .delete(cors.corsWithOptions, verifyPermission('devices', 'del'), async (req, res, next) => {
     const deviceObject = await devices.find({ _id: mongoose.Types.ObjectId(req.params.deviceId) });
-    if (!deviceObject || deviceObject.length === 0) return next(createError(404, 'Device not found'));
+    if (!deviceObject || deviceObject.length === 0) {
+      return next(createError(404, 'Device not found'));
+    }
 
     const device = deviceObject[0];
 
@@ -549,9 +637,9 @@ devicesRouter.route('/:deviceId/staticroutes/:routeId')
     );
 
     req.body.method = 'staticroutes';
-    req.body.id = req.params.routeId
+    req.body.id = req.params.routeId;
     req.body.action = 'del';
-    dispatcher.apply(device, req, res, next, req.body)
+    dispatcher.apply(device, req, res, next, req.body);
 
     return res.status(200).send({ deviceId: device.id });
   });

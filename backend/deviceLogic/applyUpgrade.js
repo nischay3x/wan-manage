@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -17,7 +18,10 @@
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const DevSwUpdater = require('./DevSwVersionUpdateManager');
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'), configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
@@ -50,14 +54,8 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
         null)
     );
   });
-  return new Promise(async (resolve, reject) => {
-    try {
-      const jobResults = await Promise.all(jobs);
-      resolve(jobResults);
-    } catch (err) {
-      reject(err);
-    }
-  });
+
+  return Promise.all(jobs);
 };
 
 /**
@@ -73,35 +71,35 @@ const apply = async (deviceList, req, res, next) => {
   // If the apply method was called for multiple devices, extract
   // only the devices that appear in the body. If it was called for
   // a single device, simply used the first device in the devices array.
-  let op_devices;
+  let opDevices;
   if (req.body.devices) {
-    selected_devices = req.body.devices;
-    op_devices = (deviceList && selected_devices)
+    const selectedDevices = req.body.devices;
+    opDevices = (deviceList && selectedDevices)
       ? deviceList.filter((device) => {
-        const in_selected = selected_devices.hasOwnProperty(device._id);
-        return !!in_selected;
+        const inSelected = selectedDevices.hasOwnProperty(device._id);
+        return !!inSelected;
       }) : [];
   } else {
-    op_devices = deviceList;
+    opDevices = deviceList;
   }
 
   try {
     // Filter out devices that already have
     // a pending upgrade job in the queue.
-    op_devices = await devices.find({
+    opDevices = await devices.find({
       $and: [
-        { _id: { $in: op_devices } },
+        { _id: { $in: opDevices } },
         { 'upgradeSchedule.jobQueued': { $ne: true } }
       ]
     },
     '_id machineId hostname'
     );
 
-    const swUpdater = await DevSwUpdater.createSwVerUpdater();
+    const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
     const version = swUpdater.getLatestDevSwVersion();
     const user = req.user.username;
     const org = req.user.defaultOrg._id.toString();
-    const jobResults = await queueUpgradeJobs(op_devices, user, org, version);
+    const jobResults = await queueUpgradeJobs(opDevices, user, org, version);
     jobResults.forEach(job => {
       logger.info('Upgrade device job queued', {
         params: { jobId: job.id, version: version },
@@ -113,7 +111,7 @@ const apply = async (deviceList, req, res, next) => {
     // Set the upgrade job pending flag for all devices.
     // This prevents queuing additional upgrade tasks as long
     // as there's a pending upgrade task in a device's queue.
-    const deviceIDs = op_devices.map(dev => { return dev._id; });
+    const deviceIDs = opDevices.map(dev => { return dev._id; });
     await setQueuedUpgradeFlag(deviceIDs, org, true);
 
     return res.status(200).send({});
@@ -131,18 +129,11 @@ const apply = async (deviceList, req, res, next) => {
  * @return {Promise}
  */
 const setQueuedUpgradeFlag = (deviceID, org, flag) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      await devices.update(
-        { _id: { $in: deviceID }, org: org },
-        { $set: { 'upgradeSchedule.jobQueued': flag } },
-        { upsert: false }
-      );
-    } catch (err) {
-      return reject(err);
-    }
-    return resolve();
-  });
+  return devices.update(
+    { _id: { $in: deviceID }, org: org },
+    { $set: { 'upgradeSchedule.jobQueued': flag } },
+    { upsert: false }
+  );
 };
 
 /**
@@ -158,7 +149,9 @@ const complete = async (jobId, res) => {
   try {
     await setQueuedUpgradeFlag([res.device], res.org, false);
   } catch (err) {
-    logger.warn('Failed to update jobQueued field in database', { params: { result: res, jobId: jobId } });
+    logger.warn('Failed to update jobQueued field in database', {
+      params: { result: res, jobId: jobId }
+    });
   }
 };
 
@@ -175,7 +168,9 @@ const error = async (jobId, res) => {
   try {
     await setQueuedUpgradeFlag([res.device], res.org, false);
   } catch (err) {
-    logger.warn('Failed to update jobQueued field in database', { params: { result: res, jobId: jobId } });
+    logger.warn('Failed to update jobQueued field in database', {
+      params: { result: res, jobId: jobId }
+    });
   }
 };
 
