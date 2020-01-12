@@ -129,7 +129,7 @@ const apply = async (deviceList, req, res, next) => {
  * @return {Promise}
  */
 const setQueuedUpgradeFlag = (deviceID, org, flag) => {
-  return devices.update(
+  return devices.updateMany(
     { _id: { $in: deviceID }, org: org },
     { $set: { 'upgradeSchedule.jobQueued': flag } },
     { upsert: false }

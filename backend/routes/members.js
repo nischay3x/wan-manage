@@ -309,36 +309,50 @@ membersRouter.route('/')
       .then(async () => {
         // Session committed, set to null
         session = null;
-        // Trigger web hook
-        const webHookMessage = {
-          account: req.user.defaultAccount.name,
-          firstName: (existingUser) ? existingUser.name : req.body.userFirstName,
-          lastName: (existingUser) ? existingUser.lastName : req.body.userLastName,
-          email: req.body.email,
-          country: req.user.defaultAccount.country,
-          jobTitle: (existingUser) ? existingUser.jobTitle : req.body.userJobTitle,
-          phoneNumber: (existingUser) ? existingUser.phoneNumber : '',
-          companySize: req.user.defaultAccount.companySize,
-          usageType: req.user.defaultAccount.serviceType,
-          numSites: req.user.defaultAccount.numSites,
-          companyType: '',
-          companyDesc: '',
-          state: (existingUser) ? existingUser.state : 'unverified'
-        };
-        if (!await webHooks.sendToWebHook(configs.get('webHookAddUserURL'),
-          webHookMessage,
-          configs.get('webHookAddUserSecret'))) {
-          logger.error('Web hook call failed', { params: { message: webHookMessage } });
+        // Send webhooks only for users invited as account owners
+        // changing the user role later will not send another hook
+        if (req.body.userPermissionTo === 'account' && req.body.userRole === 'owner') {
+          // Trigger web hook
+          const webHookMessage = {
+            account: req.user.defaultAccount.name,
+            firstName: (existingUser) ? existingUser.name : req.body.userFirstName,
+            lastName: (existingUser) ? existingUser.lastName : req.body.userLastName,
+            email: req.body.email,
+            country: req.user.defaultAccount.country,
+            jobTitle: (existingUser) ? existingUser.jobTitle : req.body.userJobTitle,
+            phoneNumber: (existingUser) ? existingUser.phoneNumber : '',
+            companySize: req.user.defaultAccount.companySize,
+            usageType: req.user.defaultAccount.serviceType,
+            numSites: req.user.defaultAccount.numSites,
+            companyType: '',
+            companyDesc: '',
+            state: (existingUser) ? existingUser.state : 'unverified'
+          };
+          if (!await webHooks.sendToWebHook(configs.get('webHookAddUserURL'),
+            webHookMessage,
+            configs.get('webHookAddUserSecret'))) {
+            logger.error('Web hook call failed', { params: { message: webHookMessage } });
+          }
+        } else {
+          logger.info('New invited user, webhook not sent - not account owner', {
+            params: {
+              email: req.body.email,
+              to: req.body.userPermissionTo,
+              role: req.body.userRole
+            }
+          });
         }
         // Always resolve
         return Promise.resolve(true);
       })
       .then(() => {
-        return res.status(200).json({
-          name: req.body.userFirstName,
-          email: req.body.email,
-          status: 'user invited'
-        });
+        return res
+          .status(200)
+          .json({
+            name: req.body.userFirstName,
+            email: req.body.email,
+            status: 'user invited'
+          });
       })
       .catch((err) => {
         if (session) session.abortTransaction();

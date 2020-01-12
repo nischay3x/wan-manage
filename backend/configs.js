@@ -127,7 +127,7 @@ const configEnv = {
     mongoBillingUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexibilling?replicaSet=rs`,
     mongoAnalyticsUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwanAnalytics?replicaSet=rs`,
     mailerBypassCert: true,
-    SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-unstable',
+    SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
     useFlexiBilling: false,
     logLevel: 'debug',
@@ -170,11 +170,11 @@ const configEnv = {
     clientStaticDir: 'client/build',
     logFilePath: '/var/log/flexiwan/flexiwan.log',
     reqLogFilePath: '/var/log/flexiwan/flexiwanReq.log',
-    billingConfigSite: 'flexiwan', // TBD: Modify
-    billingDefaultPlan: 'enterprise-test', // TBD: Modify
+    billingConfigSite: 'flexiwan',
+    billingDefaultPlan: 'enterprise',
     useFlexiBilling: true,
     billingRedirectOkUrl: 'https://manage.flexiwan.com/ok.html',
-    SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing', // TBD: Modify
+    SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     logLevel: 'info',
     logUserName: true,
     corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80']
