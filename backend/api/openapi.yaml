@@ -12,11 +12,147 @@ info:
     url: https://www.gnu.org/licenses/agpl-3.0.en.html
   version: 1.0.0
 servers:
-- url: https://manage.flexiwan.com/api
-  description: Production server
-- url: https://local.flexiwan.com:3443/api
-  description: Local Development server
+# Added by API Auto Mocking Plugin
+- description: SwaggerHub API Auto Mocking
+  url: https://virtserver.swaggerhub.com/frozen-eye/flexiwanManage/1.0.0
+- description: Production server
+  url: https://manage.flexiwan.com/api
+- description: Local Development server
+  url: https://local.flexiwan.com:3443/api
 paths:
+  /tokens:
+    get:
+      tags:
+      - Tokens
+      summary: Get all Tokens
+      # operationId: accessToken_accesstokensGET
+      responses:
+        "200":
+          description: Successfull operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Token'
+                x-content-type: application/json
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      x-swagger-router-controller: Tokens
+    post:
+      tags:
+      - Tokens
+      summary: Create new access token
+      # operationId: accessToken_accesstokensPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              schema:
+                type: string
+              required: true
+              description: Location of a new resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: Authentication Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      x-swagger-router-controller: Tokens
+    delete:
+      tags:
+      - Tokens
+      summary: Delete token
+      parameters:
+      - name: id
+        in: path
+        description: Numeric ID of the Token to delete
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Successfull operation
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      x-swagger-router-controller: Tokens
+
   /accesstokens:
     get:
       tags:
@@ -35,6 +171,12 @@ paths:
                 x-content-type: application/json
         "401":
           description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "500":
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -58,14 +200,38 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AccessToken'
+              $ref: '#/components/schemas/AccessTokenRequest'
       responses:
         "201":
-          description: Successfull operation
+          description: Created
+          headers:
+            Location:
+              schema:
+                type: string
+              required: true
+              description: Location of a new resource created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AccessToken'
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -76,6 +242,7 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: AccessTokens
+
   /accesstokens/{id}:
     put:
       tags:
@@ -106,6 +273,22 @@ paths:
                 items:
                   $ref: '#/components/schemas/AccessToken'
                 x-content-type: application/json
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -149,6 +332,7 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: AccessTokens
+
   /devices:
     get:
       tags:
@@ -187,7 +371,8 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: Devices
-  /devices/{action}:
+
+  /devices/execute:
     post:
       tags:
       - Devices
@@ -195,26 +380,33 @@ paths:
       # operationId: Device_devices_actionPOST
       parameters:
       - name: action
-        in: path
+        in: query
         description: Command to execute
         required: true
-        style: simple
-        explode: false
         schema:
           type: string
       requestBody:
         content:
           application/json:
             schema:
-              type: object
+              oneOf:
+                - $ref: '#/components/schemas/CreateTunnelCommand'
+                - $ref: '#/components/schemas/DeleteTunnelCommand'
       responses:
-        "201":
-          description: Successfull operation
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
           content:
             application/json:
               schema:
-                type: object
-                x-content-type: application/json
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
         default:
           description: Unexpected error
           content:
@@ -225,6 +417,7 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: Devices
+
   /devices/{id}:
     put:
       tags:
@@ -248,6 +441,22 @@ paths:
       responses:
         "204":
           description: Successfull operation
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -291,6 +500,40 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: Devices
+
+  /devices/{id}/tunnels:
+    get:
+      tags:
+      - Tunnels
+      summary: Retrieve device tunnels information
+      parameters:
+      - name: id
+        in: path
+        description: Numeric ID of the Device to fetch tunnel information about
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Successfull operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tunnel'
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      x-swagger-router-controller: Routes
   /devices/{id}/routes:
     get:
       tags:
@@ -373,8 +616,28 @@ paths:
         schema:
           type: string
       responses:
-        "204":
+        "200":
           description: Successfull operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaticRoute'
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -406,11 +669,37 @@ paths:
               $ref: '#/components/schemas/StaticRoute'
       responses:
         "201":
-          description: Successfull operation
+          description: Created
+          headers:
+            Location:
+              schema:
+                type: string
+              required: true
+              description: Location of a new resource created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceStaticRouteInformation'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: Authentication Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -591,7 +880,7 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: Configuration
-  /devices/{id}/{action}:
+  /devices/{id}/execute:
     post:
       tags:
       - Devices
@@ -607,11 +896,9 @@ paths:
         schema:
           type: string
       - name: action
-        in: path
+        in: query
         description: Command to execute
         required: true
-        style: simple
-        explode: false
         schema:
           type: string
       requestBody:
@@ -675,6 +962,7 @@ paths:
       - bearerAuth: []
       - apiKey: []
       x-swagger-router-controller: Notifications
+  
   /members:
     get:
       tags:
@@ -718,15 +1006,40 @@ paths:
       - Members
       summary: Create new user
       # operationId: member_membersPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
       responses:
         "201":
           description: User has been created
+          headers:
+            Location:
+              schema:
+                type: string
+              required: true
+              description: Location of a new resource created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Member'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication failed
+          description: Authentication Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
           content:
             application/json:
               schema:
@@ -741,17 +1054,87 @@ paths:
       - bearerAuth: []
       - apiKey: []
       x-swagger-router-controller: Members
+
+  /members/{id}:
+    put:
+      tags:
+      - Members
+      summary: Modify member
+      parameters:
+      - name: id
+        in: path
+        description: Numeric ID of the account to modify
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
+      responses:
+        "204":
+          description: Successfull operation
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      x-swagger-router-controller: Members
+      
+
   /members/login:
     post:
       tags:
       - Members
       summary: Login
       # operationId: member_members_loginPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
       responses:
         "200":
           description: Successful operation
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication failed
+          description: Authentication Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
           content:
             application/json:
               schema:
@@ -766,6 +1149,46 @@ paths:
       - bearerAuth: []
       - apiKey: []
       x-swagger-router-controller: Members
+  /members/reset-password:
+    post:
+      tags:
+      - Members
+      summary: Reset password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        "204":
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      x-swagger-router-controller: Members
+
   /accounts/{id}:
     get:
       tags:
@@ -806,9 +1229,34 @@ paths:
         explode: false
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
       responses:
-        "204":
+        "200":
           description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -863,18 +1311,37 @@ paths:
               $ref: '#/components/schemas/Organization'
       responses:
         "201":
-          description: Successfull operation
+          description: Created
+          headers:
+            Location:
+              schema:
+                type: string
+              required: true
+              description: Location of a new resource created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Organization'
-        "401":
-          description: Authentication failed
+        "400":
+          description: Bad Request
           content:
             application/json:
               schema:
-                type: object
-                x-content-type: application/json
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: Authentication Failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -904,10 +1371,30 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/body_4'
+              $ref: '#/components/schemas/OrganizationRequest'
       responses:
-        "204":
-          description: Successfull operation
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         default:
           description: Unexpected error
           content:
@@ -974,8 +1461,73 @@ components:
         organization: organization
         isValid: true
         name: name
-        id: id
+        _id: id
         token: token
+    AccessTokenRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        organization:
+          type: string
+      example:
+        organization: organization
+        name: name
+    MemberRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        userFirstName:
+          type: string
+        userLastName:
+          type: string
+        userJobTitle:
+          type: string
+        userPermissionTo:
+          type: string
+          enum:
+            - account
+            - group
+            - organization
+        userEntity:
+          type: string
+        userRole:
+          type: string
+          enum:
+            - viewer
+            - manager
+            - owner
+
+    Token:
+      type: object
+      properties:
+        _id:
+          type: string
+          readOnly: true
+        name:
+          type: string
+        org:
+          type: string
+        token:
+          type: string
+          readOnly: true
+      example:
+        org: organization
+        name: name
+        _id: id
+        token: token
+    TokenRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        org:
+          type: string
+      example:
+        org: organization
+        name: name
+
     Account:
       type: object
       properties:
@@ -993,6 +1545,7 @@ components:
           type: string
         enableNotifications:
           type: boolean
+          default: true
       example:
         country: country
         companyType: companyType
@@ -1000,6 +1553,22 @@ components:
         enableNotifications: true
         name: name
         _id: _id
+    AccountRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        companyType:
+          type: string
+        companyDesc:
+          type: string
+        country:
+          maxLength: 2
+          type: string
+        enableNotifications:
+          type: boolean
+          default: true
+
     Organization:
       type: object
       properties:
@@ -1263,6 +1832,13 @@ components:
         account__id: account__id
         group: group
         organization__id: organization__id
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
     DeviceStatus:
       type: string
       enum:
@@ -1366,11 +1942,39 @@ components:
         - logs
         - logs
         status: connected
-    Error:
+
+    Tunnel:
       type: object
       properties:
-        error:
+        num:
+          type: integer
+        isActive:
+          type: boolean
+        deviceAconf:
+          type: boolean
+        deviceBconf:
+          type: boolean
+        _id:
           type: string
+        __v:
+          type: integer
+        deviceA:
+          type: object
+        deviceB:
+          type: object
+        interfaceA:
+          type: object
+        interfaceB:
+          type: object
+        interfaceADetails:
+          type: object
+        interfaceBDetails:
+          type: object
+        tunnelStatusA:
+          type : object
+        tunnelStatusB:
+          type: object
+    
     body_2:
       type: object
       properties:
@@ -1391,7 +1995,7 @@ components:
           maxLength: 24
           type: string
           description: Interface name
-    body_4:
+    OrganizationRequest:
       type: object
       properties:
         name:
@@ -1401,9 +2005,54 @@ components:
       example:
         name: Default
         group: Default
+
+    # TODO: add more action types
+    ChangePasswordRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - update
+        email:
+          type: string
+        password:
+          type: string
+        token:
+          type: string
+
+    # commands
+    #method: "tunnels"
+    #devices: {5e15e5bc98a6453dbbcf3a8e: true, 5e15e65798a6453dbbcf3ae8: true}
+    CreateTunnelCommand:
+      type: object
+      properties:
+        devices:
+          type: array
+          items:
+            type: string
+
+    DeleteTunnelCommand:
+      type: object
+      properties:
+        id:
+          type: string
+
+    # error
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
   responses:
     NotFoundError:
       description: The specified resource was not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: Internal server error
       content:
         application/json:
           schema:
