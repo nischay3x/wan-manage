@@ -41,7 +41,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "500":
           description: Internal Server Error
           content:
@@ -88,11 +88,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication Failed
+          description: Authentication failed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -100,7 +100,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -132,7 +132,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -140,7 +140,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
 
         default:
           description: Unexpected error
@@ -174,13 +174,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "500":
-          description: Internal server error
+          description: Internal Server Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -223,7 +223,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -231,7 +231,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -280,7 +280,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -288,7 +288,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -321,7 +321,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -354,13 +360,19 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
-          description: Not found error
+          description: Not Found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -407,6 +419,10 @@ paths:
           description: Not Found
         "500":
           description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -448,7 +464,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -456,7 +472,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -489,7 +505,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -524,6 +546,20 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Tunnel'
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -559,6 +595,21 @@ paths:
                 items:
                   $ref: '#/components/schemas/Device'
                 x-content-type: application/json
+        
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -591,6 +642,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceStaticRouteInformation'
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -687,11 +752,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication Failed
+          description: Authentication failed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -699,7 +764,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -756,7 +821,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -789,6 +862,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceStatistics'
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -838,6 +925,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceLog'
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -870,6 +971,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceConfiguration'
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -914,6 +1029,20 @@ paths:
               schema:
                 type: object
                 x-content-type: application/json
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -945,13 +1074,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
-          description: Not found error
+          description: Not Found
+        "500":
+          description: Internal Server Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -984,13 +1115,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
-          description: Not found error
+          description: Not Found
+        "500":
+          description: Internal Server Error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1031,11 +1164,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication Failed
+          description: Authentication failed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -1043,7 +1176,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1084,7 +1217,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -1092,7 +1225,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1126,11 +1259,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication Failed
+          description: Authentication failed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -1138,7 +1271,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1169,7 +1302,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -1177,7 +1310,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1248,7 +1381,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -1256,7 +1389,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1288,7 +1421,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1329,11 +1468,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication Failed
+          description: Authentication failed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -1341,7 +1480,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1386,7 +1525,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
         "404":
           description: Not Found
         "500":
@@ -1394,7 +1533,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
@@ -1427,7 +1566,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
         default:
           description: Unexpected error
           content:
