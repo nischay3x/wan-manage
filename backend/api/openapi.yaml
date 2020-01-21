@@ -122,6 +122,60 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: Tokens
+    put:
+      tags:
+      - Tokens
+      summary: Modify a token
+      parameters:
+      - name: id
+        in: path
+        description: Numeric ID of the Token to modify
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        "200":
+          description: Successfull operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Token'
+                x-content-type: application/json
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      x-swagger-router-controller: Tokens
     delete:
       tags:
       - Tokens
