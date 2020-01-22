@@ -2887,6 +2887,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    ForbiddenError:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     InternalServerError:
       description: Internal server error
       content:
