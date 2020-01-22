@@ -610,8 +610,15 @@ paths:
             schema:
               $ref: '#/components/schemas/body_2'
       responses:
-        "204":
-          description: Successfull operation
+        "200":
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Device'
+                x-content-type: application/json
         "400":
           description: Bad Request
         "401":
@@ -1318,19 +1325,20 @@ paths:
       summary: Get all Jobs
       parameters: 
         - in: query
-          name: state
+          name: offset
           schema:
-            type: string
+            type: int
+          description: The number of items to skip before starting to collect the result set
         - in: query
           name: limit
           schema:
             type: integer
           description: The numbers of items to return
         - in: query
-          name: filter
+          name: status
           schema:
             type: string
-          description: The filter to apply on a query
+          description: A filter on the job status
       responses:
         "200":
           description: Successful operation
@@ -1713,7 +1721,7 @@ paths:
             schema:
               $ref: '#/components/schemas/LoginRequest'
       responses:
-        "200":
+        "204":
           description: Successful operation
         "400":
           description: Bad Request
@@ -2472,18 +2480,20 @@ components:
           time: time
         description: description
         defaultRoute: defaultRoute
-        deviceStatus: true
+        deviceStatus: object
         deviceToken: deviceToken
         labels:
         - labels
         - labels
-        _machineId: _machineId
+        machineId: machineId
         site: site
         hostname: true
         versions:
           agent: agent
           router: router
           device: device
+          vpp: vpp
+          frr: frr
         name: name
         _id: _id
         pendingDevModification: true
