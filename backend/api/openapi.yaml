@@ -502,8 +502,8 @@ paths:
                 - $ref: '#/components/schemas/CreateTunnelCommand'
                 - $ref: '#/components/schemas/DeleteTunnelCommand'
       responses:
-        "200":
-          description: OK
+        "204":
+          description: No Content
         "400":
           description: Bad Request
         "401":
@@ -710,9 +710,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Device'
-                x-content-type: application/json
-        
+                  $ref: '#/components/schemas/DeviceRouteInformation'
         "401":
           description: Authentication failed
           content:
@@ -732,7 +730,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceRouteInformation'
+                $ref: '#/components/schemas/Error'
       security:
       - apiKey: []
       - bearerAuth: []
@@ -768,7 +766,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceStaticRouteInformation'
+                $ref: '#/components/schemas/StaticRoute'
         "401":
           description: Authentication failed
           content:
@@ -793,6 +791,8 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: StaticRoutes
+
+  /devices/{id}/staticroutes/{route}:
     put:
       tags:
       - Static Routes
@@ -801,12 +801,25 @@ paths:
       parameters:
       - name: id
         in: path
-        description: Numeric ID of the Device to modify
+        description: Numeric ID of the Device
         required: true
         style: simple
         explode: false
         schema:
           type: string
+      - name: route
+        in: path
+        description: Numeric ID of the Route to modify
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaticRouteRequest'
       responses:
         "200":
           description: Successfull operation
@@ -854,11 +867,19 @@ paths:
         explode: false
         schema:
           type: string
+      - name: route
+        in: path
+        description: Numeric ID of the Route to modify
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StaticRoute'
+              $ref: '#/components/schemas/StaticRouteRequest'
       responses:
         "201":
           description: Created
@@ -908,34 +929,18 @@ paths:
       parameters:
       - name: id
         in: path
-        description: Numeric ID of the Device to delete
+        description: Numeric ID of the Device
         required: true
         style: simple
         explode: false
         schema:
           type: string
-      - name: destination
-        in: query
-        description: Route destination
+      - name: route
+        in: path
+        description: Numeric ID of the Route to delete
         required: true
-        style: form
-        explode: true
-        schema:
-          type: string
-      - name: gateway
-        in: query
-        description: Route Gateway
-        required: true
-        style: form
-        explode: true
-        schema:
-          type: string
-      - name: interface
-        in: query
-        description: Interface
-        required: true
-        style: form
-        explode: true
+        style: simple
+        explode: false
         schema:
           type: string
       responses:
@@ -1150,13 +1155,8 @@ paths:
                 - $ref: '#/components/schemas/CreateTunnelCommand'
                 - $ref: '#/components/schemas/DeleteTunnelCommand'
       responses:
-        "201":
-          description: Successfull operation
-          content:
-            application/json:
-              schema:
-                type: object
-                x-content-type: application/json
+        "204":
+          description: No Content
         "401":
           description: Authentication failed
           content:
@@ -1379,6 +1379,57 @@ paths:
       - bearerAuth: []
       - apiKey: []
       x-swagger-router-controller: Members
+    post:
+      tags:
+      - Members
+      summary: Create new member
+      # operationId: member_membersPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
+      responses:
+        "201":
+          description: Member has been added
+          headers:
+            Location:
+              schema:
+                type: string
+              required: true
+              description: Location of a new resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      x-swagger-router-controller: Members
 
   /members/{id}:
     put:
@@ -1428,7 +1479,6 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: Members
-      
 
   /users/login:
     post:
@@ -1525,7 +1575,7 @@ paths:
               $ref: '#/components/schemas/RegisterAccountRequest'
       responses:
         "201":
-          description: User has been created
+          description: Account has been created
           headers:
             Location:
               schema:
@@ -1587,6 +1637,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Account'
+        "400":
+          description: Bad Request
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/UnauthorizedError'
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/responses/InternalServerError'
       security:
       - bearerAuth: []
       - apiKey: []
@@ -1702,7 +1766,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Organization'
+              $ref: '#/components/schemas/OrganizationRequest'
       responses:
         "201":
           description: Created
@@ -1967,6 +2031,16 @@ components:
         enableNotifications:
           type: boolean
           default: true
+
+    OrganizationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        group:
+          type: string
+        account:
+          type: string
 
     Organization:
       type: object
@@ -2275,14 +2349,21 @@ components:
       enum:
       - connected
       - disconnected
+    DeviceStaticRouteRequest:
+      type: object
+      properties:
+        destination:
+          type: string
+        gateway:
+          type: string
+        ifname:
+          type: string
+
     DeviceRouteInformation:
       type: object
       properties:
         status:
-          type: string
-          enum:
-          - connected
-          - disconnected
+          $ref: '#/components/schemas/DeviceStatus'
         osRoutes:
           type: array
           items:
@@ -2316,13 +2397,22 @@ components:
       properties:
         status:
           $ref: '#/components/schemas/DeviceStatus'
+        destination:
+          type: string
+        gateway:
+          type: string
+        ifname:
+          type: string
       example:
         status: connected
+        ifname: eth0
+        destination: "1.1.0.0"
+        gateway: "1.1.1.1"
     DeviceStatistics:
       type: object
       properties:
         status:
-          type: string
+          type: object
       example:
         status: status
     DeviceConfiguration:
@@ -2411,6 +2501,23 @@ components:
       properties:
         name:
           type: string
+    StaticRouteRequest:
+      type: object
+      properties:
+        _id:
+          type: string
+        destination:
+          maxLength: 24
+          type: string
+          description: Destination
+        gateway:
+          maxLength: 24
+          type: string
+          description: Gateway to use
+        interface:
+          maxLength: 24
+          type: string
+          description: Interface name
     StaticRoute:
       type: object
       properties:
@@ -2426,16 +2533,6 @@ components:
           maxLength: 24
           type: string
           description: Interface name
-    OrganizationRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        group:
-          type: string
-      example:
-        name: Default
-        group: Default
 
     ResetPasswordRequest:
       type: object
