@@ -2827,12 +2827,7 @@ components:
           type : object
         tunnelStatusB:
           type: object
-    
-    body_2:
-      type: object
-      properties:
-        name:
-          type: string
+
     StaticRouteRequest:
       type: object
       properties:
