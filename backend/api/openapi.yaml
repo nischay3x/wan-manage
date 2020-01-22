@@ -25,7 +25,6 @@ paths:
       tags:
       - Tokens
       summary: Get all Tokens
-      # operationId: accessToken_accesstokensGET
       parameters:
         - in: query
           name: offset
@@ -74,6 +73,15 @@ paths:
       - Tokens
       summary: Create new access token
       # operationId: accessToken_accesstokensPOST
+      parameters:
+      - name: id
+        in: path
+        description: Numeric ID of the Token to modify
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -104,8 +112,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
-        "404":
-          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -122,6 +128,7 @@ paths:
       - apiKey: []
       - bearerAuth: []
       x-swagger-router-controller: Tokens
+  /tokens/{id}:
     put:
       tags:
       - Tokens
@@ -141,15 +148,12 @@ paths:
             schema:
               $ref: '#/components/schemas/TokenRequest'
       responses:
-        "200":
-          description: Successfull operation
+        "201":
+          description: Created
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Token'
-                x-content-type: application/json
+                $ref: '#/components/schemas/Token'
         "400":
           description: Bad Request
         "401":
@@ -290,8 +294,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AccessToken'
-        "204":
-          description: No Content
         "400":
           description: Bad Request
         "401":
@@ -300,8 +302,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
-        "404":
-          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -398,6 +398,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -502,8 +504,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
-        "404":
-          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -593,6 +593,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
+        "404":
+          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -610,7 +612,7 @@ paths:
       - bearerAuth: []
       x-swagger-router-controller: Devices
 
-  /devices/{id}/tunnels:
+  /tunnels/{id}:
     get:
       tags:
       - Tunnels
@@ -874,8 +876,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
-        "404":
-          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -1138,7 +1138,9 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              oneOf:
+                - $ref: '#/components/schemas/CreateTunnelCommand'
+                - $ref: '#/components/schemas/DeleteTunnelCommand'
       responses:
         "201":
           description: Successfull operation
@@ -1153,8 +1155,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
-        "404":
-          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -1487,8 +1487,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
-        "404":
-          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -1542,8 +1540,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
-        "404":
-          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -1724,8 +1720,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/responses/UnauthorizedError'
-        "404":
-          description: Not Found
         "500":
           description: Internal Server Error
           content:
@@ -1920,8 +1914,6 @@ components:
       properties:
         name:
           type: string
-        org:
-          type: string
       example:
         org: organization
         name: name
@@ -2033,7 +2025,7 @@ components:
           minLength: 24
           type: string
           readOnly: true
-        _machineId:
+        machineId:
           type: string
         name:
           type: string
