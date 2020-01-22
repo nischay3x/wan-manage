@@ -616,8 +616,7 @@ paths:
             application/json:
               schema:
                 type: object
-                items:
-                  $ref: '#/components/schemas/Device'
+                $ref: '#/components/schemas/Device'
                 x-content-type: application/json
         "400":
           description: Bad Request
