@@ -598,7 +598,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/body_2'
+              $ref: '#/components/schemas/DeviceRequest'
       responses:
         "200":
           description: Successful operation
@@ -1086,7 +1086,7 @@ paths:
         style: simple
         explode: false
         schema:
-          type: string
+          type: object
       responses:
         "200":
           description: Successfull operation
@@ -2371,11 +2371,56 @@ components:
           type: string
         attempts:
           $ref: '#/components/schemas/JobAttempt'
-        #data: {message: {title: "Delete tunnel between (fw01,enp0s8) and (fw01,enp0s8)",…},…}
-        #priority: 0
-        #progress: 0
-        #state: "inactive"
-        #attempts: {made: 0, remaining: 1, max: 1}
+
+    DeviceRequest:
+      type: object
+      properties:
+        machineId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        site:
+          type: string
+        defaultRoute:
+          type: string
+        isApproved:
+          type: boolean
+        isConnected:
+          type: boolean
+        pendingDevModification:
+          type: boolean
+        hostname:
+          type: boolean
+        deviceStatus:
+          type: boolean
+        deviceToken:
+          type: string
+        fromToken:
+          type: string
+        account:
+          type: string
+        org:
+          type: string
+        ipList:
+          type: string
+        staticroutes:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaticRoute'
+        upgradeSchedule:
+          $ref: '#/components/schemas/UpgradeSchedule'
+        labels:
+          type: array
+          items:
+            type: string
+        interfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/Interface'
+        versions:
+          $ref: '#/components/schemas/DeviceVersion'
 
     Device:
       type: object
