@@ -540,21 +540,11 @@ paths:
         required: true
         schema:
           type: string
-      - name: ids
-        in: query
-        description: Ids of devices to execute action on
-        required: true
-        schema:
-          type: array
-          items:
-            type: string
       requestBody:
         content:
           application/json:
             schema:
-              oneOf:
-                - $ref: '#/components/schemas/CreateTunnelCommand'
-                - $ref: '#/components/schemas/DeleteTunnelCommand'
+              $ref: '#/components/schemas/CommandRequest'
       responses:
         "204":
           description: No Content
@@ -615,9 +605,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
                 $ref: '#/components/schemas/Device'
-                x-content-type: application/json
         "400":
           description: Bad Request
         "401":
@@ -1326,7 +1314,7 @@ paths:
         - in: query
           name: offset
           schema:
-            type: int
+            type: integer
           description: The number of items to skip before starting to collect the result set
         - in: query
           name: limit
@@ -2498,8 +2486,14 @@ components:
         pendingDevModification: true
         isApproved: true
         staticroutes:
-        - id: id
-        - id: id
+        - id: 1
+          destination: 20.20.0.0
+          gateway: 20.20.0.1
+          interface: eth0
+        - id: 2
+          destination: 10.10.0.0
+          gateway: 10.10.0.1
+          interface: eth1
         fromToken: fromToken
         account: account
         ipList: ipList
@@ -2641,6 +2635,7 @@ components:
       enum:
       - connected
       - disconnected
+
     DeviceStaticRouteRequest:
       type: object
       properties:
@@ -2863,12 +2858,20 @@ components:
           type: integer
         acceptTerms:
           type: boolean
-        
-          
+
+    CommandRequest:
+      type: object
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+        command:
+          oneOf:
+            - $ref: '#/components/schemas/CreateTunnelCommand'
+            - $ref: '#/components/schemas/DeleteTunnelCommand'
 
     # commands
-    #method: "tunnels"
-    #devices: {5e15e5bc98a6453dbbcf3a8e: true, 5e15e65798a6453dbbcf3ae8: true}
     CreateTunnelCommand:
       type: object
       properties:
