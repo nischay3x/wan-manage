@@ -486,6 +486,14 @@ paths:
         required: true
         schema:
           type: string
+      - name: ids
+        in: query
+        description: Ids of devices to execute action on
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
       requestBody:
         content:
           application/json:
