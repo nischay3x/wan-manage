@@ -2294,8 +2294,11 @@ components:
           type: string
         title:
           type: string
-        status: #"unread"
+        status:
           type: string
+          enum:
+            - read
+            - unread
         time:
           type: string
         device:
