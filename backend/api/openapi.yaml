@@ -1472,56 +1472,6 @@ paths:
       - bearerAuth: []
       - apiKey: []
       x-swagger-router-controller: Notifications
-    put:
-      tags:
-      - Notifications
-      summary: Modify notification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: '#/components/schemas/NotificationRequest'
-      responses:
-        "200":
-          description: Successfull operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StaticRoute'
-        "400":
-          description: Bad Request
-        "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      x-swagger-router-controller: StaticRoutes
 
   /members:
     get:
@@ -2340,11 +2290,29 @@ components:
     Notification:
       type: object
       properties:
-        count:
-          minimum: 0
-          type: integer
+        _id:
+          type: string
+        title:
+          type: string
+        status: #"unread"
+          type: string
+        time:
+          type: string
+        device:
+          type: string
+        machineId:
+          type: string
+        details:
+          type: string
       example:
-        count: 0
+        status: "unread"
+        _id: 123
+        title: "Router state change"
+        time: "2019-12-19T12:10:01.667Z"
+        device: "test0"
+        machineId: "123"
+        details: 'Router state changed to "Not running"'
+
     JobAttempt:
       type: object
       properties:
