@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2019-2020 flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -15,8 +15,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const swaggerJSDoc = require('swagger-jsdoc');
-const swaggerUi = require('swagger-ui-express');
 const rateLimit = require('express-rate-limit');
 var configs = require('./configs')();
 var createError = require('http-errors');
@@ -31,24 +29,26 @@ const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
 const notifyUsers = require('./periodic/notifyUsers')();
 
+// var usersRouter = require('./routes/users');
+// var devicesRouter = require('./routes/devices');
+// var tokensRouter = require('./routes/tokens');
+// var tunnelsRouter = require('./routes/tunnels');
+// var { organizationsRouter } = require('./routes/organizations');
+// var { accountsRouter } = require('./routes/accounts');
+// var membersRouter = require('./routes/members');
+
 // Routers definition
-var usersRouter = require('./routes/users');
-var devicesRouter = require('./routes/devices');
-var tokensRouter = require('./routes/tokens');
-var tunnelsRouter = require('./routes/tunnels');
-var { organizationsRouter } = require('./routes/organizations');
-var { accountsRouter } = require('./routes/accounts');
-var membersRouter = require('./routes/members');
 var adminRouter = require('./routes/admin');
 var connectRouter = require('./routes/connect');
-const invoiceRouter = require('./routes/invoices');
-const couponRouter = require('./routes/coupons');
+// const invoiceRouter = require('./routes/invoices');
+// const couponRouter = require('./routes/coupons');
 
-const portalRouter = require('./routes/portals');
-var deviceStatsRouter = require('./routes/deviceStats');
-var deviceQueueRouter = require('./routes/deviceQueue');
-const notificationsRouter = require('./routes/notifications');
-const accesstokensRouter = require('./routes/accesstokens');
+// const portalRouter = require('./routes/portals');
+// var deviceStatsRouter = require('./routes/deviceStats');
+// var deviceQueueRouter = require('./routes/deviceQueue');
+// const notificationsRouter = require('./routes/notifications');
+// const accesstokensRouter = require('./routes/accesstokens');
+
 const mongoExpress = require('mongo-express/lib/middleware');
 const mongoExpressConfig = require('./mongo_express_config');
 const morgan = require('morgan');
@@ -85,38 +85,38 @@ if (configs.get('environment') === 'development') app.use(morgan('dev'));
 
 app.set('trust proxy', true); // Needed to get the public IP if behind a proxy
 
-// Swagger definition
-const swaggerDefinition = {
-  info: {
-    title: 'flexiWAN REST API documentation',
-    version: '1.0.0',
-    description:
-      'This is the REST API for flexiWAN management. ' +
-      // eslint-disable-next-line max-len
-      'Full swagger.json file: <a href="./swagger.json" target="_blank" rel="noopener noreferrer">' +
-      'swagger.json</a>'
-  },
-  components: {},
-  host: configs.get('restServerURL').split('//')[1],
-  basePath: '/api',
-  securityDefinitions: {
-    JWT: {
-      type: 'apiKey',
-      in: 'header',
-      name: 'Authorization',
-      description: ''
-    }
-  }
-};
+// // Swagger definition
+// const swaggerDefinition = {
+//   info: {
+//     title: 'flexiWAN REST API documentation',
+//     version: '1.0.0',
+//     description:
+//       'This is the REST API for flexiWAN management. ' +
+//       // eslint-disable-next-line max-len
+//       'Full swagger.json file: <a href="./swagger.json" target="_blank" rel="noopener noreferrer">' +
+//       'swagger.json</a>'
+//   },
+//   components: {},
+//   host: configs.get('restServerURL').split('//')[1],
+//   basePath: '/api',
+//   securityDefinitions: {
+//     JWT: {
+//       type: 'apiKey',
+//       in: 'header',
+//       name: 'Authorization',
+//       description: ''
+//     }
+//   }
+// };
 
-const options = {
-  swaggerDefinition,
-  apis: [`${__dirname}/swagger/**/*.yaml`]
-};
-const swaggerUiOptions = {
-  docExpansion: 'none'
-};
-const swaggerSpec = swaggerJSDoc(options);
+// const options = {
+//   swaggerDefinition,
+//   apis: [`${__dirname}/swagger/**/*.yaml`]
+// };
+// const swaggerUiOptions = {
+//   docExpansion: 'none'
+// };
+// const swaggerSpec = swaggerJSDoc(options);
 
 // Don't expose system internals in response headers
 app.disable('x-powered-by');
@@ -173,11 +173,11 @@ if (configs.get('environment') === 'development') {
 
 // Add swagger api docs, url api-docs is the latest version.
 // Older versions can be added under /api-docs/vX.Y.Z
-app.get('/api-docs/swagger.json', function (req, res) {
-  res.status(200).send(swaggerSpec);
-});
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, false, swaggerUiOptions));
-app.use('/api/users', usersRouter);
+// app.get('/api-docs/swagger.json', function (req, res) {
+//   res.status(200).send(swaggerSpec);
+// });
+// app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, false, swaggerUiOptions));
+// app.use('/api/users', usersRouter);
 app.use('/api/connect', connectRouter);
 // Download a resource
 // app.use('/download', downloadRouter);
@@ -190,34 +190,34 @@ app.use('/ok', function (req, res, next) {
 app.use(auth.verifyUserJWT);
 // app.use(auth.auth);
 
-// Routes from here and below would require authentication if they are under api path
-// To allow specific routes in a path, add the path before the auth and call
-// auth.verifyUserJWT before the request handler itself
-app.use('/api/devices', devicesRouter);
-app.use('/api/tokens', tokensRouter);
-app.use('/api/tunnels', tunnelsRouter);
-app.use('/api/admin', adminRouter);
-app.use('/api/devicestats', deviceStatsRouter);
-app.use('/api/jobs', deviceQueueRouter);
-app.use('/api/organizations', organizationsRouter);
-app.use('/api/accounts', accountsRouter);
-app.use('/api/members', membersRouter);
-app.use('/api/notifications', notificationsRouter);
-app.use('/api/accesstokens', accesstokensRouter);
+// // Routes from here and below would require authentication if they are under api path
+// // To allow specific routes in a path, add the path before the auth and call
+// // auth.verifyUserJWT before the request handler itself
+// app.use('/api/devices', devicesRouter);
+// app.use('/api/tokens', tokensRouter);
+// app.use('/api/tunnels', tunnelsRouter);
+// app.use('/api/admin', adminRouter);
+// app.use('/api/devicestats', deviceStatsRouter);
+// app.use('/api/jobs', deviceQueueRouter);
+// app.use('/api/organizations', organizationsRouter);
+// app.use('/api/accounts', accountsRouter);
+// app.use('/api/members', membersRouter);
+// app.use('/api/notifications', notificationsRouter);
+// app.use('/api/accesstokens', accesstokensRouter);
 
-// billing support
-app.use('/api/invoices', invoiceRouter);
-app.use('/api/coupons', couponRouter);
-app.use('/api/portals', portalRouter);
+// // billing support
+// app.use('/api/invoices', invoiceRouter);
+// app.use('/api/coupons', couponRouter);
+// app.use('/api/portals', portalRouter);
 
 // Create a file resource for download
 // app.use('/api/resources', resorucesRouter);
 
 // "catchall" handler, for any request that doesn't match one above, send back index.html file.
-app.get('*', (req, res, next) => {
-  logger.info('Route not found', { req: req });
-  res.sendFile(path.join(__dirname, configs.get('clientStaticDir') + '/index.html'));
-});
+// app.get('*', (req, res, next) => {
+//   logger.info('Route not found', { req: req });
+//   res.sendFile(path.join(__dirname, configs.get('clientStaticDir') + '/index.html'));
+// });
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {

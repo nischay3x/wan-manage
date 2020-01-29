@@ -1,20 +1,17 @@
 openapi: 3.0.1
 info:
-  title: FlexiWAN API
-  description: This is the REST API for flexiWAN management.
-  termsOfService: https://flexiwan.com/legal/terms-of-service/
   contact:
+    email: yourfriends@flexiwan.com
     name: API support
     url: https://flexiwan.com
-    email: yourfriends@flexiwan.com
+  description: This is the REST API for flexiWAN management.
   license:
     name: AGPLv3
     url: https://www.gnu.org/licenses/agpl-3.0.en.html
+  termsOfService: https://flexiwan.com/legal/terms-of-service/
+  title: FlexiWAN API
   version: 1.0.0
 servers:
-# Added by API Auto Mocking Plugin
-- description: SwaggerHub API Auto Mocking
-  url: https://virtserver.swaggerhub.com/frozen-eye/flexiwanManage/1.0.0
 - description: Production server
   url: https://manage.flexiwan.com/api
 - description: Local Development server
@@ -22,72 +19,79 @@ servers:
 paths:
   /tokens:
     get:
-      tags:
-      - Tokens
-      summary: Get all Tokens
+      operationId: tokensGET
       parameters:
-        - in: query
-          name: offset
-          schema:
-            type: integer
-          description: The number of items to skip before starting to collect the result set
-        - in: query
-          name: limit
-          schema:
-            type: integer
-          description: The numbers of items to return
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
       responses:
         "200":
-          description: Successfull operation
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/Token'
+                type: array
                 x-content-type: application/json
+          description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: Tokens
-    post:
+      summary: Get all Tokens
       tags:
       - Tokens
-      summary: Create new access token
-      # operationId: accessToken_accesstokensPOST
+      x-swagger-router-controller: Tokens
+      x-openapi-router-controller: TokensController
+      x-openapi-router-service: TokensService
+    post:
+      operationId: tokensPOST
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Token to modify
-        required: true
-        style: simple
+      - description: Numeric ID of the Token to modify
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
       requestBody:
         content:
           application/json:
@@ -95,217 +99,242 @@ paths:
               $ref: '#/components/schemas/TokenRequest'
       responses:
         "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
           description: Created
           headers:
             Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
               schema:
                 type: string
-              required: true
-              description: Location of a new resource created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Token'
+              style: simple
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Create new access token
+      tags:
+      - Tokens
       x-swagger-router-controller: Tokens
+      x-openapi-router-controller: TokensController
+      x-openapi-router-service: TokensService
   /tokens/{id}:
-    put:
-      tags:
-      - Tokens
-      summary: Modify a token
-      parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Token to modify
-        required: true
-        style: simple
-        explode: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TokenRequest'
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Token'
-        "400":
-          description: Bad Request
-        "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      x-swagger-router-controller: Tokens
     delete:
-      tags:
-      - Tokens
-      summary: Delete token
+      operationId: tokensIdDELETE
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Token to delete
-        required: true
-        style: simple
+      - description: Numeric ID of the Token to delete
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
       responses:
         "204":
           description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Delete token
+      tags:
+      - Tokens
       x-swagger-router-controller: Tokens
-
+      x-openapi-router-controller: TokensController
+      x-openapi-router-service: TokensService
+    put:
+      operationId: tokensIdPUT
+      parameters:
+      - description: Numeric ID of the Token to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+          description: Created
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify a token
+      tags:
+      - Tokens
+      x-swagger-router-controller: Tokens
+      x-openapi-router-controller: TokensController
+      x-openapi-router-service: TokensService
   /accesstokens:
     get:
-      tags:
-      - Access Tokens
-      summary: Get all AccessTokens
-      # operationId: accessToken_accesstokensGET
+      operationId: accesstokensGET
       parameters:
-        - in: query
-          name: offset
-          schema:
-            type: integer
-          description: The number of items to skip before starting to collect the result set
-        - in: query
-          name: limit
-          schema:
-            type: integer
-          description: The numbers of items to return
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
       responses:
         "200":
-          description: Successfull operation
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/AccessToken'
+                type: array
                 x-content-type: application/json
+          description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: AccessTokens
-    post:
+      summary: Get all AccessTokens
       tags:
       - Access Tokens
-      summary: Create new access token
-      # operationId: accessToken_accesstokensPOST
+      x-swagger-router-controller: AccessTokens
+      x-openapi-router-controller: AccessTokensController
+      x-openapi-router-service: AccessTokensService
+    post:
+      operationId: accesstokensPOST
       requestBody:
         content:
           application/json:
@@ -313,63 +342,119 @@ paths:
               $ref: '#/components/schemas/AccessTokenRequest'
       responses:
         "201":
-          description: Created
-          headers:
-            Location:
-              schema:
-                type: string
-              required: true
-              description: Location of a new resource created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AccessToken'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: AccessTokens
-
-  /accesstokens/{id}:
-    put:
+      summary: Create new access token
       tags:
       - Access Tokens
-      summary: Modify an access token
-      # operationId: accessToken_accesstokens_idPUT
+      x-swagger-router-controller: AccessTokens
+      x-openapi-router-controller: AccessTokensController
+      x-openapi-router-service: AccessTokensService
+  /accesstokens/{id}:
+    delete:
+      operationId: accesstokensIdDELETE
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Access token to modify
-        required: true
-        style: simple
+      - description: Numeric ID of the Access token to delete
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
+      responses:
+        "204":
+          description: Successfull operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete access token
+      tags:
+      - Access Tokens
+      x-swagger-router-controller: AccessTokens
+      x-openapi-router-controller: AccessTokensController
+      x-openapi-router-service: AccessTokensService
+    put:
+      operationId: accesstokensIdPUT
+      parameters:
+      - description: Numeric ID of the Access token to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
       requestBody:
         content:
           application/json:
@@ -377,169 +462,137 @@ paths:
               $ref: '#/components/schemas/AccessToken'
       responses:
         "200":
-          description: Successfull operation
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/AccessToken'
+                type: array
                 x-content-type: application/json
+          description: Successfull operation
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: AccessTokens
-    delete:
+      summary: Modify an access token
       tags:
       - Access Tokens
-      summary: Delete access token
-      # operationId: accessToken_accesstokens_idDELETE
-      parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Access token to delete
-        required: true
-        style: simple
-        explode: false
-        schema:
-          type: string
-      responses:
-        "204":
-          description: Successfull operation
-        "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-      security:
-      - apiKey: []
-      - bearerAuth: []
       x-swagger-router-controller: AccessTokens
-
+      x-openapi-router-controller: AccessTokensController
+      x-openapi-router-service: AccessTokensService
   /devices:
     get:
-      tags:
-      - Devices
-      summary: Get all registered devices
-      # operationId: Device_devicesGET
+      operationId: devicesGET
       parameters:
-        - in: query
-          name: offset
-          schema:
-            type: integer
-          description: The number of items to skip before starting to collect the result set
-        - in: query
-          name: limit
-          schema:
-            type: integer
-          description: The numbers of items to return
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
       responses:
         "200":
-          description: Successful operation
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/Device'
+                type: array
                 x-content-type: application/json
+          description: Successful operation
         "401":
-          description: Authentication failed
           content:
             application/json:
               schema:
-                $ref: '#/components/responses/UnauthorizedError'
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
         "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
         "404":
-          description: Not Found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
         "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: Devices
-
-  /devices/execute:
-    post:
+      summary: Get all registered devices
       tags:
       - Devices
-      summary: Execute an action on the device side
-      # operationId: Device_devices_actionPOST
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/execute:
+    post:
+      operationId: devicesExecutePOST
       parameters:
-      - name: action
+      - description: Command to execute
+        explode: true
         in: query
-        description: Command to execute
+        name: action
         required: true
         schema:
           type: string
+        style: form
       requestBody:
         content:
           application/json:
@@ -551,49 +604,103 @@ paths:
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: Devices
-
-  /devices/{id}:
-    put:
+      summary: Execute an action on the device side
       tags:
       - Devices
-      summary: Modify device
-      # operationId: Device_devices_idPUT
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}:
+    delete:
+      operationId: devicesIdDELETE
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to modify
-        required: true
-        style: simple
+      - description: Numeric ID of the Device to delete
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
+      responses:
+        "204":
+          description: Successfull operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete device
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+    put:
+      operationId: devicesIdPUT
+      parameters:
+      - description: Numeric ID of the Device to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
       requestBody:
         content:
           application/json:
@@ -601,370 +708,362 @@ paths:
               $ref: '#/components/schemas/DeviceRequest'
       responses:
         "200":
-          description: Successful operation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Device'
+          description: Successful operation
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: Devices
-    delete:
+      summary: Modify device
       tags:
       - Devices
-      summary: Delete device
-      # operationId: devicesIdDELETE
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /tunnels/{id}:
+    get:
+      operationId: tunnelsIdGET
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to delete
-        required: true
-        style: simple
+      - description: Numeric ID of the Device to fetch tunnel information about
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Tunnel'
+                type: array
+          description: Successfull operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve device tunnels information
+      tags:
+      - Tunnels
+      x-swagger-router-controller: Routes
+      x-openapi-router-controller: TunnelsController
+      x-openapi-router-service: TunnelsService
+  /devices/{id}/routes:
+    get:
+      operationId: devicesIdRoutesGET
+      parameters:
+      - description: Numeric ID of the Device to feth information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/DeviceRouteInformation'
+                type: array
+          description: Successfull operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve device routes information
+      tags:
+      - Routes
+      x-swagger-router-controller: Routes
+      x-openapi-router-controller: RoutesController
+      x-openapi-router-service: RoutesService
+  /devices/{id}/staticroutes:
+    get:
+      operationId: devicesIdStaticroutesGET
+      parameters:
+      - description: Numeric ID of the Device to feth information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaticRoute'
+          description: Successfull operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve device static routes information
+      tags:
+      - Static Routes
+      x-swagger-router-controller: StaticRoutes
+      x-openapi-router-controller: StaticRoutesController
+      x-openapi-router-service: StaticRoutesService
+  /devices/{id}/staticroutes/{route}:
+    delete:
+      operationId: devicesIdStaticroutesRouteDELETE
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Numeric ID of the Route to delete
+        explode: false
+        in: path
+        name: route
+        required: true
+        schema:
+          type: string
+        style: simple
       responses:
         "204":
           description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      x-swagger-router-controller: Devices
-
-  /tunnels/{id}:
-    get:
-      tags:
-      - Tunnels
-      summary: Retrieve device tunnels information
-      parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to fetch tunnel information about
-        required: true
-        style: simple
-        explode: false
-        schema:
-          type: string
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: The number of items to skip before starting to collect the result set
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: The numbers of items to return
-      responses:
-        "200":
-          description: Successfull operation
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Tunnel'
-        "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
+          description: Unauthorized
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      x-swagger-router-controller: Routes
-  /devices/{id}/routes:
-    get:
-      tags:
-      - Routes
-      summary: Retrieve device routes information
-      # operationId: route_devices_id_routesGET
-      parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to feth information about
-        required: true
-        style: simple
-        explode: false
-        schema:
-          type: string
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: The number of items to skip before starting to collect the result set
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: The numbers of items to return
-      responses:
-        "200":
-          description: Successfull operation
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/DeviceRouteInformation'
-        "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
         "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: Routes
-  /devices/{id}/staticroutes:
-    get:
+      summary: Delete static route
       tags:
       - Static Routes
-      summary: Retrieve device static routes information
-      # operationId: staticRoute_devices_id_staticroutesGET
-      parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to feth information about
-        required: true
-        style: simple
-        explode: false
-        schema:
-          type: string
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: The number of items to skip before starting to collect the result set
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: The numbers of items to return
-      responses:
-        "200":
-          description: Successfull operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StaticRoute'
-        "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-      security:
-      - apiKey: []
-      - bearerAuth: []
       x-swagger-router-controller: StaticRoutes
-
-  /devices/{id}/staticroutes/{route}:
-    put:
-      tags:
-      - Static Routes
-      summary: Modify static route
-      # operationId: staticRoute_devices_id_staticroutesPUT
-      parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device
-        required: true
-        style: simple
-        explode: false
-        schema:
-          type: string
-      - name: route
-        in: path
-        description: Numeric ID of the Route to modify
-        required: true
-        style: simple
-        explode: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StaticRouteRequest'
-      responses:
-        "200":
-          description: Successfull operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StaticRoute'
-        "400":
-          description: Bad Request
-        "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      x-swagger-router-controller: StaticRoutes
+      x-openapi-router-controller: StaticRoutesController
+      x-openapi-router-service: StaticRoutesService
     post:
-      tags:
-      - Static Routes
-      summary: Create new static route
-      # operationId: staticRoute_devices_id_staticroutesPOST
+      operationId: devicesIdStaticroutesRoutePOST
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device
-        required: true
-        style: simple
+      - description: Numeric ID of the Device
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
-      - name: route
-        in: path
-        description: Numeric ID of the Route to modify
-        required: true
         style: simple
+      - description: Numeric ID of the Route to modify
         explode: false
+        in: path
+        name: route
+        required: true
         schema:
           type: string
+        style: simple
       requestBody:
         content:
           application/json:
@@ -972,569 +1071,666 @@ paths:
               $ref: '#/components/schemas/StaticRouteRequest'
       responses:
         "201":
-          description: Created
-          headers:
-            Location:
-              schema:
-                type: string
-              required: true
-              description: Location of a new resource created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceStaticRouteInformation'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: StaticRoutes
-    delete:
+      summary: Create new static route
       tags:
       - Static Routes
-      summary: Delete static route
-      # operationId: staticRoute_devices_id_staticroutesDELETE
+      x-swagger-router-controller: StaticRoutes
+      x-openapi-router-controller: StaticRoutesController
+      x-openapi-router-service: StaticRoutesService
+    put:
+      operationId: devicesIdStaticroutesRoutePUT
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device
-        required: true
-        style: simple
+      - description: Numeric ID of the Device
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
-      - name: route
-        in: path
-        description: Numeric ID of the Route to delete
-        required: true
         style: simple
+      - description: Numeric ID of the Route to modify
         explode: false
+        in: path
+        name: route
+        required: true
         schema:
           type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaticRouteRequest'
       responses:
-        "204":
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaticRoute'
           description: Successfull operation
+        "400":
+          description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Modify static route
+      tags:
+      - Static Routes
       x-swagger-router-controller: StaticRoutes
+      x-openapi-router-controller: StaticRoutesController
+      x-openapi-router-service: StaticRoutesService
   /devices/{id}/statistics:
     get:
-      tags:
-      - Statistics
-      summary: Retrieve device statistics information
-      # operationId: statistics_devices_id_statisticsGET
+      operationId: devicesIdStatisticsGET
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to feth information about
-        required: true
-        style: simple
+      - description: Numeric ID of the Device to feth information about
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: object
+        style: simple
       responses:
         "200":
-          description: Successfull operation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceStatistics'
+          description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Retrieve device statistics information
+      tags:
+      - Statistics
       x-swagger-router-controller: Statistics
+      x-openapi-router-controller: StatisticsController
+      x-openapi-router-service: StatisticsService
   /devices/{id}/logs:
     get:
-      tags:
-      - Logs
-      summary: Retrieve device logs information
-      # operationId: log_devices_id_logsGET
+      operationId: devicesIdLogsGET
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to feth information about
-        required: true
-        style: simple
+      - description: Numeric ID of the Device to feth information about
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: The number of items to skip before starting to collect the result set
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: The numbers of items to return
-      - name: filter
-        in: query
-        description: Filter to be applied
-        required: false
-        style: form
+        style: simple
+      - description: The number of items to skip before starting to collect the result
+          set
         explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Filter to be applied
+        explode: true
+        in: query
+        name: filter
+        required: false
         schema:
           type: string
+        style: form
       responses:
         "200":
-          description: Successfull operation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceLog'
+          description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Retrieve device logs information
+      tags:
+      - Logs
       x-swagger-router-controller: Logs
+      x-openapi-router-controller: LogsController
+      x-openapi-router-service: LogsService
   /devices/{id}/configuration:
     get:
-      tags:
-      - Configuration
-      summary: Retrieve device configuration information
-      # operationId: Configuration_devices_id_consigurationGET
+      operationId: devicesIdConfigurationGET
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to feth information about
-        required: true
-        style: simple
+      - description: Numeric ID of the Device to feth information about
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
       responses:
         "200":
-          description: Successfull operation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceConfiguration'
+          description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Retrieve device configuration information
+      tags:
+      - Configuration
       x-swagger-router-controller: Configuration
+      x-openapi-router-controller: ConfigurationController
+      x-openapi-router-service: ConfigurationService
   /devices/{id}/execute:
     post:
-      tags:
-      - Devices
-      summary: Execute an action on the device side
-      # operationId: Device_devices_id_actionPOST
+      operationId: devicesIdExecutePOST
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Device to start
-        required: true
-        style: simple
+      - description: Numeric ID of the Device to start
         explode: false
-        schema:
-          type: string
-      - name: action
-        in: query
-        description: Command to execute
+        in: path
+        name: id
         required: true
         schema:
           type: string
+        style: simple
+      - description: Command to execute
+        explode: true
+        in: query
+        name: action
+        required: true
+        schema:
+          type: string
+        style: form
       requestBody:
         content:
           application/json:
             schema:
               oneOf:
-                - $ref: '#/components/schemas/CreateTunnelCommand'
-                - $ref: '#/components/schemas/DeleteTunnelCommand'
+              - $ref: '#/components/schemas/CreateTunnelCommand'
+              - $ref: '#/components/schemas/DeleteTunnelCommand'
       responses:
         "204":
           description: No Content
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Execute an action on the device side
+      tags:
+      - Devices
       x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /jobs:
     get:
-      tags:
-      - Jobs
-      summary: Get all Jobs
-      parameters: 
-        - in: query
-          name: offset
-          schema:
-            type: integer
-          description: The number of items to skip before starting to collect the result set
-        - in: query
-          name: limit
-          schema:
-            type: integer
-          description: The numbers of items to return
-        - in: query
-          name: status
-          schema:
-            type: string
-          description: A filter on the job status
+      operationId: jobsGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: A filter on the job status
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
+        style: form
       responses:
         "200":
-          description: Successful operation
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/Job'
+                type: array
                 x-content-type: application/json
+          description: Successful operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - bearerAuth: []
       - apiKey: []
-      x-swagger-router-controller: Jobs
-
-  /jobs/{id}:
-    delete:
+      summary: Get all Jobs
       tags:
       - Jobs
-      summary: Delete a job
+      x-swagger-router-controller: Jobs
+      x-openapi-router-controller: JobsController
+      x-openapi-router-service: JobsService
+  /jobs/{id}:
+    delete:
+      operationId: jobsIdDELETE
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Job to delete
-        required: true
-        style: simple
+      - description: Numeric ID of the Job to delete
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: integer
+        style: simple
       responses:
         "204":
           description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Delete a job
+      tags:
+      - Jobs
       x-swagger-router-controller: Jobs
-
+      x-openapi-router-controller: JobsController
+      x-openapi-router-service: JobsService
   /notifications:
     get:
-      tags:
-      - Notifications
-      summary: Get all Notifications
-      # operationId: notification_notificationsGET
+      operationId: notificationsGET
       parameters:
-        - in: query
-          name: offset
-          schema:
-            type: integer
-          description: The number of items to skip before starting to collect the result set
-        - in: query
-          name: limit
-          schema:
-            type: integer
-          description: The numbers of items to return
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
       responses:
         "200":
-          description: Successful operation
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/Notification'
+                type: array
                 x-content-type: application/json
+          description: Successful operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - bearerAuth: []
       - apiKey: []
+      summary: Get all Notifications
+      tags:
+      - Notifications
       x-swagger-router-controller: Notifications
-
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
   /members:
     get:
-      tags:
-      - Members
-      summary: Get all Members
-      # operationId: member_membersGET
+      operationId: membersGET
       parameters:
-      - in: query
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
         name: offset
+        required: false
         schema:
           type: integer
-        description: The number of items to skip before starting to collect the result set
-      - in: query
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
         name: limit
+        required: false
         schema:
           type: integer
-        description: The numbers of items to return
+        style: form
       responses:
         "200":
-          description: Successful operation
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/Member'
+                type: array
                 x-content-type: application/json
+          description: Successful operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - bearerAuth: []
       - apiKey: []
-      x-swagger-router-controller: Members
-    post:
+      summary: Get all Members
       tags:
       - Members
-      summary: Create new member
-      # operationId: member_membersPOST
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
+    post:
+      operationId: membersPOST
       requestBody:
         content:
           application/json:
@@ -1542,66 +1738,70 @@ paths:
               $ref: '#/components/schemas/MemberRequest'
       responses:
         "201":
-          description: Member has been added
-          headers:
-            Location:
-              schema:
-                type: string
-              required: true
-              description: Location of a new resource created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Member'
+          description: Member has been added
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - bearerAuth: []
       - apiKey: []
-      x-swagger-router-controller: Members
-
-  /members/{id}:
-    put:
+      summary: Create new member
       tags:
       - Members
-      summary: Modify member
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
+  /members/{id}:
+    put:
+      operationId: membersIdPUT
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the account to modify
-        required: true
-        style: simple
+      - description: Numeric ID of the account to modify
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
       requestBody:
         content:
           application/json:
@@ -1609,49 +1809,55 @@ paths:
               $ref: '#/components/schemas/MemberRequest'
       responses:
         "200":
-          description: Successfull operation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Member'
+          description: Successfull operation
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
+      summary: Modify member
+      tags:
+      - Members
       x-swagger-router-controller: Members
-
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
   /users/login:
     post:
-      tags:
-      - Users
-      summary: Login
+      operationId: usersLoginPOST
       requestBody:
         content:
           application/json:
@@ -1661,47 +1867,53 @@ paths:
         "204":
           description: Successful operation
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - bearerAuth: []
       - apiKey: []
-      x-swagger-router-controller: Users
-  
-  /users/reset-password:
-    post:
+      summary: Login
       tags:
       - Users
-      summary: Reset password
+      x-swagger-router-controller: Users
+      x-openapi-router-controller: UsersController
+      x-openapi-router-service: UsersService
+  /users/reset-password:
+    post:
+      operationId: usersResetPasswordPOST
       requestBody:
         content:
           application/json:
@@ -1713,40 +1925,41 @@ paths:
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - bearerAuth: []
       - apiKey: []
+      summary: Reset password
+      tags:
+      - Users
       x-swagger-router-controller: Users
-
+      x-openapi-router-controller: UsersController
+      x-openapi-router-service: UsersService
   /accounts:
     post:
-      tags:
-      - Accounts
-      summary: Create new account
-      # operationId: member_membersPOST
+      operationId: accountsPOST
       requestBody:
         content:
           application/json:
@@ -1754,112 +1967,117 @@ paths:
               $ref: '#/components/schemas/RegisterAccountRequest'
       responses:
         "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
           description: Account has been created
           headers:
             Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
               schema:
                 type: string
-              required: true
-              description: Location of a new resource created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Account'
+              style: simple
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - bearerAuth: []
       - apiKey: []
+      summary: Create new account
+      tags:
+      - Accounts
       x-swagger-router-controller: Accounts
-
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
   /accounts/{id}:
     get:
-      tags:
-      - Accounts
-      summary: Retrieve account information
-      # operationId: account_accounts_idGET
+      operationId: accountsIdGET
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Account to retrieve information
-        required: true
-        style: simple
+      - description: Numeric ID of the Account to retrieve information
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
       responses:
         "200":
-          description: Successful operation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Account'
+          description: Successful operation
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
           content:
             application/json:
               schema:
-                $ref: '#/components/responses/UnauthorizedError'
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
         "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
         "500":
-          description: Internal Server Error
           content:
             application/json:
               schema:
-                $ref: '#/components/responses/InternalServerError'
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
       security:
       - bearerAuth: []
       - apiKey: []
-      x-swagger-router-controller: Accounts
-    put:
+      summary: Retrieve account information
       tags:
       - Accounts
-      summary: Modify account information
-      # operationId: account_accounts_idPUT
+      x-swagger-router-controller: Accounts
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
+    put:
+      operationId: accountsIdPUT
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Account to modify
-        required: true
-        style: simple
+      - description: Numeric ID of the Account to modify
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
       requestBody:
         content:
           application/json:
@@ -1867,104 +2085,118 @@ paths:
               $ref: '#/components/schemas/AccountRequest'
       responses:
         "200":
-          description: Successful operation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Account'
+          description: Successful operation
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - bearerAuth: []
       - apiKey: []
+      summary: Modify account information
+      tags:
+      - Accounts
       x-swagger-router-controller: Accounts
-
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
   /organizations:
     get:
-      tags:
-      - Organizations
-      summary: Get all organizations
-      # operationId: organization_organizationsGET
+      operationId: organizationsGET
       parameters:
-      - in: query
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
         name: offset
+        required: false
         schema:
           type: integer
-        description: The number of items to skip before starting to collect the result set
-      - in: query
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
         name: limit
+        required: false
         schema:
           type: integer
-        description: The numbers of items to return
+        style: form
       responses:
         "200":
-          description: Successfull operation
           content:
             application/json:
               schema:
-                type: array
                 items:
                   $ref: '#/components/schemas/Organization'
+                type: array
                 x-content-type: application/json
+          description: Successfull operation
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: Organizations
-    post:
+      summary: Get all organizations
       tags:
       - Organizations
-      summary: Add new organization
-      # operationId: organization_organizationsPOST
+      x-swagger-router-controller: Organizations
+      x-openapi-router-controller: OrganizationsController
+      x-openapi-router-service: OrganizationsService
+    post:
+      operationId: organizationsPOST
       requestBody:
         content:
           application/json:
@@ -1972,66 +2204,123 @@ paths:
               $ref: '#/components/schemas/OrganizationRequest'
       responses:
         "201":
-          description: Created
-          headers:
-            Location:
-              schema:
-                type: string
-              required: true
-              description: Location of a new resource created
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Organization'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: Organizations
-  /organizations/{id}:
-    put:
+      summary: Add new organization
       tags:
       - Organizations
-      summary: Modify organization
-      # operationId: organization_organizations_idPUT
+      x-swagger-router-controller: Organizations
+      x-openapi-router-controller: OrganizationsController
+      x-openapi-router-service: OrganizationsService
+  /organizations/{id}:
+    delete:
+      operationId: organizationsIdDELETE
       parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Organization to modify
-        required: true
-        style: simple
+      - description: Numeric ID of the Organization to delete
         explode: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
+        style: simple
+      responses:
+        "204":
+          description: Successfull operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete organization
+      tags:
+      - Organizations
+      x-swagger-router-controller: Organizations
+      x-openapi-router-controller: OrganizationsController
+      x-openapi-router-service: OrganizationsService
+    put:
+      operationId: organizationsIdPUT
+      parameters:
+      - description: Numeric ID of the Organization to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
       requestBody:
         content:
           application/json:
@@ -2039,127 +2328,121 @@ paths:
               $ref: '#/components/schemas/OrganizationRequest'
       responses:
         "200":
-          description: Successful operation
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Organization'
+          description: Successful operation
         "400":
           description: Bad Request
         "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
-      x-swagger-router-controller: Organizations
-    delete:
+      summary: Modify organization
       tags:
       - Organizations
-      summary: Delete organization
-      # operationId: organization_organizations_idDELETE
-      parameters:
-      - name: id
-        in: path
-        description: Numeric ID of the Organization to delete
-        required: true
-        style: simple
-        explode: false
-        schema:
-          type: string
-      responses:
-        "204":
-          description: Successfull operation
-        "401":
-          description: Authentication failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/UnauthorizedError'
-        "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/ForbiddenError'
-        "404":
-          description: Not Found
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/responses/InternalServerError'
-        default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-      security:
-      - apiKey: []
-      - bearerAuth: []
       x-swagger-router-controller: Organizations
+      x-openapi-router-controller: OrganizationsController
+      x-openapi-router-service: OrganizationsService
 components:
+  responses:
+    NotFoundError:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: The specified resource was not found
+    ForbiddenError:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: Forbidden
+    InternalServerError:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: Internal server error
+    UnauthorizedError:
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      description: Unauthorized
   schemas:
     AccessToken:
-      type: object
-      properties:
-        _id:
-          type: string
-          readOnly: true
-        name:
-          type: string
-        organization:
-          type: string
-        token:
-          type: string
-          readOnly: true
-        isValid:
-          type: boolean
-          readOnly: true
-          default: true
       example:
         organization: organization
         isValid: true
         name: name
         _id: id
         token: token
-    AccessTokenRequest:
+      properties:
+        _id:
+          readOnly: true
+          type: string
+        name:
+          type: string
+        organization:
+          type: string
+        token:
+          readOnly: true
+          type: string
+        isValid:
+          default: true
+          readOnly: true
+          type: boolean
       type: object
+    AccessTokenRequest:
+      example:
+        organization: organization
+        name: name
       properties:
         name:
           type: string
         organization:
           type: string
-      example:
-        organization: organization
-        name: name
-    MemberRequest:
       type: object
+    MemberRequest:
+      example:
+        userJobTitle: userJobTitle
+        userEntity: userEntity
+        userLastName: userLastName
+        userFirstName: userFirstName
+        userRole: viewer
+        email: email
+        userPermissionTo: account
       properties:
         email:
           type: string
@@ -2170,64 +2453,46 @@ components:
         userJobTitle:
           type: string
         userPermissionTo:
-          type: string
           enum:
-            - account
-            - group
-            - organization
+          - account
+          - group
+          - organization
+          type: string
         userEntity:
           type: string
         userRole:
-          type: string
           enum:
-            - viewer
-            - manager
-            - owner
-
-    Token:
+          - viewer
+          - manager
+          - owner
+          type: string
       type: object
-      properties:
-        _id:
-          type: string
-          readOnly: true
-        name:
-          type: string
-        org:
-          type: string
-        token:
-          type: string
-          readOnly: true
+    Token:
       example:
         org: organization
         name: name
         _id: id
         token: token
-    TokenRequest:
-      type: object
-      properties:
-        name:
-          type: string
-      example:
-        name: name
-
-    Account:
-      type: object
       properties:
         _id:
-          type: string
           readOnly: true
+          type: string
         name:
           type: string
-        companyType:
+        org:
           type: string
-        companyDesc:
+        token:
+          readOnly: true
           type: string
-        country:
-          maxLength: 2
+      type: object
+    TokenRequest:
+      example:
+        name: name
+      properties:
+        name:
           type: string
-        enableNotifications:
-          type: boolean
-          default: true
+      type: object
+    Account:
       example:
         country: country
         companyType: companyType
@@ -2235,9 +2500,30 @@ components:
         enableNotifications: true
         name: name
         _id: _id
-    
-    AccountRequest:
+      properties:
+        _id:
+          readOnly: true
+          type: string
+        name:
+          type: string
+        companyType:
+          type: string
+        companyDesc:
+          type: string
+        country:
+          maxLength: 2
+          type: string
+        enableNotifications:
+          default: true
+          type: boolean
       type: object
+    AccountRequest:
+      example:
+        country: country
+        companyType: companyType
+        companyDesc: companyDesc
+        enableNotifications: true
+        name: name
       properties:
         name:
           type: string
@@ -2249,11 +2535,14 @@ components:
           maxLength: 2
           type: string
         enableNotifications:
-          type: boolean
           default: true
-
+          type: boolean
+      type: object
     OrganizationRequest:
-      type: object
+      example:
+        name: name
+        account: account
+        group: group
       properties:
         name:
           type: string
@@ -2261,44 +2550,49 @@ components:
           type: string
         account:
           type: string
-
+      type: object
     Organization:
-      type: object
-      properties:
-        _id:
-          type: string
-          readOnly: true
-        name:
-          type: string
-        group:
-          type: string
-        account:
-          type: string
       example:
         name: name
         _id: _id
         account: account
         group: group
-
-    NotificationRequest:
+      properties:
+        _id:
+          readOnly: true
+          type: string
+        name:
+          type: string
+        group:
+          type: string
+        account:
+          type: string
       type: object
+    NotificationRequest:
       properties:
         count:
           minimum: 0
           type: integer
-
-    Notification:
       type: object
+    Notification:
+      example:
+        status: unread
+        _id: 123
+        title: Router state change
+        time: 2019-12-19T12:10:01.667Z
+        device: test0
+        machineId: "123"
+        details: Router state changed to "Not running"
       properties:
         _id:
           type: string
         title:
           type: string
         status:
-          type: string
           enum:
-            - read
-            - unread
+          - read
+          - unread
+          type: string
         time:
           type: string
         device:
@@ -2307,17 +2601,12 @@ components:
           type: string
         details:
           type: string
-      example:
-        status: "unread"
-        _id: 123
-        title: "Router state change"
-        time: "2019-12-19T12:10:01.667Z"
-        device: "test0"
-        machineId: "123"
-        details: 'Router state changed to "Not running"'
-
-    JobAttempt:
       type: object
+    JobAttempt:
+      example:
+        max: 7
+        made: 5
+        remaining: 2
       properties:
         made:
           type: integer
@@ -2325,8 +2614,19 @@ components:
           type: integer
         max:
           type: integer
-    Job:
       type: object
+    Job:
+      example:
+        progress: 1
+        created_at: created_at
+        id: 0
+        state: 5
+        type: type
+        priority: 6
+        attempts:
+          max: 7
+          made: 5
+          remaining: 2
       properties:
         id:
           type: integer
@@ -2342,9 +2642,69 @@ components:
           type: string
         attempts:
           $ref: '#/components/schemas/JobAttempt'
-
+      type: object
     DeviceRequest:
-      type: object
+      example:
+        interfaces:
+        - IPv6: IPv6
+          PublicIP: PublicIP
+          IPv4: IPv4
+          type: WAN
+          MAC: MAC
+          routing: routing
+          IPv6Mask: 6
+          isAssigned: true
+          driver: driver
+          IPv4Mask: 0
+          name: name
+          pciaddr: pciaddr
+          _id: _id
+        - IPv6: IPv6
+          PublicIP: PublicIP
+          IPv4: IPv4
+          type: WAN
+          MAC: MAC
+          routing: routing
+          IPv6Mask: 6
+          isAssigned: true
+          driver: driver
+          IPv4Mask: 0
+          name: name
+          pciaddr: pciaddr
+          _id: _id
+        org: org
+        isConnected: true
+        upgradeSchedule:
+          jobQueued: true
+          _id: _id
+          time: time
+        description: description
+        defaultRoute: defaultRoute
+        deviceStatus: true
+        deviceToken: deviceToken
+        labels:
+        - labels
+        - labels
+        site: site
+        hostname: true
+        machineId: machineId
+        versions:
+          agent: agent
+          router: router
+          device: device
+        name: name
+        pendingDevModification: true
+        isApproved: true
+        staticroutes:
+        - destination: destination
+          interface: interface
+          gateway: gateway
+        - destination: destination
+          interface: interface
+          gateway: gateway
+        fromToken: fromToken
+        account: account
+        ipList: ipList
       properties:
         machineId:
           type: string
@@ -2377,76 +2737,23 @@ components:
         ipList:
           type: string
         staticroutes:
-          type: array
           items:
             $ref: '#/components/schemas/StaticRoute'
+          type: array
         upgradeSchedule:
           $ref: '#/components/schemas/UpgradeSchedule'
         labels:
-          type: array
           items:
             type: string
-        interfaces:
           type: array
+        interfaces:
           items:
             $ref: '#/components/schemas/Interface'
+          type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
-
+      type: object
     Device:
-      type: object
-      properties:
-        _id:
-          maxLength: 24
-          minLength: 24
-          type: string
-          readOnly: true
-        machineId:
-          type: string
-        name:
-          type: string
-        description:
-          type: string
-        site:
-          type: string
-        defaultRoute:
-          type: string
-        isApproved:
-          type: boolean
-        isConnected:
-          type: boolean
-        pendingDevModification:
-          type: boolean
-        hostname:
-          type: boolean
-        deviceStatus:
-          type: boolean
-        deviceToken:
-          type: string
-        fromToken:
-          type: string
-        account:
-          type: string
-        org:
-          type: string
-        ipList:
-          type: string
-        staticroutes:
-          type: array
-          items:
-            $ref: '#/components/schemas/StaticRoute'
-        upgradeSchedule:
-          $ref: '#/components/schemas/UpgradeSchedule'
-        labels:
-          type: array
-          items:
-            type: string
-        interfaces:
-          type: array
-          items:
-            $ref: '#/components/schemas/Interface'
-        versions:
-          $ref: '#/components/schemas/DeviceVersion'
       example:
         interfaces:
         - IPv6: IPv6
@@ -2513,26 +2820,92 @@ components:
         fromToken: fromToken
         account: account
         ipList: ipList
-    UpgradeSchedule:
-      type: object
       properties:
         _id:
-          type: string
+          maxLength: 24
+          minLength: 24
           readOnly: true
-        time:
           type: string
-        jobQueued:
+        machineId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        site:
+          type: string
+        defaultRoute:
+          type: string
+        isApproved:
           type: boolean
+        isConnected:
+          type: boolean
+        pendingDevModification:
+          type: boolean
+        hostname:
+          type: boolean
+        deviceStatus:
+          type: boolean
+        deviceToken:
+          type: string
+        fromToken:
+          type: string
+        account:
+          type: string
+        org:
+          type: string
+        ipList:
+          type: string
+        staticroutes:
+          items:
+            $ref: '#/components/schemas/StaticRoute'
+          type: array
+        upgradeSchedule:
+          $ref: '#/components/schemas/UpgradeSchedule'
+        labels:
+          items:
+            type: string
+          type: array
+        interfaces:
+          items:
+            $ref: '#/components/schemas/Interface'
+          type: array
+        versions:
+          $ref: '#/components/schemas/DeviceVersion'
+      type: object
+    UpgradeSchedule:
       example:
         jobQueued: true
         _id: _id
         time: time
-    Interface:
-      type: object
       properties:
         _id:
-          type: string
           readOnly: true
+          type: string
+        time:
+          type: string
+        jobQueued:
+          type: boolean
+      type: object
+    Interface:
+      example:
+        IPv6: IPv6
+        PublicIP: PublicIP
+        IPv4: IPv4
+        type: WAN
+        MAC: MAC
+        routing: routing
+        IPv6Mask: 6
+        isAssigned: true
+        driver: driver
+        IPv4Mask: 0
+        name: name
+        pciaddr: pciaddr
+        _id: _id
+      properties:
+        _id:
+          readOnly: true
+          type: string
         pciaddr:
           type: string
         driver:
@@ -2548,10 +2921,10 @@ components:
         routing:
           type: string
         type:
-          type: string
           enum:
           - WAN
           - LAN
+          type: string
         IPv4Mask:
           type: integer
         MAC:
@@ -2560,22 +2933,12 @@ components:
           type: string
         IPv6Mask:
           type: integer
-      example:
-        IPv6: IPv6
-        PublicIP: PublicIP
-        IPv4: IPv4
-        type: WAN
-        MAC: MAC
-        routing: routing
-        IPv6Mask: 6
-        isAssigned: true
-        driver: driver
-        IPv4Mask: 0
-        name: name
-        pciaddr: pciaddr
-        _id: _id
-    DeviceVersion:
       type: object
+    DeviceVersion:
+      example:
+        agent: agent
+        router: router
+        device: device
       properties:
         agent:
           type: string
@@ -2583,24 +2946,32 @@ components:
           type: string
         router:
           type: string
-      example:
-        agent: agent
-        router: router
-        device: device
+      type: object
     Role:
-      type: string
       enum:
       - owner
       - manager
       - viewer
+      type: string
     Member:
-      type: object
+      example:
+        user_email: user_email
+        role: owner
+        user__id: user__id
+        user_name: user_name
+        account_name: account_name
+        _id: _id
+        to: to
+        organization_name: organization_name
+        account__id: account__id
+        group: group
+        organization__id: organization__id
       properties:
         _id:
           maxLength: 24
           minLength: 24
-          type: string
           readOnly: true
+          type: string
         user__id:
           maxLength: 24
           minLength: 24
@@ -2627,33 +2998,23 @@ components:
           type: string
         role:
           $ref: '#/components/schemas/Role'
-      example:
-        user_email: user_email
-        role: owner
-        user__id: user__id
-        user_name: user_name
-        account_name: account_name
-        _id: _id
-        to: to
-        organization_name: organization_name
-        account__id: account__id
-        group: group
-        organization__id: organization__id
-    LoginRequest:
       type: object
+    LoginRequest:
+      example:
+        password: password
+        username: username
       properties:
         username:
           type: string
         password:
           type: string
+      type: object
     DeviceStatus:
-      type: string
       enum:
       - connected
       - disconnected
-
+      type: string
     DeviceStaticRouteRequest:
-      type: object
       properties:
         destination:
           type: string
@@ -2661,22 +3022,45 @@ components:
           type: string
         ifname:
           type: string
-
-    DeviceRouteInformation:
       type: object
+    DeviceRouteInformation:
+      example:
+        osRoutes:
+        - metric: 0
+          destination: destination
+          flags: flags
+          interface: interface
+          gateway: gateway
+          mask: mask
+        - metric: 0
+          destination: destination
+          flags: flags
+          interface: interface
+          gateway: gateway
+          mask: mask
+        vppRoutes:
+        - metric: 6
+        - metric: 6
       properties:
         status:
           $ref: '#/components/schemas/DeviceStatus'
         osRoutes:
-          type: array
           items:
             $ref: '#/components/schemas/DeviceRouteOs'
-        vppRoutes:
           type: array
+        vppRoutes:
           items:
             $ref: '#/components/schemas/DeviceRouteVpp'
-    DeviceRouteOs:
+          type: array
       type: object
+    DeviceRouteOs:
+      example:
+        metric: 0
+        destination: destination
+        flags: flags
+        interface: interface
+        gateway: gateway
+        mask: mask
       properties:
         metric:
           type: integer
@@ -2690,13 +3074,20 @@ components:
           type: string
         gateway:
           type: string
-    DeviceRouteVpp:
       type: object
+    DeviceRouteVpp:
+      example:
+        metric: 6
       properties:
         metric:
           type: integer
-    DeviceStaticRouteInformation:
       type: object
+    DeviceStaticRouteInformation:
+      example:
+        status: connected
+        ifname: eth0
+        destination: 1.1.0.0
+        gateway: 1.1.1.1
       properties:
         status:
           $ref: '#/components/schemas/DeviceStatus'
@@ -2706,69 +3097,78 @@ components:
           type: string
         ifname:
           type: string
-      example:
-        status: connected
-        ifname: eth0
-        destination: "1.1.0.0"
-        gateway: "1.1.1.1"
-    DeviceStatistics:
       type: object
+    DeviceStatistics:
+      example:
+        status: status
       properties:
         status:
           type: object
-      example:
-        status: status
-    DeviceConfiguration:
       type: object
+    DeviceConfiguration:
+      example:
+        configuration:
+        - message: message
+          params:
+          - {}
+          - {}
+        - message: message
+          params:
+          - {}
+          - {}
+        status: connected
       properties:
         status:
           $ref: '#/components/schemas/DeviceStatus'
         configuration:
-          type: array
           items:
             $ref: '#/components/schemas/DeviceConfigurationItem'
-      example:
-        configuration:
-        - message: message
-          params:
-          - {}
-          - {}
-        - message: message
-          params:
-          - {}
-          - {}
-        status: connected
-    DeviceConfigurationItem:
-      type: object
-      properties:
-        message:
-          type: string
-        params:
           type: array
-          items:
-            type: object
+      type: object
+    DeviceConfigurationItem:
       example:
         message: message
         params:
         - {}
         - {}
-    DeviceLog:
-      type: object
       properties:
-        status:
-          $ref: '#/components/schemas/DeviceStatus'
-        logs:
-          type: array
+        message:
+          type: string
+        params:
           items:
-            type: string
+            type: object
+          type: array
+      type: object
+    DeviceLog:
       example:
         logs:
         - logs
         - logs
         status: connected
-
-    Tunnel:
+      properties:
+        status:
+          $ref: '#/components/schemas/DeviceStatus'
+        logs:
+          items:
+            type: string
+          type: array
       type: object
+    Tunnel:
+      example:
+        tunnelStatusA: '{}'
+        num: 0
+        interfaceADetails: '{}'
+        isActive: true
+        interfaceBDetails: '{}'
+        tunnelStatusB: '{}'
+        interfaceA: '{}'
+        interfaceB: '{}'
+        deviceA: '{}'
+        deviceAconf: true
+        deviceB: '{}'
+        __v: 6
+        deviceBconf: true
+        _id: _id
       properties:
         num:
           type: integer
@@ -2795,51 +3195,72 @@ components:
         interfaceBDetails:
           type: object
         tunnelStatusA:
-          type : object
+          type: object
         tunnelStatusB:
           type: object
-
-    StaticRouteRequest:
       type: object
+    StaticRouteRequest:
+      example:
+        destination: destination
+        _id: _id
+        interface: interface
+        gateway: gateway
       properties:
         _id:
           type: string
         destination:
-          maxLength: 24
-          type: string
           description: Destination
+          maxLength: 24
+          type: string
         gateway:
-          maxLength: 24
-          type: string
           description: Gateway to use
-        interface:
           maxLength: 24
           type: string
+        interface:
           description: Interface name
-    StaticRoute:
+          maxLength: 24
+          type: string
       type: object
+    StaticRoute:
+      example:
+        destination: destination
+        interface: interface
+        gateway: gateway
       properties:
         destination:
-          maxLength: 24
-          type: string
           description: Destination
+          maxLength: 24
+          type: string
         gateway:
-          maxLength: 24
-          type: string
           description: Gateway to use
-        interface:
           maxLength: 24
           type: string
+        interface:
           description: Interface name
-
-    ResetPasswordRequest:
+          maxLength: 24
+          type: string
       type: object
+    ResetPasswordRequest:
+      example:
+        email: email
       properties:
         email:
           type: string
-
-    RegisterAccountRequest:
       type: object
+    RegisterAccountRequest:
+      example:
+        userJobTitle: userJobTitle
+        serviceType: Provider
+        country: country
+        password: password
+        accountName: accountName
+        userLastName: userLastName
+        userPhoneNumber: userPhoneNumber
+        acceptTerms: true
+        userFirstName: userFirstName
+        companySize: companySize
+        email: email
+        numberSites: 0
       properties:
         accountName:
           type: string
@@ -2856,84 +3277,64 @@ components:
         password:
           type: string
         country:
-          type: string
           maxLength: 2
+          type: string
         companySize:
           type: string
         serviceType:
-          type: string
           enum:
           - Provider
           - Internal
+          type: string
         numberSites:
           type: integer
         acceptTerms:
           type: boolean
-
-    CommandRequest:
       type: object
+    CommandRequest:
+      example:
+        ids:
+        - ids
+        - ids
+        command: ""
       properties:
         ids:
-          type: array
           items:
             type: string
+          type: array
         command:
           oneOf:
-            - $ref: '#/components/schemas/CreateTunnelCommand'
-            - $ref: '#/components/schemas/DeleteTunnelCommand'
-
-    # commands
-    CreateTunnelCommand:
+          - $ref: '#/components/schemas/CreateTunnelCommand'
+          - $ref: '#/components/schemas/DeleteTunnelCommand'
       type: object
+    CreateTunnelCommand:
       properties:
         devices:
-          type: array
           items:
             type: string
-
-    DeleteTunnelCommand:
+          type: array
       type: object
+    DeleteTunnelCommand:
       properties:
         id:
           type: string
-
-    # error
-    Error:
       type: object
+    Error:
       properties:
-        error:
+        code:
           type: string
-  responses:
-    NotFoundError:
-      description: The specified resource was not found
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    ForbiddenError:
-      description: Forbidden
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    InternalServerError:
-      description: Internal server error
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    UnauthorizedError:
-      description: Unauthorized
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
+        message:
+          type: string
+      required:
+      - code
+      - message
+      type: object
   securitySchemes:
     apiKey:
-      type: apiKey
-      name: APIKEY
       in: header
+      name: APIKEY
+      type: apiKey
     bearerAuth:
-      type: http
-      scheme: bearer
       bearerFormat: JWT
+      scheme: bearer
+      type: http

@@ -10,7 +10,7 @@ class TokensService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static tokensGET({ offset, limit }) {
+  static tokensGET({ offset, limit }, user) {
     return new Promise(
       async (resolve) => {
         try {

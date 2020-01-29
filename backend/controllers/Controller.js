@@ -47,7 +47,16 @@ class Controller {
     this.collectFiles(request);
     const requestParams = {};
     if (request.openapi.schema.requestBody !== undefined) {
-      requestParams.body = request.body;
+      // small hack to match arguments
+      const lower = (s) => {
+        if (typeof s !== 'string') return '';
+        return s.charAt(0).toLowerCase() + s.slice(1);
+      }
+
+      const ref = request.openapi.schema.requestBody.content["application/json"].schema["$ref"];
+      const param = lower(ref.substr(ref.lastIndexOf('/') + 1));
+
+      requestParams[param] = request.body;
     }
     request.openapi.schema.parameters.forEach((param) => {
       if (param.in === 'path') {
@@ -61,7 +70,8 @@ class Controller {
 
   static async handleRequest(request, response, serviceOperation) {
     try {
-      const serviceResponse = await serviceOperation(this.collectRequestParams(request));
+      const requestParams = this.collectRequestParams(request);
+      const serviceResponse = await serviceOperation(requestParams, /** need to pass the additional argument here */ request.user);
       Controller.sendResponse(response, serviceResponse);
     } catch (error) {
       Controller.sendError(response, error);
