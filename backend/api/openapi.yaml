@@ -12,6 +12,8 @@ info:
   title: FlexiWAN API
   version: 1.0.0
 servers:
+- description: SwaggerHub API Auto Mocking
+  url: https://virtserver.swaggerhub.com/frozen-eye/flexiwanManage/1.0.0
 - description: Production server
   url: https://manage.flexiwan.com/api
 - description: Local Development server
@@ -83,15 +85,6 @@ paths:
       x-openapi-router-service: TokensService
     post:
       operationId: tokensPOST
-      parameters:
-      - description: Numeric ID of the Token to modify
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
       requestBody:
         content:
           application/json:
@@ -3008,6 +3001,7 @@ components:
           type: string
         password:
           type: string
+      required: ["username", "password"]
       type: object
     DeviceStatus:
       enum:
