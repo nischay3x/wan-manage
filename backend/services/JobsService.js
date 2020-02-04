@@ -11,19 +11,15 @@ class JobsService {
    * status String A filter on the job status (optional)
    * returns List
    **/
-  static jobsGET({ offset, limit, status }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async jobsGET({ offset, limit, status }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
   /**
@@ -32,19 +28,15 @@ class JobsService {
    * id Integer Numeric ID of the Job to delete
    * no response value expected for this operation
    **/
-  static jobsIdDELETE({ id }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async jobsIdDELETE({ id }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
 }

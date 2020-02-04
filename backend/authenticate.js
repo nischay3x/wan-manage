@@ -236,11 +236,22 @@ exports.verifyAdmin = function (req, res, next) {
  * @param {Object} restCommand - string of get, post, put, del
  * Return middleware to check permissions for that type
  */
-exports.verifyPermission = function (accessType, restCommand) {
-  return function (req, res, next) {
-    if (req.user.perms[accessType] & permissionMasks[restCommand]) return next();
+// exports.verifyPermission = function (accessType, restCommand) {
+//   return function (req, res, next) {
+//     if (req.user.perms[accessType] & permissionMasks[restCommand]) return next();
+//     next(createError(403, "You don't have permission to perform this operation"));
+//   };
+// };
+
+exports.verifyPermission = function (req, res, next) {
+  const url = req.url.substring(req.url.lastIndexOf('/') + 1).toLowerCase();
+  const method = req.method.toLowerCase();
+
+  if (req.user.perms[url] & permissionMasks[method]) {
+    return next();
+  } else {
     next(createError(403, "You don't have permission to perform this operation"));
-  };
+  }
 };
 
 exports.validatePassword = function (password) {

@@ -9,19 +9,15 @@ class UsersService {
    * loginRequest LoginRequest  (optional)
    * no response value expected for this operation
    **/
-  static usersLoginPOST({ loginRequest }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async usersLoginPOST({ loginRequest }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
   /**
@@ -30,19 +26,15 @@ class UsersService {
    * resetPasswordRequest ResetPasswordRequest  (optional)
    * no response value expected for this operation
    **/
-  static usersResetPasswordPOST({ resetPasswordRequest }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async usersResetPasswordPOST({ resetPasswordRequest }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
 }

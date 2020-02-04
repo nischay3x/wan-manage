@@ -6,22 +6,18 @@ class StatisticsService {
   /**
    * Retrieve device statistics information
    *
-   * id Object Numeric ID of the Device to feth information about
+   * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static devicesIdStatisticsGET({ id }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async devicesIdStatisticsGET({ id }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
 }

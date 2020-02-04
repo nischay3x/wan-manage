@@ -10,19 +10,15 @@ class MembersService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static membersGET({ offset, limit }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async membersGET({ offset, limit }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
   /**
@@ -32,19 +28,15 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static membersIdPUT({ id, memberRequest }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async membersIdPUT({ id, memberRequest }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
   /**
@@ -53,19 +45,15 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static membersPOST({ memberRequest }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async membersPOST({ memberRequest }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
 }

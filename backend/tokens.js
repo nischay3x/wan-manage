@@ -22,28 +22,27 @@ const logger = require('./logging/logging')({ module: module.filename, type: 're
 
 // JWT strategy definition
 // Generate token
-exports.getToken = async function (req, override = {}, shouldExpire = true) {
+exports.getToken = async function ({ user }, override = {}, shouldExpire = true) {
   // Get user permissions
   let perms = null;
   try {
-    perms = await getUserPermissions(req.user);
+    perms = await getUserPermissions(user);
   } catch (err) {
     perms = { ...preDefinedPermissions.none };
     logger.error('Could not get user permissions', {
-      params: { user: req.user, message: err.message },
-      req: req
+      params: { user: user, message: err.message }
     });
   }
 
   return jwt.sign(
     {
-      _id: req.user._id,
-      username: req.user.username,
-      org: req.user.defaultOrg ? req.user.defaultOrg._id : null,
-      orgName: req.user.defaultOrg ? req.user.defaultOrg.name : null,
-      account: req.user.defaultAccount ? req.user.defaultAccount._id : null,
-      accountName: req.user.defaultAccount
-        ? req.user.defaultAccount.name
+      _id: user._id,
+      username: user.username,
+      org: user.defaultOrg ? user.defaultOrg._id : null,
+      orgName: user.defaultOrg ? user.defaultOrg.name : null,
+      account: user.defaultAccount ? user.defaultAccount._id : null,
+      accountName: user.defaultAccount
+        ? user.defaultAccount.name
         : null,
       perms: perms,
       ...override

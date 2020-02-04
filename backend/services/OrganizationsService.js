@@ -10,19 +10,15 @@ class OrganizationsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static organizationsGET({ offset, limit }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async organizationsGET({ offset, limit }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
   /**
@@ -31,19 +27,15 @@ class OrganizationsService {
    * id String Numeric ID of the Organization to delete
    * no response value expected for this operation
    **/
-  static organizationsIdDELETE({ id }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async organizationsIdDELETE({ id }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
   /**
@@ -53,19 +45,15 @@ class OrganizationsService {
    * organizationRequest OrganizationRequest  (optional)
    * returns Organization
    **/
-  static organizationsIdPUT({ id, organizationRequest }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async organizationsIdPUT({ id, organizationRequest }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
   /**
@@ -74,19 +62,15 @@ class OrganizationsService {
    * organizationRequest OrganizationRequest  (optional)
    * returns Organization
    **/
-  static organizationsPOST({ organizationRequest }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405,
-          ));
-        }
-      },
-    );
+  static async organizationsPOST({ organizationRequest }, { user }) {
+    try {
+      return Service.successResponse('');
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
   }
 
 }

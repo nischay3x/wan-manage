@@ -48,6 +48,7 @@ class ExpressServer {
     this.app.use('/api/users', usersRouter);
 
     this.app.use(auth.verifyUserJWT);
+    this.app.use(auth.verifyPermission);
 
     // add mongodb UI
     this.app.use('/admindb', mongoExpress(mongoExpressConfig));
@@ -62,23 +63,21 @@ class ExpressServer {
     this.app.get('/hello', (req, res) => res.send('Hello World'));
     this.app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(this.schema));
 
-    this.app.get('/login-redirect', (req, res) => {
-      res.status(200);
-      res.json(req.query);
-    });
-    this.app.get('/oauth2-redirect.html', (req, res) => {
-      res.status(200);
-      res.json(req.query);
-    });
+    // reserved for future use
+    // this.app.get('/login-redirect', (req, res) => {
+    //   res.status(200);
+    //   res.json(req.query);
+    // });
+    // this.app.get('/oauth2-redirect.html', (req, res) => {
+    //   res.status(200);
+    //   res.json(req.query);
+    // });
+
     new OpenApiValidator({
       apiSpecPath: this.openApiPath,
     }).install(this.app);
 
     this.app.use(openapiRouter());
-    this.app.get('/', (req, res) => {
-      res.status(200);
-      res.end('Hello World');
-    });
   }
 
   addErrorHandler() {
@@ -100,19 +99,11 @@ class ExpressServer {
   }
 
   async launch() {
-    return new Promise(
-      async (resolve, reject) => {
-        try {
-          this.addErrorHandler();
-          this.server = await this.app.listen(this.port, () => {
-            console.log(`server running on port ${this.port}`);
-            resolve(this.server);
-          });
-        } catch (error) {
-          reject(error);
-        }
-      },
-    );
+    this.addErrorHandler();
+    this.server = await this.app.listen(this.port, () => {
+      console.log(`server running on port ${this.port}`);
+      return this.server;
+    });
   }
 
   async close() {

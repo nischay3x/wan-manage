@@ -51,13 +51,15 @@ class Controller {
       const lower = (s) => {
         if (typeof s !== 'string') return '';
         return s.charAt(0).toLowerCase() + s.slice(1);
-      }
+      };
 
-      const ref = request.openapi.schema.requestBody.content["application/json"].schema["$ref"];
+      const [contentType] = request.headers['content-type'].split(';');
+      const ref = request.openapi.schema.requestBody.content[contentType].schema.$ref;
       const param = lower(ref.substr(ref.lastIndexOf('/') + 1));
 
       requestParams[param] = request.body;
     }
+
     request.openapi.schema.parameters.forEach((param) => {
       if (param.in === 'path') {
         requestParams[param.name] = request.openapi.pathParams[param.name];
@@ -68,10 +70,10 @@ class Controller {
     return requestParams;
   }
 
-  static async handleRequest(request, response, serviceOperation) {
+  static async handleRequest (request, response, serviceOperation) {
     try {
       const requestParams = this.collectRequestParams(request);
-      const serviceResponse = await serviceOperation(requestParams, /** need to pass the additional argument here */ request.user);
+      const serviceResponse = await serviceOperation(requestParams, /** need to pass the additional argument here */ request);
       Controller.sendResponse(response, serviceResponse);
     } catch (error) {
       Controller.sendError(response, error);

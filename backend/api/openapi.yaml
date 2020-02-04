@@ -15,9 +15,9 @@ servers:
 - description: SwaggerHub API Auto Mocking
   url: https://virtserver.swaggerhub.com/frozen-eye/flexiwanManage/1.0.0
 - description: Production server
-  url: https://manage.flexiwan.com/api
+  url: https://manage.flexiwan.com/api/v1
 - description: Local Development server
-  url: https://local.flexiwan.com:3443/api
+  url: https://local.flexiwan.com:3443/api/v1
 paths:
   /tokens:
     get:
@@ -828,7 +828,7 @@ paths:
     get:
       operationId: devicesIdRoutesGET
       parameters:
-      - description: Numeric ID of the Device to feth information about
+      - description: Numeric ID of the Device to fetch information about
         explode: false
         in: path
         name: id
@@ -905,7 +905,7 @@ paths:
     get:
       operationId: devicesIdStaticroutesGET
       parameters:
-      - description: Numeric ID of the Device to feth information about
+      - description: Numeric ID of the Device to fetch information about
         explode: false
         in: path
         name: id
@@ -1192,7 +1192,7 @@ paths:
     get:
       operationId: devicesIdStatisticsGET
       parameters:
-      - description: Numeric ID of the Device to feth information about
+      - description: Numeric ID of the Device to fetch information about
         explode: false
         in: path
         name: id
@@ -1250,7 +1250,7 @@ paths:
     get:
       operationId: devicesIdLogsGET
       parameters:
-      - description: Numeric ID of the Device to feth information about
+      - description: Numeric ID of the Device to fetch information about
         explode: false
         in: path
         name: id
@@ -1333,7 +1333,7 @@ paths:
     get:
       operationId: devicesIdConfigurationGET
       parameters:
-      - description: Numeric ID of the Device to feth information about
+      - description: Numeric ID of the Device to fetch information about
         explode: false
         in: path
         name: id
@@ -2483,6 +2483,8 @@ components:
         name: name
       properties:
         name:
+          type: string
+        description:
           type: string
       type: object
     Account:
