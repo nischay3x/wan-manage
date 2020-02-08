@@ -73,7 +73,7 @@ class Controller {
   static async handleRequest (request, response, serviceOperation) {
     try {
       const requestParams = this.collectRequestParams(request);
-      const serviceResponse = await serviceOperation(requestParams, /** need to pass the additional argument here */ request);
+      const serviceResponse = await serviceOperation(requestParams, /** need to pass the additional argument here */ request, response);
       Controller.sendResponse(response, serviceResponse);
     } catch (error) {
       Controller.sendError(response, error);

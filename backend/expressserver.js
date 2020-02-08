@@ -59,7 +59,7 @@ class ExpressServer {
     // initialize passport and authentication
     this.app.use(passport.initialize());
     this.app.use(auth.verifyUserJWT);
-    this.app.use(auth.verifyPermission);
+    // this.app.use(auth.verifyPermission);
 
     // add mongodb UI
     this.app.use('/admindb', mongoExpress(mongoExpressConfig));
