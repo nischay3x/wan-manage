@@ -17,7 +17,7 @@ servers:
 - description: Production server
   url: https://manage.flexiwan.com/api/v1
 - description: Local Development server
-  url: https://local.flexiwan.com:3443/api
+  url: https://127.0.0.1:3443/api
 paths:
   /tokens:
     get:
@@ -2000,9 +2000,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Unexpected error
-      security:
-      - bearerAuth: []
-      - apiKey: []
       summary: Login
       tags:
       - Users
@@ -2046,10 +2043,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Unexpected error
-      security:
-      - bearerAuth: []
-      - apiKey: []
       summary: Reset password
+      tags:
+      - Users
+      x-swagger-router-controller: Users
+      x-openapi-router-controller: UsersController
+      x-openapi-router-service: UsersService
+  /users/update-password:
+    post:
+      operationId: usersUpdatePasswordPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePasswordRequest'
+      responses:
+        "204":
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      summary: Update password
       tags:
       - Users
       x-swagger-router-controller: Users
@@ -3113,11 +3150,8 @@ components:
     LoginResponse:
       example:
         username: "John Doe"
-        token: "xxx"
       properties:
         username:
-          type: string
-        token:
           type: string
       type: object
     DeviceStatus:
@@ -3358,6 +3392,13 @@ components:
         email:
           type: string
       type: object
+    UpdatePasswordRequest:
+        example:
+          email: email
+        properties:
+          email:
+            type: string
+        type: object
     RegisterAccountRequest:
       example:
         userJobTitle: userJobTitle

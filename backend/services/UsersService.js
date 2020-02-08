@@ -1,6 +1,16 @@
 /* eslint-disable no-unused-vars */
 const Service = require('./Service');
 
+const createError = require('http-errors');
+const configs = require('../configs')();
+const auth = require('../authenticate');
+const mailer = require('../utils/mailer')(
+  configs.get('mailerHost'),
+  configs.get('mailerPort'),
+  configs.get('mailerBypassCert')
+);
+const { getToken, getRefreshToken } = require('../tokens');
+
 class UsersService {
 
   /**
@@ -9,9 +19,17 @@ class UsersService {
    * loginRequest LoginRequest  (optional)
    * no response value expected for this operation
    **/
-  static async usersLoginPOST({ loginRequest }) {
+  static async usersLoginPOST({ loginRequest }, { user }, response) {
     try {
-      return Service.successResponse('');
+      // Create token with user id and username
+      const token = await getToken({ user });
+      const refreshToken = await getRefreshToken({ user });
+
+      response.setHeader('Content-Type', 'application/json');
+      response.setHeader('Refresh-JWT', token);
+      response.setHeader('refresh-token', refreshToken);
+
+      return Service.successResponse({ username: user.name });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
@@ -28,8 +46,46 @@ class UsersService {
    **/
   static async usersResetPasswordPOST({ resetPasswordRequest }) {
     try {
-      return Service.successResponse('');
+      const validateKey = randomKey(30);
+
+      const resp = await Users.findOneAndUpdate(
+        // Query, use the email and make sure user is verified when reset password
+        { email: resetPasswordRequest.email, state: 'verified' },
+        // Update
+        { 'emailTokens.resetPassword': validateKey },
+        // Options
+        { upsert: false, new: false }
+      );
+
+      // Send email if user found
+      if (resp) {
+        await mailer.sendMailHTML(
+          'noreply@flexiwan.com',
+          resetPasswordRequest.email,
+          'Reset Password for Your flexiWAN Account',
+          `<h2>Reset Password for your flexiWAN Account</h2>
+                <b>It has been requested to reset your account password. If it is asked by yourself,
+                   click below to reset your password. If you do not know who this is,
+                   ignore this message.</b>
+                <p><a href="${configs.get(
+                  'UIServerURL'
+                )}/reset-password?email=${
+                  resetPasswordRequest.email
+          }&t=${validateKey}"><button style="color:#fff;
+          background-color:#F99E5B;border-color:#F99E5B;
+          font-weight:400;text-align:center;
+          vertical-align:middle;border:1px solid transparent;
+          padding:.375rem .75rem;font-size:1rem;line-height:1.5;
+          border-radius:.25rem;
+                cursor:pointer">Reset Password</button></a></p>
+                <p>Your friends @ flexiWAN</p>`
+        );
+      }
+
+      // In case of password reset, always return OK to not expose email addresses
+      return Service.successResponse({ status: 'password reset initiated' });
     } catch (e) {
+      logger.error('Account Password Reset process failed', { params: { reason: e.message } });
       return Service.rejectResponse(
         e.message || 'Invalid input',
         e.status || 405,
@@ -37,6 +93,43 @@ class UsersService {
     }
   }
 
+  /**
+   * Update password
+   *
+   * updatePasswordRequest UpdatePasswordRequest  (optional)
+   * no response value expected for this operation
+   **/
+  static async usersUpdatePasswordPOST({ updatePasswordRequest }, { user }) {
+    try {
+      // Validate password
+      if (!auth.validatePassword(updatePasswordRequest.password)) return next(createError(500, 'Bad Password'));
+
+      let registerUser = await Users.findOneAndUpdate(
+        // Query, use the email and password reset token
+        {
+          email: updatePasswordRequest.email,
+          'emailTokens.resetPassword': updatePasswordRequest.token
+        },
+        // Update
+        {
+          state: 'verified',
+          'emailTokens.resetPassword': ''
+        },
+        // Options
+        { upsert: false, new: true }
+      );
+      await registerUser.setPassword(updatePasswordRequest.password);
+      await registerUser.save();
+
+      return Service.successResponse({ status: 'password reset' });
+    } catch (e) {
+      logger.error('Account Password Udate process failed', { params: { reason: e.message } });
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
+  }
 }
 
 module.exports = UsersService;

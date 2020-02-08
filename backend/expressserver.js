@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const configs = require('./configs')();
 const swaggerUI = require('swagger-ui-express');
 const yamljs = require('yamljs');
 const express = require('express');
@@ -13,6 +14,10 @@ const openapiRouter = require('./utils/openapiRouter');
 
 const passport = require('passport');
 const auth = require('./authenticate');
+const uuid = require('uuid/v4');
+const morgan = require('morgan');
+const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
+const { reqLogger, errLogger } = require('./logging/request-logging');
 
 // mongo database UI
 const mongoExpress = require('mongo-express/lib/middleware');
@@ -23,8 +28,6 @@ const adminRouter = require('./routes/admin');
 
 // Devices contact point
 const connectRouter = require('./routes/connect');
-
-const logger = require('./logger');
 
 class ExpressServer {
   constructor(port, openApiYaml) {
@@ -37,21 +40,50 @@ class ExpressServer {
 
   setupMiddleware() {
     // this.setupAllowedMedia();
-
     this.app.use((req, res, next) => {
       console.log(`${req.method}: ${req.url}`);
       return next();
     });
 
+    // A middleware that adds a unique request ID for each request
+    // or uses the existing request ID, if there is one.
+    // THIS MIDDLEWARE MUST BE ASSIGNED FIRST.
+    this.app.use((req, res, next) => {
+      // Add unique ID to each request
+      req.id = req.get('X-Request-Id') || uuid();
+      res.set('X-Request-Id', req.id);
+
+      // Set the remote address IP on the request
+      // req.ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+
+      next();
+    });
+
+    // Request logging middleware - must be defined before routers.
+    this.app.use(reqLogger);
+
+    // Use morgan request logger in development mode
+    if (configs.get('environment') === 'development') this.app.use(morgan('dev'));
+
+    this.app.set('trust proxy', true); // Needed to get the public IP if behind a proxy
+
+    // eneral settings here
     this.app.use(cors());
     this.app.use(bodyParser.json());
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
     this.app.use(cookieParser());
 
+    // add mongodb UI
+    // Enable db admin only in development mode
+    if (configs.get('environment') === 'development') {
+      logger.warn('Warning: Enabling UI database access');
+      this.app.use('/admindb', mongoExpress(mongoExpressConfig));
+    }
+    
     // no authentication
     this.app.use('/api/connect', require('./routes/connect'));
-    this.app.use('/api/users', require('./routes/users'));
+    // this.app.use('/api/users', require('./routes/users'));
 
     // add API documentation
     this.app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(this.schema));
@@ -59,10 +91,8 @@ class ExpressServer {
     // initialize passport and authentication
     this.app.use(passport.initialize());
     this.app.use(auth.verifyUserJWT);
-    // this.app.use(auth.verifyPermission);
+    this.app.use(auth.verifyPermission);
 
-    // add mongodb UI
-    this.app.use('/admindb', mongoExpress(mongoExpressConfig));
 
     // Intialize routes
     this.app.use('/api/admin', adminRouter);

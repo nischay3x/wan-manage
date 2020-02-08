@@ -52,10 +52,10 @@ exports.getToken = async function ({ user }, override = {}, shouldExpire = true)
   );
 };
 
-exports.getRefreshToken = async (req, override = {}) => {
+exports.getRefreshToken = async ({ user }, override = {}) => {
   return jwt.sign({
-    _id: req.user._id,
-    username: req.user.username,
+    _id: user._id,
+    username: user.username,
     ...override
   }, configs.get('userTokenSecretKey'), { expiresIn: configs.get('userRefreshTokenExpiration') });
 };
