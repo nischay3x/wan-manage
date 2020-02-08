@@ -1,5 +1,7 @@
 // const { Middleware } = require('swagger-express-middleware');
+const fs = require('fs');
 const path = require('path');
+const https = require('https');
 const swaggerUI = require('swagger-ui-express');
 const yamljs = require('yamljs');
 const express = require('express');
@@ -35,24 +37,32 @@ class ExpressServer {
 
   setupMiddleware() {
     // this.setupAllowedMedia();
+
+    this.app.use((req, res, next) => {
+      console.log(`${req.method}: ${req.url}`);
+      return next();
+    });
+
     this.app.use(cors());
     this.app.use(bodyParser.json());
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
     this.app.use(cookieParser());
 
+    // no authentication
+    this.app.use('/api/connect', require('./routes/connect'));
+    this.app.use('/api/users', require('./routes/users'));
+
+    // add API documentation
+    this.app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(this.schema));
+
     // initialize passport and authentication
     this.app.use(passport.initialize());
-
-    const usersRouter = require('./routes/users');
-    this.app.use('/api/users', usersRouter);
-
     this.app.use(auth.verifyUserJWT);
     this.app.use(auth.verifyPermission);
 
     // add mongodb UI
     this.app.use('/admindb', mongoExpress(mongoExpressConfig));
-
 
     // Intialize routes
     this.app.use('/api/admin', adminRouter);
@@ -61,7 +71,6 @@ class ExpressServer {
     this.app.use('/ok', express.static(path.join(__dirname, 'public', 'ok.html')));
     this.app.use('/spec', express.static(path.join(__dirname, 'api', 'openapi.yaml')));
     this.app.get('/hello', (req, res) => res.send('Hello World'));
-    this.app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(this.schema));
 
     // reserved for future use
     // this.app.get('/login-redirect', (req, res) => {
@@ -100,10 +109,20 @@ class ExpressServer {
 
   async launch() {
     this.addErrorHandler();
-    this.server = await this.app.listen(this.port, () => {
-      console.log(`server running on port ${this.port}`);
-      return this.server;
-    });
+
+    try {
+      this.options = {
+        key: fs.readFileSync('./bin/cert.local.flexiwan.com/domain.key'),
+        cert: fs.readFileSync('./bin/cert.local.flexiwan.com/certificate.pem')
+      };
+
+      this.server = https.createServer(this.options, this.app).listen(this.port, () => {
+        console.log(`server running on port ${this.port}`);
+        return this.server;
+      });
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   async close() {

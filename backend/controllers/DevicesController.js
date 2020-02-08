@@ -21,6 +21,10 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdExecutePOST);
   }
 
+  async devicesRegisterPOST(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesRegisterPOST);
+  }
+
   async devicesIdPUT(request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdPUT);
   }

@@ -23,7 +23,7 @@ var User = require('./models/users');
 const Accesstoken = require('./models/accesstokens');
 const { verifyToken, getToken } = require('./tokens');
 const { permissionMasks } = require('./models/membership');
-const { orgUpdateFromNull } = require('./routes/membershipUtils');
+const { orgUpdateFromNull } = require('./utils/membershipUtils');
 var configs = require('./configs')();
 const createError = require('http-errors');
 const reCaptcha = require('./utils/recaptcha')(configs.get('captchaKey'));
@@ -243,9 +243,18 @@ exports.verifyAdmin = function (req, res, next) {
 //   };
 // };
 
-exports.verifyPermission = function (req, res, next) {
+exports.verifyPermission = function (req, _res, next) {
   const url = req.url.substring(req.url.lastIndexOf('/') + 1).toLowerCase();
   const method = req.method.toLowerCase();
+
+  if (!req.url.startsWith('/api')) {
+    return next();
+  }
+
+  // need an workaround for devices to allow them to register
+  if (req.url.endsWith('devices/register') && method === 'post') {
+    return next();
+  }
 
   if (req.user.perms[url] & permissionMasks[method]) {
     return next();

@@ -9,6 +9,10 @@ class MembersController {
     await Controller.handleRequest(request, response, this.service.membersGET);
   }
 
+  async membersIdDELETE(request, response) {
+    await Controller.handleRequest(request, response, this.service.membersIdDELETE);
+  }
+
   async membersIdPUT(request, response) {
     await Controller.handleRequest(request, response, this.service.membersIdPUT);
   }

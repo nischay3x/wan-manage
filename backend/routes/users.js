@@ -447,7 +447,7 @@ router.route('/login')
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Refresh-JWT', token);
     res.setHeader('refresh-token', refreshToken);
-    res.json({ name: req.user.name, status: 'logged in' });
+    res.json({ username: req.user.name, token: token });
   });
 
 // Passport exposes a function logout() on the req object which removes the req.user
