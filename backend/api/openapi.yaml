@@ -17,7 +17,7 @@ servers:
 - description: Production server
   url: https://manage.flexiwan.com/api/v1
 - description: Local Development server
-  url: https://127.0.0.1:3443/api
+  url: https://local.flexiwan.com:3443/api
 paths:
   /tokens:
     get:
