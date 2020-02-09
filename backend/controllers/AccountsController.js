@@ -5,6 +5,10 @@ class AccountsController {
     this.service = Service;
   }
 
+  async accountsGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.accountsGET);
+  }
+
   async accountsIdGET(request, response) {
     await Controller.handleRequest(request, response, this.service.accountsIdGET);
   }

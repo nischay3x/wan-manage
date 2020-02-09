@@ -77,13 +77,12 @@ class ExpressServer {
     // no authentication
     this.app.use('/api/connect', require('./routes/connect'));
     this.app.use('/api/users', require('./routes/users'));
-
+    
     // add API documentation
     this.app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(this.schema));
 
     // initialize passport and authentication
     this.app.use(passport.initialize());
-
 
     // Routes allowed without authentication
     this.app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
@@ -95,6 +94,14 @@ class ExpressServer {
 
     this.app.use(auth.verifyUserJWT);
     // this.app.use(auth.verifyPermission);
+
+    try {
+      // temporary map the OLD routes 
+      this.app.use('/api/devices', require('./routes/devices'));
+      this.app.use('/api/tunnels', require('./routes/tunnels'));
+    } catch (error) {
+      logger.error('Error: Can\'t connect OLD routes');      
+    }
 
     // Intialize routes
     this.app.use('/api/admin', adminRouter);
@@ -114,11 +121,11 @@ class ExpressServer {
     //   res.json(req.query);
     // });
 
-    new OpenApiValidator({
-      apiSpecPath: this.openApiPath,
-    }).install(this.app);
-
-    this.app.use(openapiRouter());
+      new OpenApiValidator({
+        apiSpecPath: this.openApiPath,
+      }).install(this.app);
+  
+      this.app.use(openapiRouter());
   }
 
   addErrorHandler() {
