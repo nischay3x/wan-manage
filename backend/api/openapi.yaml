@@ -592,7 +592,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#components/schemas/Error"
+                $ref: "#/components/schemas/Error"
           description: Payment needed
         "403":
           content:
@@ -2093,6 +2093,76 @@ paths:
       x-openapi-router-controller: UsersController
       x-openapi-router-service: UsersService
   /accounts:
+    get:
+      operationId: accountsGET
+      parameters:
+        - description: The number of items to skip before starting to collect the result
+            set
+          explode: true
+          in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+          style: form
+        - description: The numbers of items to return
+          explode: true
+          in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+          style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Account'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get all Accounts
+      tags:
+      - Accounts
+      x-swagger-router-controller: Accounts
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
+
     post:
       operationId: accountsPOST
       requestBody:
