@@ -73,26 +73,28 @@ class ExpressServer {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
     this.app.use(cookieParser());
-
-    // add mongodb UI
-    // Enable db admin only in development mode
-    if (configs.get('environment') === 'development') {
-      logger.warn('Warning: Enabling UI database access');
-      this.app.use('/admindb', mongoExpress(mongoExpressConfig));
-    }
     
     // no authentication
     this.app.use('/api/connect', require('./routes/connect'));
-    // this.app.use('/api/users', require('./routes/users'));
+    this.app.use('/api/users', require('./routes/users'));
 
     // add API documentation
     this.app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(this.schema));
 
     // initialize passport and authentication
     this.app.use(passport.initialize());
-    this.app.use(auth.verifyUserJWT);
-    this.app.use(auth.verifyPermission);
 
+
+    // Routes allowed without authentication
+    this.app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
+    // Enable db admin only in development mode
+    if (configs.get('environment') === 'development') {
+      logger.warn('Warning: Enabling UI database access');
+      this.app.use('/admindb', mongoExpress(mongoExpressConfig));
+    }
+
+    this.app.use(auth.verifyUserJWT);
+    // this.app.use(auth.verifyPermission);
 
     // Intialize routes
     this.app.use('/api/admin', adminRouter);
