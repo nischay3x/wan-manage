@@ -19,17 +19,25 @@ class JobsService {
    **/
   static async jobsGET({ offset, limit, status }, { user }) {
     try {
+      const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
+      // Check state provided is allowed
+      if (!stateOpts.includes(status) && status !== 'all') {
+        return Service.rejectResponse(400, 'Unsupported query state');
+      }
+
       // Generate and send the result
       const result = [];
-      const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
+      if (status === 'all') {
+        await Promise.all(
+          stateOpts.map(async (s) => {
+            await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(), s, (job) => result.push(job));
+          })
+        );
+      } else {
+        await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(), status, (job) => result.push(job));
+      }
 
-      await Promise.all(
-        stateOpts.map(async (s) => {
-          await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(), s,
-            (job) => result.push(job));
-        })
-      );
-      return Service.successResponse(200, result);
+      return Service.successResponse(result);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
