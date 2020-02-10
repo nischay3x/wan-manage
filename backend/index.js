@@ -1,6 +1,7 @@
 const config = require('./config');
 const logger = require('./logger');
 const ExpressServer = require('./expressServer');
+
 // const App = require('./app');
 
 // const app = new App(config);
@@ -20,6 +21,7 @@ const launchServer = async () => {
     await this.expressServer.launch();
     logger.info('Express server running');
   } catch (error) {
+    debugger
     logger.error(error);
     await this.close();
   }

@@ -19,6 +19,17 @@ const morgan = require('morgan');
 const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 const { reqLogger, errLogger } = require('./logging/request-logging');
 
+// periodic tasks
+const deviceStatus = require('./periodic/deviceStatus')();
+const deviceQueues = require('./periodic/deviceQueue')();
+const deviceSwVersion = require('./periodic/deviceSwVersion')();
+const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
+const notifyUsers = require('./periodic/notifyUsers')();
+
+// rate limiter
+const rateLimit = require('express-rate-limit');
+const RateLimitStore = require('./rateLimitStore');
+
 // mongo database UI
 const mongoExpress = require('mongo-express/lib/middleware');
 const mongoExpressConfig = require('./mongo_express_config');
@@ -29,12 +40,18 @@ const adminRouter = require('./routes/admin');
 // Devices contact point
 const connectRouter = require('./routes/connect');
 
+// WSS
+const WebSocket = require('ws');
+const connections = require('./websocket/Connections')();
+const broker = require('./broker/broker.js');
+
 class ExpressServer {
   constructor(port, openApiYaml) {
     this.port = port;
     this.app = express();
     this.openApiPath = openApiYaml;
     this.schema = yamljs.load(openApiYaml);
+
     this.setupMiddleware();
   }
 
@@ -48,24 +65,64 @@ class ExpressServer {
     // A middleware that adds a unique request ID for each request
     // or uses the existing request ID, if there is one.
     // THIS MIDDLEWARE MUST BE ASSIGNED FIRST.
-    this.app.use((req, res, next) => {
-      // Add unique ID to each request
-      req.id = req.get('X-Request-Id') || uuid();
-      res.set('X-Request-Id', req.id);
+    // this.app.use((req, res, next) => {
+    //   // Add unique ID to each request
+    //   req.id = req.get('X-Request-Id') || uuid();
+    //   res.set('X-Request-Id', req.id);
 
-      // Set the remote address IP on the request
-      // req.ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    //   // Set the remote address IP on the request
+    //   req.ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
-      next();
-    });
+    //   next();
+    // });
 
     // Request logging middleware - must be defined before routers.
     this.app.use(reqLogger);
+    this.app.set('trust proxy', true); // Needed to get the public IP if behind a proxy
+
+    // Don't expose system internals in response headers
+    this.app.disable('x-powered-by');
 
     // Use morgan request logger in development mode
     if (configs.get('environment') === 'development') this.app.use(morgan('dev'));
 
-    this.app.set('trust proxy', true); // Needed to get the public IP if behind a proxy
+
+    // Start periodic device tasks
+    deviceStatus.start();
+    deviceQueues.start();
+    deviceSwVersion.start();
+    deviceSwUpgrade.start();
+    notifyUsers.start();
+
+    // Secure traffic only
+    this.app.all('*', (req, res, next) => {
+      // Allow Let's encrypt certbot to access its certificate dirctory
+      if (!configs.get('shouldRedirectHTTPS') ||
+          req.secure || req.url.startsWith('/.well-known/acme-challenge')) {
+        return next();
+      } else {
+        return res.redirect(
+          307, 'https://' + req.hostname + ':' + configs.get('redirectHttpsPort') + req.url
+        );
+      }
+    });
+
+    // Global rate limiter to protect against DoS attacks
+    // Windows size of 5 minutes
+    const inMemoryStore = new RateLimitStore(5 * 60 * 1000);
+    const rateLimiter = rateLimit({
+      store: inMemoryStore,
+      max: 300, // Up to 300 request per IP address
+      message: 'Request rate limit exceeded',
+      onLimitReached: (req, res, options) => {
+        logger.error(
+          'Request rate limit exceeded. blocking request', {
+            params: { ip: req.ip },
+            req: req
+          });
+      }
+    });
+    this.app.use(rateLimiter);
 
     // eneral settings here
     this.app.use(cors());
@@ -74,6 +131,19 @@ class ExpressServer {
     this.app.use(express.urlencoded({ extended: false }));
     this.app.use(cookieParser());
     
+    // Secure traffic only
+    this.app.all('*', (req, res, next) => {
+      // Allow Let's encrypt certbot to access its certificate dirctory
+      if (!configs.get('shouldRedirectHTTPS') ||
+          req.secure || req.url.startsWith('/.well-known/acme-challenge')) {
+        return next();
+      } else {
+        return res.redirect(
+          307, 'https://' + req.hostname + ':' + configs.get('redirectHttpsPort') + req.url
+        );
+      }
+    });
+
     // no authentication
     this.app.use('/api/connect', require('./routes/connect'));
     this.app.use('/api/users', require('./routes/users'));
@@ -84,8 +154,9 @@ class ExpressServer {
     // initialize passport and authentication
     this.app.use(passport.initialize());
 
-    // Routes allowed without authentication
+    // // Routes allowed without authentication
     this.app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
+
     // Enable db admin only in development mode
     if (configs.get('environment') === 'development') {
       logger.warn('Warning: Enabling UI database access');
@@ -124,7 +195,7 @@ class ExpressServer {
       new OpenApiValidator({
         apiSpecPath: this.openApiPath,
       }).install(this.app);
-  
+
       this.app.use(openapiRouter());
   }
 
@@ -155,7 +226,21 @@ class ExpressServer {
         cert: fs.readFileSync('./bin/cert.local.flexiwan.com/certificate.pem')
       };
 
-      this.server = https.createServer(this.options, this.app).listen(this.port, () => {
+      this.server = https.createServer(this.options, this.app);
+
+      // setup wss here
+      this.wss = new WebSocket.Server({
+        server: this.server,
+        verifyClient: connections.verifyDevice
+      });
+
+      connections.registerConnectCallback('broker', broker.deviceConnectionOpened);
+      connections.registerCloseCallback('broker', broker.deviceConnectionClosed);
+
+      this.wss.on('connection', connections.createConnection);
+      logger.info('Websocket server running');
+
+      this.server.listen(this.port, () => {
         console.log(`server running on port ${this.port}`);
         return this.server;
       });

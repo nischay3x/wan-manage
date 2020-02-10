@@ -185,10 +185,10 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
   }
 });
 
-const updResp = (qtype, req, res, next, resp, origDoc = null) =>
+const updResp = (qtype, req, res, next, resp, origDoc = null) => {
   // Disabling this line assuming this code is about to be removed.
   // eslint-disable-next-line no-async-promise-executor
-  new Promise(async function (resolve, reject) {
+  return new Promise((resolve, reject) => {
     if (qtype === 'DELETE') {
       resolve({ ok: 1 });
     } else if (qtype === 'GET') {
@@ -231,9 +231,11 @@ const updResp = (qtype, req, res, next, resp, origDoc = null) =>
         // console.log(error);
         // if (error) return reject(error);
         try {
-          await dispatcher.apply([origDoc], req, res, next, {
+          dispatcher.apply([origDoc], req, res, next, {
             newDevice: resp
-          });
+          }).then(() => {
+            return resolve({ ok: 1});
+          })
         } catch (err) {
           return reject(err);
         }
@@ -244,6 +246,8 @@ const updResp = (qtype, req, res, next, resp, origDoc = null) =>
       resolve({ ok: 1 });
     }
   });
+}
+
 const checkDeviceBaseApi = (qtype, req) => new Promise(function (resolve, reject) {
   // Creating new devices should be done only via the /register API
   if (qtype === 'POST') {
