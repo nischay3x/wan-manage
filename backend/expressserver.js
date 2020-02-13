@@ -147,7 +147,7 @@ class ExpressServer {
     // no authentication
     this.app.use('/api/connect', require('./routes/connect'));
     this.app.use('/api/users', require('./routes/users'));
-    
+
     // add API documentation
     this.app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(this.schema));
 
@@ -165,6 +165,10 @@ class ExpressServer {
 
     this.app.use(auth.verifyUserJWT);
     // this.app.use(auth.verifyPermission);
+
+    // FIXME: Omit OpenAPI routes for now!
+    this.app.use('/api/accounts', require('./routes/accounts').accountsRouter);
+    this.app.use('/api/members', require('./routes/members'));
 
     try {
       // temporary map the OLD routes 
@@ -204,6 +208,7 @@ class ExpressServer {
       res.status(404);
       res.send(JSON.stringify({ error: `path ${req.baseUrl} doesn't exist` }));
     });
+
     /**
      * suppressed eslint rule: The next variable is required here, even though it's not used.
      *
