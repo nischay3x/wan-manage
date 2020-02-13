@@ -236,37 +236,18 @@ exports.verifyAdmin = function (req, res, next) {
  * @param {Object} restCommand - string of get, post, put, del
  * Return middleware to check permissions for that type
  */
-// exports.verifyPermission = function (accessType, restCommand) {
-//   return function (req, res, next) {
-//     if (req.user.perms[accessType] & permissionMasks[restCommand]) return next();
-//     next(createError(403, "You don't have permission to perform this operation"));
-//   };
-// };
-
-exports.verifyPermission = function (req, res) {
-  // FIXME: temporary hack
+exports.verifyPermission = function (accessType, restCommand) {
   return function (req, res, next) {
-    return next();
+    if (req.user.perms[accessType] & permissionMasks[restCommand]) return next();
+    next(createError(403, "You don't have permission to perform this operation"));
   };
+};
 
-  // const url = req.url.substring(req.url.lastIndexOf('/') + 1).toLowerCase();
-  // const method = req.method.toLowerCase();
+exports.verifyPermissionEx = function (serviceName, { method, user }) {
+  const accessType = serviceName.replace('Service', '').toLowerCase();
+  const restCommand = method.toLowerCase();
 
-
-  // if (!req.url.startsWith('/api')) {
-  //   return next();
-  // }
-
-  // // need an workaround for devices to allow them to register
-  // if (req.url.endsWith('devices/register') && method === 'post') {
-  //   return next();
-  // }
-
-  // if (req.user.perms[url] & permissionMasks[method]) {
-  //   return next();
-  // } else {
-  //   next(createError(403, "You don't have permission to perform this operation"));
-  // }
+  return (user.perms[accessType] & permissionMasks[restCommand]);
 };
 
 exports.validatePassword = function (password) {

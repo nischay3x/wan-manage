@@ -13,6 +13,7 @@ const StatisticsService = require('./StatisticsService');
 const TokensService = require('./TokensService');
 const TunnelsService = require('./TunnelsService');
 const UsersService = require('./UsersService');
+const BillingService = require('./BillingService');
 
 module.exports = {
   AccessTokensService,
@@ -30,4 +31,5 @@ module.exports = {
   TokensService,
   TunnelsService,
   UsersService,
+  BillingService
 };

@@ -2,6 +2,8 @@ const logger = require('../logger');
 const controllers = require('../controllers');
 const Services = require('../services');
 
+const { verifyPermissionEx } = require('../authenticate');
+
 function handleError(err, request, response, next) {
   logger.error(err);
   const code = err.code || 400;
@@ -54,6 +56,13 @@ function openApiRouter() {
       } else {
         const apiController = new controllers[controllerName](Services[serviceName]);
         const controllerOperation = request.openapi.schema.operationId;
+
+        // this is the place to check on users access level
+        if (!verifyPermissionEx(serviceName, request)) {
+          const err = { code: 403, error: 'You don\'t have permission to perform this operation' };
+          return handleError(err, request, response, next);
+        }
+
         await apiController[controllerOperation](request, response, next);
       }
     } catch (error) {

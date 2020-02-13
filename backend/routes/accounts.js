@@ -22,7 +22,7 @@ const { verifyPermission } = require('../authenticate');
 const User = require('../models/users');
 const Accounts = require('../models/accounts');
 const { getToken } = require('../tokens');
-const { getUserAccounts, orgUpdateFromNull } = require('./membershipUtils');
+const { getUserAccounts, orgUpdateFromNull } = require('../utils/membershipUtils');
 const createError = require('http-errors');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 

@@ -78,12 +78,6 @@ class Controller {
       const requestParams = this.collectRequestParams(request);
       const serviceResponse = await serviceOperation(requestParams, /** need to pass the additional argument here */ request, response);
 
-      // need to update headers here
-      if (request.user) {
-        const token = await getToken(request, { accountName: request.user.defaultAccount.name });
-        response.setHeader('Refresh-JWT', token);
-      }
-
       Controller.sendResponse(response, serviceResponse);
     } catch (error) {
       Controller.sendError(response, error);

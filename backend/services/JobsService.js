@@ -30,7 +30,9 @@ class JobsService {
       if (status === 'all') {
         await Promise.all(
           stateOpts.map(async (s) => {
-            await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(), s, (job) => result.push(job));
+            await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(), s, (job) => {
+              result.push(job);
+            });
           })
         );
       } else {

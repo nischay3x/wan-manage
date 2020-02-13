@@ -27,7 +27,7 @@ class UsersService {
 
       response.setHeader('Content-Type', 'application/json');
       response.setHeader('Refresh-JWT', token);
-      response.setHeader('refresh-token', refreshToken);
+      response.setHeader('Refresh-Token', refreshToken);
 
       return Service.successResponse({ username: user.name });
     } catch (e) {

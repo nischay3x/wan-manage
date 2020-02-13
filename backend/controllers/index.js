@@ -13,6 +13,7 @@ const StatisticsController = require('./StatisticsController');
 const TokensController = require('./TokensController');
 const TunnelsController = require('./TunnelsController');
 const UsersController = require('./UsersController');
+const BillingController = require('./BillingController');
 
 module.exports = {
   AccessTokensController,
@@ -30,4 +31,5 @@ module.exports = {
   TokensController,
   TunnelsController,
   UsersController,
+  BillingController,
 };
