@@ -193,7 +193,7 @@ const notificationsMgr = require('../notifications/notifications')();
                             // Options
                             {'upsert':true})
             .then((resp) => {
-                logger.info('Storing interfaces statistics in DB', {
+                logger.debug('Storing interfaces statistics in DB', {
                     params: {deviceId: deviceID, stats: statsEntry}, periodic: {task: this.taskInfo}});
             }, (err) => {
                 logger.warn('Failed to store interface statistics', {
