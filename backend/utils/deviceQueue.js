@@ -126,7 +126,7 @@ class DeviceQueues {
                 await processor(job);
             }
             catch (err) {
-                logger.warn("Failed to process job", {
+                logger.debug("Failed to process job", {
                     params: { job: job, deviceId: deviceId, err: err.message },
                     job: job
                 });
