@@ -24,6 +24,7 @@ const {devices} = require('../models/devices');
 const jwt = require('jsonwebtoken');
 const mongoConns = require('../mongoConns.js')();
 const { checkDeviceVersion } = require('../versioning');
+const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({module: module.filename, type: 'req'});
 
 // billing support
@@ -140,8 +141,27 @@ connectRouter.route('/register')
                                     await session.commitTransaction();
                                     session = null;
 
+                                    // Send register device webhook for first device
+                                    if (keepCount === 0) {
+                                        const webHookMessage = {
+                                            'account': decoded.account,
+                                            'org': decoded.org
+                                        };
+                                        if (! await webHooks.sendToWebHook(configs.get('webHookRegisterDeviceURL'),
+                                        webHookMessage,
+                                        configs.get('webHookRegisterDeviceSecret'))) {
+                                            logger.error("Web hook call failed for registered device",
+                                            {params: {message: webHookMessage}});
+                                        }
+                                    }
+
                                     logger.info('Device registered successfully',
-                                                {params: {deviceId: req.body.machine_id}, req: req});
+                                                {params: {
+                                                    deviceId: req.body.machine_id,
+                                                    account: decoded.account,
+                                                    org: decoded.org
+                                                },
+                                                req: req});
                                     res.statusCode = 200;
                                     res.setHeader('Content-Type', 'application/json');
                                     res.json({'deviceToken':deviceToken, 'server':configs.get('agentBroker')});

@@ -49,7 +49,7 @@ const validateIPv6 = (ip) => { return ip === '' || net.isIPv6(ip); };
 const validateIPaddr = (ip) => { return validateIPv4(ip) || validateIPv6(ip); };
 const validatePciAddress = (pci) => { return pci === '' || /^([A-F0-9]{2,4}:)?([A-F0-9]{2}|[A-F0-9]{4}):[A-F0-9]{2}\.[A-F0-9]{2}$/i.test(pci); };
 const validateIfcName = (name) => { return /^[a-zA-Z0-9_]{1,15}$/i.test(name || ''); };
-const validateDriverName = (name) => { return /^[a-z0-9-]{1,30}$/i.test(name || ''); };
+const validateDriverName = (name) => { return /^[a-z0-9_-]{1,30}$/i.test(name || ''); };
 const validateMacAddress = (mac) => { return /^(([A-F0-9]{2}:){5}[A-F0-9]{2})|(([A-F0-9]{2}-){5}[A-F0-9]{2})$/i.test(mac); };
 const validateRoutingProto = (protocol) => { return !isEmpty(protocol) && protocols.includes(protocol.toUpperCase()); };
 const validateIfcType = (type) => { return !isEmpty(type) && interfaceTypes.includes(type.toUpperCase()); };

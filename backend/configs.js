@@ -115,6 +115,10 @@ const config_env = {
         'webHookAddUserURL':'',
         // Web hooks add user secret, send in addition to the message for filtering
         'webHookAddUserSecret': 'ABC',
+        // Web hooks register device URL, used to send for new registered devices, '' to bypass hook
+        'webHookRegisterDeviceURL':'',
+        // Web hooks register device secret, send in addition to the message for filtering
+        'webHookRegisterDeviceSecret': 'ABC',
     },
 
     // Override for development environment, default environment if not specified
@@ -216,6 +220,10 @@ class Configs {
         combined_config['redisUrl'] = process.env.REDIS_URL || combined_config['redisUrl'];
         combined_config['webHookAddUserURL'] = process.env.WEBHOOK_ADD_USER_URL || combined_config['webHookAddUserURL'];
         combined_config['webHookAddUserSecret'] = process.env.WEBHOOK_ADD_USER_KEY || combined_config['webHookAddUserSecret'];
+        combined_config['webHookRegisterDeviceURL'] = process.env.WEBHOOK_REGISTER_DEVICE_URL ||
+            combined_config['webHookRegisterDeviceURL'];
+        combined_config['webHookRegisterDeviceSecret'] = process.env.WEBHOOK_REGISTER_DEVICE_KEY ||
+            combined_config['webHookRegisterDeviceSecret'];
 
         this.config_values = combined_config;
         console.log("Configuration used:\n" + JSON.stringify(this.config_values, null, 2));

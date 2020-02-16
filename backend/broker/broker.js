@@ -82,7 +82,7 @@ deviceProcessor = async (job) => {
         // 3. Update transaction job progress
         async.waterfall(operations, (error, results) => {
             if (error) {
-                logger.error("Job operation error",{params:{job: job, err: error.message}, job: job});
+                logger.error("Job error",{params:{job: job, err: error.message}, job: job});
                 // Call error callback only if the job reached maximal retries
                 // We check if the remaining attempts are less than 1 instead of 0
                 // since this code runs before the number of attempts is decreased.
