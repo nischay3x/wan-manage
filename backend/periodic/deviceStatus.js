@@ -343,7 +343,8 @@ const notificationsMgr = require('../notifications/notifications')();
      * @param {number} tunnelId Tunnel Id
      */
     getTunnelStatus(deviceID, tunnelId) {
-        if (this.status[deviceID] && this.status[deviceID].state !== "running") {
+        const isConnected = connections.isConnected(deviceID);
+        if (!isConnected || this.status[deviceID] && this.status[deviceID].state !== "running") {
             return null;
         }
 

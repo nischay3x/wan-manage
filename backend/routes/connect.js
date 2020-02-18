@@ -144,6 +144,7 @@ connectRouter.route('/register')
                                     // Send register device webhook for first device
                                     if (keepCount === 0) {
                                         const webHookMessage = {
+                                            '_id': result[0]._id.toString(),
                                             'account': decoded.account,
                                             'org': decoded.org
                                         };
@@ -157,6 +158,7 @@ connectRouter.route('/register')
 
                                     logger.info('Device registered successfully',
                                                 {params: {
+                                                    _id: result[0]._id.toString(),
                                                     deviceId: req.body.machine_id,
                                                     account: decoded.account,
                                                     org: decoded.org
