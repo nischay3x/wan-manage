@@ -37,6 +37,10 @@ const config_env = {
         'userRefreshTokenExpiration': 604800,
         // Key used for device tokens, override default with environment variable DEVICE_SECRET_KEY
         'deviceTokenSecretKey': 'abcdefg1234567',
+        // Number of REST requests allowed in 5 min per IP address, more requests will be rate limited
+        'userIpReqRateLimit': 300,
+        // Unread notification email period (in msec), a mail is sent once a period
+        'unreadNotificationPeriod' : 86400000,
         // Key used to validate google captcha token, generated at https://www.google.com/u/1/recaptcha/admin/create
         // Default value is not set, which only validate the client side captcha
         'captchaKey': '',
@@ -188,6 +192,8 @@ const config_env = {
         'shouldRedirectHTTPS': false,
         'redirectHttpsPort': 443,
         'userTokenExpiration': 300,
+        'userIpReqRateLimit': 3000,
+        'unreadNotificationPeriod' : 300000,
         'userRefreshTokenExpiration': 86400,
         'agentBroker': 'appqa01.flexiwan.com:443',
         'clientStaticDir': 'client/build',
