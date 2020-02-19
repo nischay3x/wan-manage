@@ -141,7 +141,7 @@ app.all('*', (req, res, next) => {
 const inMemoryStore = new rateLimitStore(5 * 60 * 1000);
 const rateLimiter = rateLimit({
     store: inMemoryStore,
-    max: 300, // Up to 300 request per IP address
+    max: configs.get('userIpReqRateLimit'), // Rate limit for requests in 5 min per IP address
     message: 'Request rate limit exceeded',
     onLimitReached: (req, res, options) => {
         logger.error(
