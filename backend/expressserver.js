@@ -14,7 +14,6 @@ const openapiRouter = require('./utils/openapiRouter');
 
 const passport = require('passport');
 const auth = require('./authenticate');
-const uuid = require('uuid/v4');
 const morgan = require('morgan');
 const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 const { reqLogger, errLogger } = require('./logging/request-logging');
@@ -36,9 +35,6 @@ const mongoExpressConfig = require('./mongo_express_config');
 
 // Internal routers definition
 const adminRouter = require('./routes/admin');
-
-// Devices contact point
-const connectRouter = require('./routes/connect');
 
 // WSS
 const WebSocket = require('ws');
@@ -130,7 +126,10 @@ class ExpressServer {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
     this.app.use(cookieParser());
-    
+
+    // // Routes allowed without authentication
+    this.app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
+
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
       // Allow Let's encrypt certbot to access its certificate dirctory
@@ -154,14 +153,16 @@ class ExpressServer {
     // initialize passport and authentication
     this.app.use(passport.initialize());
 
-    // // Routes allowed without authentication
-    this.app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
-
     // Enable db admin only in development mode
     if (configs.get('environment') === 'development') {
       logger.warn('Warning: Enabling UI database access');
       this.app.use('/admindb', mongoExpress(mongoExpressConfig));
     }
+
+    // Enable routes for non-authorized links
+    this.app.use('/ok', express.static(path.join(__dirname, 'public', 'ok.html')));
+    this.app.use('/spec', express.static(path.join(__dirname, 'api', 'openapi.yaml')));
+    this.app.get('/hello', (req, res) => res.send('Hello World'));
 
     this.app.use(auth.verifyUserJWT);
     // this.app.use(auth.verifyPermission);
@@ -178,11 +179,6 @@ class ExpressServer {
 
     // Intialize routes
     this.app.use('/api/admin', adminRouter);
-    this.app.use('/api/connect', connectRouter);
-
-    this.app.use('/ok', express.static(path.join(__dirname, 'public', 'ok.html')));
-    this.app.use('/spec', express.static(path.join(__dirname, 'api', 'openapi.yaml')));
-    this.app.get('/hello', (req, res) => res.send('Hello World'));
 
     // reserved for future use
     // this.app.get('/login-redirect', (req, res) => {
@@ -202,10 +198,24 @@ class ExpressServer {
   }
 
   addErrorHandler() {
-    this.app.use('*', (req, res) => {
-      res.status(404);
-      res.send(JSON.stringify({ error: `path ${req.baseUrl} doesn't exist` }));
+    // "catchall" handler, for any request that doesn't match one above, send back index.html file.
+    this.app.get('*', (req, res, next) => {
+      logger.info("Route not found", {req: req});
+      res.sendFile(path.join(__dirname, configs.get('clientStaticDir'), 'index.html'));
     });
+
+    // catch 404 and forward to error handler
+    this.app.use(function(req, res, next) {
+      next(createError(404));
+    });
+
+    // Request error logger - must be defined after all routers
+    // Set log severity on the request to log errors only for 5xx status codes.
+    this.app.use((err, req, res, next) => {
+      req.logSeverity = err.status || 500;
+      next(err);
+    });
+    this.app.use(errLogger);
 
     /**
      * suppressed eslint rule: The next variable is required here, even though it's not used.
@@ -225,8 +235,8 @@ class ExpressServer {
 
     try {
       this.options = {
-        key: fs.readFileSync('./bin/cert.local.flexiwan.com/domain.key'),
-        cert: fs.readFileSync('./bin/cert.local.flexiwan.com/certificate.pem')
+        key: fs.readFileSync(path.join(__dirname, 'bin', configs.get('httpsCertKey'))),
+        cert: fs.readFileSync(path.join(__dirname, 'bin', configs.get('httpsCert')))
       };
 
       this.server = https.createServer(this.options, this.app);
@@ -244,7 +254,7 @@ class ExpressServer {
       logger.info('Websocket server running');
 
       this.server.listen(this.port, () => {
-        console.log(`server running on port ${this.port}`);
+        logger.info('HTTP server listening on port', {params: {port: configs.get('httpPort')}});
         return this.server;
       });
     } catch (error) {

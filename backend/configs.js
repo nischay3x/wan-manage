@@ -30,7 +30,7 @@ const configEnv = {
     // URL of the rest server
     restServerURL: 'https://local.flexiwan.com:3443',
     // URL of the UI server
-    UIServerURL: 'https://local.flexiwan.com:3000',
+    UIServerURL: 'https://local.flexiwan.com:3443',
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
     userTokenSecretKey: 'abcdefg1234567',
     // The duration of the user JWT token in seconds

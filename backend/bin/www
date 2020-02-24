@@ -16,85 +16,22 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-var app = require('../app');
-var debug = require('debug')('flexiwansite:server');
-var http = require('http');
-var https = require('https');
-var fs = require('fs');
-var WebSocketServer = require('ws').Server;
-var connections = require('../websocket/Connections')();
-var broker = require('../broker/broker.js');
-const logger = require('../logging/logging')({module: module.filename, type: 'req'});
-
-// Get global config
+const path = require('path');
 const configs = require('../configs')();
+const logger = require('../logger');
+const ExpressServer = require('../expressserver');
 
-/**
- * Create HTTP & HTTPS server.
- */
-var server = http.createServer(app);
-var options = {
-    key: fs.readFileSync(__dirname+configs.get('httpsCertKey')),
-    cert: fs.readFileSync(__dirname+configs.get('httpsCert'))
+const launchServer = async () => {
+  try {
+    const openapiYaml = path.join(__dirname, '../api', 'openapi.yaml');
+    const httpsPort = configs.get('httpsPort');
+    this.expressServer = new ExpressServer(httpsPort, openapiYaml);
+    await this.expressServer.launch();
+    logger.info('Express server running');
+  } catch (error) {
+    logger.error(error);
+    await this.close();
+  }
 };
-var secureServer = https.createServer(options,app);
 
-// Open WebSocket
-var wss = new WebSocketServer({server: configs.get('shouldRedirectHTTPS')?secureServer:server, 
-    verifyClient:connections.verifyDevice});
-connections.registerConnectCallback('broker',broker.deviceConnectionOpened);
-connections.registerCloseCallback('broker',broker.deviceConnectionClosed);
-wss.on('connection', connections.createConnection);
-
-/**
- * Listen on provided ports, on all network interfaces.
- */
-server.listen(configs.get('httpPort'), () => {
-    logger.info('HTTP server listening on port', {params: {port: configs.get('httpPort')}});
-});
-server.on('error', onError(configs.get('httpPort')));
-server.on('listening', onListening);
-
-secureServer.listen(configs.get('httpsPort'), () => {
-    logger.info('HTTPS server listening on port',{params: {port: configs.get('httpsPort')}});
-});
-secureServer.on('error', onError(configs.get('httpsPort')));
-secureServer.on('listening', onListening);
-
-/**
- * Event listener for HTTP/HTTPS server "error" event.
- */
- function onError(port) {
-    return function (error) {
-        if (error.syscall !== 'listen') {
-            throw error;
-        }
-
-    var bind = 'Port ' + port;
-
-    // handle specific listen errors with friendly messages
-    switch (error.code) {
-      case 'EACCES':
-        console.error(bind + ' requires elevated privileges');
-        process.exit(1);
-        break;
-      case 'EADDRINUSE':
-        console.error(bind + ' is already in use');
-         process.exit(1);
-        break;
-      default:
-        throw error;
-    }
-  };
-}
-
-/**
- * Event listener for HTTP server "listening" event.
- */
-function onListening() {
-    var addr = server.address();
-    var bind = typeof addr === 'string'
-    ? 'pipe ' + addr
-    : 'port ' + addr.port;
-    debug('Listening on ' + bind);
-}
+launchServer().catch(e => logger.error(e));
