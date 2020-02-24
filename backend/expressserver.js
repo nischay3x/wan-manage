@@ -166,16 +166,14 @@ class ExpressServer {
     this.app.use(auth.verifyUserJWT);
     // this.app.use(auth.verifyPermission);
 
-    // FIXME: Omit OpenAPI routes for now!
-    this.app.use('/api/accounts', require('./routes/accounts').accountsRouter);
-    this.app.use('/api/members', require('./routes/members'));
-
     try {
-      // temporary map the OLD routes 
+      // FIXME: temporary map the OLD routes
       this.app.use('/api/devices', require('./routes/devices'));
       this.app.use('/api/tunnels', require('./routes/tunnels'));
+      this.app.use('/api/accounts', require('./routes/accounts').accountsRouter);
+      this.app.use('/api/members', require('./routes/members'));
     } catch (error) {
-      logger.error('Error: Can\'t connect OLD routes');      
+      logger.error('Error: Can\'t connect OLD routes');
     }
 
     // Intialize routes
