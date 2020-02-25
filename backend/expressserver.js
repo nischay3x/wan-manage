@@ -1,6 +1,7 @@
 // const { Middleware } = require('swagger-express-middleware');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const https = require('https');
 const configs = require('./configs')();
 const swaggerUI = require('swagger-ui-express');
@@ -11,6 +12,7 @@ const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const { OpenApiValidator } = require('express-openapi-validator');
 const openapiRouter = require('./utils/openapiRouter');
+const createError = require('http-errors');
 
 const passport = require('passport');
 const auth = require('./authenticate');
@@ -42,16 +44,24 @@ const connections = require('./websocket/Connections')();
 const broker = require('./broker/broker.js');
 
 class ExpressServer {
-  constructor(port, openApiYaml) {
+  constructor (port, securePort, openApiYaml) {
     this.port = port;
+    this.securePort = securePort;
     this.app = express();
     this.openApiPath = openApiYaml;
     this.schema = yamljs.load(openApiYaml);
 
     this.setupMiddleware();
+
+    this.setupMiddleware = this.setupMiddleware.bind(this);
+    this.addErrorHandler = this.addErrorHandler.bind(this);
+    this.onError = this.onError.bind(this);
+    this.onListening = this.onListening.bind(this);
+    this.launch = this.launch.bind(this);
+    this.close = this.close.bind(this);
   }
 
-  setupMiddleware() {
+  setupMiddleware () {
     // this.setupAllowedMedia();
     this.app.use((req, res, next) => {
       console.log(`${req.method}: ${req.url}`);
@@ -81,7 +91,6 @@ class ExpressServer {
 
     // Use morgan request logger in development mode
     if (configs.get('environment') === 'development') this.app.use(morgan('dev'));
-
 
     // Start periodic device tasks
     deviceStatus.start();
@@ -191,22 +200,22 @@ class ExpressServer {
     //   res.json(req.query);
     // });
 
-      new OpenApiValidator({
-        apiSpecPath: this.openApiPath,
-      }).install(this.app);
+    new OpenApiValidator({
+      apiSpecPath: this.openApiPath
+    }).install(this.app);
 
-      this.app.use(openapiRouter());
+    this.app.use(openapiRouter());
   }
 
-  addErrorHandler() {
+  addErrorHandler () {
     // "catchall" handler, for any request that doesn't match one above, send back index.html file.
     this.app.get('*', (req, res, next) => {
-      logger.info("Route not found", {req: req});
+      logger.info('Route not found', { req: req });
       res.sendFile(path.join(__dirname, configs.get('clientStaticDir'), 'index.html'));
     });
 
     // catch 404 and forward to error handler
-    this.app.use(function(req, res, next) {
+    this.app.use(function (req, res, next) {
       next(createError(404));
     });
 
@@ -231,20 +240,57 @@ class ExpressServer {
     });
   }
 
-  async launch() {
+  /**
+   * Event listener for HTTP/HTTPS server "error" event.
+   */
+  onError (port) {
+    return function (error) {
+      if (error.syscall !== 'listen') {
+        throw error;
+      }
+
+      const bind = 'Port ' + port;
+
+      // handle specific listen errors with friendly messages
+      switch (error.code) {
+        case 'EACCES':
+          console.error(bind + ' requires elevated privileges');
+          process.exit(1);
+        case 'EADDRINUSE':
+          console.error(bind + ' is already in use');
+          process.exit(1);
+        default:
+          throw error;
+      }
+    };
+  }
+
+  /**
+  * Event listener for HTTP server "listening" event.
+  */
+  onListening (server) {
+    return function () {
+      const addr = server.address();
+      const bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
+      console.debug('Listening on ' + bind);
+    };
+  }
+
+  async launch () {
     this.addErrorHandler();
 
     try {
+      this.server = http.createServer(this.app);
+
       this.options = {
         key: fs.readFileSync(path.join(__dirname, 'bin', configs.get('httpsCertKey'))),
         cert: fs.readFileSync(path.join(__dirname, 'bin', configs.get('httpsCert')))
       };
-
-      this.server = https.createServer(this.options, this.app);
+      this.secureServer = https.createServer(this.options, this.app);
 
       // setup wss here
       this.wss = new WebSocket.Server({
-        server: this.server,
+        server: configs.get('shouldRedirectHTTPS') ? this.secureServer : this.server,
         verifyClient: connections.verifyDevice
       });
 
@@ -252,21 +298,32 @@ class ExpressServer {
       connections.registerCloseCallback('broker', broker.deviceConnectionClosed);
 
       this.wss.on('connection', connections.createConnection);
-      logger.info('Websocket server running');
+      console.log('Websocket server running');
 
       this.server.listen(this.port, () => {
-        logger.info('HTTP server listening on port', {params: {port: configs.get('httpPort')}});
-        return this.server;
+        console.log('HTTP server listening on port', { params: { port: this.port } });
       });
+      this.server.on('error', this.onError(this.port));
+      this.server.on('listening', this.onListening(this.server));
+
+      this.secureServer.listen(this.securePort, () => {
+        console.log('HTTPS server listening on port', { params: { port: this.securePort } });
+      });
+      this.secureServer.on('error', this.onError(this.securePort));
+      this.secureServer.on('listening', this.onListening(this.secureServer));
     } catch (error) {
-      console.error(error);
+      console.log('Express server lunch error', { params: { message: error.message } });
     }
   }
 
-  async close() {
+  async close () {
     if (this.server !== undefined) {
       await this.server.close();
-      console.log(`Server on port ${this.port} shut down`);
+      console.log(`HTTP Server on port ${this.port} shut down`);
+    }
+    if (this.secureServer !== undefined) {
+      await this.secureServer.close();
+      console.log(`HTTPS Server on port ${this.securePort} shut down`);
     }
   }
 }
