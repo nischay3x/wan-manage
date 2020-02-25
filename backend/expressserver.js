@@ -170,6 +170,7 @@ class ExpressServer {
     try {
       // FIXME: temporary map the OLD routes
       this.app.use('/api/devices', require('./routes/devices'));
+      this.app.use('/api/devicestats', require('./routes/deviceStats'));
       this.app.use('/api/tunnels', require('./routes/tunnels'));
       this.app.use('/api/accounts', require('./routes/accounts').accountsRouter);
       this.app.use('/api/members', require('./routes/members'));
