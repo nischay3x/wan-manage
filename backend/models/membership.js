@@ -127,9 +127,7 @@ const preDefinedPermissions = {
     tokens: setPermission(1, 0, 0, 0),
     members: setPermission(1, 0, 0, 0),
     tunnels: setPermission(1, 0, 0, 0),
-    accesstokens: setPermission(0, 0, 0, 0)
-  },
-  organiz_manager: {
+    accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 0, 0, 0)
   },
   organization_manager: {
