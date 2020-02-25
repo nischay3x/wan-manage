@@ -1,18 +1,14 @@
 const logger = require('../logger');
 const controllers = require('../controllers');
 const Services = require('../services');
+const createError = require('http-errors');
 
 const { verifyPermissionEx } = require('../authenticate');
 
-function handleError(err, request, response, next) {
+function handleError (err, request, response, next) {
   logger.error(err);
   const code = err.code || 400;
-  response.status(code);
-  response.error = err;
-  next(JSON.stringify({
-    code,
-    error: err,
-  }));
+  return next(createError(code, err.error));
 }
 
 /**
