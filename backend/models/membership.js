@@ -59,6 +59,7 @@ const Permissions = new Schema({
 // Predefined permissions
 const preDefinedPermissions = {
   none: {
+    jobs: setPermission(0, 0, 0, 0),
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(0, 0, 0, 0),
     organizations: setPermission(0, 0, 0, 0),
@@ -70,6 +71,7 @@ const preDefinedPermissions = {
     notifications: setPermission(0, 0, 0, 0)
   },
   account_owner: {
+    jobs: setPermission(1, 1, 1, 1),
     billing: setPermission(1, 1, 0, 0),
     accounts: setPermission(1, 1, 1, 0),
     organizations: setPermission(1, 1, 1, 1),
@@ -81,6 +83,7 @@ const preDefinedPermissions = {
     notifications: setPermission(1, 1, 1, 1)
   },
   account_manager: {
+    jobs: setPermission(1, 1, 1, 1),
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(1, 0, 0, 0),
     organizations: setPermission(1, 1, 1, 1),
@@ -92,6 +95,7 @@ const preDefinedPermissions = {
     notifications: setPermission(1, 1, 1, 1)
   },
   account_viewer: {
+    jobs: setPermission(1, 0, 0, 0),
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(1, 0, 0, 0),
     organizations: setPermission(1, 0, 0, 0),
@@ -103,6 +107,7 @@ const preDefinedPermissions = {
     notifications: setPermission(1, 0, 0, 0)
   },
   group_manager: {
+    jobs: setPermission(1, 1, 1, 1),
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(0, 0, 0, 0),
     organizations: setPermission(1, 1, 1, 1),
@@ -114,6 +119,7 @@ const preDefinedPermissions = {
     notifications: setPermission(1, 1, 1, 1)
   },
   group_viewer: {
+    jobs: setPermission(1, 0, 0, 0),
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(0, 0, 0, 0),
     organizations: setPermission(1, 0, 0, 0),
@@ -127,6 +133,7 @@ const preDefinedPermissions = {
     notifications: setPermission(1, 0, 0, 0)
   },
   organization_manager: {
+    jobs: setPermission(1, 1, 1, 1),
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(0, 0, 0, 0),
     organizations: setPermission(1, 1, 1, 1),
@@ -138,6 +145,7 @@ const preDefinedPermissions = {
     notifications: setPermission(1, 1, 1, 1)
   },
   organization_viewer: {
+    jobs: setPermission(1, 0, 0, 0),
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(0, 0, 0, 0),
     organizations: setPermission(1, 0, 0, 0),
