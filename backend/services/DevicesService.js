@@ -137,6 +137,9 @@ class DevicesService {
         org: user.defaultOrg._id
       });
 
+      // TBD: remove from billing
+
+
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -186,6 +189,8 @@ class DevicesService {
       );
       await session.commitTransaction();
       session = null;
+
+      // TBD: Check to disconnect on device unapprove
 
       // Apply modify device action
       if (origDevice) {

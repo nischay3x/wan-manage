@@ -6,7 +6,6 @@ const configs = require('../configs.js')();
 const Tokens = require('../models/tokens');
 
 class TokensService {
-
   /**
    * Get all Tokens
    *
@@ -30,7 +29,7 @@ class TokensService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -52,7 +51,7 @@ class TokensService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -79,15 +78,10 @@ class TokensService {
    **/
   static async tokensIdPUT ({ id, tokenRequest }, { user }) {
     try {
-      await Tokens.update({
-        _id: id,
-        org: user.defaultOrg._id
-      }, { $set: tokenRequest }, { upsert: false, multi: false, runValidators: true, new: true });
-
-      const result = await Tokens.findOne({
-        _id: id,
-        org: user.defaultOrg._id
-      });
+      const result = await Tokens.findOneAndUpdate(
+        { _id: id, org: user.defaultOrg._id },
+        { tokenRequest },
+        { upsert: false, runValidators: true, new: true });
 
       const token = {
         _id: result.id,
@@ -110,7 +104,7 @@ class TokensService {
    * tokenRequest TokenRequest  (optional)
    * returns Token
    **/
-  static async tokensPOST({ tokenRequest }, { user }) {
+  static async tokensPOST ({ tokenRequest }, { user }) {
     try {
       const body = jwt.sign({
         org: user.defaultOrg._id.toString(),
@@ -131,11 +125,10 @@ class TokensService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
-
 }
 
 module.exports = TokensService;
