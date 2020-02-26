@@ -1699,76 +1699,202 @@ paths:
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
-  # /members:
-  #   get:
-  #     operationId: membersGET
-  #     parameters:
-  #     - description: The number of items to skip before starting to collect the result
-  #         set
-  #       explode: true
-  #       in: query
-  #       name: offset
-  #       required: false
-  #       schema:
-  #         type: integer
-  #       style: form
-  #     - description: The numbers of items to return
-  #       explode: true
-  #       in: query
-  #       name: limit
-  #       required: false
-  #       schema:
-  #         type: integer
-  #       style: form
-  #     responses:
-  #       "200":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               items:
-  #                 $ref: '#/components/schemas/Member'
-  #               type: array
-  #               x-content-type: application/json
-  #         description: Successful operation
-  #       "401":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unauthorized
-  #       "403":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Forbidden
-  #       "404":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: The specified resource was not found
-  #       "500":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Internal server error
-  #       default:
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unexpected error
-  #     security:
-  #     - bearerAuth: []
-  #     - apiKey: []
-  #     summary: Get all Members
-  #     tags:
-  #     - Members
-  #     x-swagger-router-controller: Members
-  #     x-openapi-router-controller: MembersController
-  #     x-openapi-router-service: MembersService
+  /members:
+    get:
+      operationId: membersGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Member'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get all Members
+      tags:
+      - Members
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
+
+  /members/{id}:
+    get:
+      operationId: membersIdGET
+      parameters:
+      - description: Numeric ID of the Member to retrieve
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Member'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get Member
+      tags:
+      - Members
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
+    put:
+      operationId: membersIdPUT
+      parameters:
+      - description: Numeric ID of the account to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          description: Successfull operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify member
+      tags:
+      - Members
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
   #   post:
   #     operationId: membersPOST
   #     requestBody:
@@ -1879,70 +2005,6 @@ paths:
   #     - apiKey: []
   #     - bearerAuth: []
   #     summary: Delete member
-  #     tags:
-  #     - Members
-  #     x-swagger-router-controller: Members
-  #     x-openapi-router-controller: MembersController
-  #     x-openapi-router-service: MembersService
-  #   put:
-  #     operationId: membersIdPUT
-  #     parameters:
-  #     - description: Numeric ID of the account to modify
-  #       explode: false
-  #       in: path
-  #       name: id
-  #       required: true
-  #       schema:
-  #         type: string
-  #       style: simple
-  #     requestBody:
-  #       content:
-  #         application/json:
-  #           schema:
-  #             $ref: '#/components/schemas/MemberRequest'
-  #     responses:
-  #       "200":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Member'
-  #         description: Successfull operation
-  #       "400":
-  #         description: Bad Request
-  #       "401":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unauthorized
-  #       "403":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Forbidden
-  #       "404":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: The specified resource was not found
-  #       "500":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Internal server error
-  #       default:
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unexpected error
-  #     security:
-  #     - apiKey: []
-  #     - bearerAuth: []
-  #     summary: Modify member
   #     tags:
   #     - Members
   #     x-swagger-router-controller: Members
@@ -2939,7 +3001,7 @@ components:
       example:
         progress: 1
         created_at: created_at
-        id: 0
+        _id: 0
         state: 5
         type: type
         priority: 6
@@ -2948,7 +3010,7 @@ components:
           made: 5
           remaining: 2
       properties:
-        id:
+        _id:
           type: integer
         type:
           type: string

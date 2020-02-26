@@ -182,7 +182,6 @@ class ExpressServer {
       this.app.use('/api/devicestats', require('./routes/deviceStats'));
       this.app.use('/api/tunnels', require('./routes/tunnels'));
       this.app.use('/api/accounts', require('./routes/accounts').accountsRouter);
-      this.app.use('/api/members', require('./routes/members'));
     } catch (error) {
       logger.error('Error: Can\'t connect OLD routes');
     }

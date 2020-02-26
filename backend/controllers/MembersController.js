@@ -17,8 +17,16 @@ class MembersController {
     await Controller.handleRequest(request, response, this.service.membersIdPUT);
   }
 
+  async membersIdGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.membersIdGET);
+  }
+
   async membersPOST(request, response) {
     await Controller.handleRequest(request, response, this.service.membersPOST);
+  }
+
+  async membersOptionsTypeGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.membersOptionsTypeGET);
   }
 
 }
