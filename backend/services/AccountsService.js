@@ -2,6 +2,7 @@
 const Service = require('./Service');
 
 const Accounts = require('../models/accounts');
+const Users = require('../models/users');
 const { getToken } = require('../tokens');
 const { getUserAccounts, orgUpdateFromNull } = require('../utils/membershipUtils');
 
@@ -82,6 +83,49 @@ class AccountsService {
         ...rest
       } = account.toObject();
       return Service.successResponse(rest);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
+  }
+
+  /**
+   * Select account
+   *
+   * selectAccountRequest SelectAccountRequest
+   * returns Account
+   **/
+  static async accountsSelectPOST({ accountSelectRequest }, { user }) {
+    try {
+      if (!user.defaultAccount || !user.defaultAccount._id || !user._id) {
+        return Service.rejectResponse(new Error('Error in selecting account'), 500);
+      }
+
+      // If current account not changed, return OK
+      if (user.defaultAccount._id.toString() === accountSelectRequest.account) {
+        return Service.successResponse({ _id: user.defaultAccount._id });
+      }
+
+      // Get organizations for the new account
+      const updUser = await Users.findOneAndUpdate(
+        // Query, use the email and account
+        { _id: user._id },
+        // Update account, set default org to null so the system
+        // will choose an organization on login if something failed
+        { defaultAccount: accountSelectRequest.account, defaultOrg: null },
+        // Options
+        { upsert: false, new: true }
+      )
+        .populate('defaultAccount');
+
+        // Set a default organization for the new account
+        user.defaultAccount = updUser.defaultAccount;
+        user.defaultOrg = null;
+
+        await orgUpdateFromNull(req, res);
+        return Service.successResponse({ _id: updUser.defaultAccount._id });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',

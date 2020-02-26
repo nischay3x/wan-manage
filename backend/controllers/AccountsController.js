@@ -17,6 +17,10 @@ class AccountsController {
     await Controller.handleRequest(request, response, this.service.accountsIdPUT);
   }
 
+  async accountsSelectPOST(request, response) {
+    await Controller.handleRequest(request, response, this.service.accountsSelectPOST);
+  }
+
   async accountsPOST(request, response) {
     await Controller.handleRequest(request, response, this.service.accountsPOST);
   }

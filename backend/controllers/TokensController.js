@@ -13,6 +13,10 @@ class TokensController {
     await Controller.handleRequest(request, response, this.service.tokensIdDELETE);
   }
 
+  async tokensIdGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.tokensIdGET);
+  }
+
   async tokensIdPUT(request, response) {
     await Controller.handleRequest(request, response, this.service.tokensIdPUT);
   }
