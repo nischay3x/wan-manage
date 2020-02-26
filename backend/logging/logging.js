@@ -143,9 +143,11 @@ const loggerFactory = (env) => {
       transports: [
         new transports.File({
           filename: configs.get('logFilePath'),
-          format: fileLogFormat
-        }),
-        new transports.Console({ format: consolLogFormat })
+          format: fileLogFormat,
+          maxsize: '300000000', // Max file size is 300MB
+          maxFiles: '5',
+          tailable: true
+        }), new transports.Console({ format: consolLogFormat })
       ]
     });
     return logger;

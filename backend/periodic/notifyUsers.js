@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const periodic = require('./periodic')();
 const notificationsMgr = require('../notifications/notifications')();
 
@@ -35,7 +36,7 @@ class NotifyUsers {
       name: 'notify_users',
       func: this.periodicNotifyUsers,
       handle: null,
-      period: 86400000 // Runs once a day
+      period: configs.get('unreadNotificationPeriod') // Period for sending unread notifications
     };
   }
 

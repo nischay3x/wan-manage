@@ -99,7 +99,7 @@ const Accounts = new Schema({
   // enable or disable notifications
   enableNotifications: {
     type: Boolean,
-    default: true
+    default: false
   },
   // logo file url. Not used
   logoFile: {

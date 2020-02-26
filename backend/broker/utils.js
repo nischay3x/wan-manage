@@ -31,11 +31,11 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'j
  * @return {void}
  */
 const sendMsg = (org, machineID, msg, job, curTask, tasksLength) => (inp, done) => {
-  logger.info('Starting new task', { params: { message: msg, input: inp }, job: job });
+  logger.debug('Starting new task', { params: { message: msg, input: inp }, job: job });
   connections.deviceSendMessage(org, machineID, msg)
     .then((rmsg) => {
       if (rmsg !== null && rmsg.ok === 1) {
-        logger.info('Finished task', { params: { message: msg, reply: rmsg }, job: job });
+        logger.debug('Finished task', { params: { message: msg, reply: rmsg }, job: job });
         job.progress(curTask, tasksLength);
         done(null, rmsg.message);
       } else {

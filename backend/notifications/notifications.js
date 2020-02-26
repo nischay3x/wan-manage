@@ -145,11 +145,21 @@ class NotificationsManager {
             emailAddresses,
             'Pending unread notifications',
             `<h2>flexiWAN Notification Reminder</h2>
-                <p>This email was sent to you since you have pending unread notifications.
-                    <br>To view the notifications, login to your
-                    account and check the 'Notifications' page.</br>
-                    <br>Your friends @ flexiWAN</br>
-                </p>`
+            <p style="font-size:16px">This email was sent to you since you have pending
+             unread notifications.
+            <br>To view the notifications, please check the
+            <a href="${configs.get('UIServerURL')}/notifications">Notifications</a>
+             page in your flexiMange account.</br>
+            </p>
+            <p style="font-size:14px;color:gray">Note: Unread notification email alerts
+             are sent to Account owners (not Users in Organization level).
+              You can disable these emails in the
+               <a href="${configs.get('UIServerURL')}/accounts/update">Account profile</a>
+               page in your flexiManage account. Alerts on new flexiEdge software versions
+               or billing information are always sent, regardless of the notifications settings.
+               More about notifications
+               <a href="https://docs.flexiwan.com/troubleshoot/notifications.html">here</a>.</p>
+            <p style="font-size:16px">Your friends @ flexiWAN</p>`
           );
 
           logger.info('User notifications reminder email sent', {

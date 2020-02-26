@@ -30,9 +30,13 @@ const configEnv = {
     // URL of the rest server
     restServerURL: 'https://local.flexiwan.com:3443',
     // URL of the UI server
-    UIServerURL: 'https://local.flexiwan.com:3443',
+    UIServerURL: 'https://local.flexiwan.com:3000',
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
     userTokenSecretKey: 'abcdefg1234567',
+    // Number of REST requests allowed in 5 min per IP address, more requests will be rate limited
+    userIpReqRateLimit: 300,
+    // Unread notification email period (in msec), a mail is sent once a period
+    unreadNotificationPeriod: 86400000,
     // The duration of the user JWT token in seconds
     userTokenExpiration: 300,
     // The duration of the user refresh token in seconds
@@ -117,7 +121,11 @@ const configEnv = {
     // Web hooks add user URL, used to send for new uses, '' to bypass hook
     webHookAddUserURL: '',
     // Web hooks add user secret, send in addition to the message for filtering
-    webHookAddUserSecret: 'ABC'
+    webHookAddUserSecret: 'ABC',
+    // Web hooks register device URL, used to send for new registered devices, '' to bypass hook
+    webHookRegisterDeviceURL: '',
+    // Web hooks register device secret, send in addition to the message for filtering
+    webHookRegisterDeviceSecret: 'ABC'
   },
 
   // Override for development environment, default environment if not specified
@@ -187,6 +195,8 @@ const configEnv = {
     shouldRedirectHTTPS: false,
     redirectHttpsPort: 443,
     userTokenExpiration: 300,
+    userIpReqRateLimit: 3000,
+    unreadNotificationPeriod: 300000,
     userRefreshTokenExpiration: 86400,
     agentBroker: 'appqa01.flexiwan.com:443',
     clientStaticDir: 'client/build',
@@ -219,6 +229,10 @@ class Configs {
     combinedConfig.redisUrl = process.env.REDIS_URL || combinedConfig.redisUrl;
     combinedConfig.webHookAddUserURL = process.env.WEBHOOK_ADD_USER_URL || combinedConfig.webHookAddUserURL;
     combinedConfig.webHookAddUserSecret = process.env.WEBHOOK_ADD_USER_KEY || combinedConfig.webHookAddUserSecret;
+    combinedConfig.webHookRegisterDeviceURL = process.env.WEBHOOK_REGISTER_DEVICE_URL ||
+      combinedConfig.webHookRegisterDeviceURL;
+    combinedConfig.webHookRegisterDeviceSecret = process.env.WEBHOOK_REGISTER_DEVICE_KEY ||
+      combinedConfig.webHookRegisterDeviceSecret;
 
     this.config_values = combinedConfig;
     console.log('Configuration used:\n' + JSON.stringify(this.config_values, null, 2));

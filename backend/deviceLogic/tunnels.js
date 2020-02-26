@@ -442,7 +442,7 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer) 
   paramsDeviceA['loopback-iface'] = {
     addr: tunnelParams.ip1 + '/31',
     mac: tunnelParams.mac1,
-    mtu: 1360,
+    mtu: 1350,
     routing: 'ospf'
   };
 
@@ -467,7 +467,7 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer) 
   paramsDeviceB['loopback-iface'] = {
     addr: tunnelParams.ip2 + '/31',
     mac: tunnelParams.mac2,
-    mtu: 1360,
+    mtu: 1350,
     routing: 'ospf'
   };
 

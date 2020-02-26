@@ -74,7 +74,7 @@ const validatePciAddress = pci => {
   );
 };
 const validateIfcName = (name) => { return /^[a-zA-Z0-9_]{1,15}$/i.test(name || ''); };
-const validateDriverName = (name) => { return /^[a-z0-9-]{1,30}$/i.test(name || ''); };
+const validateDriverName = (name) => { return /^[a-z0-9_-]{1,30}$/i.test(name || ''); };
 const validateMacAddress = mac => {
   return /^(([A-F0-9]{2}:){5}[A-F0-9]{2})|(([A-F0-9]{2}-){5}[A-F0-9]{2})$/i.test(
     mac

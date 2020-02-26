@@ -93,7 +93,8 @@ app.set('trust proxy', true); // Needed to get the public IP if behind a proxy
 //     description:
 //       'This is the REST API for flexiWAN management. ' +
 //       // eslint-disable-next-line max-len
-//       'Full swagger.json file: <a href="./swagger.json" target="_blank" rel="noopener noreferrer">' +
+//       'Full swagger.json file:
+//          <a href="./swagger.json" target="_blank" rel="noopener noreferrer">' +
 //       'swagger.json</a>'
 //   },
 //   components: {},
@@ -146,14 +147,15 @@ app.all('*', (req, res, next) => {
 const inMemoryStore = new RateLimitStore(5 * 60 * 1000);
 const rateLimiter = rateLimit({
   store: inMemoryStore,
-  max: 300, // Up to 300 request per IP address
+  max: configs.get('userIpReqRateLimit'), // Rate limit for requests in 5 min per IP address
   message: 'Request rate limit exceeded',
   onLimitReached: (req, res, options) => {
     logger.error(
       'Request rate limit exceeded. blocking request', {
         params: { ip: req.ip },
         req: req
-      });
+      }
+    );
   }
 });
 app.use(rateLimiter);
