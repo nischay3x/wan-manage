@@ -677,6 +677,66 @@ paths:
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
   /devices/{id}:
+    get:
+      operationId: devicesIdGET
+      parameters:
+      - description: Numeric ID of the Device to retrieve
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Device'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get Device
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
     delete:
       operationId: devicesIdDELETE
       parameters:
@@ -751,10 +811,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Device'
+                items:
+                  $ref: '#/components/schemas/Device'
+                type: array
+                x-content-type: application/json
           description: Successful operation
-        "400":
-          description: Bad Request
         "401":
           content:
             application/json:
@@ -1769,6 +1830,67 @@ paths:
       x-swagger-router-controller: Members
       x-openapi-router-controller: MembersController
       x-openapi-router-service: MembersService
+    post:
+      operationId: membersPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Member'
+          description: Member has been added
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Create new member
+      tags:
+      - Members
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
 
   /members/{id}:
     get:
@@ -1895,121 +2017,122 @@ paths:
       x-swagger-router-controller: Members
       x-openapi-router-controller: MembersController
       x-openapi-router-service: MembersService
-  #   post:
-  #     operationId: membersPOST
-  #     requestBody:
-  #       content:
-  #         application/json:
-  #           schema:
-  #             $ref: '#/components/schemas/MemberRequest'
-  #     responses:
-  #       "201":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Member'
-  #         description: Member has been added
-  #         headers:
-  #           Location:
-  #             description: Location of a new resource created
-  #             explode: false
-  #             required: true
-  #             schema:
-  #               type: string
-  #             style: simple
-  #       "400":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Bad Request
-  #       "401":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unauthorized
-  #       "403":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Forbidden
-  #       "500":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Internal server error
-  #       default:
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unexpected error
-  #     security:
-  #     - bearerAuth: []
-  #     - apiKey: []
-  #     summary: Create new member
-  #     tags:
-  #     - Members
-  #     x-swagger-router-controller: Members
-  #     x-openapi-router-controller: MembersController
-  #     x-openapi-router-service: MembersService
-  # /members/{id}:
-  #   delete:
-  #     operationId: membersIdDELETE
-  #     parameters:
-  #     - description: Numeric ID of the Member to delete
-  #       explode: false
-  #       in: path
-  #       name: id
-  #       required: true
-  #       schema:
-  #         type: string
-  #       style: simple
-  #     responses:
-  #       "204":
-  #         description: Successfull operation
-  #       "401":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unauthorized
-  #       "403":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Forbidden
-  #       "404":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: The specified resource was not found
-  #       "500":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Internal server error
-  #       default:
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unexpected error
-  #     security:
-  #     - apiKey: []
-  #     - bearerAuth: []
-  #     summary: Delete member
-  #     tags:
-  #     - Members
-  #     x-swagger-router-controller: Members
-  #     x-openapi-router-controller: MembersController
-  #     x-openapi-router-service: MembersService
+    delete:
+      operationId: membersIdDELETE
+      parameters:
+      - description: Numeric ID of the Member to delete
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Successfull operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete member
+      tags:
+      - Members
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
+
+  /members/options/{type}:
+    get:
+      operationId: membersOptionsTypeGET
+      parameters:
+      - description: Numeric ID of the Member to retrieve
+        explode: false
+        in: path
+        name: type
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Member'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get Member
+      tags:
+      - Members
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
+
   # /users/login:
   #   post:
   #     operationId: usersLoginPOST

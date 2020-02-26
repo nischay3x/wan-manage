@@ -108,6 +108,23 @@ class DevicesService {
   }
 
   /**
+   * Retrieve device
+   *
+   * id String Numeric ID of the Device to retrieve
+   * Returns Device
+   **/
+  static async devicesIdGET({ id }, { user }) {
+    try {
+      return Service.successResponse({});
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
+  }
+
+  /**
    * Delete device
    *
    * id String Numeric ID of the Device to delete
