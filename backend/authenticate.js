@@ -245,7 +245,11 @@ exports.verifyPermission = function (accessType, restCommand) {
 
 exports.verifyPermissionEx = function (serviceName, { method, user }) {
   const accessType = serviceName.replace('Service', '').toLowerCase();
-  const restCommand = method.toLowerCase();
+  let restCommand = method.toLowerCase();
+
+  if (restCommand === "delete") {
+    restCommand = "del";
+  }
 
   return (user.perms[accessType] & permissionMasks[restCommand]);
 };
