@@ -14,6 +14,7 @@ const mailer = require('../utils/mailer')(
 const webHooks = require('../utils/webhooks')();
 
 const Users = require('../models/users');
+const Accounts = require('../models/accounts');
 const Organizations = require('../models/organizations');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
@@ -267,6 +268,11 @@ class MembersService {
     }
   }
 
+  /**
+   * Retrieve Member
+   * id String numeric ID of the account to modify
+   * returns Member
+   */
   static async membersIdGET({ id }, { user }) {
     let userPromise = null;
     // Check the user permission:
@@ -329,14 +335,14 @@ class MembersService {
 
       // Don't allow to delete self
       if (user._id.toString() === membershipData.user.toString()) {
-        return next(createError(400, 'User cannot delete itself'));
+        return Service.rejectResponse(new Error('User cannot delete itself'), 400);
       }
 
       // Check that current user is allowed to delete member
-      const verified = await checkMemberLevel(membershipData.to, membershipData.role,
+      const verified = await MembersService.checkMemberLevel(membershipData.to, membershipData.role,
         (membershipData.to === 'organization') ? membershipData.organization : membershipData.group,
         user._id, user.defaultAccount._id);
-      if (!verified) return next(createError(400, 'No sufficient permissions for this operation'));
+      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
 
       // Check that the account have at least one owner
       if (membershipData.to === 'account' && membershipData.role === 'owner') {
@@ -346,7 +352,7 @@ class MembersService {
           role: 'owner'
         });
         if (numAccountOwners < 2) {
-          return next(createError(400, 'Account must have at least one owner'));
+          return Service.rejectResponse(new Error('Account must have at least one owner'), 400);
         }
       }
 
@@ -358,7 +364,7 @@ class MembersService {
         account: user.defaultAccount._id
       });
 
-      return res.status(200).json({ ok: 1 });
+      return Service.successResponse();
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
@@ -378,7 +384,7 @@ class MembersService {
 
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
-      if (checkParams.status === false) return next(createError(400, checkParams.error));
+      if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
       // Check if user don't add itself
       if (user.email === memberRequest.email) {
@@ -393,7 +399,7 @@ class MembersService {
         user._id,
         user.defaultAccount._id
       );
-      if (!verified) return next(createError(400, 'No sufficient permissions for this operation'));
+      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
 
       // Add user
       let registerUser = null;
@@ -505,6 +511,42 @@ class MembersService {
         e.status || 405,
       );
     }
+  }
+
+
+  static async membersOptionsTypeGET({ type }, { user }) {
+    if (type === 'account') {
+      return Service.successResponse([{
+        id: user.defaultAccount._id,
+        value: user.defaultAccount.name
+      }]);
+    }
+
+    let optionFiled = '';
+    if (type === 'group') optionFiled = 'group';
+    else if (type === 'organization') optionFiled = 'name';
+
+    // TBD:
+    // Show only organizations valid for user
+
+    const account = await Accounts.find({ _id: user.defaultAccount._id }).populate('organizations');
+
+    const uniques = {};
+    account[0].organizations.forEach((org) => {
+      uniques[type === 'organization' ? org._id : org[optionFiled]] =
+        org[optionFiled];
+    });
+    const result = Object.keys(uniques).map((key) => {
+      return {
+        id: key,
+        value: uniques[key]
+      };
+    });
+    return Service.successResponse(result);
+      // .catch((err) => {
+      //   logger.error('Error getting member options', { params: { reason: err.message } });
+      //   return next(createError(500, 'Error getting member options'));
+      // });
   }
 
 }
