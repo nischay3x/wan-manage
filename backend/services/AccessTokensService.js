@@ -49,7 +49,7 @@ class AccessTokensService {
         org: user.defaultOrg._id
       });
 
-      return Service.successResponse(null, 204);
+      return Service.successResponse();
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',

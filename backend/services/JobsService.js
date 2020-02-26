@@ -65,7 +65,7 @@ class JobsService {
       });
 
       await deviceQueues.removeJobIdsByOrg(user.defaultOrg._id.toString(), [id]);
-      return Service.successResponse(204);
+      return Service.successResponse();
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',

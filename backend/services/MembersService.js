@@ -15,7 +15,17 @@ const webHooks = require('../utils/webhooks')();
 
 const Users = require('../models/users');
 const Organizations = require('../models/organizations');
+const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
+
+const pick = (...keys) => obj => keys.reduce((a, e) => {
+  const objKeys = e.split('.');
+  let val = obj[objKeys[0]];
+  for (let i = 1; i < objKeys.length; i++) {
+    if (val && val[objKeys[i]]) val = val[objKeys[i]]; else val = null;
+  };
+  return { ...a, [objKeys.join('_')]: val };
+}, {});
 
 class MembersService {
 
@@ -151,7 +161,7 @@ class MembersService {
           .populate('account')
           .populate('organization');
 
-        const response = memList.map(mem =>
+        const response = await memList.map(mem =>
           pick(
             '_id',
             'user._id',
@@ -187,173 +197,122 @@ class MembersService {
    **/
   static async membersIdPUT({ id, memberRequest }, { user }) {
     try {
-
       // Check that input parameters are OK
-      const checkParams = checkMemberParameters(req);
-      if (checkParams.status === false) return next(createError(400, checkParams.error));
-
-      // Check if user don't add itself
-      if (user.email === req.body.email) {
-        return next(createError(500, 'You can not add yourself'));
-      }
+      const checkParams = MembersService.checkMemberParameters(memberRequest, user);
+      if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400); //next(createError(400, checkParams.error));
 
       // make sure user is only allow to define membership under his view
-      const verified = await checkMemberLevel(
-        req.body.userPermissionTo,
-        req.body.userRole,
-        req.body.userEntity,
+      const verified = await MembersService.checkMemberLevel(
+        memberRequest.userPermissionTo,
+        memberRequest.userRole,
+        memberRequest.userEntity,
         user._id,
         user.defaultAccount._id
       );
-      if (!verified) return next(createError(400, 'No sufficient permissions for this operation'));
+      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
 
-      // Add user
-      let session = null;
-      let registerUser = null;
-      let existingUser = null;
-      const resetPWKey = randomKey(30);
-      mongoConns.getMainDB().startSession()
-        .then((_session) => {
-          session = _session;
-          return session.startTransaction();
-        })
-      // Create a new unverified user
-      // Associate to account and current organization
-        .then(async () => {
-          // Check if user exists
-          existingUser = await User.findOne({ username: req.body.email });
-          if (!existingUser) {
-            registerUser = new User({
-              username: req.body.email,
-              name: req.body.userFirstName,
-              lastName: req.body.userLastName,
-              email: req.body.email,
-              jobTitle: req.body.userJobTitle,
-              phoneNumber: '',
-              admin: false,
-              state: 'unverified',
-              emailTokens: { verify: '', invite: '', resetPassword: resetPWKey },
-              defaultAccount: user.defaultAccount._id,
-              defaultOrg: req.body.userPermissionTo === 'organization' ? req.body.userEntity : null
-              // null will try to find a valid organization on login
-            });
-            return registerUser.validate();
+      // Update
+      const member = await membership.findOneAndUpdate(
+        { _id: memberRequest._id, account: user.defaultAccount._id },
+        {
+          $set: {
+            group: memberRequest.userPermissionTo === 'group' ? memberRequest.userEntity : '',
+            organization: memberRequest.userPermissionTo === 'organization' ? memberRequest.userEntity : null,
+            to: memberRequest.userPermissionTo,
+            role: memberRequest.userRole,
+            perms: preDefinedPermissions[memberRequest.userPermissionTo + '_' + memberRequest.userRole]
           }
-          return Promise.resolve();
-        })
-      // Set random password for that user
-        .then(() => {
-          if (registerUser) {
-            const randomPass = randomKey(10);
-            return registerUser.setPassword(randomPass);
-          } else return Promise.resolve();
-        })
-        .then(() => {
-          return membership.create([{
-            user: (existingUser) ? existingUser._id : registerUser._id,
-            account: user.defaultAccount._id,
-            group: req.body.userPermissionTo === 'group' ? req.body.userEntity : '',
-            organization: req.body.userPermissionTo === 'organization' ? req.body.userEntity : null,
-            to: req.body.userPermissionTo,
-            role: req.body.userRole,
-            perms: preDefinedPermissions[req.body.userPermissionTo + '_' + req.body.userRole]
-          }], { session: session });
-        })
-        .then(() => {
-          if (registerUser) {
-            registerUser.$session(session);
-            return registerUser.save();
-          } else return Promise.resolve();
-        })
-      // Send email
-        .then(() => {
-          const p = mailer.sendMailHTML(
-            'noreply@flexiwan.com',
-            req.body.email,
-            'You are invited to a flexiWAN Account',
-            (`<h2>flexiWAN Account Invitation</h2>
-            <b>You have been invited to a flexiWAN
-            ${req.body.userPermissionTo}. </b>`) + ((registerUser)
-              ? `<b>Click below to set your password</b>
-            <p><a href="${configs.get('UIServerURL')}/reset-password?
-              email=${req.body.email}&t=${resetPWKey}">
-              <button style="color:#fff;background-color:#F99E5B;
-              border-color:#F99E5B;font-weight:400;text-align:center;
-              vertical-align:middle;border:1px solid transparent;
-              padding:.375rem .75rem;font-size:1rem;
-              line-height:1.5;border-radius:.25rem;
-              cursor:pointer">Set Password</button></a></p>`
-              : '<b>You can use your current account credentials to access it</b>') +
-          ('<p>Your friends @ flexiWAN</p>'));
-          return p;
-        })
-        .then(() => {
-          return session.commitTransaction();
-        })
-        .then(async () => {
-          // Session committed, set to null
-          session = null;
-          // Send webhooks only for users invited as account owners
-          // changing the user role later will not send another hook
-          if (req.body.userPermissionTo === 'account' && req.body.userRole === 'owner') {
-            // Trigger web hook
-            const webHookMessage = {
-              account: user.defaultAccount.name,
-              firstName: (existingUser) ? existingUser.name : req.body.userFirstName,
-              lastName: (existingUser) ? existingUser.lastName : req.body.userLastName,
-              email: req.body.email,
-              country: user.defaultAccount.country,
-              jobTitle: (existingUser) ? existingUser.jobTitle : req.body.userJobTitle,
-              phoneNumber: (existingUser) ? existingUser.phoneNumber : '',
-              companySize: user.defaultAccount.companySize,
-              usageType: user.defaultAccount.serviceType,
-              numSites: user.defaultAccount.numSites,
-              companyType: '',
-              companyDesc: '',
-              state: (existingUser) ? existingUser.state : 'unverified'
-            };
-            if (!await webHooks.sendToWebHook(configs.get('webHookAddUserURL'),
-              webHookMessage,
-              configs.get('webHookAddUserSecret'))) {
-              logger.error('Web hook call failed', { params: { message: webHookMessage } });
-            }
-          } else {
-            logger.info('New invited user, webhook not sent - not account owner', {
-              params: {
-                email: req.body.email,
-                to: req.body.userPermissionTo,
-                role: req.body.userRole
-              }
-            });
-          }
-          // Always resolve
-          return Promise.resolve(true);
-        })
-        .then(() => {
-          return res
-            .status(200)
-            .json({
-              name: req.body.userFirstName,
-              email: req.body.email,
-              status: 'user invited'
-            });
-        })
-        .catch((err) => {
-          if (session) session.abortTransaction();
-          logger.error('User Invitation Failure', { params: { reason: err.message } });
-          const fErr = formatErr(err, req.body);
-          return next(createError(fErr.status, fErr.error));
-        });
+        },
+        { upsert: false, new: true, runValidators: true })
+        .populate('user')
+        .populate('account')
+        .populate('organization');
 
-      return Service.successResponse('');
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+      // Verify if default organization still accessible by the
+      // user after the change, if not switch to another org
+      const _user = await Users.findOne({ _id: memberRequest.userId }).populate('defaultAccount');
+      if (_user.defaultAccount._id.toString() === _user.defaultAccount._id.toString()) {
+        const orgs = await getUserOrganizations(_user);
+        const org = orgs[_user.defaultOrg];
+        if (!org) {
+          // Get the first org available for this user
+          const org0 = orgs[Object.keys(orgs)[0]] || null;
+          await Users.updateOne({ _id: memberRequest.userId }, { defaultOrg: org0._id });
+        }
+      }
+
+      return Service.successResponse(
+        pick(
+          '_id',
+          'user._id',
+          'user.name',
+          'user.email',
+          'to',
+          'account.name',
+          'account._id',
+          'group',
+          'organization.name',
+          'organization._id',
+          'role'
+        )(member)
       );
+    } catch (err) {
+      logger.error('Error updating user', {
+        params: {
+          memberId: req.params.memberId,
+          reason: err.message
+        }
+      });
+      return Service.rejectResponse(err, 400); // next(createError(400, err.message));
     }
   }
 
+  static async membersIdGET({ id }, { user }) {
+    let userPromise = null;
+    // Check the user permission:
+    // Account owners or members should be able to see all account users
+    // + groups + all organizations users. Organization members should
+    //  be able to see all organization users
+    if (user.perms.accounts & permissionMasks.get) {
+      userPromise = membership.find({
+        _id: id,
+        account: user.defaultAccount._id
+      });
+    } else if (user.perms.organizations & permissionMasks.get) {
+      userPromise = membership.find({
+        _id: id,
+        account: user.defaultAccount._id,
+        $or: [{
+          to: 'organization',
+          organization: user.defaultOrg._id
+        }, {
+          to: 'group',
+          group: user.defaultOrg.group
+        }]
+      });
+    }
+
+    if (userPromise) {
+      const memList = await userPromise.populate('user').populate('account').populate('organization');
+      let response = await memList.map(mem => pick(
+        '_id',
+        'user._id',
+        'user.name',
+        'user.email',
+        'to',
+        'account.name',
+        'account._id',
+        'group',
+        'organization.name',
+        'organization._id',
+        'role')(mem)
+      );
+
+      return Service.successResponse(response, 200);
+    } else {
+      return Service.successResponse([]);
+    }
+  }
   /**
    * Delete member
    *
