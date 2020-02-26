@@ -57,6 +57,19 @@ class TokensService {
     }
   }
 
+  static async tokensIdGET({ id }, { user }) {
+    try {
+      const token = await Tokens.findOne({ _id: id, org: user.defaultOrg._id });
+
+      return Service.successResponse([token]);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
+  }
+
   /**
    * Modify a token
    *

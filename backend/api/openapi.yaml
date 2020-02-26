@@ -145,6 +145,60 @@ paths:
       x-openapi-router-controller: TokensController
       x-openapi-router-service: TokensService
   /tokens/{id}:
+    get:
+      operationId: tokensIdGET
+      parameters:
+      - description: Numeric ID of the Token to retrieve
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Token'
+                type: array
+                x-content-type: application/json
+          description: Successfull operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Tokens
+      tags:
+      - Tokens
+      x-swagger-router-controller: Tokens
+      x-openapi-router-controller: TokensController
+      x-openapi-router-service: TokensService
     delete:
       operationId: tokensIdDELETE
       parameters:
@@ -1891,7 +1945,6 @@ paths:
       x-swagger-router-controller: Members
       x-openapi-router-controller: MembersController
       x-openapi-router-service: MembersService
-
   /members/{id}:
     get:
       operationId: membersIdGET
@@ -2070,7 +2123,6 @@ paths:
       x-swagger-router-controller: Members
       x-openapi-router-controller: MembersController
       x-openapi-router-service: MembersService
-
   /members/options/{type}:
     get:
       operationId: membersOptionsTypeGET
@@ -2276,76 +2328,138 @@ paths:
   #     x-swagger-router-controller: Users
   #     x-openapi-router-controller: UsersController
   #     x-openapi-router-service: UsersService
-  # /accounts:
-  #   get:
-  #     operationId: accountsGET
-  #     parameters:
-  #       - description: The number of items to skip before starting to collect the result
-  #           set
-  #         explode: true
-  #         in: query
-  #         name: offset
-  #         required: false
-  #         schema:
-  #           type: integer
-  #         style: form
-  #       - description: The numbers of items to return
-  #         explode: true
-  #         in: query
-  #         name: limit
-  #         required: false
-  #         schema:
-  #           type: integer
-  #         style: form
-  #     responses:
-  #       "200":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               items:
-  #                 $ref: '#/components/schemas/Account'
-  #               type: array
-  #               x-content-type: application/json
-  #         description: Successful operation
-  #       "401":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unauthorized
-  #       "403":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Forbidden
-  #       "404":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: The specified resource was not found
-  #       "500":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Internal server error
-  #       default:
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unexpected error
-  #     security:
-  #     - bearerAuth: []
-  #     - apiKey: []
-  #     summary: Get all Accounts
-  #     tags:
-  #     - Accounts
-  #     x-swagger-router-controller: Accounts
-  #     x-openapi-router-controller: AccountsController
-  #     x-openapi-router-service: AccountsService
+  /accounts:
+    get:
+      operationId: accountsGET
+      parameters:
+        - description: The number of items to skip before starting to collect the result
+            set
+          explode: true
+          in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+          style: form
+        - description: The numbers of items to return
+          explode: true
+          in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+          style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Account'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get all Accounts
+      tags:
+      - Accounts
+      x-swagger-router-controller: Accounts
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
+  /accounts/select:
+    post:
+      operationId: accountsSelectPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountSelectRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+          description: Account has been selected
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Select account
+      tags:
+      - Accounts
+      x-swagger-router-controller: Accounts
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
 
   #   post:
   #     operationId: accountsPOST
@@ -2408,118 +2522,118 @@ paths:
   #     x-swagger-router-controller: Accounts
   #     x-openapi-router-controller: AccountsController
   #     x-openapi-router-service: AccountsService
-  # /accounts/{id}:
-  #   get:
-  #     operationId: accountsIdGET
-  #     parameters:
-  #     - description: Numeric ID of the Account to retrieve information
-  #       explode: false
-  #       in: path
-  #       name: id
-  #       required: true
-  #       schema:
-  #         type: string
-  #       style: simple
-  #     responses:
-  #       "200":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Account'
-  #         description: Successful operation
-  #       "400":
-  #         description: Bad Request
-  #       "401":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unauthorized
-  #       "403":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Forbidden
-  #       "500":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Internal server error
-  #     security:
-  #     - bearerAuth: []
-  #     - apiKey: []
-  #     summary: Retrieve account information
-  #     tags:
-  #     - Accounts
-  #     x-swagger-router-controller: Accounts
-  #     x-openapi-router-controller: AccountsController
-  #     x-openapi-router-service: AccountsService
-  #   put:
-  #     operationId: accountsIdPUT
-  #     parameters:
-  #     - description: Numeric ID of the Account to modify
-  #       explode: false
-  #       in: path
-  #       name: id
-  #       required: true
-  #       schema:
-  #         type: string
-  #       style: simple
-  #     requestBody:
-  #       content:
-  #         application/json:
-  #           schema:
-  #             $ref: '#/components/schemas/AccountRequest'
-  #     responses:
-  #       "200":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Account'
-  #         description: Successful operation
-  #       "400":
-  #         description: Bad Request
-  #       "401":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unauthorized
-  #       "403":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Forbidden
-  #       "404":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: The specified resource was not found
-  #       "500":
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Internal server error
-  #       default:
-  #         content:
-  #           application/json:
-  #             schema:
-  #               $ref: '#/components/schemas/Error'
-  #         description: Unexpected error
-  #     security:
-  #     - bearerAuth: []
-  #     - apiKey: []
-  #     summary: Modify account information
-  #     tags:
-  #     - Accounts
-  #     x-swagger-router-controller: Accounts
-  #     x-openapi-router-controller: AccountsController
-  #     x-openapi-router-service: AccountsService
+  /accounts/{id}:
+    get:
+      operationId: accountsIdGET
+      parameters:
+      - description: Numeric ID of the Account to retrieve information
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Retrieve account information
+      tags:
+      - Accounts
+      x-swagger-router-controller: Accounts
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
+    put:
+      operationId: accountsIdPUT
+      parameters:
+      - description: Numeric ID of the Account to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Modify account information
+      tags:
+      - Accounts
+      x-swagger-router-controller: Accounts
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
   /organizations:
     get:
       operationId: organizationsGET
@@ -3191,7 +3305,7 @@ components:
         - labels
         - labels
         site: site
-        hostname: true
+        hostname: host01
         machineId: machineId
         versions:
           agent: agent
@@ -3228,7 +3342,7 @@ components:
         pendingDevModification:
           type: boolean
         hostname:
-          type: boolean
+          type: string
         deviceStatus:
           type: boolean
         deviceToken:
@@ -3302,7 +3416,7 @@ components:
         - labels
         machineId: machineId
         site: site
-        hostname: true
+        hostname: host01
         versions:
           agent: agent
           router: router
@@ -3348,7 +3462,7 @@ components:
         pendingDevModification:
           type: boolean
         hostname:
-          type: boolean
+          type: string
         deviceStatus:
           type: boolean
         deviceToken:
@@ -3810,6 +3924,13 @@ components:
           type: integer
         acceptTerms:
           type: boolean
+      type: object
+    AccountSelectRequest:
+      example:
+        account: "12345678890"
+      properties:
+        account:
+          type: string
       type: object
     CommandRequest:
       example:
