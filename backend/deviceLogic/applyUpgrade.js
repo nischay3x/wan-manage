@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2019-2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -23,7 +23,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { devices } = require('../models/devices');
-const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 /**
  * Queues upgrade jobs to a list of devices.
@@ -61,64 +61,57 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
 /**
  * Applies the upgrade request on all requested devices
  * @async
- * @param  {Array}    deviceList an array of devices to upgrade
- * @param  {Object}   req        express request object
- * @param  {Object}   res        express response object
- * @param  {Callback} next       express next() callback
- * @return {void}
+ * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Object}   user      User object
+ * @param  {Object}   data      Additional data used by caller
+ * @return {None}
  */
-const apply = async (deviceList, req, res, next) => {
+const apply = async (devices, user, data) => {
   // If the apply method was called for multiple devices, extract
   // only the devices that appear in the body. If it was called for
   // a single device, simply used the first device in the devices array.
   let opDevices;
-  if (req.body.devices) {
-    const selectedDevices = req.body.devices;
-    opDevices = (deviceList && selectedDevices)
-      ? deviceList.filter((device) => {
+  if (data.devices) {
+    const selectedDevices = data.devices;
+    opDevices = (devices && selectedDevices)
+      ? devices.filter((device) => {
         const inSelected = selectedDevices.hasOwnProperty(device._id);
         return !!inSelected;
       }) : [];
   } else {
-    opDevices = deviceList;
+    opDevices = devices;
   }
 
-  try {
-    // Filter out devices that already have
-    // a pending upgrade job in the queue.
-    opDevices = await devices.find({
-      $and: [
-        { _id: { $in: opDevices } },
-        { 'upgradeSchedule.jobQueued': { $ne: true } }
-      ]
-    },
-    '_id machineId hostname'
-    );
+  // Filter out devices that already have
+  // a pending upgrade job in the queue.
+  opDevices = await devices.find({
+    $and: [
+      { _id: { $in: opDevices } },
+      { 'upgradeSchedule.jobQueued': { $ne: true } }
+    ]
+  },
+  '_id machineId hostname'
+  );
 
-    const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
-    const version = swUpdater.getLatestDevSwVersion();
-    const user = req.user.username;
-    const org = req.user.defaultOrg._id.toString();
-    const jobResults = await queueUpgradeJobs(opDevices, user, org, version);
-    jobResults.forEach(job => {
-      logger.info('Upgrade device job queued', {
-        params: { jobId: job.id, version: version },
-        job: job,
-        req: req
-      });
+  const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
+  const version = swUpdater.getLatestDevSwVersion();
+  const userName = user.username;
+  const org = user.defaultOrg._id.toString();
+  const jobResults = await queueUpgradeJobs(opDevices, userName, org, version);
+  jobResults.forEach(job => {
+    logger.info('Upgrade device job queued', {
+      params: { jobId: job.id, version: version },
+      job: job
     });
+  });
 
-    // Set the upgrade job pending flag for all devices.
-    // This prevents queuing additional upgrade tasks as long
-    // as there's a pending upgrade task in a device's queue.
-    const deviceIDs = opDevices.map(dev => { return dev._id; });
-    await setQueuedUpgradeFlag(deviceIDs, org, true);
-
-    return res.status(200).send({});
-  } catch (err) {
-    return next(err);
-  }
+  // Set the upgrade job pending flag for all devices.
+  // This prevents queuing additional upgrade tasks as long
+  // as there's a pending upgrade task in a device's queue.
+  const deviceIDs = opDevices.map(dev => { return dev._id; });
+  await setQueuedUpgradeFlag(deviceIDs, org, true);
 };
+
 /**
  * Sets the value of the pending upgrade flag in the database.
  * The pending upgrade flag indicates if a pending upgrade job

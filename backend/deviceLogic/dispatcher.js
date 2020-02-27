@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2019-2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -16,7 +16,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // File used to dispatch the apply logic to the right function
-const createError = require('http-errors');
 const start = require('./start');
 const stop = require('./stop');
 const modify = require('./modifyDevice');
@@ -29,7 +28,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 
-const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 /**
  * Holds the apply, complete, error and remove callbacks for each device task
@@ -88,22 +87,26 @@ Object.entries(methods).forEach(([method, functions]) => {
 });
 /**
  * Calls the apply method for to the method
- * specified in the req.body object.
+ *
  * @param  {Array}    devices     an array of devices
- * @param  {Object}   req         express request object
- * @param  {Object}   res         express response object
- * @param  {Callback} next        express next() callback
+ * @param  {String}   method      apply methond to execute
+ * @param  {Object}   user        User data
  * @param  {Object}   data=null   additional data per caller's choice
  * @return {void}
  */
-const apply = (devices, req, res, next, data = null) => {
-  logger.info('Apply method called', { params: { method: req.body.method || null }, req: req });
-  const method = methods.hasOwnProperty(req.body.method)
-    ? methods[req.body.method].apply : null;
-  if (!method) {
-    return next(createError(400, 'Apply method not found'));
-  }
-  return method(devices, req, res, next, data);
+const apply = (devices, method, user, data = null) => {
+  return async () => {
+    logger.info('Apply method called', {
+      params: { method: method || null, user: user, data: data }
+    });
+    const methodFunc = methods.hasOwnProperty(method)
+      ? methods[method].apply : null;
+    if (!methodFunc) {
+      throw new Error('Apply method not found');
+    }
+    const job = await methodFunc(devices, user, data);
+    return job;
+  };
 };
 
 /**

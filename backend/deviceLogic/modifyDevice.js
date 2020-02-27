@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2019-2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -77,6 +77,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
   );
 
   logger.info('Modify device job queued', { params: { job: job } });
+  return job;
 };
 /**
  * Performs required tasks before device modification
@@ -86,7 +87,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
  * @param  {Object}  messageParams device changes that will be sent to the device
  * @param  {string}  user          the user that created the request
  * @param  {string}  org           organization to which the user belongs
- * @return {Promise}               a promise for queuing a modify-device job
+ * @return {Job}                   The queued modify-device job
  */
 const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   const removedTunnels = [];
@@ -177,7 +178,8 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
     messageParams.reconnect = true;
   }
   const tasks = [{ entity: 'agent', message: 'modify-device', params: messageParams }];
-  await queueJob(org, user, tasks, device, removedTunnels);
+  const job = await queueJob(org, user, tasks, device, removedTunnels);
+  return job;
 };
 /**
  * Reconstructs tunnels that were removed before
@@ -265,16 +267,14 @@ const rollBackDeviceChanges = async (origDevice) => {
  * it then creates an object with the changes and calls
  * queueModifyDeviceJob() to queue the job to the device.
  * @async
- * @param  {Array}    device an array of the devices to be modified
- * @param  {Object}   req    express request object
- * @param  {Object}   res    express response object
- * @param  {Callback} next   express next() callback
- * @param  {Object}   data   data specific to the modify-device apply method
- * @return {Promise}         a promise for applying modify-device request
+ * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Object}   user      User object
+ * @param  {Object}   data      Additional data used by caller
+ * @return {None}
  */
-const apply = async (device, req, res, next, data) => {
-  const user = req.user.username;
-  const org = req.user.defaultOrg._id.toString();
+const apply = async (device, user, data) => {
+  const userName = user.username;
+  const org = user.defaultOrg._id.toString();
   const modifyParams = {};
 
   // Create the default route modification parameters
@@ -415,7 +415,7 @@ const apply = async (device, req, res, next, data) => {
         throw (new Error(err));
       }
       await setJobPendingInDB(device[0]._id, org, true);
-      await queueModifyDeviceJob(device[0], modifyParams, user, org);
+      await queueModifyDeviceJob(device[0], modifyParams, userName, org);
     }
   } catch (err) {
     logger.error('Failed to queue modify device job', {

@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2019-2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -25,29 +25,29 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const mongoose = require('mongoose');
-const createError = require('http-errors');
-const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { getMajorVersion } = require('../versioning');
 
 /**
  * Creates and queues the start-router job.
- * @param  {Array}    device an array of the devices to be modified
- * @param  {Object}   req    express request object
- * @param  {Object}   res    express response object
- * @param  {Callback} next   express next() callback
- * @return {void}
+ * @async
+ * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Object}   user      User object
+ * @param  {Object}   data      Additional data used by caller
+ * @return {None}
  */
-const apply = (device, req, res, next) => {
-  logger.info('Starting device:', { params: { machineId: device[0].machineId }, req: req });
+const apply = async (device, user, data) => {
+  logger.info('Starting device:', {
+    params: { machineId: device[0].machineId, user: user, data: data }
+  });
 
   const deviceValidator = validateDevice(device[0]);
   if (!deviceValidator.valid) {
     logger.warn('Start command validation failed',
       {
-        params: { device: device[0], err: deviceValidator.err },
-        req: req
+        params: { device: device[0], err: deviceValidator.err }
       });
-    return next(createError(400, deviceValidator.err));
+    throw new Error(deviceValidator.err);
   }
 
   deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
@@ -101,16 +101,16 @@ const apply = (device, req, res, next) => {
   startParams.reconnect = true;
 
   const tasks = [];
-  const user = req.user.username;
-  const org = req.user.defaultOrg._id.toString();
+  const userName = user.username;
+  const org = user.defaultOrg._id.toString();
   const mId = device[0].machineId;
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
 
-  deviceQueues
+  const job = await deviceQueues
     .addJob(
       mId,
-      user,
+      userName,
       org,
       // Data
       { title: 'Start device ' + device[0].hostname, tasks: tasks },
@@ -127,14 +127,10 @@ const apply = (device, req, res, next) => {
       { priority: 'medium', attempts: 1, removeOnComplete: false },
       // Complete callback
       null
-    )
-    .then(job => {
-      logger.info('Start device job queued', { job: job, req: req });
-      res.status(200).send({ ok: 1 });
-    })
-    .catch(err => {
-      next(err);
-    });
+    );
+
+  logger.info('Start device job queued', { job: job });
+  return job;
 };
 
 /**

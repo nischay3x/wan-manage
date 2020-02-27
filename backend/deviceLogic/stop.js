@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2019-2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -23,24 +23,25 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const tunnelsModel = require('../models/tunnels');
 const mongoose = require('mongoose');
-const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { getMajorVersion } = require('../versioning');
 
 /**
  * Creates and queues the stop-router job.
  * @async
- * @param  {Array}    device an array of the devices to be modified
- * @param  {Object}   req    express request object
- * @param  {Object}   res    express response object
- * @param  {Callback} next   express next() callback
- * @return {void}
+ * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Object}   user      User object
+ * @param  {Object}   data      Additional data used by caller
+ * @return {None}
  */
-const apply = async (device, req, res, next) => {
-  logger.info('Stopping device:', { params: { machineId: device[0].machineId }, req: req });
+const apply = async (device, user, data) => {
+  logger.info('Stopping device:', {
+    params: { machineId: device[0].machineId, user: user, data: data }
+  });
   deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
 
-  const user = req.user.username;
-  const org = req.user.defaultOrg._id.toString();
+  const userName = user.username;
+  const org = user.defaultOrg._id.toString();
   const machineID = device[0].machineId;
   const majorAgentVersion = getMajorVersion(device[0].versions.agent);
 
@@ -50,34 +51,29 @@ const apply = async (device, req, res, next) => {
   const stopParams = { reconnect: true };
   const tasks = [{ entity: 'agent', message: 'stop-router', params: stopParams }];
 
-  deviceQueues
-    .addJob(
-      machineID,
-      user,
-      org,
-      // Data
-      { title: 'Stop device ' + device[0].hostname, tasks: tasks },
-      // Response data
-      {
-        method: 'stop',
-        data: {
-          device: device[0]._id,
-          org: org,
-          shouldUpdateTunnel: majorAgentVersion === 0
-        }
-      },
-      // Metadata
-      { priority: 'medium', attempts: 1, removeOnComplete: false },
-      // Complete callback
-      null
-    )
-    .then(job => {
-      logger.info('Stop device job queued', { job: job, req: req });
-      res.status(200).send({ ok: 1 });
-    })
-    .catch(err => {
-      next(err);
-    });
+  const job = await deviceQueues.addJob(
+    machineID,
+    userName,
+    org,
+    // Data
+    { title: 'Stop device ' + device[0].hostname, tasks: tasks },
+    // Response data
+    {
+      method: 'stop',
+      data: {
+        device: device[0]._id,
+        org: org,
+        shouldUpdateTunnel: majorAgentVersion === 0
+      }
+    },
+    // Metadata
+    { priority: 'medium', attempts: 1, removeOnComplete: false },
+    // Complete callback
+    null
+  );
+
+  logger.info('Stop device job queued', { params: { job: job } });
+  return job;
 };
 
 /**

@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2019-2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -20,7 +20,6 @@ const configs = require('../configs')();
 const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
 const mongoose = require('mongoose');
-const createError = require('http-errors');
 const randomNum = require('../utils/random-key');
 
 const deviceQueues = require('../utils/deviceQueue')(
@@ -28,30 +27,29 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { routerVersionsCompatible } = require('../versioning');
-const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 /**
  * This function is called when adding new tunnels
- * @param  {Array}    devices the array of device objects
- * @param  {Object}   req     express request object
- * @param  {Object}   res     express response object
- * @param  {Callback} next    express next() callback
- * @return {void}
+ * @async
+ * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Object}   user      User object
+ * @param  {Object}   data      Additional data used by caller
+ * @return {None}
  */
-const applyTunnelAdd = (devices, req, res, next) => {
+const applyTunnelAdd = async (devices, user, data) => {
   /**
      * Request body holds the list of devices ids to connect tunnel between
      */
-  const selectedSevices = req.body.devices;
+  const selectedDevices = data.devices;
   logger.info('Creating tunnels between devices', {
-    params: { devices: selectedSevices },
-    req: req
+    params: { devices: selectedDevices }
   });
 
   // Get details for devices to connect
-  const opDevices = (devices && selectedSevices)
+  const opDevices = (devices && selectedDevices)
     ? devices.filter((device) => {
-      const inSelected = selectedSevices.hasOwnProperty(device._id);
+      const inSelected = selectedDevices.hasOwnProperty(device._id);
       if (inSelected) return true;
       else return false;
     }) : [];
@@ -61,8 +59,8 @@ const applyTunnelAdd = (devices, req, res, next) => {
   // Only allow tunnels for more than two devices
   if (devicesLen >= 2) {
     const dbTasks = [];
-    const user = req.user.username;
-    const org = req.user.defaultOrg._id.toString();
+    const userName = user.username;
+    const org = user.defaultOrg._id.toString();
 
     for (let idxA = 0; idxA < devicesLen - 1; idxA++) {
       for (let idxB = idxA + 1; idxB < devicesLen; idxB++) {
@@ -73,15 +71,9 @@ const applyTunnelAdd = (devices, req, res, next) => {
         const [verA, verB] = [deviceA.versions.router, deviceB.versions.router];
         if (!routerVersionsCompatible(verA, verB)) {
           logger.warn('Tunnel creation failed', {
-            params: { reason: 'Router version mismatch', versions: { verA: verA, verB: verB } },
-            req: req
+            params: { reason: 'Router version mismatch', versions: { verA: verA, verB: verB } }
           });
-          return next(
-            createError(
-              400,
-              'Cannot create tunnels between devices with mismatching router versions'
-            )
-          );
+          throw new Error('Cannot create tunnels between devices with mismatching router versions');
         }
 
         // Find device A WAN interface
@@ -104,7 +96,7 @@ const applyTunnelAdd = (devices, req, res, next) => {
           deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name },
           deviceB: { hostname: deviceB.hostname, interface: deviceBIntf.name }
         };
-        logger.debug('Connecting tunnel between devices', { params: { devicesInfo }, req: req });
+        logger.debug('Connecting tunnel between devices', { params: { devicesInfo } });
 
         // Create a tunnel from device A to device B WAN interface
         // TBD: add tunnels through multiple WAN interfaces
@@ -115,54 +107,28 @@ const applyTunnelAdd = (devices, req, res, next) => {
 
           // Check if tunnel exist, if already exist skip the configuration
           // Use a copy of devices objects as promise runs later
-          dbTasks.push(getTunnelPromise(user, org,
+          dbTasks.push(getTunnelPromise(userName, org,
             { ...deviceA.toObject() }, { ...deviceB.toObject() },
-            { ...deviceAIntf.toObject() }, { ...deviceBIntf.toObject() },
-            next));
+            { ...deviceAIntf.toObject() }, { ...deviceBIntf.toObject() }));
         } else {
           logger.info('Failed to connect tunnel between devices', {
             params: {
               deviceA: deviceA.hostname,
               deviceB: deviceB.hostname,
               reason: 'no valid WAN interfaces'
-            },
-            req: req
+            }
           });
         }
       }
     }
 
     // Execute all promises
-    logger.debug('Running tunnel promises', { params: { tunnels: dbTasks.length }, req: req });
-    Promise.all(dbTasks)
-      .then((values) => {
-        // Run all device configuration operations
-        logger.debug('Operation completed', { params: { values: values }, req: req });
-        res.status(200).send({ ok: 1 });
-      }, (err) => {
-        logger.error('Error in configuring some devices', { params: { reason: err.message } });
-        return next(
-          createError(
-            500,
-            'Error for some of the tunnels, you may try again to configure the same tunnels'
-          )
-        );
-      })
-      .catch((err) => {
-        logger.error('Error (general) in configuring some devices', {
-          params: { reason: err.message }
-        });
-        return next(
-          createError(
-            500,
-            // eslint-disable-next-line max-len
-            'Error (general) for some of the tunnels, you may try again to configure the same tunnels'
-          )
-        );
-      });
+    logger.debug('Running tunnel promises', { params: { tunnels: dbTasks.length } });
+    const values = await Promise.all(dbTasks);
+    logger.debug('Operation completed', { params: { values: values } });
   } else {
     logger.error('At least 2 devices must be selected to create tunnels', { params: {} });
-    return next(createError(400, 'At least 2 devices must be selected to create tunnels'));
+    throw new Error('At least 2 devices must be selected to create tunnels');
   }
 };
 
@@ -199,7 +165,7 @@ const completeTunnelAdd = (jobId, res) => {
  * @param  {Object} res   including the deviceA id, deviceB id, deviceSideConf
  * @return {void}
  */
-const errorTunnelAdd = (jobId, res) => {
+const errorTunnelAdd = async (jobId, res) => {
   logger.info('Tunnel add error. rollback tunnel',
     { params: { result: res, jobId: jobId } });
   if (!res || !res.deviceA || !res.deviceB || !res.target || !res.username || !res.org) {
@@ -208,9 +174,9 @@ const errorTunnelAdd = (jobId, res) => {
   }
 
   tunnelsModel.findOne({ deviceA: res.deviceA, deviceB: res.deviceB, org: res.org, isActive: true })
-    .then((tunnel) => {
+    .then(async (tunnel) => {
       if (tunnel != null) {
-        oneTunnelDel(tunnel._id, res.username, res.org,
+        await oneTunnelDel(tunnel._id, res.username, res.org,
           (msg) => { logger.info('One tunnel del', { params: { message: msg } }); },
           () => {
             logger.info('Tunnel deleted', {
@@ -258,10 +224,9 @@ const errorTunnelAdd = (jobId, res) => {
  * @param  {Object}   deviceB      device B details
  * @param  {Object}   deviceAIntf device A tunnel interface
  * @param  {Object}   deviceBIntf device B tunnel interface
- * @param  {callback} next         express next() callback
  */
 const getTunnelPromise = (user, org, deviceA, deviceB,
-  deviceAIntf, deviceBIntf, next) => {
+  deviceAIntf, deviceBIntf) => {
   logger.debug('getTunnelPromise between', {
     params:
         {
@@ -279,7 +244,6 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
       isActive: true,
       org: org
     })
-
       .then((tunnelFound) => {
         logger.debug('Found tunnels', { params: { tunnels: tunnelFound } });
 
@@ -304,7 +268,7 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
                 // Configure tunnel using this num
                 addTunnel(user, org, tunnelnum,
                   deviceA, deviceB, deviceAIntf, deviceBIntf,
-                  next, resolve, reject);
+                  resolve, reject);
               } else { // No deleted tunnel found, get a new one
                 tunnelIDsModel.findOneAndUpdate(
                   // Query, allow only 15000 tunnels per organization
@@ -323,7 +287,7 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
                   // Configure tunnel using this num
                   addTunnel(user, org, tunnelnum,
                     deviceA, deviceB, deviceAIntf, deviceBIntf,
-                    next, resolve, reject);
+                    resolve, reject);
                 }, (err) => {
                   // org is a key value in the collection, upsert sometimes creates a new doc
                   // (if two upserts done at once)
@@ -349,7 +313,7 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
                       // Configure tunnel using this num
                       addTunnel(user, org, tunnelnum,
                         deviceA, deviceB, deviceAIntf, deviceBIntf,
-                        next, resolve, reject);
+                        resolve, reject);
                     }, (err) => {
                       logger.error('Tunnel ID not found (not found twice)', {
                         params: { reason: err.message }
@@ -495,7 +459,7 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer) 
  * @return {void}
  */
 const addTunnel = (user, org, tunnelnum, deviceA, deviceB,
-  deviceAIntf, deviceBIntf, next, resolve, reject) => {
+  deviceAIntf, deviceBIntf, resolve, reject) => {
   const devicesInfo = {
     deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name },
     deviceB: { hostname: deviceB.hostname, interface: deviceBIntf.name }
@@ -738,14 +702,14 @@ const updateTunnelIsConnected = (
 
 /**
  * This function is called when deleting a tunnel
- * @param  {Array}    devices the array of device objects
- * @param  {Object}   req     express request object
- * @param  {Object}   res     express response object
- * @param  {Callback} next    express next() callback
- * @return {void}
+ * @async
+ * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Object}   user      User object
+ * @param  {Object}   data      Additional data used by caller
+ * @return {None}
  */
-const applyTunnelDel = (devices, req, res, next) => {
-  const selectedTunnels = req.body.tunnels;
+const applyTunnelDel = async (devices, user, data) => {
+  const selectedTunnels = data.tunnels;
   const tunnelIds = Object.keys(selectedTunnels);
   logger.info('Delete tunnels ', { params: { tunnels: selectedTunnels } });
 
@@ -754,33 +718,31 @@ const applyTunnelDel = (devices, req, res, next) => {
   if (devices && tunnelIds.length === 1) {
     // Get tunnel data
     const tunnelID = tunnelIds[0];
-    const org = req.user.defaultOrg._id.toString();
-    const user = req.user.username;
+    const org = user.defaultOrg._id.toString();
+    const userName = user.username;
 
-    oneTunnelDel(tunnelID, user, org, next, () => {
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'application/json');
-      return res.json({ ok: 1 });
-    });
-  } else {
-    logger.error('Attempt to delete more than one tunnel or no devices found', { params: {} });
-    return next(createError(400, 'Attempt to delete more than one tunnel or no devices found'));
+    try {
+      await oneTunnelDel(tunnelID, userName, org);
+    } catch (err) {
+      logger.error('Attempt to delete more than one tunnel or no devices found', { params: {} });
+      throw new Error('Attempt to delete more than one tunnel or no devices found');
+    }
   }
 };
+
 /**
  * Deletes a single tunnel.
  * @param  {number}   tunnelID   the id of the tunnel to be deleted
  * @param  {string}   user       the user id of the requesting user
  * @param  {string}   org        the user's organization id
- * @param  {Callback} next       express next() callback
- * @param  {Callback} successCB  a callback that will be called if operation succeeds
  * @return {void}
  */
-const oneTunnelDel = (tunnelID, user, org, next, successCB) => {
+const oneTunnelDel = async (tunnelID, user, org) => {
+  /*
   tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
     .populate('deviceA')
     .populate('deviceB')
-    .then((tunnelResp) => {
+    .then(async (tunnelResp) => {
       logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
 
       // Define devices
@@ -795,7 +757,7 @@ const oneTunnelDel = (tunnelID, user, org, next, successCB) => {
 
       const tunnelnum = tunnelResp.num;
 
-      delTunnel(user, org, tunnelnum, deviceA, deviceB, deviceAIntf, deviceBIntf, next);
+      await delTunnel(user, org, tunnelnum, deviceA, deviceB, deviceAIntf, deviceBIntf);
 
       logger.info('Deleting tunnels from database');
       tunnelsModel
@@ -828,7 +790,9 @@ const oneTunnelDel = (tunnelID, user, org, next, successCB) => {
       });
       return next(createError(400, 'Must have at least 2 devices to delete tunnels'));
     });
+    */
 };
+
 /**
  * Called when tunnel delete jobs are finished successfully.
  * @param  {number} jobId the id of the delete tunnel job
@@ -892,7 +856,6 @@ const prepareTunnelRemoveJob = (tunnelnum, deviceAIntf, deviceBIntf) => {
  * @param  {Object}   deviceB      details of device B
  * @param  {Object}   deviceAIntf device A tunnel interface
  * @param  {Object}   deviceBIntf device B tunnel interface
- * @param  {Callback} next         express next() callback
  * @return {void}
  */
 const delTunnel = async (
@@ -902,8 +865,7 @@ const delTunnel = async (
   deviceA,
   deviceB,
   deviceAIntf,
-  deviceBIntf,
-  next
+  deviceBIntf
 ) => {
   const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
     tunnelnum,
@@ -933,9 +895,10 @@ const delTunnel = async (
     );
   } catch (err) {
     logger.error('Delete tunnel error', { params: { reason: err.message } });
-    return next(createError(500, err.message));
+    throw err;
   }
 };
+
 /**
  * Generates various tunnel parameters that will
  * be used for creating the tunnel.

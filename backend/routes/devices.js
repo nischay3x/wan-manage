@@ -329,6 +329,7 @@ devicesRouter.route('/apply')
     // Find all devices of the organization
     devices.find({ org: req.user.defaultOrg._id })
       .then((devices) => {
+        // TBD: Call with method = req.body.method, data = req.body
         return dispatcher.apply(devices, req, res, next);
       }, (err) => { next(err); })
       .catch((err) => {
@@ -369,6 +370,7 @@ devicesRouter.route('/:deviceId/apply')
       .then(
         device => {
           if (device.length === 1) {
+            // TBD: Call with method=req.body.method, data = req.body
             return dispatcher.apply(device, req, res, next);
           } else {
             return next(createError(500, 'Device error'));
@@ -594,6 +596,7 @@ devicesRouter.route('/:deviceId/staticroutes')
 
       req.body.method = 'staticroutes';
       req.body.id = route.id;
+      // TBD: Add params to data {req.body.id, req.body.destination_network, req.body.gateway_ip, req.body.ifname, req.body.action}
       dispatcher.apply(device, req, res, next, req.body);
 
       return res.status(200).send({});
@@ -619,6 +622,7 @@ devicesRouter.route('/:deviceId/staticroutes/:routeId')
     const device = deviceObject[0];
     req.body.method = 'staticroutes';
     req.body.action = req.body.status === 'add-failed' ? 'add' : 'del';
+    // TBD: Add params to data {req.body.id, req.body.destination_network, req.body.gateway_ip, req.body.ifname, req.body.action}
     dispatcher.apply(device, req, res, next, req.body);
 
     return res.status(200).send({ deviceId: device.id });
@@ -643,6 +647,7 @@ devicesRouter.route('/:deviceId/staticroutes/:routeId')
     req.body.method = 'staticroutes';
     req.body.id = req.params.routeId;
     req.body.action = 'del';
+    // TBD: Add params to data {req.body.id, req.body.destination_network, req.body.gateway_ip, req.body.ifname, req.body.action}
     dispatcher.apply(device, req, res, next, req.body);
 
     return res.status(200).send({ deviceId: device.id });
