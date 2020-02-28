@@ -258,7 +258,7 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
             // Options
             { upsert: false }
           )
-            .then((tunnelResp) => {
+            .then(async (tunnelResp) => {
               logger.debug('Found a tunnel', { params: { tunnel: tunnelResp } });
 
               if (tunnelResp !== null) { // deleted tunnel found, use it
@@ -266,9 +266,10 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
                 logger.info('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
 
                 // Configure tunnel using this num
-                addTunnel(user, org, tunnelnum,
-                  deviceA, deviceB, deviceAIntf, deviceBIntf,
-                  resolve, reject);
+                const tunnelJobs = await addTunnel(user, org, tunnelnum,
+                  deviceA, deviceB, deviceAIntf, deviceBIntf);
+
+                return resolve(tunnelJobs);
               } else { // No deleted tunnel found, get a new one
                 tunnelIDsModel.findOneAndUpdate(
                   // Query, allow only 15000 tunnels per organization
@@ -280,14 +281,15 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
                   { $inc: { nextAvailID: 1 } },
                   // Options
                   { new: true, upsert: true }
-                ).then((idResp) => {
+                ).then(async (idResp) => {
                   const tunnelnum = idResp.nextAvailID;
                   logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
 
                   // Configure tunnel using this num
-                  addTunnel(user, org, tunnelnum,
-                    deviceA, deviceB, deviceAIntf, deviceBIntf,
-                    resolve, reject);
+                  const tunnelJobs = await addTunnel(user, org, tunnelnum,
+                    deviceA, deviceB, deviceAIntf, deviceBIntf);
+
+                  return resolve(tunnelJobs);
                 }, (err) => {
                   // org is a key value in the collection, upsert sometimes creates a new doc
                   // (if two upserts done at once)
@@ -307,13 +309,14 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
                       { $inc: { nextAvailID: 1 } },
                       // Options
                       { new: true, upsert: true }
-                    ).then((idResp) => {
+                    ).then(async (idResp) => {
                       const tunnelnum = idResp.nextAvailID;
                       logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
                       // Configure tunnel using this num
-                      addTunnel(user, org, tunnelnum,
-                        deviceA, deviceB, deviceAIntf, deviceBIntf,
-                        resolve, reject);
+                      const tunnelJobs = await addTunnel(user, org, tunnelnum,
+                        deviceA, deviceB, deviceAIntf, deviceBIntf);
+
+                      return resolve(tunnelJobs);
                     }, (err) => {
                       logger.error('Tunnel ID not found (not found twice)', {
                         params: { reason: err.message }
@@ -347,7 +350,7 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
             });
         } else {
           logger.info('Tunnel found, will be checked via periodic task');
-          resolve({ ok: 1, message: 'Tunnel found' });
+          resolve(true);
         }
       }, (err) => {
         logger.error('Tunnels find error', { params: { reason: err.message } });
@@ -360,6 +363,107 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
   });
   return tPromise;
 };
+
+/**
+ * Queues the tunnel creation/deletion jobs to both
+ * of the devices that are connected via the tunnel
+ * @param  {boolean} isAdd        a flag indicating creation/deletion
+ * @param  {string} title         title of the task
+ * @param  {Object} tasksDeviceA  device A tunnel job
+ * @param  {Object} tasksDeviceB  device B tunnel job
+ * @param  {string} user          user id of the requesting user
+ * @param  {string} org           user's organization id
+ * @param  {string} devAMachineID device A host id
+ * @param  {string} devBMachineID device B host id
+ * @param  {string} devAOid       device A database mongodb object id
+ * @param  {string} devBOid       device B database mongodb object id
+ * @return {void}
+ */
+const queueTunnel = async (
+  isAdd,
+  title,
+  tasksDeviceA,
+  tasksDeviceB,
+  user,
+  org,
+  devAMachineID,
+  devBMachineID,
+  devAOid,
+  devBOid
+) => {
+  try {
+    const devices = { deviceA: devAOid, deviceB: devBOid };
+    const jobA = await deviceQueues.addJob(
+      devAMachineID,
+      user,
+      org,
+      // Data
+      {
+        title: title,
+        tasks: tasksDeviceA
+      },
+      // Response data
+      {
+        method: isAdd ? 'tunnels' : 'deltunnels',
+        data: {
+          username: user,
+          org: org,
+          deviceA: devAOid,
+          deviceB: devBOid,
+          target: 'deviceAconf'
+        }
+      },
+      // Metadata
+      { priority: 'normal', attempts: 1, removeOnComplete: false },
+      // Complete callback
+      null
+    );
+
+    logger.info(`${isAdd ? 'Add' : 'Del'} tunnel job queued - deviceA`, {
+      params: { devices: devices },
+      job: jobA
+    });
+
+    const jobB = await deviceQueues.addJob(
+      devBMachineID,
+      user,
+      org,
+      // Data
+      {
+        title: title,
+        tasks: tasksDeviceB
+      },
+      // Response data
+      {
+        method: isAdd ? 'tunnels' : 'deltunnels',
+        data: {
+          username: user,
+          org: org,
+          deviceA: devAOid,
+          deviceB: devBOid,
+          target: 'deviceBconf'
+        }
+      },
+      // Metadata
+      { priority: 'normal', attempts: 1, removeOnComplete: false },
+      // Complete callback
+      null
+    );
+
+    logger.info(`${isAdd ? 'Add' : 'Del'} tunnel job queued - deviceB`, {
+      params: { devices: devices },
+      job: jobB
+    });
+
+    return [jobA, jobB];
+  } catch (err) {
+    logger.error('Error queuing tunnel', {
+      params: { deviceAId: devAMachineID, deviceBId: devBMachineID, message: err.message }
+    });
+    throw new Error(`Error queuing tunnel for device IDs ${devAMachineID} and ${devBMachineID}`);
+  }
+};
+
 /**
  * Prepares tunnel add jobs by creating an array that contains
  * the jobs that should be queued for each of the devices connected
@@ -458,8 +562,7 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer) 
  * @param  {Callback} reject       promise resolve callback
  * @return {void}
  */
-const addTunnel = (user, org, tunnelnum, deviceA, deviceB,
-  deviceAIntf, deviceBIntf, resolve, reject) => {
+const addTunnel = async (user, org, tunnelnum, deviceA, deviceB, deviceAIntf, deviceBIntf) => {
   const devicesInfo = {
     deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name },
     deviceB: { hostname: deviceB.hostname, interface: deviceBIntf.name }
@@ -467,7 +570,7 @@ const addTunnel = (user, org, tunnelnum, deviceA, deviceB,
 
   logger.info('Adding Tunnel between devices', { params: { devices: devicesInfo } });
 
-  tunnelsModel.findOneAndUpdate(
+  await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
     {
       org: org,
@@ -485,161 +588,38 @@ const addTunnel = (user, org, tunnelnum, deviceA, deviceB,
     },
     // Options
     { upsert: true }
-  ).then(async (tResp) => {
-    const { agent } = deviceB.versions;
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
-      tunnelnum,
-      deviceAIntf,
-      deviceBIntf,
-      agent
-    );
-    try {
-      await queueTunnel(
-        true,
-        'Create tunnel between (' +
-          deviceA.hostname +
-          ',' +
-          deviceAIntf.name +
-          ') and (' +
-          deviceB.hostname +
-          ',' +
-          deviceBIntf.name +
-          ')',
-        tasksDeviceA,
-        tasksDeviceB,
-        user,
-        org,
-        deviceA.machineId,
-        deviceB.machineId,
-        deviceA._id,
-        deviceB._id
-      );
-      resolve();
-    } catch (err) {
-      reject(err);
-    }
-  }, (err) => {
-    logger.error('Unable to store tunnel', { params: { reason: err.message } });
-    reject(new Error('Unable to store tunnel'));
-  })
-    .catch((err) => {
-      logger.error('Unable to store tunnel (general error)', { params: { reason: err.message } });
-      reject(new Error('Unable to store tunnel'));
-    });
-};
-/**
- * Queues the tunnel creation/deletion jobs to both
- * of the devices that are connected via the tunnel
- * @param  {boolean} isAdd        a flag indicating creation/deletion
- * @param  {string} title         title of the task
- * @param  {Object} tasksDeviceA  device A tunnel job
- * @param  {Object} tasksDeviceB  device B tunnel job
- * @param  {string} user          user id of the requesting user
- * @param  {string} org           user's organization id
- * @param  {string} devAmachineID device A host id
- * @param  {string} devBmachineID device B host id
- * @param  {string} devAOid       device A database mongodb object id
- * @param  {string} devBOid       device B database mongodb object id
- * @return {void}
- */
-const queueTunnel = async (
-  isAdd,
-  title,
-  tasksDeviceA,
-  tasksDeviceB,
-  user,
-  org,
-  devAmachineID,
-  devBmachineID,
-  devAOid,
-  devBOid
-) => {
-  return new Promise((resolve, reject) => {
-    const devices = { deviceA: devAOid, deviceB: devBOid };
-    deviceQueues
-      .addJob(
-        devAmachineID,
-        user,
-        org,
-        // Data
-        {
-          title: title,
-          tasks: tasksDeviceA
-        },
-        // Response data
-        {
-          method: isAdd ? 'tunnels' : 'deltunnels',
-          data: {
-            username: user,
-            org: org,
-            deviceA: devAOid,
-            deviceB: devBOid,
-            target: 'deviceAconf'
-          }
-        },
-        // Metadata
-        { priority: 'normal', attempts: 1, removeOnComplete: false },
-        // Complete callback
-        null
-      )
-      .then(job => {
-        logger.info(`${isAdd ? 'Add' : 'Del'} tunnel job queued`, {
-          params: { devices: devices },
-          job: job
-        });
-        resolve(job.id);
-      })
-      .catch(err => {
-        logger.error('Error queuing tunnel device A', {
-          params: { deviceID: devAmachineID, reason: err.message }
-        });
-        reject(
-          new Error(`Error queuing tunnel for device ID=${devAmachineID}`)
-        );
-      });
+  );
 
-    deviceQueues
-      .addJob(
-        devBmachineID,
-        user,
-        org,
-        // Data
-        {
-          title: title,
-          tasks: tasksDeviceB
-        },
-        // Response data
-        {
-          method: isAdd ? 'tunnels' : 'deltunnels',
-          data: {
-            username: user,
-            org: org,
-            deviceA: devAOid,
-            deviceB: devBOid,
-            target: 'deviceBconf'
-          }
-        },
-        // Metadata
-        { priority: 'normal', attempts: 1, removeOnComplete: false },
-        // Complete callback
-        null
-      )
-      .then(job => {
-        logger.info(`${isAdd ? 'Add' : 'Del'} tunnel job queued`, {
-          params: { devices: devices },
-          job: job
-        });
-        resolve(job.id);
-      })
-      .catch(err => {
-        logger.error('Error queuing tunnel device B', {
-          params: { deviceID: devAmachineID, reason: err.message }
-        });
-        reject(
-          new Error(`Error queuing tunnel for device ID=${devBmachineID}`)
-        );
-      });
-  });
+  const { agent } = deviceB.versions;
+  const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
+    tunnelnum,
+    deviceAIntf,
+    deviceBIntf,
+    agent
+  );
+
+  const tunnelJobs = await queueTunnel(
+    true,
+    'Create tunnel between (' +
+      deviceA.hostname +
+      ',' +
+      deviceAIntf.name +
+      ') and (' +
+      deviceB.hostname +
+      ',' +
+      deviceBIntf.name +
+      ')',
+    tasksDeviceA,
+    tasksDeviceB,
+    user,
+    org,
+    deviceA.machineId,
+    deviceB.machineId,
+    deviceA._id,
+    deviceB._id
+  );
+
+  return tunnelJobs;
 };
 
 /**
@@ -738,59 +718,39 @@ const applyTunnelDel = async (devices, user, data) => {
  * @return {void}
  */
 const oneTunnelDel = async (tunnelID, user, org) => {
-  /*
-  tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
+  const tunnelResp = await tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
     .populate('deviceA')
-    .populate('deviceB')
-    .then(async (tunnelResp) => {
-      logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
+    .populate('deviceB');
 
-      // Define devices
-      const deviceA = tunnelResp.deviceA;
-      const deviceB = tunnelResp.deviceB;
+  logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
 
-      // Populate interface details
-      const deviceAIntf = tunnelResp.deviceA.interfaces
-        .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceA; })[0];
-      const deviceBIntf = tunnelResp.deviceB.interfaces
-        .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
+  // Define devices
+  const deviceA = tunnelResp.deviceA;
+  const deviceB = tunnelResp.deviceB;
 
-      const tunnelnum = tunnelResp.num;
+  // Populate interface details
+  const deviceAIntf = tunnelResp.deviceA.interfaces
+    .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceA; })[0];
+  const deviceBIntf = tunnelResp.deviceB.interfaces
+    .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
 
-      await delTunnel(user, org, tunnelnum, deviceA, deviceB, deviceAIntf, deviceBIntf);
+  const tunnelnum = tunnelResp.num;
 
-      logger.info('Deleting tunnels from database');
-      tunnelsModel
-        .findOneAndUpdate(
-          // Query
-          { _id: mongoose.Types.ObjectId(tunnelID), org: org },
-          // Update
-          { isActive: false, deviceAconf: false, deviceBconf: false },
-          // Options
-          { upsert: false, new: true })
-        .then((resp) => {
-          if (resp != null) {
-            return successCB();
-          } else {
-            return next(createError(500, 'Error deleting tunnel'));
-          }
-        }, (err) => {
-          next(err);
-        })
-        .catch((err) => {
-          next(err);
-        });
-    }, (err) => {
-      logger.error('No tunnel found', { params: { reason: err.message } });
-      return next(createError(404, 'No tunnel found'));
-    })
-    .catch((err) => {
-      logger.error('Must have at least 2 devices to delete tunnels', {
-        params: { reason: err.message }
-      });
-      return next(createError(400, 'Must have at least 2 devices to delete tunnels'));
-    });
-    */
+  const tunnelJobs = await delTunnel(user, org, tunnelnum, deviceA, deviceB,
+    deviceAIntf, deviceBIntf);
+
+  logger.info('Deleting tunnels from database');
+  const resp = await tunnelsModel.findOneAndUpdate(
+    // Query
+    { _id: mongoose.Types.ObjectId(tunnelID), org: org },
+    // Update
+    { isActive: false, deviceAconf: false, deviceBconf: false },
+    // Options
+    { upsert: false, new: true });
+
+  if (resp === null) throw new Error('Error deleting tunnel');
+
+  return tunnelJobs;
 };
 
 /**
@@ -873,7 +833,7 @@ const delTunnel = async (
     deviceBIntf
   );
   try {
-    await queueTunnel(
+    const tunnelJobs = await queueTunnel(
       false,
       'Delete tunnel between (' +
         deviceA.hostname +
@@ -893,6 +853,8 @@ const delTunnel = async (
       deviceA._id,
       deviceB._id
     );
+    logger.debug('Tunnel jobs queued', { params: { jobA: tunnelJobs[0], jobB: tunnelJobs[1] } });
+    return tunnelJobs;
   } catch (err) {
     logger.error('Delete tunnel error', { params: { reason: err.message } });
     throw err;
