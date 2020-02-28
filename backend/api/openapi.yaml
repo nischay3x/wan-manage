@@ -628,6 +628,56 @@ paths:
 #      x-swagger-router-controller: Devices
 #      x-openapi-router-controller: DevicesController
 #      x-openapi-router-service: DevicesService
+#  /devices/latestVersions:
+#    get:
+#      operationId: devicesLatestVersionsGET
+#      responses:
+#        "200":
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/DeviceLatestVersion'
+#          description: Successful operation
+#        "401":
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: Unauthorized
+#        "403":
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: Forbidden
+#        "404":
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: The specified resource was not found
+#        "500":
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: Internal server error
+#        default:
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: Unexpected error
+#      security:
+#      - apiKey: []
+#      - bearerAuth: []
+#      summary: Get all registered devices
+#      tags:
+#      - Devices
+#      x-swagger-router-controller: Devices
+#      x-openapi-router-controller: DevicesController
+#      x-openapi-router-service: DevicesService
+#
 #  /devices/register:
 #    post:
 #      operationId: devicesRegisterPOST
@@ -3566,6 +3616,20 @@ components:
         router:
           type: string
       type: object
+    DeviceLatestVersion:
+      example:
+        "versions":
+          "device": "1.1.51"
+          "agent": "1.0.39"
+          "vpp": "19.01-rc0"
+          "frr": "7.1"
+          "router": "01.01.10"
+        "versionDeadline": "2020-03-15T00:00:00.000Z"
+      properties:
+        versions:
+          $ref: '#/components/schemas/DeviceVersion'
+        versionDeadLite:
+          type: string
     Role:
       enum:
       - owner

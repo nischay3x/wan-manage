@@ -3,6 +3,7 @@ const Service = require('./Service');
 const { devices } = require('../models/devices');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
+const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const pick = require('lodash/pick');
 const dispatcher = require('../deviceLogic/dispatcher');
@@ -104,6 +105,18 @@ class DevicesService {
         e.message || 'Invalid input',
         e.status || 405
       );
+    }
+  }
+
+  static async devicesLatestVersionsGET ({ user }) {
+    try {
+      const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
+      return Service.successResponse({
+        versions: swUpdater.getLatestSwVersions(),
+        versionDeadline: swUpdater.getVersionUpDeadline()
+      });
+    } catch (err) {
+      return Service.rejectResponse(err);
     }
   }
 
