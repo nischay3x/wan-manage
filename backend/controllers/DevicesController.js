@@ -13,6 +13,10 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesGET);
   }
 
+  async devicesLatestVersionsGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesLatestVersionsGET);
+  }
+
   async devicesIdGET(request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdGET);
   }
