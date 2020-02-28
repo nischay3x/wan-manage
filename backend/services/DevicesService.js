@@ -108,7 +108,12 @@ class DevicesService {
     }
   }
 
-  static async devicesLatestVersionsGET ({ user }) {
+  /**
+   * Get device software version
+   *
+   * returns DeviceLatestVersion
+   **/
+  static async devicesLatestVersionsGET () {
     try {
       const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
       return Service.successResponse({

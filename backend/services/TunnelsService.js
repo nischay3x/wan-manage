@@ -15,7 +15,38 @@ class TunnelsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async tunnelsIdGET ({ id, offset, limit }, { user }) {
+  static async tunnelsIdDELETE({ id, offset, limit }, { user }) {
+    try {
+      const resp = await Tunnels.findOneAndUpdate(
+        // Query
+        { _id: mongoose.Types.ObjectId(id), org: user.defaultOrg._id },
+        // Update
+        { isActive: false },
+        // Options
+        { upsert: false, new: true });
+
+      if (resp != null) {
+        return Service.successResponse(resp);
+      } else {
+        return Service.rejectResponse(404);
+      }
+    } catch (error) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
+  }
+
+  /**
+   * Retrieve device tunnels information
+   *
+   * id String Numeric ID of the Device to fetch tunnel information about
+   * offset Integer The number of items to skip before starting to collect the result set (optional)
+   * limit Integer The numbers of items to return (optional)
+   * returns List
+   **/
+  static async tunnelsGET ({ offset, limit }, { user }) {
     try {
       const response = await Tunnels.find({ org: user.defaultOrg._id, isActive: true }).populate('deviceA').populate('deviceB');
 

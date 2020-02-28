@@ -29,7 +29,7 @@ class Controller {
   }
 
   static collectFiles(request) {
-    logger.info('Checking if files are expected in schema');
+    // 'Checking if files are expected in schema');
     if (request.openapi.schema.requestBody !== undefined) {
       const [contentType] = request.headers['content-type'].split(';');
       if (contentType === 'multipart/form-data') {
