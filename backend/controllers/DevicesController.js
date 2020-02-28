@@ -17,8 +17,20 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesLatestVersionsGET);
   }
 
+  async devicesIdUpgdSchedPOST(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdUpgdSchedPOST);
+  }
+
+  async devicesUpgdSchedPOST(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesUpgdSchedPOST);
+  }
+
   async devicesIdGET(request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdGET);
+  }
+
+  async devicesIdConfigurationGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdConfigurationGET);
   }
 
   async devicesIdDELETE(request, response) {
@@ -35,6 +47,10 @@ class DevicesController {
 
   async devicesIdPUT(request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdPUT);
+  }
+
+  async devicesIdLogsGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdLogsGET);
   }
 
 }

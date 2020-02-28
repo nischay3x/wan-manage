@@ -108,6 +108,43 @@ class DevicesService {
     }
   }
 
+  static async devicesUpgdSchedPOST( { ids, date }, { user }) {
+    try {
+      const query = { _id: { $in: ids } };
+      const numOfIdsFound = await devices.countDocuments(query);
+
+      // The request is considered invalid if not all device IDs
+      // are found in the database. This is done to prevent a partial
+      // schedule of the devices in case of a user's mistake.
+      if (numOfIdsFound < ids.length) {
+        return Service.rejectResponse(new Error('Some devices were not found'), 404);
+      }
+
+      const set = { $set: { upgradeSchedule: { time: date, jobQueued: false } } };
+      const options = { upsert: false, useFindAndModify: false };
+      await devices.updateMany(query, set, options);
+      return Service.successResponse();
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405
+      );
+    }
+  }
+
+  static async devicesIdUpgdSchedPOST( { id, date }, { user }) {
+    try {
+      const query = { _id: id };
+      const set = { $set: { upgradeSchedule: { time: date, jobQueued: false } } };
+      const options = { upsert: false, useFindAndModify: false };
+      const res = await devices.updateOne(query, set, options);
+      if (res.n === 0) return Service.rejectResponse(createError(404));
+    } catch (err) {
+      return Service.rejectResponse();
+    }
+    return Service.successResponse();
+  }
+
   /**
    * Get device software version
    *
@@ -133,11 +170,115 @@ class DevicesService {
    **/
   static async devicesIdGET({ id }, { user }) {
     try {
-      return Service.successResponse({});
+      const result = await devices.findOne({ _id: id, org: user.defaultOrg._id });
+      const device = DevicesService.selectDeviceParams(result);
+
+      return Service.successResponse([device]);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
+      );
+    }
+  }
+
+  /**
+   * Retrieve device configuration
+   *
+   * id String Numeric ID of the Device to retrieve configuration from
+   * Returns Device Configuration
+   **/
+  static async devicesIdConfigurationGET({ id }, { user }) {
+    try {
+      const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
+      if (!device || device.length === 0) return Service.rejectResponse(new Error('Device not found'), 404);
+
+      if (!connections.isConnected(device[0].machineId)) {
+        return Service.successResponse({
+          status: 'disconnected',
+          configurations: []
+        });
+      }
+
+      const deviceConf = await connections.deviceSendMessage(
+        null,
+        device[0].machineId,
+        { entity: 'agent', message: 'get-router-config' }
+      );
+
+      if (!deviceConf.ok) {
+        logger.error('Failed to get device configuration', {
+          params: {
+            deviceId: id,
+            response: deviceConf.message
+          },
+          req: req
+        });
+        return Service.rejectResponse(new Error('Failed to get device configuration'), 500);
+      }
+
+      return Service.successResponse({
+        status: 'connected',
+        configuration: deviceConf.message
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405
+      );
+    }
+  }
+
+  /**
+   * Retrieve device configuration
+   *
+   * id String Numeric ID of the Device to retrieve configuration from
+   * Returns Device Configuration
+   **/
+  static async devicesIdLogsGET({ id, filter, lines }, { user }) {
+    try {
+      const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
+      if (!device || device.length === 0) return Service.rejectResponse(new Error('Device not found'), 404);
+
+      if (!connections.isConnected(device[0].machineId)) {
+        return Service.successResponse({
+          status: 'disconnected',
+          log: []
+        });
+      }
+
+      const deviceLogs = await connections.deviceSendMessage(
+        null,
+        device[0].machineId,
+        {
+          entity: 'agent',
+          message: 'get-device-logs',
+          params: {
+            lines: lines || '100',
+            filter: filter || 'all'
+          }
+        }
+      );
+
+      if (!deviceLogs.ok) {
+        logger.error('Failed to get device logs', {
+          params: {
+            deviceId: id,
+            response: deviceLogs.message
+          },
+          req: req
+        });
+        return Service.rejectResponse(new Error('Failed to get device logs'), 404);
+      }
+
+      return Service.successResponse({
+        status: 'connected',
+        logs: deviceLogs.message
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405
       );
     }
   }

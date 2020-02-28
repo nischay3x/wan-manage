@@ -558,76 +558,76 @@ paths:
       x-swagger-router-controller: AccessTokens
       x-openapi-router-controller: AccessTokensController
       x-openapi-router-service: AccessTokensService
-#  /devices:
-#    get:
-#      operationId: devicesGET
-#      parameters:
-#      - description: The number of items to skip before starting to collect the result
-#          set
-#        explode: true
-#        in: query
-#        name: offset
-#        required: false
-#        schema:
-#          type: integer
-#        style: form
-#      - description: The numbers of items to return
-#        explode: true
-#        in: query
-#        name: limit
-#        required: false
-#        schema:
-#          type: integer
-#        style: form
-#      responses:
-#        "200":
-#          content:
-#            application/json:
-#              schema:
-#                items:
-#                  $ref: '#/components/schemas/Device'
-#                type: array
-#                x-content-type: application/json
-#          description: Successful operation
-#        "401":
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: Unauthorized
-#        "403":
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: Forbidden
-#        "404":
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: The specified resource was not found
-#        "500":
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: Internal server error
-#        default:
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: Unexpected error
-#      security:
-#      - apiKey: []
-#      - bearerAuth: []
-#      summary: Get all registered devices
-#      tags:
-#      - Devices
-#      x-swagger-router-controller: Devices
-#      x-openapi-router-controller: DevicesController
-#      x-openapi-router-service: DevicesService
+  /devices:
+    get:
+      operationId: devicesGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Device'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all registered devices
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/latestVersions:
     get:
       operationId: devicesLatestVersionsGET
@@ -677,6 +677,308 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/upgdSched:
+    post:
+      operationId: devicesUpgdSchedPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevicesUpgradeRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Create new access token
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}:
+    get:
+      operationId: devicesIdGET
+      parameters:
+      - description: Numeric ID of the Device to retrieve
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Device'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all registered devices
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/upgdSched:
+    post:
+      operationId: devicesIdUpgdSchedPOST
+      parameters:
+      - description: Numeric ID of the Device to be upgraded
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceUpgradeRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Create new access token
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/configuration:
+    get:
+      operationId: devicesIdConfigurationGET
+      parameters:
+      - description: Numeric ID of the Device to retrieve configuration
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/DeviceConfiguration'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get Device
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+#  /devices/execute:
+#    post:
+#      operationId: devicesExecutePOST
+#      parameters:
+#      - description: Command to execute
+#        explode: true
+#        in: query
+#        name: action
+#        required: true
+#        schema:
+#          type: string
+#        style: form
+#      requestBody:
+#        content:
+#          application/json:
+#            schema:
+#              $ref: '#/components/schemas/CommandRequest'
+#      responses:
+#        "204":
+#          description: No Content
+#        "400":
+#          description: Bad Request
+#        "401":
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: Unauthorized
+#        "403":
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: Forbidden
+#        "500":
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: Internal server error
+#        default:
+#          content:
+#            application/json:
+#              schema:
+#                $ref: '#/components/schemas/Error'
+#          description: Unexpected error
+#      security:
+#      - apiKey: []
+#      - bearerAuth: []
+#      summary: Execute an action on the device side
+#      tags:
+#      - Devices
+#      x-swagger-router-controller: Devices
+#      x-openapi-router-controller: DevicesController
+#      x-openapi-router-service: DevicesService
 #
 #  /devices/register:
 #    post:
@@ -1588,64 +1890,7 @@ paths:
       x-swagger-router-controller: Logs
       x-openapi-router-controller: LogsController
       x-openapi-router-service: LogsService
-  /devices/{id}/configuration:
-    get:
-      operationId: devicesIdConfigurationGET
-      parameters:
-      - description: Numeric ID of the Device to fetch information about
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DeviceConfiguration'
-          description: Successfull operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Retrieve device configuration information
-      tags:
-      - Configuration
-      x-swagger-router-controller: Configuration
-      x-openapi-router-controller: ConfigurationController
-      x-openapi-router-service: ConfigurationService
+
   /devices/{id}/execute:
     post:
       operationId: devicesIdExecutePOST
@@ -3685,6 +3930,20 @@ components:
             type: string
           type: array
       type: object
+    DeviceUpgradeRequest:
+      type: object
+      properties:
+        date:
+          type: string
+    DevicesUpgradeRequest:
+      type: object
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+        date:
+          type: string
     Tunnel:
       example:
         tunnelStatusA: '{}'
