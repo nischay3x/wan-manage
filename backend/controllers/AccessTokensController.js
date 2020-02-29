@@ -18,26 +18,25 @@
 const Controller = require('./Controller');
 
 class AccessTokensController {
-  constructor(Service) {
+  constructor (Service) {
     this.service = Service;
   }
 
-  async accesstokensGET(request, response) {
+  async accesstokensGET (request, response) {
     await Controller.handleRequest(request, response, this.service.accesstokensGET);
   }
 
-  async accesstokensIdDELETE(request, response) {
+  async accesstokensIdDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.accesstokensIdDELETE);
   }
 
-  async accesstokensIdPUT(request, response) {
+  async accesstokensIdPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.accesstokensIdPUT);
   }
 
-  async accesstokensPOST(request, response) {
+  async accesstokensPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.accesstokensPOST);
   }
-
 }
 
 module.exports = AccessTokensController;

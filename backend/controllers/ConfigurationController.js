@@ -18,14 +18,13 @@
 const Controller = require('./Controller');
 
 class ConfigurationController {
-  constructor(Service) {
+  constructor (Service) {
     this.service = Service;
   }
 
-  async devicesIdConfigurationGET(request, response) {
+  async devicesIdConfigurationGET (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdConfigurationGET);
   }
-
 }
 
 module.exports = ConfigurationController;

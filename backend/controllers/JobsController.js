@@ -18,18 +18,17 @@
 const Controller = require('./Controller');
 
 class JobsController {
-  constructor(Service) {
+  constructor (Service) {
     this.service = Service;
   }
 
-  async jobsGET(request, response) {
+  async jobsGET (request, response) {
     await Controller.handleRequest(request, response, this.service.jobsGET);
   }
 
-  async jobsIdDELETE(request, response) {
+  async jobsIdDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.jobsIdDELETE);
   }
-
 }
 
 module.exports = JobsController;

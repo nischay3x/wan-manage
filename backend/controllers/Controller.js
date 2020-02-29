@@ -15,19 +15,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const logger = require('../logger');
-
-// user to update the JWT header
-const { getToken } = require('../tokens');
-
 class Controller {
-  static sendResponse(response, payload) {
+  static sendResponse (response, payload) {
     /**
      * The default response-code is 200. We want to allow to change that. in That case,
      * payload will be an object consisting of a code and a payload. If not customized
      * send 200 and the payload as received in this method.
      */
-    response.status(payload.code || 200);
+    response.status (payload.code || 200);
     const responsePayload = payload.payload !== undefined ? payload.payload : payload;
     if (responsePayload instanceof Object) {
       response.json(responsePayload);
@@ -36,7 +31,7 @@ class Controller {
     }
   }
 
-  static sendError(response, error) {
+  static sendError (response, error) {
     response.status(error.code || 500);
     if (error.error instanceof Object) {
       response.json(error.error);
@@ -45,7 +40,7 @@ class Controller {
     }
   }
 
-  static collectFiles(request) {
+  static collectFiles (request) {
     // 'Checking if files are expected in schema');
     if (request.openapi.schema.requestBody !== undefined) {
       const [contentType] = request.headers['content-type'].split(';');
@@ -56,14 +51,14 @@ class Controller {
             request.body[name] = request.files.find(file => file.fieldname === name);
           }
         });
-      } else if (request.openapi.schema.requestBody.content[contentType] !== undefined
-          && request.files !== undefined) {
+      } else if (request.openapi.schema.requestBody.content[contentType] !== undefined &&
+        request.files !== undefined) {
         [request.body] = request.files;
       }
     }
   }
 
-  static collectRequestParams(request) {
+  static collectRequestParams (request) {
     this.collectFiles(request);
     const requestParams = {};
     if (request.openapi.schema.requestBody !== undefined) {
@@ -93,7 +88,9 @@ class Controller {
   static async handleRequest (request, response, serviceOperation) {
     try {
       const requestParams = this.collectRequestParams(request);
-      const serviceResponse = await serviceOperation(requestParams, /** need to pass the additional argument here */ request, response);
+      const serviceResponse = await serviceOperation(requestParams,
+        /** need to pass the additional argument here */ request,
+        response);
 
       Controller.sendResponse(response, serviceResponse);
     } catch (error) {
