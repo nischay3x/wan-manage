@@ -198,7 +198,15 @@ class DevicesService {
         return Service.rejectResponse(new Error('Some devices were not found'), 404);
       }
 
-      const set = { $set: { upgradeSchedule: { time: devicesUpgradeRequest.date, jobQueued: false } } };
+      const set = {
+        $set: {
+          upgradeSchedule: {
+            time: devicesUpgradeRequest.date,
+            jobQueued: false
+          }
+        }
+      };
+
       const options = { upsert: false, useFindAndModify: false };
       await devices.updateMany(query, set, options);
       return Service.successResponse();
@@ -213,7 +221,15 @@ class DevicesService {
   static async devicesIdUpgdSchedPOST ({ id, deviceUpgradeRequest }, { user }) {
     try {
       const query = { _id: id };
-      const set = { $set: { upgradeSchedule: { time: deviceUpgradeRequest.date, jobQueued: false } } };
+      const set = {
+        $set: {
+          upgradeSchedule: {
+            time: deviceUpgradeRequest.date,
+            jobQueued: false
+          }
+        }
+      };
+
       const options = { upsert: false, useFindAndModify: false };
       const res = await devices.updateOne(query, set, options);
       if (res.n === 0) {
