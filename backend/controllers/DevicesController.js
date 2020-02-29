@@ -33,6 +33,10 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdConfigurationGET);
   }
 
+  async devicesIdLogsGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdLogsGET);
+  }
+
   async devicesIdDELETE(request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdDELETE);
   }
@@ -53,6 +57,25 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdLogsGET);
   }
 
+  async devicesIdRoutesGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdRoutesGET);
+  }
+
+  async devicesIdStaticroutesGET(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdStaticroutesGET);
+  }
+
+  async devicesIdStaticroutesRouteDELETE(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdStaticroutesDELETE);
+  }
+
+  async devicesIdStaticroutesPOST(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdStaticroutesPOST);
+  }
+
+  async devicesIdStaticroutesRoutePATCH(request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdStaticroutesPUT);
+  }
 }
 
 module.exports = DevicesController;

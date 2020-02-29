@@ -5,10 +5,6 @@ class LogsController {
     this.service = Service;
   }
 
-  async devicesIdLogsGET(request, response) {
-    await Controller.handleRequest(request, response, this.service.devicesIdLogsGET);
-  }
-
 }
 
 module.exports = LogsController;
