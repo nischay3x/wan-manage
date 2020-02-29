@@ -76,9 +76,27 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesExecutePOST ({ action, commandRequest }, { user }) {
+  static async devicesApplyPOST ({ deviceCommand }, { user }) {
     try {
-      return Service.successResponse('');
+      return Service.successResponse();
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Execute an action on the device side
+   *
+   * action String Command to execute
+   * commandRequest CommandRequest  (optional)
+   * no response value expected for this operation
+   **/
+  static async devicesIdApplyPOST ({ id, deviceCommand }, { user }) {
+    try {
+      return Service.successResponse();
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -168,19 +186,19 @@ class DevicesService {
     }
   }
 
-  static async devicesUpgdSchedPOST ({ ids, date }, { user }) {
+  static async devicesUpgdSchedPOST ({ devicesUpgradeRequest }, { user }) {
     try {
-      const query = { _id: { $in: ids } };
+      const query = { _id: { $in: devicesUpgradeRequest.devices } };
       const numOfIdsFound = await devices.countDocuments(query);
 
       // The request is considered invalid if not all device IDs
       // are found in the database. This is done to prevent a partial
       // schedule of the devices in case of a user's mistake.
-      if (numOfIdsFound < ids.length) {
+      if (numOfIdsFound < devicesUpgradeRequest.devices.length) {
         return Service.rejectResponse(new Error('Some devices were not found'), 404);
       }
 
-      const set = { $set: { upgradeSchedule: { time: date, jobQueued: false } } };
+      const set = { $set: { upgradeSchedule: { time: devicesUpgradeRequest.date, jobQueued: false } } };
       const options = { upsert: false, useFindAndModify: false };
       await devices.updateMany(query, set, options);
       return Service.successResponse();
@@ -192,14 +210,16 @@ class DevicesService {
     }
   }
 
-  static async devicesIdUpgdSchedPOST ({ id, date }, { user }) {
+  static async devicesIdUpgdSchedPOST ({ id, deviceUpgradeRequest }, { user }) {
     try {
       const query = { _id: id };
-      const set = { $set: { upgradeSchedule: { time: date, jobQueued: false } } };
+      const set = { $set: { upgradeSchedule: { time: deviceUpgradeRequest.date, jobQueued: false } } };
       const options = { upsert: false, useFindAndModify: false };
       const res = await devices.updateOne(query, set, options);
       if (res.n === 0) {
         return Service.rejectResponse(new Error('Device not found'), 404);
+      } else {
+        return Service.successResponse();
       }
     } catch (e) {
       return Service.rejectResponse(

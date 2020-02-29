@@ -714,6 +714,50 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/apply:
+    post:
+      operationId: devicesApplyPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCommand'
+      responses:
+        "204":
+          description: No Content
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Execute an action on the device side
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/upgdSched:
     post:
       operationId: devicesUpgdSchedPOST
@@ -1079,61 +1123,6 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-#  /devices/execute:
-#    post:
-#      operationId: devicesExecutePOST
-#      parameters:
-#      - description: Command to execute
-#        explode: true
-#        in: query
-#        name: action
-#        required: true
-#        schema:
-#          type: string
-#        style: form
-#      requestBody:
-#        content:
-#          application/json:
-#            schema:
-#              $ref: '#/components/schemas/CommandRequest'
-#      responses:
-#        "204":
-#          description: No Content
-#        "400":
-#          description: Bad Request
-#        "401":
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: Unauthorized
-#        "403":
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: Forbidden
-#        "500":
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: Internal server error
-#        default:
-#          content:
-#            application/json:
-#              schema:
-#                $ref: '#/components/schemas/Error'
-#          description: Unexpected error
-#      security:
-#      - apiKey: []
-#      - bearerAuth: []
-#      summary: Execute an action on the device side
-#      tags:
-#      - Devices
-#      x-swagger-router-controller: Devices
-#      x-openapi-router-controller: DevicesController
-#      x-openapi-router-service: DevicesService
 #
 #  /devices/register:
 #    post:
@@ -1923,9 +1912,9 @@ paths:
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
 
-  /devices/{id}/execute:
+  /devices/{id}/apply:
     post:
-      operationId: devicesIdExecutePOST
+      operationId: devicesIdApplyPOST
       parameters:
       - description: Numeric ID of the Device to start
         explode: false
@@ -1935,21 +1924,11 @@ paths:
         schema:
           type: string
         style: simple
-      - description: Command to execute
-        explode: true
-        in: query
-        name: action
-        required: true
-        schema:
-          type: string
-        style: form
       requestBody:
         content:
           application/json:
             schema:
-              oneOf:
-              - $ref: '#/components/schemas/CreateTunnelCommand'
-              - $ref: '#/components/schemas/DeleteTunnelCommand'
+              $ref: '#/components/schemas/DeviceCommand'
       responses:
         "204":
           description: No Content
@@ -4128,22 +4107,6 @@ components:
         account:
           type: string
       type: object
-    CommandRequest:
-      example:
-        ids:
-        - ids
-        - ids
-        command: ""
-      properties:
-        ids:
-          items:
-            type: string
-          type: array
-        command:
-          oneOf:
-          - $ref: '#/components/schemas/CreateTunnelCommand'
-          - $ref: '#/components/schemas/DeleteTunnelCommand'
-      type: object
     CreateTunnelCommand:
       properties:
         devices:
@@ -4156,6 +4119,13 @@ components:
         id:
           type: string
       type: object
+    DeviceCommand:
+      type: object
+      properties:
+        method:
+          type: string
+        devices:
+          type: object
     Invoice:
       properties:
         id:
