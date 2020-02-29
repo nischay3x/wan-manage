@@ -152,7 +152,7 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async devicesGET ({ offset, limit }, { user }) {
+  static async devicesGET ({ org, offset, limit }, { user }) {
     try {
       const result = await devices.find({ org: user.defaultOrg._id });
 
@@ -215,7 +215,7 @@ class DevicesService {
    *
    * returns DeviceLatestVersion
    **/
-  static async devicesLatestVersionsGET () {
+  static async devicesLatestVersionsGET ({ org }) {
     try {
       const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
       return Service.successResponse({
@@ -709,7 +709,7 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesStatisticsGET ({ user }) {
+  static async devicesStatisticsGET ({ org }, { user }) {
     try {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;

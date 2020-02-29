@@ -62,7 +62,7 @@ class TunnelsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async tunnelsGET ({ offset, limit }, { user }) {
+  static async tunnelsGET ({ org, offset, limit }, { user }) {
     try {
       const response = await Tunnels.find({ org: user.defaultOrg._id, isActive: true })
         .populate('deviceA').populate('deviceB');

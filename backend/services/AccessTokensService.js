@@ -28,7 +28,7 @@ class AccessTokensService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async accesstokensGET ({ offset, limit }, { user }) {
+  static async accesstokensGET ({ org, offset, limit }, { user }) {
     try {
       const response = await AccessTokens.find({ account: user.defaultAccount._id })
         .populate('organization');
