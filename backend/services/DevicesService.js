@@ -1,8 +1,26 @@
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2020  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 /* eslint-disable no-unused-vars */
 const Service = require('./Service');
 const { devices, staticroutes } = require('../models/devices');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
+const { deviceStats } = require('../models/analytics/deviceStats');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
@@ -10,6 +28,49 @@ const pick = require('lodash/pick');
 const dispatcher = require('../deviceLogic/dispatcher');
 
 class DevicesService {
+
+
+  static async queryDeviceStats({org, id, startTime, endTime}) {
+    const match = { org: mongoose.Types.ObjectId(org) };
+
+    if (id) match.device = mongoose.Types.ObjectId(id);
+    if (startTime && endTime) {
+      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
+    } else if (startTime) match.time = { $gte: startTime };
+    else if (endTime) match.time = { $lte: endTime };
+
+    const pipeline = [
+      { $match: match },
+      { $project: { time: 1, stats: { $objectToArray: '$stats' } } },
+      { $unwind: '$stats' },
+      {
+        $group:
+              {
+                _id: { time: '$time', interface: 'All' },
+                rx_bps: { $sum: '$stats.v.rx_bps' },
+                tx_bps: { $sum: '$stats.v.tx_bps' },
+                rx_pps: { $sum: '$stats.v.rx_pps' },
+                tx_pps: { $sum: '$stats.v.tx_pps' }
+              }
+      },
+      {
+        $project: {
+          _id: 0,
+          time: '$_id.time',
+          interface: '$_id.interface',
+          rx_bps: '$rx_bps',
+          tx_bps: '$tx_bps',
+          rx_pps: '$rx_pps',
+          tx_pps: '$tx_pps'
+        }
+      },
+      { $sort: { time: -1 } }
+    ];
+
+    return deviceStats.aggregate(pipeline).allowDiskUse(true);
+  }
+
+
   /**
    * Execute an action on the device side
    *
@@ -371,11 +432,11 @@ class DevicesService {
    *
    * id String Numeric ID of the Device to start
    * action String Command to execute
-   * uNKNOWNUnderscoreBASEUnderscoreTYPE UNKNOWN_BASE_TYPE  (optional)
+   * request object  (optional)
    * no response value expected for this operation
    **/
   static async devicesIdExecutePOST (
-    { id, action, uNKNOWNUnderscoreBASEUnderscoreTYPE }, { user }) {
+    { id, action, request }, { user }) {
     try {
       return Service.successResponse('');
     } catch (e) {
@@ -634,6 +695,58 @@ class DevicesService {
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
       dispatcher.apply(device, copy.method, user, copy);
       return Service.successResponse({ deviceId: device.id });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
+  }
+
+  /**
+   * Retrieve devices statistics information
+   *
+   * id Object Numeric ID of the Device to fetch information about
+   * returns DeviceStatistics
+   **/
+  static async devicesStatisticsGET({ user }) {
+    try {
+      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
+      const endTime = null;
+
+      const stats = await DeviceService.queryDeviceStats( {
+        org:user.defaultOrg._id.toString(),
+        id: null,
+        startTime: startTime,
+        endTime: endTime
+      });
+      return Service.successResponse(stats);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 405,
+      );
+    }
+  }
+
+  /**
+   * Retrieve device statistics information
+   *
+   * id Object Numeric ID of the Device to fetch information about
+   * returns DeviceStatistics
+   **/
+  static async devicesIdStatisticsGET({ id }, { user }) {
+    try {
+      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
+      const endTime = null;
+
+      const stats = await DevicesService.queryDeviceStats( {
+        org:user.defaultOrg._id.toString(),
+        id: id,
+        startTime: startTime,
+        endTime: endTime
+      });
+      return Service.successResponse(stats);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
