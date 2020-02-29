@@ -139,7 +139,7 @@ class MembersService {
   /**
    * Get all Members
    *
-   * offset Integer The number of items to skip before starting to collect the result set (optional)
+   * offset Integer The number of items to skip before starting to collect the result set
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
@@ -216,7 +216,7 @@ class MembersService {
     try {
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
-      if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400); //next(createError(400, checkParams.error));
+      if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
       // make sure user is only allow to define membership under his view
       const verified = await MembersService.checkMemberLevel(
@@ -226,7 +226,8 @@ class MembersService {
         user._id,
         user.defaultAccount._id
       );
-      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
+      if (!verified) return Service.rejectResponse(
+        new Error('No sufficient permissions for this operation'), 400);
 
       // Update
       const member = await membership.findOneAndUpdate(
@@ -234,10 +235,13 @@ class MembersService {
         {
           $set: {
             group: memberRequest.userPermissionTo === 'group' ? memberRequest.userEntity : '',
-            organization: memberRequest.userPermissionTo === 'organization' ? memberRequest.userEntity : null,
+            organization: memberRequest.userPermissionTo === 'organization' ?
+              memberRequest.userEntity : null,
             to: memberRequest.userPermissionTo,
             role: memberRequest.userRole,
-            perms: preDefinedPermissions[memberRequest.userPermissionTo + '_' + memberRequest.userRole]
+            perms: preDefinedPermissions[
+              memberRequest.userPermissionTo + '_' + memberRequest.userRole
+            ]
           }
         },
         { upsert: false, new: true, runValidators: true })
@@ -247,7 +251,9 @@ class MembersService {
 
       // Verify if default organization still accessible by the
       // user after the change, if not switch to another org
-      const _user = await Users.findOne({ _id: memberRequest.userId }).populate('defaultAccount');
+      const _user = await Users.findOne({ _id: memberRequest.userId })
+        .populate('defaultAccount');
+
       if (_user.defaultAccount._id.toString() === _user.defaultAccount._id.toString()) {
         const orgs = await getUserOrganizations(_user);
         const org = orgs[_user.defaultOrg];
@@ -276,11 +282,11 @@ class MembersService {
     } catch (err) {
       logger.error('Error updating user', {
         params: {
-          memberId: req.params.memberId,
+          memberId: id,
           reason: err.message
         }
       });
-      return Service.rejectResponse(err, 400); // next(createError(400, err.message));
+      return Service.rejectResponse(err, 400);
     }
   }
 

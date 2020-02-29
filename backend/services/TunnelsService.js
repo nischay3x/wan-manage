@@ -17,12 +17,12 @@
 
 const Service = require('./Service');
 const Tunnels = require('../models/tunnels');
+const mongoose = require('mongoose');
 
 // not sure that it is needed
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
-
   /**
    * Retrieve device tunnels information
    *
@@ -31,7 +31,7 @@ class TunnelsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async tunnelsIdDELETE({ id, offset, limit }, { user }) {
+  static async tunnelsIdDELETE ({ id, offset, limit }, { user }) {
     try {
       const resp = await Tunnels.findOneAndUpdate(
         // Query
@@ -46,7 +46,7 @@ class TunnelsService {
       } else {
         return Service.rejectResponse(404);
       }
-    } catch (error) {
+    } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
         e.status || 405
@@ -64,7 +64,8 @@ class TunnelsService {
    **/
   static async tunnelsGET ({ offset, limit }, { user }) {
     try {
-      const response = await Tunnels.find({ org: user.defaultOrg._id, isActive: true }).populate('deviceA').populate('deviceB');
+      const response = await Tunnels.find({ org: user.defaultOrg._id, isActive: true })
+        .populate('deviceA').populate('deviceB');
 
       // Populate interface details
       response.forEach((d) => {

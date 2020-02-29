@@ -26,16 +26,18 @@ const mailer = require('../utils/mailer')(
   configs.get('mailerBypassCert')
 );
 const { getToken, getRefreshToken } = require('../tokens');
+const randomKey = require('../utils/random-key');
+const Users = require('../models/users');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 class UsersService {
-
   /**
    * Login
    *
    * loginRequest LoginRequest  (optional)
    * no response value expected for this operation
    **/
-  static async usersLoginPOST({ loginRequest }, { user }, response) {
+  static async usersLoginPOST ({ loginRequest }, { user }, response) {
     try {
       // Create token with user id and username
       const token = await getToken({ user });
@@ -60,7 +62,7 @@ class UsersService {
    * resetPasswordRequest ResetPasswordRequest  (optional)
    * no response value expected for this operation
    **/
-  static async usersResetPasswordPOST({ resetPasswordRequest }) {
+  static async usersResetPasswordPOST ({ resetPasswordRequest }) {
     try {
       const validateKey = randomKey(30);
 
@@ -80,7 +82,8 @@ class UsersService {
           resetPasswordRequest.email,
           'Reset Password for Your flexiWAN Account',
           `<h2>Reset Password for your flexiWAN Account</h2>
-                <b>It has been requested to reset your account password. If it is asked by yourself,
+                <b>It has been requested to reset your account password.
+                   If it is asked by yourself,
                    click below to reset your password. If you do not know who this is,
                    ignore this message.</b>
                 <p><a href="${configs.get(
@@ -115,12 +118,14 @@ class UsersService {
    * updatePasswordRequest UpdatePasswordRequest  (optional)
    * no response value expected for this operation
    **/
-  static async usersUpdatePasswordPOST({ updatePasswordRequest }, { user }) {
+  static async usersUpdatePasswordPOST ({ updatePasswordRequest }, { user }) {
     try {
       // Validate password
-      if (!auth.validatePassword(updatePasswordRequest.password)) return next(createError(500, 'Bad Password'));
+      if (!auth.validatePassword(updatePasswordRequest.password)) {
+        return Service.rejectResponse(new Error('Bad Password'), 500);
+      }
 
-      let registerUser = await Users.findOneAndUpdate(
+      const registerUser = await Users.findOneAndUpdate(
         // Query, use the email and password reset token
         {
           email: updatePasswordRequest.email,

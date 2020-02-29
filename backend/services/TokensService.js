@@ -72,7 +72,7 @@ class TokensService {
     }
   }
 
-  static async tokensIdGET({ id }, { user }) {
+  static async tokensIdGET ({ id }, { user }) {
     try {
       const token = await Tokens.findOne({ _id: id, org: user.defaultOrg._id });
 

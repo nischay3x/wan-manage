@@ -24,7 +24,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 class JobsService {
-
   /**
    * Get all Jobs
    *
@@ -33,7 +32,7 @@ class JobsService {
    * status String A filter on the job status (optional)
    * returns List
    **/
-  static async jobsGET({ offset, limit, status }, { user }) {
+  static async jobsGET ({ offset, limit, status }, { user }) {
     try {
       const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
       // Check state provided is allowed
@@ -52,7 +51,8 @@ class JobsService {
           })
         );
       } else {
-        await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(), status, (job) => result.push(job));
+        await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(),
+          status, (job) => result.push(job));
       }
 
       return Service.successResponse(result);
@@ -70,12 +70,12 @@ class JobsService {
    * id Integer Numeric ID of the Job to delete
    * no response value expected for this operation
    **/
-  static async jobsIdDELETE({ id }, req) {
+  static async jobsIdDELETE ({ id }, req) {
     try {
       logger.info('Deleting jobs', {
         params: {
           org: req.user.defaultOrg._id.toString(),
-          jobs: [ id ]
+          jobs: [id]
         },
         req: req
       });

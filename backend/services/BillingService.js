@@ -17,12 +17,13 @@
 
 const Service = require('./Service');
 const flexibilling = require('../flexibilling');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 class BillingService {
   /**
    * Get all Invoices
    *
-   * offset Integer The number of items to skip before starting to collect the result set (optional)
+   * offset Integer The number of items to skip before starting to collect the result set
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
