@@ -45,7 +45,6 @@ const pick = (...keys) => obj => keys.reduce((a, e) => {
 }, {});
 
 class MembersService {
-
   // check user parameters
   static checkMemberParameters (memberRequest, user) {
     if (
@@ -56,16 +55,20 @@ class MembersService {
       !memberRequest.userRole ||
       !memberRequest.userEntity
     ) { return { status: false, error: 'Invitation Fields Error' }; }
+
     // Account permissions could be owner, manager or viewer
     // Group and organization permissions could be manager or viewer
-    if (memberRequest.userRole !== 'owner' && memberRequest.userRole !== 'manager' && memberRequest.userRole !== 'viewer') {
+    if (memberRequest.userRole !== 'owner' &&
+      memberRequest.userRole !== 'manager' &&
+      memberRequest.userRole !== 'viewer') {
       return { status: false, error: 'Illegal role' };
     }
+
     if ((memberRequest.userPermissionTo === 'group' ||
       memberRequest.userPermissionTo === 'organization') &&
       memberRequest.userRole !== 'manager' &&
       memberRequest.userRole !== 'viewer') {
-        return { status: false, error: 'Illegal permission combination' };
+      return { status: false, error: 'Illegal permission combination' };
     }
     return { status: true, error: '' };
   };
@@ -415,7 +418,6 @@ class MembersService {
    **/
   static async membersPOST ({ memberRequest }, { user }) {
     try {
-
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
       if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
