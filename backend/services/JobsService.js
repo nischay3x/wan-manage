@@ -59,7 +59,7 @@ class JobsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -70,26 +70,25 @@ class JobsService {
    * id Integer Numeric ID of the Job to delete
    * no response value expected for this operation
    **/
-  static async jobsIdDELETE({ id }, { user }) {
+  static async jobsIdDELETE({ id }, req) {
     try {
       logger.info('Deleting jobs', {
         params: {
-          org: user.defaultOrg._id.toString(),
+          org: req.user.defaultOrg._id.toString(),
           jobs: [ id ]
         },
         req: req
       });
 
-      await deviceQueues.removeJobIdsByOrg(user.defaultOrg._id.toString(), [id]);
+      await deviceQueues.removeJobIdsByOrg(req.user.defaultOrg._id.toString(), [id]);
       return Service.successResponse();
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
-
 }
 
 module.exports = JobsService;

@@ -16,11 +16,9 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
-const configs = require('../configs')();
-const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const flexibilling = require('../flexibilling');
 
 class BillingService {
-
   /**
    * Get all Invoices
    *
@@ -28,13 +26,44 @@ class BillingService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async invoicesGET({ offset, limit }, { user }) {
+  static async invoicesGET ({ offset, limit }, { user }) {
     try {
-      return Service.successResponse([]);
+      const customerId = user.defaultAccount.billingCustomerId;
+
+      if (!customerId) {
+        logger.error('Account does not have link to billing system', { params: {} });
+        return Service.rejectResponse(new Error('Unknown account error'), 500);
+      }
+
+      const invoices = await flexibilling.retrieveInvoices({ customer_id: customerId });
+
+      const _invoices = invoices.map(value => {
+        return {
+          id: value.invoice.id,
+          type: 'card',
+          payment_method: 'card',
+          amount: value.invoice.total,
+          base_currency_code: value.invoice.base_currency_code,
+          status: value.invoice.status,
+          date: value.invoice.date
+        };
+      });
+
+      for (let idx = 0; idx < _invoices.length; idx++) {
+        _invoices[idx].download_url = await flexibilling.retrieveInvoiceDownloadLink({
+          invoice_id: _invoices[idx].id
+        });
+      }
+
+      const summary = await flexibilling.getMaxDevicesRegisteredSummmary(user.defaultAccount.id);
+      const amount = await flexibilling.getCurrentUsage({ customer_id: customerId });
+      const status = await flexibilling.getSubscriptionStatus({ customer_id: customerId });
+
+      return Service.successResponse({ invoices: _invoices, summary, amount, subscription: status });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -45,13 +74,13 @@ class BillingService {
    * id Integer Numeric ID of the Job to delete
    * no response value expected for this operation
    **/
-  static async couponsPOST({ couponsRequest }, { user }) {
+  static async couponsPOST ({ couponsRequest }, { user }) {
     try {
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }

@@ -21,7 +21,6 @@ const { getToken } = require('../tokens');
 const AccessTokens = require('../models/accesstokens');
 
 class AccessTokensService {
-
   /**
    * Get all AccessTokens
    *
@@ -69,7 +68,7 @@ class AccessTokensService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -105,7 +104,7 @@ class AccessTokensService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -151,7 +150,7 @@ class AccessTokensService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }

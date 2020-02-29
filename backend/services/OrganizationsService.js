@@ -53,7 +53,7 @@ class OrganizationsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -127,7 +127,7 @@ class OrganizationsService {
 
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -159,7 +159,7 @@ class OrganizationsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -203,7 +203,7 @@ class OrganizationsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }

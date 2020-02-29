@@ -49,7 +49,7 @@ class UsersService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -104,7 +104,7 @@ class UsersService {
       logger.error('Account Password Reset process failed', { params: { reason: e.message } });
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -142,7 +142,7 @@ class UsersService {
       logger.error('Account Password Udate process failed', { params: { reason: e.message } });
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }

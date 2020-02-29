@@ -50,7 +50,7 @@ class NotificationsService {
       });
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }

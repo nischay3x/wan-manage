@@ -228,8 +228,8 @@ const updResp = (qtype, req, res, next, resp, origDoc = null) => {
           dispatcher.apply([origDoc], 'modify', req.users, {
             newDevice: resp
           }).then(() => {
-            return resolve({ ok: 1});
-          })
+            return resolve({ ok: 1 });
+          });
         } catch (err) {
           return reject(err);
         }
@@ -240,7 +240,7 @@ const updResp = (qtype, req, res, next, resp, origDoc = null) => {
       resolve({ ok: 1 });
     }
   });
-}
+};
 
 const checkDeviceBaseApi = (qtype, req) => new Promise(function (resolve, reject) {
   // Creating new devices should be done only via the /register API

@@ -37,7 +37,6 @@ class OrganizationsController {
   async organizationsPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.organizationsPOST);
   }
-
 }
 
 module.exports = OrganizationsController;

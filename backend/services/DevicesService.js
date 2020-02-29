@@ -27,9 +27,7 @@ const pick = require('lodash/pick');
 const dispatcher = require('../deviceLogic/dispatcher');
 
 class DevicesService {
-
-
-  static async queryDeviceStats({org, id, startTime, endTime}) {
+  static async queryDeviceStats ({ org, id, startTime, endTime }) {
     const match = { org: mongoose.Types.ObjectId(org) };
 
     if (id) match.device = mongoose.Types.ObjectId(id);
@@ -169,7 +167,7 @@ class DevicesService {
     }
   }
 
-  static async devicesUpgdSchedPOST( { ids, date }, { user }) {
+  static async devicesUpgdSchedPOST ( { ids, date }, { user }) {
     try {
       const query = { _id: { $in: ids } };
       const numOfIdsFound = await devices.countDocuments(query);
@@ -193,7 +191,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdUpgdSchedPOST( { id, date }, { user }) {
+  static async devicesIdUpgdSchedPOST ( { id, date }, { user }) {
     try {
       const query = { _id: id };
       const set = { $set: { upgradeSchedule: { time: date, jobQueued: false } } };
@@ -229,7 +227,7 @@ class DevicesService {
    * id String Numeric ID of the Device to retrieve
    * Returns Device
    **/
-  static async devicesIdGET({ id }, { user }) {
+  static async devicesIdGET ({ id }, { user }) {
     try {
       const result = await devices.findOne({ _id: id, org: user.defaultOrg._id });
       const device = DevicesService.selectDeviceParams(result);
@@ -249,7 +247,7 @@ class DevicesService {
    * id String Numeric ID of the Device to retrieve configuration from
    * Returns Device Configuration
    **/
-  static async devicesIdConfigurationGET({ id }, { user }) {
+  static async devicesIdConfigurationGET ({ id }, { user }) {
     try {
       const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
       if (!device || device.length === 0) return Service.rejectResponse(new Error('Device not found'), 404);
@@ -299,50 +297,50 @@ class DevicesService {
    * filter String Filter to be applied (optional)
    * returns DeviceLog
    **/
-  static async devicesIdLogsGET({ id, offset, limit, filter }, { user }) {
+  static async devicesIdLogsGET ({ id, offset, limit, filter }, { user }) {
     try {
       const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
-        if (!device || device.length === 0) return Service.rejectResponse(404);
+      if (!device || device.length === 0) return Service.rejectResponse(404);
 
-        if (!Connections.isConnected(device[0].machineId)) {
-          return Service.successResponse({
-            status: 'disconnected',
-            log: []
-          });
-        }
-
-        const deviceLogs = await Connections.deviceSendMessage(
-          null,
-          device[0].machineId,
-          {
-            entity: 'agent',
-            message: 'get-device-logs',
-            params: {
-              lines: limit || '100',
-              filter: filter || 'all'
-            }
-          }
-        );
-
-        if (!deviceLogs.ok) {
-          logger.error('Failed to get device logs', {
-            params: {
-              deviceId: id,
-              response: deviceLogs.message
-            },
-            req: req
-          });
-          return Service.rejectResponse('Failed to get device logs', 500);
-        }
-
+      if (!Connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'connected',
-          logs: deviceLogs.message
+          status: 'disconnected',
+          log: []
         });
+      }
+
+      const deviceLogs = await Connections.deviceSendMessage(
+        null,
+        device[0].machineId,
+        {
+          entity: 'agent',
+          message: 'get-device-logs',
+          params: {
+            lines: limit || '100',
+            filter: filter || 'all'
+          }
+        }
+      );
+
+      if (!deviceLogs.ok) {
+        logger.error('Failed to get device logs', {
+          params: {
+            deviceId: id,
+            response: deviceLogs.message
+          },
+          req: req
+        });
+        return Service.rejectResponse('Failed to get device logs', 500);
+      }
+
+      return Service.successResponse({
+        status: 'connected',
+        logs: deviceLogs.message
+      });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -353,7 +351,7 @@ class DevicesService {
    * id String Numeric ID of the Device to retrieve configuration from
    * Returns Device Configuration
    **/
-  static async devicesIdLogsGET({ id, filter, lines }, { user }) {
+  static async devicesIdLogsGET ({ id, filter, lines }, { user }) {
     try {
       const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
       if (!device || device.length === 0) return Service.rejectResponse(new Error('Device not found'), 404);
@@ -502,7 +500,7 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async devicesIdRoutesGET({ id, offset, limit }, { user }) {
+  static async devicesIdRoutesGET ({ id, offset, limit }, { user }) {
     try {
       const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
       if (!device || device.length === 0) return Service.rejectResponse(new Error('Device not found'), 404);
@@ -540,7 +538,7 @@ class DevicesService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -553,7 +551,7 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesGET({ id, offset, limit }, { user }) {
+  static async devicesIdStaticroutesGET ({ id, offset, limit }, { user }) {
     try {
       const deviceObject = await devices.find({
         _id: mongoose.Types.ObjectId(id)
@@ -576,7 +574,7 @@ class DevicesService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -588,7 +586,7 @@ class DevicesService {
    * route String Numeric ID of the Route to delete
    * no response value expected for this operation
    **/
-  static async devicesIdStaticroutesRouteDELETE({ id, route }, { user }) {
+  static async devicesIdStaticroutesRouteDELETE ({ id, route }, { user }) {
     try {
       const deviceObject = await devices.find({ _id: mongoose.Types.ObjectId(id) });
       if (!deviceObject || deviceObject.length === 0) {
@@ -605,7 +603,7 @@ class DevicesService {
         }
       );
 
-      let copy = Object.assign({}, )
+      const copy = Object.assign({}, )
       copy.method = 'staticroutes';
       copy.id = route;
       copy.action = 'del';
@@ -614,7 +612,7 @@ class DevicesService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -626,7 +624,7 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns DeviceStaticRouteInformation
    **/
-  static async devicesIdStaticroutesPOST({ id, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesPOST ({ id, staticRouteRequest }, { user }) {
     try {
       const deviceObject = await devices.find({ _id: mongoose.Types.ObjectId(id) });
       if (!deviceObject || deviceObject.length === 0) {
@@ -655,7 +653,7 @@ class DevicesService {
         { new: true }
       );
 
-      let copy = Object.assign({}, staticRouteRequest);
+      const copy = Object.assign({}, staticRouteRequest);
 
       copy.method = 'staticroutes';
       copy.id = route.id;
@@ -664,7 +662,7 @@ class DevicesService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -688,7 +686,7 @@ class DevicesService {
       }
 
       const device = deviceObject[0];
-      let copy = Object.assign({}, staticRouteRequest);
+      const copy = Object.assign({}, staticRouteRequest);
 
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
@@ -697,7 +695,7 @@ class DevicesService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -723,7 +721,7 @@ class DevicesService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -749,7 +747,7 @@ class DevicesService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }

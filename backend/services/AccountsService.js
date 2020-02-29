@@ -23,7 +23,6 @@ const { getToken } = require('../tokens');
 const { getUserAccounts, orgUpdateFromNull } = require('../utils/membershipUtils');
 
 class AccountsService {
-
   /**
    * Get all AccessTokens
    *
@@ -38,7 +37,7 @@ class AccountsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -49,7 +48,7 @@ class AccountsService {
    * id String Numeric ID of the Account to retrieve information
    * returns Account
    **/
-  static async accountsIdGET({ id }, { user }) {
+  static async accountsIdGET ({ id }, { user }) {
     try {
       const account = await Accounts.findOne({ _id: user.defaultAccount._id });
       const {
@@ -65,7 +64,7 @@ class AccountsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -77,7 +76,7 @@ class AccountsService {
    * accountRequest AccountRequest  (optional)
    * returns Account
    **/
-  static async accountsIdPUT({ id, accountRequest }, { user }, response) {
+  static async accountsIdPUT ({ id, accountRequest }, { user }, response) {
     try {
       const account = await Accounts.findOneAndUpdate(
         { _id: id },
@@ -102,7 +101,7 @@ class AccountsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -113,7 +112,9 @@ class AccountsService {
    * selectAccountRequest SelectAccountRequest
    * returns Account
    **/
-  static async accountsSelectPOST({ accountSelectRequest }, { user }) {
+  static async accountsSelectPOST ({ accountSelectRequest }, req, res) {
+    const user = req.user;
+
     try {
       if (!user.defaultAccount || !user.defaultAccount._id || !user._id) {
         return Service.rejectResponse(new Error('Error in selecting account'), 500);
@@ -133,19 +134,18 @@ class AccountsService {
         { defaultAccount: accountSelectRequest.account, defaultOrg: null },
         // Options
         { upsert: false, new: true }
-      )
-        .populate('defaultAccount');
+      ).populate('defaultAccount');
 
-        // Set a default organization for the new account
-        user.defaultAccount = updUser.defaultAccount;
-        user.defaultOrg = null;
+      // Set a default organization for the new account
+      user.defaultAccount = updUser.defaultAccount;
+      user.defaultOrg = null;
 
-        await orgUpdateFromNull(req, res);
-        return Service.successResponse({ _id: updUser.defaultAccount._id });
+      await orgUpdateFromNull(req, res);
+      return Service.successResponse({ _id: updUser.defaultAccount._id });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -156,13 +156,13 @@ class AccountsService {
    * registerAccountRequest RegisterAccountRequest  (optional)
    * returns Account
    **/
-  static async accountsPOST({ registerAccountRequest }, { user }) {
+  static async accountsPOST ({ registerAccountRequest }, { user }) {
     try {
       return Service.successResponse('');
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }

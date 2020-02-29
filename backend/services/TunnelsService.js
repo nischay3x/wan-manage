@@ -49,7 +49,7 @@ class TunnelsService {
     } catch (error) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     }
   }
@@ -101,7 +101,7 @@ class TunnelsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
-        e.status || 405,
+        e.status || 405
       );
     };
   }

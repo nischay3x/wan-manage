@@ -29,7 +29,6 @@ class BillingController {
   async couponsPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.couponsPOST);
   }
-
 }
 
 module.exports = BillingController;

@@ -40,5 +40,5 @@ module.exports = {
   TokensController,
   TunnelsController,
   UsersController,
-  BillingController,
+  BillingController
 };

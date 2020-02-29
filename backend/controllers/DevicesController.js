@@ -26,8 +26,8 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesExecutePOST);
   }
 
-  async devicesGET(request, response) {
-    await Controller.handleRequest (request, response, this.service.devicesGET);
+  async devicesGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesGET);
   }
 
   async devicesLatestVersionsGET (request, response) {
@@ -68,10 +68,6 @@ class DevicesController {
 
   async devicesIdPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdPUT);
-  }
-
-  async devicesIdLogsGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.devicesIdLogsGET);
   }
 
   async devicesIdRoutesGET (request, response) {
