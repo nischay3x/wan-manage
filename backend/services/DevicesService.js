@@ -69,7 +69,6 @@ class DevicesService {
     return deviceStats.aggregate(pipeline).allowDiskUse(true);
   }
 
-
   /**
    * Execute an action on the device side
    *
@@ -169,7 +168,7 @@ class DevicesService {
     }
   }
 
-  static async devicesUpgdSchedPOST ( { ids, date }, { user }) {
+  static async devicesUpgdSchedPOST ({ ids, date }, { user }) {
     try {
       const query = { _id: { $in: ids } };
       const numOfIdsFound = await devices.countDocuments(query);
@@ -342,59 +341,6 @@ class DevicesService {
           }
         });
         return Service.rejectResponse('Failed to get device logs', 500);
-      }
-
-      return Service.successResponse({
-        status: 'connected',
-        logs: deviceLogs.message
-      });
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
-
-  /**
-   * Retrieve device configuration
-   *
-   * id String Numeric ID of the Device to retrieve configuration from
-   * Returns Device Configuration
-   **/
-  static async devicesIdLogsGET ({ id, filter, lines }, { user }) {
-    try {
-      const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
-      if (!device || device.length === 0) return Service.rejectResponse(new Error('Device not found'), 404);
-
-      if (!connections.isConnected(device[0].machineId)) {
-        return Service.successResponse({
-          status: 'disconnected',
-          log: []
-        });
-      }
-
-      const deviceLogs = await connections.deviceSendMessage(
-        null,
-        device[0].machineId,
-        {
-          entity: 'agent',
-          message: 'get-device-logs',
-          params: {
-            lines: lines || '100',
-            filter: filter || 'all'
-          }
-        }
-      );
-
-      if (!deviceLogs.ok) {
-        logger.error('Failed to get device logs', {
-          params: {
-            deviceId: id,
-            response: deviceLogs.message
-          }
-        });
-        return Service.rejectResponse(new Error('Failed to get device logs'), 404);
       }
 
       return Service.successResponse({
@@ -606,7 +552,7 @@ class DevicesService {
         }
       );
 
-      const copy = Object.assign({}, staticRouteRequest);
+      const copy = Object.assign({}, route);
       copy.method = 'staticroutes';
       copy.id = route;
       copy.action = 'del';
@@ -714,7 +660,7 @@ class DevicesService {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;
 
-      const stats = await DeviceService.queryDeviceStats({
+      const stats = await DevicesService.queryDeviceStats({
         org: user.defaultOrg._id.toString(),
         id: null,
         startTime: startTime,
