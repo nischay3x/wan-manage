@@ -60,7 +60,12 @@ class BillingService {
       const amount = await flexibilling.getCurrentUsage({ customer_id: customerId });
       const status = await flexibilling.getSubscriptionStatus({ customer_id: customerId });
 
-      return Service.successResponse({ invoices: _invoices, summary, amount, subscription: status });
+      return Service.successResponse({
+        invoices: _invoices,
+        summary,
+        amount,
+        subscription: status
+      });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',

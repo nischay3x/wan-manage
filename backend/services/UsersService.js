@@ -17,7 +17,6 @@
 
 const Service = require('./Service');
 
-const createError = require('http-errors');
 const configs = require('../configs')();
 const auth = require('../authenticate');
 const mailer = require('../utils/mailer')(

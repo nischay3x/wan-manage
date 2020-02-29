@@ -143,7 +143,7 @@ class MembersService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async membersGET({ offset, limit }, { user }) {
+  static async membersGET ({ offset, limit }, { user }) {
     // pick routine
     const pick = (...keys) => obj => keys.reduce((a, e) => {
       const objKeys = e.split('.');
@@ -212,7 +212,7 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static async membersIdPUT({ id, memberRequest }, { user }) {
+  static async membersIdPUT ({ id, memberRequest }, { user }) {
     try {
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
@@ -226,8 +226,11 @@ class MembersService {
         user._id,
         user.defaultAccount._id
       );
-      if (!verified) return Service.rejectResponse(
+
+      if (!verified) {
+        return Service.rejectResponse(
         new Error('No sufficient permissions for this operation'), 400);
+      }
 
       // Update
       const member = await membership.findOneAndUpdate(
@@ -235,8 +238,8 @@ class MembersService {
         {
           $set: {
             group: memberRequest.userPermissionTo === 'group' ? memberRequest.userEntity : '',
-            organization: memberRequest.userPermissionTo === 'organization' ?
-              memberRequest.userEntity : null,
+            organization: memberRequest.userPermissionTo === 'organization'
+              ? memberRequest.userEntity : null,
             to: memberRequest.userPermissionTo,
             role: memberRequest.userRole,
             perms: preDefinedPermissions[
@@ -295,7 +298,7 @@ class MembersService {
    * id String numeric ID of the account to modify
    * returns Member
    */
-  static async membersIdGET({ id }, { user }) {
+  static async membersIdGET ({ id }, { user }) {
     let userPromise = null;
     // Check the user permission:
     // Account owners or members should be able to see all account users
@@ -321,8 +324,11 @@ class MembersService {
     }
 
     if (userPromise) {
-      const memList = await userPromise.populate('user').populate('account').populate('organization');
-      let response = await memList.map(mem => pick(
+      const memList = await userPromise.populate('user')
+        .populate('account')
+        .populate('organization');
+
+      const response = await memList.map(mem => pick(
         '_id',
         'user._id',
         'user.name',
@@ -347,7 +353,7 @@ class MembersService {
    * id String Numeric ID of the account to delete
    * returns Member
    **/
-  static async membersIdDELETE({ id }, { user }) {
+  static async membersIdDELETE ({ id }, { user }) {
     try {
       // Find member id data
       const membershipData = await membership.findOne({
@@ -362,9 +368,11 @@ class MembersService {
 
       // Check that current user is allowed to delete member
       const verified = await MembersService.checkMemberLevel(membershipData.to, membershipData.role,
-        (membershipData.to === 'organization') ? membershipData.organization : membershipData.group,
+        (membershipData.to === 'organization')
+          ? membershipData.organization : membershipData.group,
         user._id, user.defaultAccount._id);
-      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
+      if (!verified) return Service.rejectResponse(
+        new Error('No sufficient permissions for this operation'), 400);
 
       // Check that the account have at least one owner
       if (membershipData.to === 'account' && membershipData.role === 'owner') {
@@ -401,7 +409,7 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static async membersPOST({ memberRequest }, { user }) {
+  static async membersPOST ({ memberRequest }, { user }) {
     try {
 
       // Check that input parameters are OK
@@ -410,7 +418,7 @@ class MembersService {
 
       // Check if user don't add itself
       if (user.email === memberRequest.email) {
-        return next(createError(500, 'You can not add yourself'));
+        return Service.rejectResponse(new Error('You can not add yourself'), 500);
       }
 
       // make sure user is only allow to define membership under his view
@@ -421,7 +429,8 @@ class MembersService {
         user._id,
         user.defaultAccount._id
       );
-      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
+      if (!verified) return Service.rejectResponse(
+        new Error('No sufficient permissions for this operation'), 400);
 
       // Add user
       let registerUser = null;
@@ -445,7 +454,8 @@ class MembersService {
           state: 'unverified',
           emailTokens: { verify: '', invite: '', resetPassword: resetPWKey },
           defaultAccount: user.defaultAccount._id,
-          defaultOrg: memberRequest.userPermissionTo === 'organization' ? memberRequest.userEntity : null
+          defaultOrg: memberRequest.userPermissionTo === 'organization'
+            ? memberRequest.userEntity : null
           // null will try to find a valid organization on login
         });
         registerUser.validate();
@@ -460,10 +470,13 @@ class MembersService {
         user: (existingUser) ? existingUser._id : registerUser._id,
         account: user.defaultAccount._id,
         group: memberRequest.userPermissionTo === 'group' ? memberRequest.userEntity : '',
-        organization: memberRequest.userPermissionTo === 'organization' ? memberRequest.userEntity : null,
+        organization: memberRequest.userPermissionTo === 'organization'
+          ? memberRequest.userEntity : null,
         to: memberRequest.userPermissionTo,
         role: memberRequest.userRole,
-        perms: preDefinedPermissions[memberRequest.userPermissionTo + '_' + memberRequest.userRole]
+        perms: preDefinedPermissions[
+          memberRequest.userPermissionTo + '_' + memberRequest.userRole
+        ]
       }], { session: session });
 
       if (registerUser) {
@@ -495,7 +508,8 @@ class MembersService {
 
       // Send webhooks only for users invited as account owners
       // changing the user role later will not send another hook
-      if (memberRequest.userPermissionTo === 'account' && memberRequest.userRole === 'owner') {
+      if (memberRequest.userPermissionTo === 'account' &&
+        memberRequest.userRole === 'owner') {
         // Trigger web hook
         const webHookMessage = {
           account: user.defaultAccount.name,
@@ -535,8 +549,7 @@ class MembersService {
     }
   }
 
-
-  static async membersOptionsTypeGET({ type }, { user }) {
+  static async membersOptionsTypeGET ({ type }, { user }) {
     if (type === 'account') {
       return Service.successResponse([{
         id: user.defaultAccount._id,
@@ -565,12 +578,7 @@ class MembersService {
       };
     });
     return Service.successResponse(result);
-      // .catch((err) => {
-      //   logger.error('Error getting member options', { params: { reason: err.message } });
-      //   return next(createError(500, 'Error getting member options'));
-      // });
   }
-
 }
 
 module.exports = MembersService;
