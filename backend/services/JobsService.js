@@ -58,8 +58,8 @@ class JobsService {
       return Service.successResponse(result);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -84,8 +84,8 @@ class JobsService {
       return Service.successResponse();
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }

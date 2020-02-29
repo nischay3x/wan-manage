@@ -44,8 +44,8 @@ class TokensService {
       return Service.successResponse(tokens);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -66,8 +66,8 @@ class TokensService {
       return Service.successResponse();
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -79,8 +79,8 @@ class TokensService {
       return Service.successResponse([token]);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -108,8 +108,8 @@ class TokensService {
       return Service.successResponse(token);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -140,8 +140,8 @@ class TokensService {
       });
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }

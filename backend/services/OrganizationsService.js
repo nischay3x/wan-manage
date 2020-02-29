@@ -51,8 +51,8 @@ class OrganizationsService {
       return Service.successResponse(result);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -133,8 +133,8 @@ class OrganizationsService {
       logger.error('Error deleting organization', { params: { reason: e.message } });
 
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -165,8 +165,8 @@ class OrganizationsService {
       }
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -209,8 +209,8 @@ class OrganizationsService {
       return Service.successResponse(org, 201);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }

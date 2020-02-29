@@ -49,8 +49,8 @@ class UsersService {
       return Service.successResponse({ username: user.name });
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -105,8 +105,8 @@ class UsersService {
     } catch (e) {
       logger.error('Account Password Reset process failed', { params: { reason: e.message } });
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -145,8 +145,8 @@ class UsersService {
     } catch (e) {
       logger.error('Account Password Udate process failed', { params: { reason: e.message } });
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }

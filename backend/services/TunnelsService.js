@@ -48,8 +48,8 @@ class TunnelsService {
       }
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -101,8 +101,8 @@ class TunnelsService {
       return Service.successResponse(response);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     };
   }
