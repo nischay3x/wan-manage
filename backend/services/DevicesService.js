@@ -202,10 +202,12 @@ class DevicesService {
       if (res.n === 0) {
         return Service.rejectResponse(new Error('Device not found'), 404);
       }
-    } catch (err) {
-      return Service.rejectResponse();
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
-    return Service.successResponse();
   }
 
   /**
@@ -220,8 +222,11 @@ class DevicesService {
         versions: swUpdater.getLatestSwVersions(),
         versionDeadline: swUpdater.getVersionUpDeadline()
       });
-    } catch (err) {
-      return Service.rejectResponse(err);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
