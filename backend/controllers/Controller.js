@@ -15,6 +15,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const Logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+
 class Controller {
   static sendResponse (response, payload) {
     /**
@@ -91,6 +93,18 @@ class Controller {
       const serviceResponse = await serviceOperation(requestParams,
         /** need to pass the additional argument here */ request,
         response);
+
+      // need to log request if not successfull
+      if (serviceResponse.code >= 400) {
+        Logger.error('Error performing operation', {
+          params: {
+            url: request.url,
+            method: request.method,
+            body: request.body,
+            error: serviceResponse
+          }
+        });
+      }
 
       Controller.sendResponse(response, serviceResponse);
     } catch (error) {
