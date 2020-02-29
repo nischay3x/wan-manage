@@ -29,7 +29,7 @@ class TokensService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async tokensGET ({ offset, limit }, { user }) {
+  static async tokensGET ({ org, offset, limit }, { user }) {
     try {
       const result = await Tokens.find({ org: user.defaultOrg._id });
 
