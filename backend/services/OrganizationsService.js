@@ -32,6 +32,7 @@ const Flexibilling = require('../flexibilling');
 
 const { getUserOrganizations, orgUpdateFromNull } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getToken } = require('../tokens');
 
 class OrganizationsService {
@@ -45,7 +46,7 @@ class OrganizationsService {
   static async organizationsGET ({ offset, limit }, { user }) {
     try {
       const orgs = await getUserOrganizations(user);
-      const result = Object.keys(orgs).map((key) => { return orgs[key]});
+      const result = Object.keys(orgs).map((key) => { return orgs[key]; });
 
       return Service.successResponse(result);
     } catch (e) {
@@ -63,8 +64,10 @@ class OrganizationsService {
    * no response value expected for this operation
    **/
   static async organizationsIdDELETE ({ id }, { user }, response) {
+    let session;
+
     try {
-      const session = await mongoConns.getMainDB().startSession();
+      session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
 
       // Find and remove organization from account

@@ -29,7 +29,7 @@ class NotificationsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async notificationsGET({ offset, limit }, { user }) {
+  static async notificationsGET ({ offset, limit }, { user }) {
     try {
       const query = { org: user.defaultOrg._id };
 

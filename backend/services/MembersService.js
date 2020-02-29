@@ -61,10 +61,11 @@ class MembersService {
     if (memberRequest.userRole !== 'owner' && memberRequest.userRole !== 'manager' && memberRequest.userRole !== 'viewer') {
       return { status: false, error: 'Illegal role' };
     }
-    if ((memberRequest.userPermissionTo === 'group' || memberRequest.userPermissionTo === 'organization') &&
+    if ((memberRequest.userPermissionTo === 'group' ||
+      memberRequest.userPermissionTo === 'organization') &&
       memberRequest.userRole !== 'manager' &&
       memberRequest.userRole !== 'viewer') {
-      return { status: false, error: 'Illegal permission combination' };
+        return { status: false, error: 'Illegal permission combination' };
     }
     return { status: true, error: '' };
   };
@@ -229,7 +230,7 @@ class MembersService {
 
       if (!verified) {
         return Service.rejectResponse(
-        new Error('No sufficient permissions for this operation'), 400);
+          new Error('No sufficient permissions for this operation'), 400);
       }
 
       // Update
@@ -257,7 +258,7 @@ class MembersService {
       const _user = await Users.findOne({ _id: memberRequest.userId })
         .populate('defaultAccount');
 
-      if (_user.defaultAccount._id.toString() === _user.defaultAccount._id.toString()) {
+      if (_user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
         const orgs = await getUserOrganizations(_user);
         const org = orgs[_user.defaultOrg];
         if (!org) {
@@ -347,6 +348,7 @@ class MembersService {
       return Service.successResponse([]);
     }
   }
+
   /**
    * Delete member
    *
@@ -371,8 +373,10 @@ class MembersService {
         (membershipData.to === 'organization')
           ? membershipData.organization : membershipData.group,
         user._id, user.defaultAccount._id);
-      if (!verified) return Service.rejectResponse(
-        new Error('No sufficient permissions for this operation'), 400);
+      if (!verified) {
+        return Service.rejectResponse(
+          new Error('No sufficient permissions for this operation'), 400);
+      }
 
       // Check that the account have at least one owner
       if (membershipData.to === 'account' && membershipData.role === 'owner') {
@@ -429,8 +433,10 @@ class MembersService {
         user._id,
         user.defaultAccount._id
       );
-      if (!verified) return Service.rejectResponse(
-        new Error('No sufficient permissions for this operation'), 400);
+      if (!verified) {
+        return Service.rejectResponse(
+          new Error('No sufficient permissions for this operation'), 400);
+      }
 
       // Add user
       let registerUser = null;
@@ -485,7 +491,7 @@ class MembersService {
       };
 
       // Send email
-      const p = await mailer.sendMailHTML(
+      await mailer.sendMailHTML(
         'noreply@flexiwan.com',
         memberRequest.email,
         'You are invited to a flexiWAN Account',
