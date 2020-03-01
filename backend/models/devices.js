@@ -270,7 +270,7 @@ const deviceSchema = new Schema({
     type: String,
     maxlength: [50, 'Description length must be at most 50'],
     validate: {
-      validator: validators.validateDevDescription,
+      validator: validators.validateDescription,
       message: 'Device description format is invalid'
     },
     default: ''
