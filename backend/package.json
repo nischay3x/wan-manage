@@ -4,7 +4,7 @@
   "private": true,
   "license": "GNU Affero General Public License",
   "scripts": {
-    "start": "node ./index.js",
+    "start": "node ./bin/www",
     "test": "jest"
   },
   "dependencies": {

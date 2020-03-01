@@ -33,6 +33,9 @@ const configEnv = {
     UIServerURL: 'https://local.flexiwan.com:3000',
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
     userTokenSecretKey: 'abcdefg1234567',
+    // Whether to validate open API response. True for testing and dev, False for production,
+    // to remove unneeded fields from the response, use validateOpenAPIResponse = { removeAdditional: 'failing' }
+    validateOpenAPIResponse: true,
     // Number of REST requests allowed in 5 min per IP address, more requests will be rate limited
     userIpReqRateLimit: 300,
     // Unread notification email period (in msec), a mail is sent once a period
@@ -155,6 +158,7 @@ const configEnv = {
     shouldRedirectHTTPS: false,
     redirectHttpsPort: 443,
     agentBroker: 'app.flexiwan.com:443',
+    validateOpenAPIResponse: false,
     clientStaticDir: 'client/build',
     // 'billingConfigSite': 'flexiwan-test',
     // 'billingDefaultPlan': 'enterprise',
@@ -175,6 +179,7 @@ const configEnv = {
     redirectHttpsPort: 443,
     kuePrefix: 'mngdeviceq',
     agentBroker: 'manage.flexiwan.com:443',
+    validateOpenAPIResponse: false,
     clientStaticDir: 'client/build',
     logFilePath: '/var/log/flexiwan/flexiwan.log',
     reqLogFilePath: '/var/log/flexiwan/flexiwanReq.log',

@@ -200,10 +200,10 @@ class ExpressServer {
     const validator = new OpenApiValidator({
       apiSpec: this.openApiPath,
       validateRequests: true,
-      //validateResponses: true /*{
-        removeAdditional: 'failing'
-      }*/
-    })
+      validateResponses: configs.get('validateOpenAPIResponse')
+    });
+
+    validator
       .install(this.app)
       .then(async () => {
         await this.app.use(openapiRouter());
