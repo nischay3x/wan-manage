@@ -211,7 +211,7 @@ class DevicesService {
         /*
         req.body.method = 'modify';
 
-        dispatcher.apply([origDoc], req, res, next, {
+        await dispatcher.apply([origDoc], req, res, next, {
           newDevice: resp
         }).then(() => {
           return resolve({ ok: 1});

@@ -51,14 +51,14 @@ class ExpressServer {
     this.openApiPath = openApiYaml;
     this.schema = yamljs.load(openApiYaml);
 
-    this.setupMiddleware();
-
     this.setupMiddleware = this.setupMiddleware.bind(this);
     this.addErrorHandler = this.addErrorHandler.bind(this);
     this.onError = this.onError.bind(this);
     this.onListening = this.onListening.bind(this);
     this.launch = this.launch.bind(this);
     this.close = this.close.bind(this);
+
+    this.setupMiddleware();
   }
 
   setupMiddleware () {
@@ -198,11 +198,19 @@ class ExpressServer {
     //   res.json(req.query);
     // });
 
-    new OpenApiValidator({
-      apiSpecPath: this.openApiPath
-    }).install(this.app);
-
-    this.app.use(openapiRouter());
+    const validator = new OpenApiValidator({
+      apiSpec: this.openApiPath,
+      validateRequests: true,
+      //validateResponses: true /*{
+        removeAdditional: 'failing'
+      }*/
+    })
+      .install(this.app)
+      .then(async () => {
+        await this.app.use(openapiRouter());
+        await this.launch();
+        logger.info('Express server running');
+      });
   }
 
   addErrorHandler () {
@@ -231,7 +239,7 @@ class ExpressServer {
      ** */
     // eslint-disable-next-line no-unused-vars
     this.app.use((error, req, res, next) => {
-      const errorResponse = error.error || error.errors || error.message || 'Unknown error';
+      const errorResponse = error.error || error.message || error.errors || 'Unknown error';
       res.status(error.status || 500);
       res.type('json');
       res.json({ error: errorResponse });

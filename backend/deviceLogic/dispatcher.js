@@ -94,19 +94,17 @@ Object.entries(methods).forEach(([method, functions]) => {
  * @param  {Object}   data=null   additional data per caller's choice
  * @return {void}
  */
-const apply = (devices, method, user, data = null) => {
-  return async () => {
-    logger.info('Apply method called', {
-      params: { method: method || null, user: user, data: data }
-    });
-    const methodFunc = methods.hasOwnProperty(method)
-      ? methods[method].apply : null;
-    if (!methodFunc) {
-      throw new Error('Apply method not found');
-    }
-    const job = await methodFunc(devices, user, data);
-    return job;
-  };
+const apply = async (devices, method, user, data = null) => {
+  logger.info('Apply method called', {
+    params: { method: method || null, user: user, data: data }
+  });
+  const methodFunc = methods.hasOwnProperty(method)
+    ? methods[method].apply : null;
+  if (!methodFunc) {
+    throw new Error('Apply method not found');
+  }
+  const job = await methodFunc(devices, user, data);
+  return job;
 };
 
 /**
@@ -117,7 +115,7 @@ const apply = (devices, method, user, data = null) => {
  * @return {void}
  */
 const complete = (jobId, jobResult) => {
-  logger.info('Dispatcher complete callback called', {
+  logger.debug('Dispatcher complete callback', {
     params: { jobId: jobId, result: jobResult }
   });
   const method = methods.hasOwnProperty(jobResult.method)

@@ -188,7 +188,7 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
 const updResp = (qtype, req, res, next, resp, origDoc = null) => {
   // Disabling this line assuming this code is about to be removed.
   // eslint-disable-next-line no-async-promise-executor
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     if (qtype === 'DELETE') {
       resolve({ ok: 1 });
     } else if (qtype === 'GET') {
@@ -225,11 +225,10 @@ const updResp = (qtype, req, res, next, resp, origDoc = null) => {
       // device itself, add a 'modify' job to the device's queue.
       if (origDoc) {
         try {
-          dispatcher.apply([origDoc], 'modify', req.users, {
+          await dispatcher.apply([origDoc], 'modify', req.user, {
             newDevice: resp
-          }).then(() => {
-            return resolve({ ok: 1});
-          })
+          });
+          return resolve({ ok: 1 });
         } catch (err) {
           return reject(err);
         }
@@ -240,7 +239,7 @@ const updResp = (qtype, req, res, next, resp, origDoc = null) => {
       resolve({ ok: 1 });
     }
   });
-}
+};
 
 const checkDeviceBaseApi = (qtype, req) => new Promise(function (resolve, reject) {
   // Creating new devices should be done only via the /register API
@@ -322,8 +321,8 @@ devicesRouter.route('/apply')
   .post(cors.corsWithOptions, verifyPermission('devices', 'post'), (req, res, next) => {
     // Find all devices of the organization
     devices.find({ org: req.user.defaultOrg._id })
-      .then((devices) => {
-        dispatcher.apply(devices, req.body.method, req.user, req.body);
+      .then(async (devices) => {
+        await dispatcher.apply(devices, req.body.method, req.user, req.body);
         return res.status(200).send({});
       }, (err) => { next(err); })
       .catch((err) => {
@@ -361,19 +360,17 @@ devicesRouter.route('/:deviceId/apply')
         _id: mongoose.Types.ObjectId(req.params.deviceId),
         org: req.user.defaultOrg._id
       })
-      .then(
-        device => {
-          if (device.length === 1) {
-            dispatcher.apply(devices, req.body.method, req.user, req.body);
-            return res.status(200).send({});
-          } else {
-            return next(createError(500, 'Device error'));
-          }
-        },
-        err => {
-          next(err);
+      .then(async device => {
+        if (device.length === 1) {
+          await dispatcher.apply(device, req.body.method, req.user, req.body);
+          return res.status(200).send({});
+        } else {
+          return next(createError(500, 'Device error'));
         }
-      )
+      },
+      err => {
+        next(err);
+      })
       .catch(err => {
         logger.warn('Apply operation failed', {
           params: { err: err.message },
@@ -590,7 +587,7 @@ devicesRouter.route('/:deviceId/staticroutes')
 
       req.body.method = 'staticroutes';
       req.body.id = route.id;
-      dispatcher.apply(device, req.body.method, req.user, req.body);
+      await dispatcher.apply(device, req.body.method, req.user, req.body);
       return res.status(200).send({});
     } catch (error) {
       return next(createError(500, 'Failed to add a route'));
@@ -614,7 +611,7 @@ devicesRouter.route('/:deviceId/staticroutes/:routeId')
     const device = deviceObject[0];
     req.body.method = 'staticroutes';
     req.body.action = req.body.status === 'add-failed' ? 'add' : 'del';
-    dispatcher.apply(device, req.body.method, req.user, req.body);
+    await dispatcher.apply(device, req.body.method, req.user, req.body);
     return res.status(200).send({ deviceId: device.id });
   })
 // delete static route
@@ -637,7 +634,7 @@ devicesRouter.route('/:deviceId/staticroutes/:routeId')
     req.body.method = 'staticroutes';
     req.body.id = req.params.routeId;
     req.body.action = 'del';
-    dispatcher.apply(devices, req.body.method, req.user, req.body);
+    await dispatcher.apply(device, req.body.method, req.user, req.body);
     return res.status(200).send({ deviceId: device.id });
   });
 

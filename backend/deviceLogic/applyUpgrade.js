@@ -66,20 +66,20 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
  * @param  {Object}   data      Additional data used by caller
  * @return {None}
  */
-const apply = async (devices, user, data) => {
+const apply = async (devicesIn, user, data) => {
   // If the apply method was called for multiple devices, extract
   // only the devices that appear in the body. If it was called for
   // a single device, simply used the first device in the devices array.
   let opDevices;
   if (data.devices) {
     const selectedDevices = data.devices;
-    opDevices = (devices && selectedDevices)
-      ? devices.filter((device) => {
+    opDevices = (devicesIn && selectedDevices)
+      ? devicesIn.filter((device) => {
         const inSelected = selectedDevices.hasOwnProperty(device._id);
         return !!inSelected;
       }) : [];
   } else {
-    opDevices = devices;
+    opDevices = devicesIn;
   }
 
   // Filter out devices that already have
