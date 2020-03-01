@@ -18,11 +18,54 @@
 const Service = require('./Service');
 const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
+const pick = require('lodash/pick');
 
 // not sure that it is needed
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
+
+  /**
+   * Select the API fields from mongo Tunnel Object
+   *
+   * @param {mongo Tunnel Object} item
+   */
+  static selectTunnelParams (item) {
+    // Pick relevant fields
+    const retTunnel = pick(item, [
+      'num',
+      'isActive',
+      'interfaceA',
+      'interfaceB',
+      'deviceA',
+      'deviceAconf',
+      'deviceB',
+      'deviceBconf',
+      '_id']);
+
+    retTunnel.interfaceADetails =
+      retTunnel.deviceA.interfaces.filter((ifc) => {
+        return ifc._id.toString() === '' + retTunnel.interfaceA;
+      })[0];
+    retTunnel.interfaceBDetails =
+      retTunnel.deviceB.interfaces.filter((ifc) => {
+        return ifc._id.toString() === '' + retTunnel.interfaceB;
+      })[0];
+
+    const tunnelId = retTunnel.num;
+    // Add tunnel status
+    retTunnel.tunnelStatusA =
+      deviceStatus.getTunnelStatus(retTunnel.deviceA.machineId, tunnelId) || {};
+
+    // Add tunnel status
+    retTunnel.tunnelStatusB =
+      deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+
+    retTunnel._id = retTunnel._id.toString();
+
+    return retTunnel;
+  }
+
   /**
    * Retrieve device tunnels information
    *
@@ -42,7 +85,7 @@ class TunnelsService {
         { upsert: false, new: true });
 
       if (resp != null) {
-        return Service.successResponse(resp);
+        return Service.successResponse();
       } else {
         return Service.rejectResponse(404);
       }
@@ -68,37 +111,11 @@ class TunnelsService {
         .populate('deviceA').populate('deviceB');
 
       // Populate interface details
-      response.forEach((d) => {
-        d.set('interfaceADetails',
-          d.deviceA.interfaces.filter((ifc) => {
-            return ifc._id.toString() === '' + d.interfaceA;
-          })[0],
-          { strict: false });
-        d.set('interfaceBDetails',
-          d.deviceB.interfaces.filter((ifc) => {
-            return ifc._id.toString() === '' + d.interfaceB;
-          })[0],
-          { strict: false });
-
-        const tunnelId = d.num;
-        // Add tunnel status
-        d.set(
-          'tunnelStatusA',
-          deviceStatus.getTunnelStatus(d.deviceA.machineId, tunnelId) ||
-            null,
-          { strict: false }
-        );
-
-        // Add tunnel status
-        d.set(
-          'tunnelStatusB',
-          deviceStatus.getTunnelStatus(d.deviceB.machineId, tunnelId) ||
-            null,
-          { strict: false }
-        );
+      const tunnelMap = response.map((d) => {
+        return TunnelsService.selectTunnelParams(d);
       });
 
-      return Service.successResponse(response);
+      return Service.successResponse(tunnelMap);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

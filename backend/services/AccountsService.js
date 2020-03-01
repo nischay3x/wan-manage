@@ -60,6 +60,7 @@ class AccountsService {
         __v,
         ...rest
       } = account.toObject();
+      rest._id = rest._id.toString();
       return Service.successResponse(rest);
     } catch (e) {
       return Service.rejectResponse(
@@ -97,6 +98,7 @@ class AccountsService {
         __v,
         ...rest
       } = account.toObject();
+      rest._id = rest._id.toString();
       return Service.successResponse(rest);
     } catch (e) {
       return Service.rejectResponse(
