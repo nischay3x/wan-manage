@@ -1,4 +1,20 @@
-/* eslint-disable no-unused-vars */
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2020  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 const Service = require('./Service');
 
 const Accounts = require('../models/accounts');
@@ -7,7 +23,6 @@ const { getToken } = require('../tokens');
 const { getUserAccounts, orgUpdateFromNull } = require('../utils/membershipUtils');
 
 class AccountsService {
-
   /**
    * Get all AccessTokens
    *
@@ -21,8 +36,8 @@ class AccountsService {
       return Service.successResponse(accounts);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -33,7 +48,7 @@ class AccountsService {
    * id String Numeric ID of the Account to retrieve information
    * returns Account
    **/
-  static async accountsIdGET({ id }, { user }) {
+  static async accountsIdGET ({ id }, { user }) {
     try {
       const account = await Accounts.findOne({ _id: user.defaultAccount._id });
       const {
@@ -48,8 +63,8 @@ class AccountsService {
       return Service.successResponse(rest);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -61,7 +76,7 @@ class AccountsService {
    * accountRequest AccountRequest  (optional)
    * returns Account
    **/
-  static async accountsIdPUT({ id, accountRequest }, { user }, response) {
+  static async accountsIdPUT ({ id, accountRequest }, { user }, response) {
     try {
       const account = await Accounts.findOneAndUpdate(
         { _id: id },
@@ -85,8 +100,8 @@ class AccountsService {
       return Service.successResponse(rest);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -97,7 +112,9 @@ class AccountsService {
    * selectAccountRequest SelectAccountRequest
    * returns Account
    **/
-  static async accountsSelectPOST({ accountSelectRequest }, { user }) {
+  static async accountsSelectPOST ({ accountSelectRequest }, req, res) {
+    const user = req.user;
+
     try {
       if (!user.defaultAccount || !user.defaultAccount._id || !user._id) {
         return Service.rejectResponse(new Error('Error in selecting account'), 500);
@@ -117,19 +134,18 @@ class AccountsService {
         { defaultAccount: accountSelectRequest.account, defaultOrg: null },
         // Options
         { upsert: false, new: true }
-      )
-        .populate('defaultAccount');
+      ).populate('defaultAccount');
 
-        // Set a default organization for the new account
-        user.defaultAccount = updUser.defaultAccount;
-        user.defaultOrg = null;
+      // Set a default organization for the new account
+      user.defaultAccount = updUser.defaultAccount;
+      user.defaultOrg = null;
 
-        await orgUpdateFromNull(req, res);
-        return Service.successResponse({ _id: updUser.defaultAccount._id });
+      await orgUpdateFromNull(req, res);
+      return Service.successResponse({ _id: updUser.defaultAccount._id });
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -140,13 +156,13 @@ class AccountsService {
    * registerAccountRequest RegisterAccountRequest  (optional)
    * returns Account
    **/
-  static async accountsPOST({ registerAccountRequest }, { user }) {
+  static async accountsPOST ({ registerAccountRequest }, { user }) {
     try {
       return Service.successResponse('');
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }

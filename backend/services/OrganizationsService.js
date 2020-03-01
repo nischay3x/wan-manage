@@ -1,4 +1,20 @@
-/* eslint-disable no-unused-vars */
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2020  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 const Service = require('./Service');
 
 const Accounts = require('../models/accounts');
@@ -9,18 +25,17 @@ const Tunnels = require('../models/tunnels');
 const TunnelIds = require('../models/tunnelids');
 const Tokens = require('../models/tokens');
 const AccessTokens = require('../models/accesstokens');
-const { membership, permissionMasks, preDefinedPermissions } = require('../models/membership');
+const { membership } = require('../models/membership');
 const Connections = require('../websocket/Connections')();
 
 const Flexibilling = require('../flexibilling');
 
-const { getUserOrganizations, getUserOrgByID, orgUpdateFromNull } = require('../utils/membershipUtils');
+const { getUserOrganizations, orgUpdateFromNull } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getToken } = require('../tokens');
 
-
 class OrganizationsService {
-
   /**
    * Get all organizations
    *
@@ -28,16 +43,16 @@ class OrganizationsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async organizationsGET({ offset, limit }, { user }) {
+  static async organizationsGET ({ offset, limit }, { user }) {
     try {
       const orgs = await getUserOrganizations(user);
-      const result = Object.keys(orgs).map((key) => { return orgs[key]});
+      const result = Object.keys(orgs).map((key) => { return orgs[key]; });
 
       return Service.successResponse(result);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -48,9 +63,11 @@ class OrganizationsService {
    * id String Numeric ID of the Organization to delete
    * no response value expected for this operation
    **/
-  static async organizationsIdDELETE({ id }, { user }, response) {
+  static async organizationsIdDELETE ({ id }, { user }, response) {
+    let session;
+
     try {
-      const session = await mongoConns.getMainDB().startSession();
+      session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
 
       // Find and remove organization from account
@@ -66,7 +83,6 @@ class OrganizationsService {
         { upsert: false, new: true, session }
       );
 
-
       if (!account) {
         throw new Error('Cannot delete organization');
       }
@@ -76,7 +92,9 @@ class OrganizationsService {
       await orgUpdateFromNull({ user }, response);
 
       // Remove organization
-      await Organizations.findOneAndRemove({ _id: id, account: user.defaultAccount }, { session: session });
+      await Organizations.findOneAndRemove(
+        { _id: id, account: user.defaultAccount },
+        { session: session });
 
       // Remove all memberships that belong to the organization, but keep group even if empty
       await membership.deleteMany({ organization: id }, { session: session });
@@ -88,9 +106,14 @@ class OrganizationsService {
       await AccessTokens.deleteMany({ organization: id }, { session: session });
 
       // Find all devices for organization
-      const orgDevices = await Devices.find({ org: id }, { machineId: 1, _id: 0 }, { session: session });
+      const orgDevices = await Devices.find({ org: id },
+        { machineId: 1, _id: 0 },
+        { session: session });
+
       // Get the account total device count
-      const deviceCount = await Devices.countDocuments({ account: user.defaultAccount._id }).session(session);
+      const deviceCount = await Devices.countDocuments({ account: user.defaultAccount._id })
+        .session(session);
+
       // Delete all devices
       await Devices.deleteMany({ org: id }, { session: session });
       // Unregister a device (by removing the removed org number)
@@ -107,11 +130,11 @@ class OrganizationsService {
       return Service.successResponse(204);
     } catch (e) {
       if (session) session.abortTransaction();
-      logger.error('Error deleting organization', { params: { reason: err.message } });
+      logger.error('Error deleting organization', { params: { reason: e.message } });
 
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -123,7 +146,7 @@ class OrganizationsService {
    * organizationRequest OrganizationRequest  (optional)
    * returns Organization
    **/
-  static async organizationsIdPUT({ id, organizationRequest }, { user }, response) {
+  static async organizationsIdPUT ({ id, organizationRequest }, { user }, response) {
     try {
       // Only allow to update current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
@@ -142,8 +165,8 @@ class OrganizationsService {
       }
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -154,9 +177,9 @@ class OrganizationsService {
    * organizationRequest OrganizationRequest  (optional)
    * returns Organization
    **/
-  static async organizationsPOST({ organizationRequest }, { user }, response) {
+  static async organizationsPOST ({ organizationRequest }, { user }, response) {
     try {
-      const session = await mongoConns.getMainDB().startSession()
+      const session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
       const _org = await Organizations.create([organizationRequest], { session: session });
       const org = _org[0];
@@ -186,12 +209,11 @@ class OrganizationsService {
       return Service.successResponse(org, 201);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
-
 }
 
 module.exports = OrganizationsService;

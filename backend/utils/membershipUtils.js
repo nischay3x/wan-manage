@@ -119,7 +119,6 @@ const getUserAccounts = async (user) => {
   return [];
 };
 
-
 /**
  * Update default organization when it's null and refresh token
  * If defaultOrg is null, will to find a new organization and update the req with it

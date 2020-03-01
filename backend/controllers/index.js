@@ -1,15 +1,28 @@
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2020  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 const AccessTokensController = require('./AccessTokensController');
 const AccountsController = require('./AccountsController');
 const ConfigurationController = require('./ConfigurationController');
 const DevicesController = require('./DevicesController');
 const JobsController = require('./JobsController');
-const LogsController = require('./LogsController');
 const MembersController = require('./MembersController');
 const NotificationsController = require('./NotificationsController');
 const OrganizationsController = require('./OrganizationsController');
-const RoutesController = require('./RoutesController');
-const StaticRoutesController = require('./StaticRoutesController');
-const StatisticsController = require('./StatisticsController');
 const TokensController = require('./TokensController');
 const TunnelsController = require('./TunnelsController');
 const UsersController = require('./UsersController');
@@ -21,15 +34,11 @@ module.exports = {
   ConfigurationController,
   DevicesController,
   JobsController,
-  LogsController,
   MembersController,
   NotificationsController,
   OrganizationsController,
-  RoutesController,
-  StaticRoutesController,
-  StatisticsController,
   TokensController,
   TunnelsController,
   UsersController,
-  BillingController,
+  BillingController
 };

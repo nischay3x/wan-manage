@@ -1,4 +1,20 @@
-/* eslint-disable no-unused-vars */
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2020  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 const Service = require('./Service');
 
 const { membership, permissionMasks, preDefinedPermissions } = require('../models/membership');
@@ -29,7 +45,6 @@ const pick = (...keys) => obj => keys.reduce((a, e) => {
 }, {});
 
 class MembersService {
-
   // check user parameters
   static checkMemberParameters (memberRequest, user) {
     if (
@@ -40,12 +55,17 @@ class MembersService {
       !memberRequest.userRole ||
       !memberRequest.userEntity
     ) { return { status: false, error: 'Invitation Fields Error' }; }
+
     // Account permissions could be owner, manager or viewer
     // Group and organization permissions could be manager or viewer
-    if (memberRequest.userRole !== 'owner' && memberRequest.userRole !== 'manager' && memberRequest.userRole !== 'viewer') {
+    if (memberRequest.userRole !== 'owner' &&
+      memberRequest.userRole !== 'manager' &&
+      memberRequest.userRole !== 'viewer') {
       return { status: false, error: 'Illegal role' };
     }
-    if ((memberRequest.userPermissionTo === 'group' || memberRequest.userPermissionTo === 'organization') &&
+
+    if ((memberRequest.userPermissionTo === 'group' ||
+      memberRequest.userPermissionTo === 'organization') &&
       memberRequest.userRole !== 'manager' &&
       memberRequest.userRole !== 'viewer') {
       return { status: false, error: 'Illegal permission combination' };
@@ -123,11 +143,11 @@ class MembersService {
   /**
    * Get all Members
    *
-   * offset Integer The number of items to skip before starting to collect the result set (optional)
+   * offset Integer The number of items to skip before starting to collect the result set
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async membersGET({ offset, limit }, { user }) {
+  static async membersGET ({ offset, limit }, { user }) {
     // pick routine
     const pick = (...keys) => obj => keys.reduce((a, e) => {
       const objKeys = e.split('.');
@@ -183,8 +203,8 @@ class MembersService {
       }
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -196,11 +216,11 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static async membersIdPUT({ id, memberRequest }, { user }) {
+  static async membersIdPUT ({ id, memberRequest }, { user }) {
     try {
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
-      if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400); //next(createError(400, checkParams.error));
+      if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
       // make sure user is only allow to define membership under his view
       const verified = await MembersService.checkMemberLevel(
@@ -210,7 +230,11 @@ class MembersService {
         user._id,
         user.defaultAccount._id
       );
-      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
+
+      if (!verified) {
+        return Service.rejectResponse(
+          new Error('No sufficient permissions for this operation'), 400);
+      }
 
       // Update
       const member = await membership.findOneAndUpdate(
@@ -218,10 +242,13 @@ class MembersService {
         {
           $set: {
             group: memberRequest.userPermissionTo === 'group' ? memberRequest.userEntity : '',
-            organization: memberRequest.userPermissionTo === 'organization' ? memberRequest.userEntity : null,
+            organization: memberRequest.userPermissionTo === 'organization'
+              ? memberRequest.userEntity : null,
             to: memberRequest.userPermissionTo,
             role: memberRequest.userRole,
-            perms: preDefinedPermissions[memberRequest.userPermissionTo + '_' + memberRequest.userRole]
+            perms: preDefinedPermissions[
+              memberRequest.userPermissionTo + '_' + memberRequest.userRole
+            ]
           }
         },
         { upsert: false, new: true, runValidators: true })
@@ -231,8 +258,10 @@ class MembersService {
 
       // Verify if default organization still accessible by the
       // user after the change, if not switch to another org
-      const _user = await Users.findOne({ _id: memberRequest.userId }).populate('defaultAccount');
-      if (_user.defaultAccount._id.toString() === _user.defaultAccount._id.toString()) {
+      const _user = await Users.findOne({ _id: memberRequest.userId })
+        .populate('defaultAccount');
+
+      if (_user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
         const orgs = await getUserOrganizations(_user);
         const org = orgs[_user.defaultOrg];
         if (!org) {
@@ -260,11 +289,11 @@ class MembersService {
     } catch (err) {
       logger.error('Error updating user', {
         params: {
-          memberId: req.params.memberId,
+          memberId: id,
           reason: err.message
         }
       });
-      return Service.rejectResponse(err, 400); // next(createError(400, err.message));
+      return Service.rejectResponse(err, 400);
     }
   }
 
@@ -273,7 +302,7 @@ class MembersService {
    * id String numeric ID of the account to modify
    * returns Member
    */
-  static async membersIdGET({ id }, { user }) {
+  static async membersIdGET ({ id }, { user }) {
     let userPromise = null;
     // Check the user permission:
     // Account owners or members should be able to see all account users
@@ -299,8 +328,11 @@ class MembersService {
     }
 
     if (userPromise) {
-      const memList = await userPromise.populate('user').populate('account').populate('organization');
-      let response = await memList.map(mem => pick(
+      const memList = await userPromise.populate('user')
+        .populate('account')
+        .populate('organization');
+
+      const response = await memList.map(mem => pick(
         '_id',
         'user._id',
         'user.name',
@@ -319,13 +351,14 @@ class MembersService {
       return Service.successResponse([]);
     }
   }
+
   /**
    * Delete member
    *
    * id String Numeric ID of the account to delete
    * returns Member
    **/
-  static async membersIdDELETE({ id }, { user }) {
+  static async membersIdDELETE ({ id }, { user }) {
     try {
       // Find member id data
       const membershipData = await membership.findOne({
@@ -340,9 +373,13 @@ class MembersService {
 
       // Check that current user is allowed to delete member
       const verified = await MembersService.checkMemberLevel(membershipData.to, membershipData.role,
-        (membershipData.to === 'organization') ? membershipData.organization : membershipData.group,
+        (membershipData.to === 'organization')
+          ? membershipData.organization : membershipData.group,
         user._id, user.defaultAccount._id);
-      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
+      if (!verified) {
+        return Service.rejectResponse(
+          new Error('No sufficient permissions for this operation'), 400);
+      }
 
       // Check that the account have at least one owner
       if (membershipData.to === 'account' && membershipData.role === 'owner') {
@@ -367,8 +404,8 @@ class MembersService {
       return Service.successResponse();
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
@@ -379,16 +416,15 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static async membersPOST({ memberRequest }, { user }) {
+  static async membersPOST ({ memberRequest }, { user }) {
     try {
-
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
       if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
       // Check if user don't add itself
       if (user.email === memberRequest.email) {
-        return next(createError(500, 'You can not add yourself'));
+        return Service.rejectResponse(new Error('You can not add yourself'), 500);
       }
 
       // make sure user is only allow to define membership under his view
@@ -399,7 +435,10 @@ class MembersService {
         user._id,
         user.defaultAccount._id
       );
-      if (!verified) return Service.rejectResponse(new Error('No sufficient permissions for this operation'), 400);
+      if (!verified) {
+        return Service.rejectResponse(
+          new Error('No sufficient permissions for this operation'), 400);
+      }
 
       // Add user
       let registerUser = null;
@@ -423,7 +462,8 @@ class MembersService {
           state: 'unverified',
           emailTokens: { verify: '', invite: '', resetPassword: resetPWKey },
           defaultAccount: user.defaultAccount._id,
-          defaultOrg: memberRequest.userPermissionTo === 'organization' ? memberRequest.userEntity : null
+          defaultOrg: memberRequest.userPermissionTo === 'organization'
+            ? memberRequest.userEntity : null
           // null will try to find a valid organization on login
         });
         registerUser.validate();
@@ -438,10 +478,13 @@ class MembersService {
         user: (existingUser) ? existingUser._id : registerUser._id,
         account: user.defaultAccount._id,
         group: memberRequest.userPermissionTo === 'group' ? memberRequest.userEntity : '',
-        organization: memberRequest.userPermissionTo === 'organization' ? memberRequest.userEntity : null,
+        organization: memberRequest.userPermissionTo === 'organization'
+          ? memberRequest.userEntity : null,
         to: memberRequest.userPermissionTo,
         role: memberRequest.userRole,
-        perms: preDefinedPermissions[memberRequest.userPermissionTo + '_' + memberRequest.userRole]
+        perms: preDefinedPermissions[
+          memberRequest.userPermissionTo + '_' + memberRequest.userRole
+        ]
       }], { session: session });
 
       if (registerUser) {
@@ -450,7 +493,7 @@ class MembersService {
       };
 
       // Send email
-      const p = await mailer.sendMailHTML(
+      await mailer.sendMailHTML(
         'noreply@flexiwan.com',
         memberRequest.email,
         'You are invited to a flexiWAN Account',
@@ -473,7 +516,8 @@ class MembersService {
 
       // Send webhooks only for users invited as account owners
       // changing the user role later will not send another hook
-      if (memberRequest.userPermissionTo === 'account' && memberRequest.userRole === 'owner') {
+      if (memberRequest.userPermissionTo === 'account' &&
+        memberRequest.userRole === 'owner') {
         // Trigger web hook
         const webHookMessage = {
           account: user.defaultAccount.name,
@@ -507,14 +551,13 @@ class MembersService {
       return Service.successResponse(registerUser, 201);
     } catch (e) {
       return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 405,
+        e.message || 'Internal Server Error',
+        e.status || 500
       );
     }
   }
 
-
-  static async membersOptionsTypeGET({ type }, { user }) {
+  static async membersOptionsTypeGET ({ type }, { user }) {
     if (type === 'account') {
       return Service.successResponse([{
         id: user.defaultAccount._id,
@@ -543,12 +586,7 @@ class MembersService {
       };
     });
     return Service.successResponse(result);
-      // .catch((err) => {
-      //   logger.error('Error getting member options', { params: { reason: err.message } });
-      //   return next(createError(500, 'Error getting member options'));
-      // });
   }
-
 }
 
 module.exports = MembersService;
