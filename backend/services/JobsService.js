@@ -21,6 +21,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 class JobsService {
@@ -41,17 +42,18 @@ class JobsService {
       }
 
       // Generate and send the result
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const result = [];
       if (status === 'all') {
         await Promise.all(
           stateOpts.map(async (s) => {
-            await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(), s, (job) => {
+            await deviceQueues.iterateJobsByOrg(orgList[0].toString(), s, (job) => {
               result.push(job);
             });
           })
         );
       } else {
-        await deviceQueues.iterateJobsByOrg(user.defaultOrg._id.toString(),
+        await deviceQueues.iterateJobsByOrg(orgList[0].toString(),
           status, (job) => result.push(job));
       }
 
@@ -71,7 +73,8 @@ class JobsService {
    **/
   static async jobsDELETE ({ org }, { user }) {
     try {
-      await deviceQueues.removeJobIdsByOrg(user.defaultOrg._id.toString(), ['all']);
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), ['all']);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -87,17 +90,17 @@ class JobsService {
    * id Integer Numeric ID of the Job to delete
    * no response value expected for this operation
    **/
-  static async jobsIdDELETE ({ id, org }, req) {
+  static async jobsIdDELETE ({ id, org }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       logger.info('Deleting jobs', {
         params: {
-          org: req.user.defaultOrg._id.toString(),
+          org: orgList[0].toString(),
           jobs: [id]
-        },
-        req: req
+        }
       });
 
-      await deviceQueues.removeJobIdsByOrg(req.user.defaultOrg._id.toString(), [id]);
+      await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), [id]);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(

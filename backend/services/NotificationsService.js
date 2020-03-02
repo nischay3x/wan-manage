@@ -19,6 +19,7 @@ const Service = require('./Service');
 
 const notificationsDb = require('../models/notifications');
 const { devices } = require('../models/devices');
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 class NotificationsService {
@@ -30,8 +31,10 @@ class NotificationsService {
    * returns List
    **/
   static async notificationsGET ({ org, offset, limit, op, status }, { user }) {
+    let orgList;
     try {
-      const query = { org: user.defaultOrg._id };
+      orgList = await getAccessTokenOrgList(user, org, false);
+      const query = { org: { $in: orgList } };
       if (status) {
         query.status = status;
       }
@@ -56,7 +59,7 @@ class NotificationsService {
     } catch (e) {
       logger.warn('Failed to retrieve notifications', {
         params: {
-          org: user.defaultOrg._id.toString(),
+          org: orgList,
           err: e.message
         }
       });

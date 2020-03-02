@@ -42,7 +42,8 @@ class DevicesService {
   static async devicesApplyPOST ({ org, deviceCommand }, { user }) {
     try {
       // Find all devices of the organization
-      const opDevices = await devices.find({ org: user.defaultOrg._id });
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const opDevices = await devices.find({ org: { $in: orgList } });
       // Apply the device command
       await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
 
@@ -64,9 +65,10 @@ class DevicesService {
    **/
   static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
 
       if (opDevice.length === 1) {
@@ -156,7 +158,7 @@ class DevicesService {
    **/
   static async devicesGET ({ org, offset, limit }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org);
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.find({ org: { $in: orgList } });
 
       const devicesMap = result.map(item => {
@@ -174,7 +176,8 @@ class DevicesService {
 
   static async devicesUpgdSchedPOST ({ org, devicesUpgradeRequest }, { user }) {
     try {
-      const query = { _id: { $in: devicesUpgradeRequest.devices }, org: user.defaultOrg._id };
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { _id: { $in: devicesUpgradeRequest.devices }, org: { $in: orgList } };
       const numOfIdsFound = await devices.countDocuments(query);
 
       // The request is considered invalid if not all device IDs
@@ -206,7 +209,8 @@ class DevicesService {
 
   static async devicesIdUpgdSchedPOST ({ id, org, deviceUpgradeRequest }, { user }) {
     try {
-      const query = { _id: id, org: user.defaultOrg._id };
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { _id: id, org: { $in: orgList } };
       const set = {
         $set: {
           upgradeSchedule: {
@@ -259,7 +263,8 @@ class DevicesService {
    **/
   static async devicesIdGET ({ id, org }, { user }) {
     try {
-      const result = await devices.findOne({ _id: id, org: user.defaultOrg._id });
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const result = await devices.findOne({ _id: id, org: { $in: orgList } });
       const device = DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
@@ -279,9 +284,10 @@ class DevicesService {
    **/
   static async devicesIdConfigurationGET ({ id, org }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.find({
         _id: mongoose.Types.ObjectId(id),
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
       if (!device || device.length === 0) {
         return Service.rejectResponse('Device not found');
@@ -333,9 +339,10 @@ class DevicesService {
    **/
   static async devicesIdLogsGET ({ id, org, offset, limit, filter }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.find({
         _id: mongoose.Types.ObjectId(id),
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
       if (!device || device.length === 0) {
         return Service.rejectResponse('Device not found');
@@ -394,10 +401,11 @@ class DevicesService {
     try {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const tunnelCount = await tunnelsModel.countDocuments({
         $or: [{ deviceA: id }, { deviceB: id }],
         isActive: true,
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       }).session(session);
 
       if (tunnelCount > 0) {
@@ -408,7 +416,7 @@ class DevicesService {
 
       const delDevices = await devices.find({
         _id: mongoose.Types.ObjectId(id),
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       }).session(session);
 
       if (!delDevices.length) throw new Error('Device for deletion not found');
@@ -427,7 +435,7 @@ class DevicesService {
       // Now we can remove the device
       await devices.remove({
         _id: id,
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       }).session(session);
 
       await session.commitTransaction();
@@ -456,9 +464,10 @@ class DevicesService {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
 
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const origDevice = await devices.findOne({
         _id: id,
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       }).session(session);
 
       // Don't allow any changes if the device is not approved
@@ -502,7 +511,7 @@ class DevicesService {
       }
 
       const updDevice = await devices.findOneAndUpdate(
-        { _id: id, org: user.defaultOrg._id },
+        { _id: id, org: { $in: orgList } },
         deviceRequest,
         { new: true, upsert: false, runValidators: true }
       ).session(session);
@@ -539,9 +548,10 @@ class DevicesService {
    **/
   static async devicesIdRoutesGET ({ id, org, offset, limit }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.find({
         _id: mongoose.Types.ObjectId(id),
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
       if (!device || device.length === 0) {
         return Service.rejectResponse('Device not found');
@@ -595,9 +605,10 @@ class DevicesService {
    **/
   static async devicesIdStaticroutesGET ({ id, org, offset, limit }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const deviceObject = await devices.find({
         _id: mongoose.Types.ObjectId(id),
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
         return Service.rejectResponse('Device not found');
@@ -662,9 +673,10 @@ class DevicesService {
    **/
   static async devicesIdStaticroutesPOST ({ id, org, staticRouteRequest }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.find({
         _id: mongoose.Types.ObjectId(id),
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
         return Service.rejectResponse('Device not found');
@@ -716,9 +728,10 @@ class DevicesService {
    **/
   static async devicesIdStaticroutesRoutePATCH ({ id, org, staticRouteRequest }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.find({
         _id: mongoose.Types.ObjectId(id),
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
         return Service.rejectResponse('Device not found');
@@ -794,8 +807,9 @@ class DevicesService {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;
 
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const stats = await DevicesService.queryDeviceStats({
-        org: user.defaultOrg._id.toString(),
+        org: { $in: orgList }.toString(),
         id: null, // null get all devices stats
         startTime: startTime,
         endTime: endTime
@@ -820,8 +834,9 @@ class DevicesService {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;
 
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const stats = await DevicesService.queryDeviceStats({
-        org: user.defaultOrg._id.toString(),
+        org: { $in: orgList }.toString(),
         id: id,
         startTime: startTime,
         endTime: endTime

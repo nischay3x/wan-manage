@@ -20,6 +20,7 @@ const Service = require('./Service');
 const jwt = require('jsonwebtoken');
 const configs = require('../configs.js')();
 const Tokens = require('../models/tokens');
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class TokensService {
   /**
@@ -31,7 +32,8 @@ class TokensService {
    **/
   static async tokensGET ({ org, offset, limit }, { user }) {
     try {
-      const result = await Tokens.find({ org: user.defaultOrg._id });
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const result = await Tokens.find({ org: { $in: orgList } });
 
       const tokens = result.map(item => {
         return {
@@ -56,11 +58,12 @@ class TokensService {
    * id String Numeric ID of the Token to delete
    * no response value expected for this operation
    **/
-  static async tokensIdDELETE ({ id }, { user }) {
+  static async tokensIdDELETE ({ id, org }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       await Tokens.remove({
         _id: id,
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
 
       return Service.successResponse(null, 204);
@@ -72,9 +75,10 @@ class TokensService {
     }
   }
 
-  static async tokensIdGET ({ id }, { user }) {
+  static async tokensIdGET ({ id, org }, { user }) {
     try {
-      const token = await Tokens.findOne({ _id: id, org: user.defaultOrg._id });
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const token = await Tokens.findOne({ _id: id, org: { $in: orgList } });
 
       return Service.successResponse([token]);
     } catch (e) {
@@ -92,10 +96,11 @@ class TokensService {
    * tokenRequest TokenRequest  (optional)
    * returns Token
    **/
-  static async tokensIdPUT ({ id, tokenRequest }, { user }) {
+  static async tokensIdPUT ({ id, org, tokenRequest }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const result = await Tokens.findOneAndUpdate(
-        { _id: id, org: user.defaultOrg._id },
+        { _id: id, org: { $in: orgList } },
         { tokenRequest },
         { upsert: false, runValidators: true, new: true });
 
@@ -120,16 +125,17 @@ class TokensService {
    * tokenRequest TokenRequest  (optional)
    * returns Token
    **/
-  static async tokensPOST ({ tokenRequest }, { user }) {
+  static async tokensPOST ({ org, tokenRequest }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const body = jwt.sign({
-        org: user.defaultOrg._id.toString(),
+        org: orgList[0].toString(),
         account: user.defaultAccount._id
       }, configs.get('deviceTokenSecretKey'));
 
       const token = await Tokens.create({
         name: tokenRequest.name,
-        org: user.defaultOrg._id.toString(),
+        org: orgList[0].toString(),
         token: body
       });
 

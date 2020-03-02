@@ -27,10 +27,10 @@ const Tokens = require('../models/tokens');
 const AccessTokens = require('../models/accesstokens');
 const { membership } = require('../models/membership');
 const Connections = require('../websocket/Connections')();
-
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const Flexibilling = require('../flexibilling');
-
-const { getUserOrganizations, getUserOrgByID, orgUpdateFromNull } = require('../utils/membershipUtils');
+const { getUserOrganizations, getUserOrgByID, orgUpdateFromNull } =
+  require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getToken } = require('../tokens');
@@ -113,7 +113,8 @@ class OrganizationsService {
       // Find and remove organization from account
       // Only allow to delete current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
-      if (user.defaultOrg._id.toString() !== id) {
+      const orgList = await getAccessTokenOrgList(user, undefined, false);
+      if (orgList.includes(id)) {
         throw new Error('Please select an organization to delete it');
       }
 
@@ -190,7 +191,8 @@ class OrganizationsService {
     try {
       // Only allow to update current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
-      if (user.defaultOrg._id.toString() === id) {
+      const orgList = await getAccessTokenOrgList(user, undefined, false);
+      if (orgList.includes(id)) {
         const resultOrg = await Organizations.findOneAndUpdate(
           { _id: id },
           { $set: organizationRequest },

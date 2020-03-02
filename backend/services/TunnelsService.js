@@ -19,8 +19,7 @@ const Service = require('./Service');
 const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
-
-// not sure that it is needed
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
@@ -73,11 +72,12 @@ class TunnelsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async tunnelsIdDELETE ({ id, offset, limit }, { user }) {
+  static async tunnelsIdDELETE ({ id, org, offset, limit }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const resp = await Tunnels.findOneAndUpdate(
         // Query
-        { _id: mongoose.Types.ObjectId(id), org: user.defaultOrg._id },
+        { _id: mongoose.Types.ObjectId(id), org: { $in: orgList } },
         // Update
         { isActive: false },
         // Options
@@ -106,7 +106,8 @@ class TunnelsService {
    **/
   static async tunnelsGET ({ org, offset, limit }, { user }) {
     try {
-      const response = await Tunnels.find({ org: user.defaultOrg._id, isActive: true })
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const response = await Tunnels.find({ org: { $in: orgList }, isActive: true })
         .populate('deviceA').populate('deviceB');
 
       // Populate interface details

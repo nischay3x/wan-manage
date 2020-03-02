@@ -103,13 +103,18 @@ const getUserOrgByID = async (user, orgId) => {
  *
  * @param {Object} user - request user
  * @param {String} orgId
+ * @param {Boolean} orgIdRequired - whether org must be specified for the operation
  * @returns {List} List of organizations
  */
-const getAccessTokenOrgList = async (user, orgId) => {
+const getAccessTokenOrgList = async (user, orgId, orgIdRequired = false) => {
   // No access token, return default orgId, if no orgId found, otherwise throw an error
   if (!user.accessToken) {
     if (!orgId) return [user.defaultOrg._id];
     else throw new Error('Organization query parameter is only available in Access Key');
+  }
+  // Access token where org is required for the operation, must be specified
+  if (orgIdRequired && !orgId) {
+    throw new Error('Organization query parameter must be specified for this operation');
   }
   const account = await Accounts.findOne({ _id: user.jwtAccount });
   // If Access token with orgId specified
