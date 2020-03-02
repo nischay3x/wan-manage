@@ -30,10 +30,6 @@ class AccessTokensController {
     await Controller.handleRequest(request, response, this.service.accesstokensIdDELETE);
   }
 
-  async accesstokensIdPUT (request, response) {
-    await Controller.handleRequest(request, response, this.service.accesstokensIdPUT);
-  }
-
   async accesstokensPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.accesstokensPOST);
   }

@@ -57,7 +57,7 @@ paths:
                   $ref: '#/components/schemas/Token'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -188,7 +188,7 @@ paths:
                   $ref: '#/components/schemas/Token'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -242,7 +242,7 @@ paths:
           type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -390,7 +390,7 @@ paths:
                   $ref: '#/components/schemas/AccessToken'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -510,7 +510,7 @@ paths:
           type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -545,80 +545,6 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Delete access token
-      tags:
-      - Access Tokens
-      x-swagger-router-controller: AccessTokens
-      x-openapi-router-controller: AccessTokensController
-      x-openapi-router-service: AccessTokensService
-    put:
-      operationId: accesstokensIdPUT
-      parameters:
-      - description: Numeric ID of the Access token to modify
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccessToken'
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/AccessToken'
-                type: array
-                x-content-type: application/json
-          description: Successfull operation
-        "400":
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Modify an access token
       tags:
       - Access Tokens
       x-swagger-router-controller: AccessTokens
@@ -964,7 +890,7 @@ paths:
           type: string
       responses:
        "204":
-         description: Successfull operation
+         description: Successful operation
        "401":
          content:
            application/json:
@@ -1358,7 +1284,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Tunnel'
                 type: array
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1419,7 +1345,7 @@ paths:
           type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1496,7 +1422,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/DeviceRouteInformation'
                 type: array
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1641,7 +1567,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StaticRoute'
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1703,7 +1629,7 @@ paths:
         style: simple
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1773,7 +1699,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StaticRoute'
-          description: Successfull operation
+          description: Successful operation
         "400":
           description: Bad Request
         "401":
@@ -1832,7 +1758,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceStatistics'
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1890,7 +1816,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceStatistics'
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1973,7 +1899,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceLog'
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -2165,7 +2091,7 @@ paths:
           type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -2226,7 +2152,7 @@ paths:
           type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -2571,7 +2497,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Member'
-          description: Successfull operation
+          description: Successful operation
         "400":
           description: Bad Request
         "401":
@@ -2626,7 +2552,7 @@ paths:
         style: simple
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -3001,7 +2927,7 @@ paths:
                   $ref: '#/components/schemas/Organization'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -3172,7 +3098,7 @@ paths:
         style: simple
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -3306,7 +3232,7 @@ paths:
                   $ref: '#/components/schemas/Invoice'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -3419,7 +3345,6 @@ components:
   schemas:
     AccessToken:
       example:
-        organization: organization
         isValid: true
         name: name
         _id: id
@@ -3429,8 +3354,6 @@ components:
           readOnly: true
           type: string
         name:
-          type: string
-        organization:
           type: string
         token:
           readOnly: true
@@ -3442,12 +3365,9 @@ components:
       type: object
     AccessTokenRequest:
       example:
-        organization: organization
         name: name
       properties:
         name:
-          type: string
-        organization:
           type: string
       type: object
     MemberRequest:
