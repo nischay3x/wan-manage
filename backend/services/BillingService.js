@@ -33,7 +33,7 @@ class BillingService {
 
       if (!customerId) {
         logger.error('Account does not have link to billing system', { params: {} });
-        return Service.rejectResponse(new Error('Unknown account error'), 500);
+        return Service.rejectResponse('Account does not have link to billing system', 500);
       }
 
       const invoices = await flexibilling.retrieveInvoices({ customer_id: customerId });
