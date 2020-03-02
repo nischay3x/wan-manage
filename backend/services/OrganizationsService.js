@@ -32,10 +32,28 @@ const Flexibilling = require('../flexibilling');
 const { getUserOrganizations, getUserOrgByID, orgUpdateFromNull } =
   require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
+const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getToken } = require('../tokens');
 
 class OrganizationsService {
+  /**
+   * Select the API fields from mongo organization Object
+   * @param {Object} item - mongodb organization object
+   */
+  static selectOrganizationParams (item) {
+    const retOrg = pick(item, [
+      'name',
+      '_id',
+      'account',
+      'group'
+    ]);
+    retOrg._id = retOrg._id.toString();
+    retOrg.account = retOrg.account.toString();
+
+    return retOrg;
+  }
+
   /**
    * Get all organizations
    *
@@ -46,7 +64,9 @@ class OrganizationsService {
   static async organizationsGET ({ offset, limit }, { user }) {
     try {
       const orgs = await getUserOrganizations(user);
-      const result = Object.keys(orgs).map((key) => { return orgs[key]; });
+      const result = Object.keys(orgs).map((key) => {
+        return OrganizationsService.selectOrganizationParams(orgs[key]);
+      });
 
       return Service.successResponse(result);
     } catch (e) {
@@ -78,8 +98,7 @@ class OrganizationsService {
           { defaultOrg: organizationSelectRequest.org },
           // Options
           { upsert: false, new: true }
-        ).
-        populate('defaultOrg');
+        ).populate('defaultOrg');
         // Success, return OK and refresh JWT with new values
         user.defaultOrg = updUser.defaultOrg;
         const token = await getToken({ user }, {
@@ -223,7 +242,8 @@ class OrganizationsService {
     try {
       const session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
-      const _org = await Organizations.create([organizationRequest], { session: session });
+      const orgBody = { ...organizationRequest, account: user.defaultAccount };
+      const _org = await Organizations.create([orgBody], { session: session });
       const org = _org[0];
       const updUser = await Users.findOneAndUpdate(
         // Query, use the email
@@ -248,7 +268,7 @@ class OrganizationsService {
       const token = await getToken({ user }, { org: org._id, orgName: org.name });
       response.setHeader('Refresh-JWT', token);
 
-      return Service.successResponse(org, 201);
+      return Service.successResponse(OrganizationsService.selectOrganizationParams(org), 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
