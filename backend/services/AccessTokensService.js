@@ -59,9 +59,9 @@ class AccessTokensService {
    **/
   static async accesstokensIdDELETE ({ id }, { user }) {
     try {
-      await AccessTokens.remove({
+      await AccessTokens.deleteOne({
         _id: id,
-        org: user.defaultOrg._id
+        account: user.defaultAccount._id
       });
 
       return Service.successResponse(null, 204);
