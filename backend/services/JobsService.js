@@ -32,7 +32,7 @@ class JobsService {
    * status String A filter on the job status (optional)
    * returns List
    **/
-  static async jobsGET ({ offset, limit, status }, { user }) {
+  static async jobsGET ({ offset, limit, org, status }, { user }) {
     try {
       const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
       // Check state provided is allowed
@@ -65,12 +65,29 @@ class JobsService {
   }
 
   /**
+   * Delete jobs
+   *
+   * no response value expected for this operation
+   **/
+  static async jobsIdDELETE ({ ids, org }, { user }) {
+    try {
+      await deviceQueues.removeJobIdsByOrg(user.defaultOrg._id.toString(), ids);
+      return Service.successResponse(null, 204);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Delete a job
    *
    * id Integer Numeric ID of the Job to delete
    * no response value expected for this operation
    **/
-  static async jobsIdDELETE ({ id }, req) {
+  static async jobsIdDELETE ({ id, org }, req) {
     try {
       logger.info('Deleting jobs', {
         params: {
@@ -81,7 +98,7 @@ class JobsService {
       });
 
       await deviceQueues.removeJobIdsByOrg(req.user.defaultOrg._id.toString(), [id]);
-      return Service.successResponse();
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

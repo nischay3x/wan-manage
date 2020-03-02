@@ -63,7 +63,7 @@ class TokensService {
         org: user.defaultOrg._id
       });
 
-      return Service.successResponse();
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

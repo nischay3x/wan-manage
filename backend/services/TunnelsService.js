@@ -85,7 +85,7 @@ class TunnelsService {
         { upsert: false, new: true });
 
       if (resp != null) {
-        return Service.successResponse();
+        return Service.successResponse(null, 204);
       } else {
         return Service.rejectResponse(404);
       }

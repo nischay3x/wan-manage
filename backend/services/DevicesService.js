@@ -38,7 +38,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ deviceCommand }, { user }) {
+  static async devicesApplyPOST ({ org, deviceCommand }, { user }) {
     try {
       // Find all devices of the organization
       const opDevices = await devices.find({ org: user.defaultOrg._id });
@@ -61,7 +61,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, deviceCommand }, { user }) {
+  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }) {
     try {
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
@@ -170,7 +170,7 @@ class DevicesService {
     }
   }
 
-  static async devicesUpgdSchedPOST ({ devicesUpgradeRequest }, { user }) {
+  static async devicesUpgdSchedPOST ({ org, devicesUpgradeRequest }, { user }) {
     try {
       const query = { _id: { $in: devicesUpgradeRequest.devices }, org: user.defaultOrg._id };
       const numOfIdsFound = await devices.countDocuments(query);
@@ -202,7 +202,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdUpgdSchedPOST ({ id, deviceUpgradeRequest }, { user }) {
+  static async devicesIdUpgdSchedPOST ({ id, org, deviceUpgradeRequest }, { user }) {
     try {
       const query = { _id: id, org: user.defaultOrg._id };
       const set = {
@@ -255,7 +255,7 @@ class DevicesService {
    * id String Numeric ID of the Device to retrieve
    * Returns Device
    **/
-  static async devicesIdGET ({ id }, { user }) {
+  static async devicesIdGET ({ id, org }, { user }) {
     try {
       const result = await devices.findOne({ _id: id, org: user.defaultOrg._id });
       const device = DevicesService.selectDeviceParams(result);
@@ -275,7 +275,7 @@ class DevicesService {
    * id String Numeric ID of the Device to retrieve configuration from
    * Returns Device Configuration
    **/
-  static async devicesIdConfigurationGET ({ id }, { user }) {
+  static async devicesIdConfigurationGET ({ id, org }, { user }) {
     try {
       const device = await devices.find({
         _id: mongoose.Types.ObjectId(id),
@@ -329,7 +329,7 @@ class DevicesService {
    * filter String Filter to be applied (optional)
    * returns DeviceLog
    **/
-  static async devicesIdLogsGET ({ id, offset, limit, filter }, { user }) {
+  static async devicesIdLogsGET ({ id, org, offset, limit, filter }, { user }) {
     try {
       const device = await devices.find({
         _id: mongoose.Types.ObjectId(id),
@@ -387,7 +387,7 @@ class DevicesService {
    * id String Numeric ID of the Device to delete
    * no response value expected for this operation
    **/
-  static async devicesIdDELETE ({ id }, { user }) {
+  static async devicesIdDELETE ({ id, org }, { user }) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -431,7 +431,7 @@ class DevicesService {
       await session.commitTransaction();
       session = null;
 
-      return Service.successResponse();
+      return Service.successResponse(null, 204);
     } catch (e) {
       if (session) session.abortTransaction();
       return Service.rejectResponse(
@@ -448,7 +448,7 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, deviceRequest }, { user }) {
+  static async devicesIdPUT ({ id, org, deviceRequest }, { user }) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -535,7 +535,7 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async devicesIdRoutesGET ({ id, offset, limit }, { user }) {
+  static async devicesIdRoutesGET ({ id, org, offset, limit }, { user }) {
     try {
       const device = await devices.find({
         _id: mongoose.Types.ObjectId(id),
@@ -591,7 +591,7 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesGET ({ id, offset, limit }, { user }) {
+  static async devicesIdStaticroutesGET ({ id, org, offset, limit }, { user }) {
     try {
       const deviceObject = await devices.find({
         _id: mongoose.Types.ObjectId(id),
@@ -627,7 +627,7 @@ class DevicesService {
    * route String Numeric ID of the Route to delete
    * no response value expected for this operation
    **/
-  static async devicesIdStaticroutesRouteDELETE ({ id, route }, { user }) {
+  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }) {
     try {
       const device = await devices.findOneAndUpdate(
         { _id: mongoose.Types.ObjectId(id) },
@@ -642,7 +642,7 @@ class DevicesService {
       copy.id = route;
       copy.action = 'del';
       await dispatcher.apply(devices, copy.method, user, copy);
-      return Service.successResponse({ deviceId: device.id });
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -658,7 +658,7 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns DeviceStaticRouteInformation
    **/
-  static async devicesIdStaticroutesPOST ({ id, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesPOST ({ id, org, staticRouteRequest }, { user }) {
     try {
       const deviceObject = await devices.find({
         _id: mongoose.Types.ObjectId(id),
@@ -712,7 +712,7 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesRoutePATCH ({ id, route, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesRoutePATCH ({ id, org, staticRouteRequest }, { user }) {
     try {
       const deviceObject = await devices.find({
         _id: mongoose.Types.ObjectId(id),
@@ -740,7 +740,7 @@ class DevicesService {
     }
   }
 
-  static async queryDeviceStats ({ org, id, startTime, endTime }) {
+  static async queryDeviceStats ({ id, org, startTime, endTime }) {
     const match = { org: mongoose.Types.ObjectId(org) };
 
     if (id) match.device = mongoose.Types.ObjectId(id);
@@ -813,7 +813,7 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesIdStatisticsGET ({ id }, { user }) {
+  static async devicesIdStatisticsGET ({ id, org }, { user }) {
     try {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;

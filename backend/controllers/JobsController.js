@@ -26,6 +26,10 @@ class JobsController {
     await Controller.handleRequest(request, response, this.service.jobsGET);
   }
 
+  async jobsDELETE (request, response) {
+    await Controller.handleRequest(request, response, this.service.jobsDELETE);
+  }
+
   async jobsIdDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.jobsIdDELETE);
   }

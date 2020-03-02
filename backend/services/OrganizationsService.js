@@ -127,7 +127,7 @@ class OrganizationsService {
       orgDevices.forEach((device) => Connections.deviceDisconnect(device.machineId));
 
       await session.commitTransaction();
-      return Service.successResponse(204);
+      return Service.successResponse(null, 204);
     } catch (e) {
       if (session) session.abortTransaction();
       logger.error('Error deleting organization', { params: { reason: e.message } });
