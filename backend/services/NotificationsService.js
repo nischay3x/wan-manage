@@ -29,15 +29,28 @@ class NotificationsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async notificationsGET ({ org, offset, limit }, { user }) {
+  static async notificationsGET ({ org, offset, limit, op, status }, { user }) {
     try {
       const query = { org: user.defaultOrg._id };
+      if (status) {
+        query.status = status;
+      }
 
       // If operation is 'count', return the amount
       // of notifications for each device
-      const notifications = await notificationsDb
-        .find(query, 'time device title details status machineId')
-        .populate('device', 'name -_id', devices);
+      const notifications = op === 'count' ?
+        await notificationsDb.aggregate([{ $match: query },
+          {
+            $group: {
+              _id: '$device',
+              count: { $sum: 1 }
+            }
+          }
+        ])
+        : await notificationsDb.find(
+          query,
+          'time device title details status machineId'
+        ).populate('device', 'name -_id', devices);
 
       return Service.successResponse(notifications);
     } catch (e) {

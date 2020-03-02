@@ -2301,6 +2301,20 @@ paths:
         required: false
         schema:
           type: string
+      - description: Operation to be executed
+        explode: true
+        in: query
+        name: op
+        required: false
+        schema:
+          type: string
+      - description: Filter by status to be executed
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
