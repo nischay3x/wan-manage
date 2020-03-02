@@ -71,7 +71,7 @@ class DevicesService {
       if (opDevice.length === 1) {
         await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
       } else {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
       return Service.successResponse({}, 204);
     } catch (e) {
@@ -179,7 +179,7 @@ class DevicesService {
       // are found in the database. This is done to prevent a partial
       // schedule of the devices in case of a user's mistake.
       if (numOfIdsFound < devicesUpgradeRequest.devices.length) {
-        return Service.rejectResponse(new Error('Some devices were not found'), 404);
+        return Service.rejectResponse('Some devices were not found');
       }
 
       const set = {
@@ -217,7 +217,7 @@ class DevicesService {
       const options = { upsert: false, useFindAndModify: false };
       const res = await devices.updateOne(query, set, options);
       if (res.n === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       } else {
         return Service.successResponse();
       }
@@ -282,7 +282,7 @@ class DevicesService {
         org: user.defaultOrg._id
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -305,7 +305,7 @@ class DevicesService {
             response: deviceConf.message
           }
         });
-        return Service.rejectResponse(new Error('Failed to get device configuration'), 500);
+        return Service.rejectResponse('Failed to get device configuration');
       }
 
       return Service.successResponse({
@@ -336,7 +336,7 @@ class DevicesService {
         org: user.defaultOrg._id
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -542,7 +542,7 @@ class DevicesService {
         org: user.defaultOrg._id
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -567,7 +567,7 @@ class DevicesService {
           },
           req: null
         });
-        return Service.rejectResponse(new Error('Failed to get device routes'), 500);
+        return Service.rejectResponse('Failed to get device routes');
       }
       const response = {
         status: 'connected',
@@ -598,7 +598,7 @@ class DevicesService {
         org: user.defaultOrg._id
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
 
       const device = deviceObject[0];
@@ -665,10 +665,10 @@ class DevicesService {
         org: user.defaultOrg._id
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
       if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
-        return Service.rejectResponse(new Error('Device must be first approved'), 400);
+        return Service.rejectResponse('Device must be first approved', 400);
       }
       const device = deviceObject[0];
 
@@ -719,10 +719,10 @@ class DevicesService {
         org: user.defaultOrg._id
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
       if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
-        return Service.rejectResponse(new Error('Device must be first approved'), 400);
+        return Service.rejectResponse('Device must be first approved', 400);
       }
 
       const device = deviceObject[0];

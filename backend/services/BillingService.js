@@ -89,7 +89,7 @@ class BillingService {
       if (result) {
         return Service.successResponse({ name: code });
       } else {
-        return Service.rejectResponse('Failed to apply coupon', 400)
+        return Service.rejectResponse('Failed to apply coupon', 400);
       }
     } catch (e) {
       return Service.rejectResponse(
