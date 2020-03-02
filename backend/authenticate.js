@@ -78,6 +78,9 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
 const setUserPerms = (user, jwtPayload) => {
   if (user.defaultAccount && user.defaultAccount._id.toString() === jwtPayload.account) {
     user.perms = jwtPayload.perms;
+    user.accessToken = (jwtPayload.type === 'app_access_token');
+    user.jwtAccount = jwtPayload.account;
+    user.jwtOrg = jwtPayload.org;
     return true;
   }
   return false;

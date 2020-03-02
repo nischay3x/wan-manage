@@ -29,6 +29,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
 const { validateDevice } = require('../deviceLogic/validators');
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class DevicesService {
   /**
@@ -155,7 +156,8 @@ class DevicesService {
    **/
   static async devicesGET ({ org, offset, limit }, { user }) {
     try {
-      const result = await devices.find({ org: user.defaultOrg._id });
+      const orgList = await getAccessTokenOrgList(user, org);
+      const result = await devices.find({ org: { $in: orgList } });
 
       const devicesMap = result.map(item => {
         return DevicesService.selectDeviceParams(item);
@@ -641,7 +643,7 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy.id = route;
       copy.action = 'del';
-      await dispatcher.apply(devices, copy.method, user, copy);
+      await dispatcher.apply(device, copy.method, user, copy);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
