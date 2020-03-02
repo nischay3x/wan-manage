@@ -38,8 +38,8 @@ class NotificationsService {
 
       // If operation is 'count', return the amount
       // of notifications for each device
-      const notifications = op === 'count' ?
-        await notificationsDb.aggregate([{ $match: query },
+      const notifications = op === 'count'
+        ? await notificationsDb.aggregate([{ $match: query },
           {
             $group: {
               _id: '$device',

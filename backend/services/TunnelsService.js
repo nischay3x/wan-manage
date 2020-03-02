@@ -24,7 +24,6 @@ const pick = require('lodash/pick');
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
-
   /**
    * Select the API fields from mongo Tunnel Object
    *

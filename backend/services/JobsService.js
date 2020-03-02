@@ -69,7 +69,7 @@ class JobsService {
    *
    * no response value expected for this operation
    **/
-  static async jobsIdDELETE ({ ids, org }, { user }) {
+  static async jobsDELETE ({ ids, org }, { user }) {
     try {
       await deviceQueues.removeJobIdsByOrg(user.defaultOrg._id.toString(), ids);
       return Service.successResponse(null, 204);
