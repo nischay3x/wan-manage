@@ -18,7 +18,8 @@
 
 const path = require('path');
 const configs = require('../configs')();
-const logger = require('../logger');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+
 const ExpressServer = require('../expressserver');
 
 const launchServer = async () => {
