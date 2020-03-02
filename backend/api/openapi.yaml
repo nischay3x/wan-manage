@@ -2152,17 +2152,10 @@ paths:
       x-swagger-router-controller: Jobs
       x-openapi-router-controller: JobsController
       x-openapi-router-service: JobsService
+  /jobs/all:
     delete:
       operationId: jobsDELETE
       parameters:
-      - description: Numeric ID of the Job to delete
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: integer
-        style: simple
       - description: Organization to be filtered by
         explode: true
         in: query

@@ -178,7 +178,7 @@ class ExpressServer {
     try {
       // FIXME: temporary map the OLD routes
       // this.app.use('/api/devices', require('./routes/devices'));
-      this.app.use('/api/devicestats', require('./routes/deviceStats'));
+      // this.app.use('/api/devicestats', require('./routes/deviceStats'));
     } catch (error) {
       logger.error('Error: Can\'t connect OLD routes');
     }
