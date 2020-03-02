@@ -34,6 +34,10 @@ class OrganizationsController {
     await Controller.handleRequest(request, response, this.service.organizationsIdPUT);
   }
 
+  async organizationsSelectPOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.organizationsSelectPOST);
+  }
+
   async organizationsPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.organizationsPOST);
   }

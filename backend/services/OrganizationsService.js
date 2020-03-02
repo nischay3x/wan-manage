@@ -30,7 +30,7 @@ const Connections = require('../websocket/Connections')();
 
 const Flexibilling = require('../flexibilling');
 
-const { getUserOrganizations, orgUpdateFromNull } = require('../utils/membershipUtils');
+const { getUserOrganizations, getUserOrgByID, orgUpdateFromNull } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getToken } = require('../tokens');
@@ -49,6 +49,46 @@ class OrganizationsService {
       const result = Object.keys(orgs).map((key) => { return orgs[key]; });
 
       return Service.successResponse(result);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async organizationsSelectPOST ({ organizationSelectRequest }, { user }, res) {
+    try {
+      if (!user._id || !user.defaultAccount) {
+        return Service.rejectResponse('Error in selecting organization', 500);
+      }
+      // Check first that user is allowed for this organization
+      let org = [];
+      try {
+        org = await getUserOrgByID(user, organizationSelectRequest.org);
+      } catch (err) {
+        logger.error('Finding organization for user', { params: { reason: err.message } });
+        return Service.rejectResponse('Error selecting organization', 500);
+      }
+      if (org.length > 0) {
+        const updUser = await Users.findOneAndUpdate(
+          // Query, use the email and account
+          { _id: user._id, defaultAccount: user.defaultAccount._id },
+          // Update
+          { defaultOrg: organizationSelectRequest.org },
+          // Options
+          { upsert: false, new: true }
+        ).
+        populate('defaultOrg');
+        // Success, return OK and refresh JWT with new values
+        user.defaultOrg = updUser.defaultOrg;
+        const token = await getToken({ user }, {
+          org: updUser.defaultOrg._id,
+          orgName: updUser.defaultOrg.name
+        });
+        res.setHeader('Refresh-JWT', token);
+        return Service.successResponse(updUser.defaultOrg, 201);
+      }
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

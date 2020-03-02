@@ -3096,6 +3096,68 @@ paths:
       x-swagger-router-controller: Organizations
       x-openapi-router-controller: OrganizationsController
       x-openapi-router-service: OrganizationsService
+  /organizations/select:
+    post:
+      operationId: organizationsSelectPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationSelectRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Add new organization
+      tags:
+      - Organizations
+      x-swagger-router-controller: Organizations
+      x-openapi-router-controller: OrganizationsController
+      x-openapi-router-service: OrganizationsService
   /organizations/{id}:
     delete:
       operationId: organizationsIdDELETE
@@ -4246,6 +4308,11 @@ components:
           email:
             type: string
         type: object
+    OrganizationSelectRequest:
+      properties:
+        org:
+          type: string
+      type: object
     RegisterAccountRequest:
       example:
         userJobTitle: userJobTitle
