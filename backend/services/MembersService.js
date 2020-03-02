@@ -233,7 +233,7 @@ class MembersService {
 
       if (!verified) {
         return Service.rejectResponse(
-          new Error('No sufficient permissions for this operation'), 400);
+          'No sufficient permissions for this operation', 400);
       }
 
       // Update
@@ -368,7 +368,7 @@ class MembersService {
 
       // Don't allow to delete self
       if (user._id.toString() === membershipData.user.toString()) {
-        return Service.rejectResponse(new Error('User cannot delete itself'), 400);
+        return Service.rejectResponse('User cannot delete itself', 400);
       }
 
       // Check that current user is allowed to delete member
@@ -378,7 +378,7 @@ class MembersService {
         user._id, user.defaultAccount._id);
       if (!verified) {
         return Service.rejectResponse(
-          new Error('No sufficient permissions for this operation'), 400);
+          'No sufficient permissions for this operation', 400);
       }
 
       // Check that the account have at least one owner
@@ -389,7 +389,7 @@ class MembersService {
           role: 'owner'
         });
         if (numAccountOwners < 2) {
-          return Service.rejectResponse(new Error('Account must have at least one owner'), 400);
+          return Service.rejectResponse('Account must have at least one owner', 400);
         }
       }
 
@@ -424,7 +424,7 @@ class MembersService {
 
       // Check if user don't add itself
       if (user.email === memberRequest.email) {
-        return Service.rejectResponse(new Error('You can not add yourself'), 500);
+        return Service.rejectResponse('You can not add yourself', 500);
       }
 
       // make sure user is only allow to define membership under his view
@@ -437,7 +437,7 @@ class MembersService {
       );
       if (!verified) {
         return Service.rejectResponse(
-          new Error('No sufficient permissions for this operation'), 400);
+          'No sufficient permissions for this operation', 400);
       }
 
       // Add user

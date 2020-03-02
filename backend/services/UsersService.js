@@ -121,7 +121,7 @@ class UsersService {
     try {
       // Validate password
       if (!auth.validatePassword(updatePasswordRequest.password)) {
-        return Service.rejectResponse(new Error('Bad Password'), 500);
+        return Service.rejectResponse('Bad Password', 403);
       }
 
       const registerUser = await Users.findOneAndUpdate(

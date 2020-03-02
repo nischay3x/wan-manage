@@ -119,7 +119,7 @@ class AccountsService {
 
     try {
       if (!user.defaultAccount || !user.defaultAccount._id || !user._id) {
-        return Service.rejectResponse(new Error('Error in selecting account'), 500);
+        return Service.rejectResponse('Error in selecting account', 500);
       }
 
       // If current account not changed, return OK
