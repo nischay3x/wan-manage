@@ -75,14 +75,22 @@ class BillingService {
   }
 
   /**
-   * Delete a job
+   * Apply a coupon
    *
-   * id Integer Numeric ID of the Job to delete
    * no response value expected for this operation
    **/
   static async couponsPOST ({ couponsRequest }, { user }) {
     try {
-      return Service.successResponse(null, 204);
+      const customerId = user.defaultAccount.billingCustomerId;
+      const code = couponsRequest.name;
+
+      const result = await flexibilling.applyCoupon({ customer_id: customerId, code });
+
+      if (result) {
+        return Service.successResponse({ name: code });
+      } else {
+        return Service.rejectResponse('Failed to apply coupon', 400)
+      }
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
