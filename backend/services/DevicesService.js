@@ -455,7 +455,7 @@ class DevicesService {
       await session.startTransaction();
 
       const origDevice = await devices.findOne({
-        id: id,
+        _id: id,
         org: user.defaultOrg._id
       }).session(session);
 
@@ -500,7 +500,7 @@ class DevicesService {
       }
 
       const updDevice = await devices.findOneAndUpdate(
-        { id: id, org: user.defaultOrg._id },
+        { _id: id, org: user.defaultOrg._id },
         deviceRequest,
         { new: true, upsert: false, runValidators: true }
       ).session(session);
