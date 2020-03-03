@@ -111,7 +111,7 @@ class DevicesService {
       'labels',
       'staticroutes',
       'upgradeSchedule']);
-      retDevice.deviceStatus = retDevice.deviceStatus ? true : false;
+    retDevice.deviceStatus = (retDevice.deviceStatus === "1") ? true : false;
 
     // pick interfaces
     const retInterfaces = item.interfaces.map(i => {
