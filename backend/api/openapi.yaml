@@ -3371,6 +3371,8 @@ components:
       properties:
         name:
           type: string
+        validityEntity:
+          type: string
       type: object
     MemberRequest:
       example:
