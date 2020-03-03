@@ -48,7 +48,16 @@ class OrganizationsService {
       const orgs = await getUserOrganizations(user);
       const result = Object.keys(orgs).map((key) => { return orgs[key]; });
 
-      return Service.successResponse(result);
+      const list = result.map(element => {
+        return {
+          _id: element._id.toString(),
+          name: element.name,
+          account: element.account ? element.account.toString() : '',
+          group: element.group
+        };
+      });
+
+      return Service.successResponse(list);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -87,7 +96,14 @@ class OrganizationsService {
           orgName: updUser.defaultOrg.name
         });
         res.setHeader('Refresh-JWT', token);
-        return Service.successResponse(updUser.defaultOrg, 201);
+
+        const result = {
+          _id: updUser.defaultOrg._id.toString(),
+          name: updUser.defaultOrg.name,
+          account: updUser.defaultOrg.account ? updUser.defaultOrg.account.toString() : '',
+          group: updUser.defaultOrg.group
+        }
+        return Service.successResponse(result, 201);
       }
     } catch (e) {
       return Service.rejectResponse(
@@ -147,16 +163,16 @@ class OrganizationsService {
       await AccessTokens.deleteMany({ organization: id }, { session: session });
 
       // Find all devices for organization
-      const orgDevices = await Devices.find({ org: id },
+      const orgDevices = await Devices.devices.find({ org: id },
         { machineId: 1, _id: 0 },
         { session: session });
 
       // Get the account total device count
-      const deviceCount = await Devices.countDocuments({ account: user.defaultAccount._id })
+      const deviceCount = await Devices.devices.countDocuments({ account: user.defaultAccount._id })
         .session(session);
 
       // Delete all devices
-      await Devices.deleteMany({ org: id }, { session: session });
+      await Devices.devices.deleteMany({ org: id }, { session: session });
       // Unregister a device (by removing the removed org number)
       await Flexibilling.registerDevice({
         account: user.defaultAccount._id,
@@ -248,7 +264,13 @@ class OrganizationsService {
       const token = await getToken({ user }, { org: org._id, orgName: org.name });
       response.setHeader('Refresh-JWT', token);
 
-      return Service.successResponse(org, 201);
+      const new_org = {
+        _id: org._id.toString(),
+        name: org.name,
+        group: org.group,
+        account: org.account ? ord.account.toString() : ''
+      }
+      return Service.successResponse(new_org, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

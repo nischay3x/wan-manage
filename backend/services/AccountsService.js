@@ -143,7 +143,7 @@ class AccountsService {
       user.defaultOrg = null;
 
       await orgUpdateFromNull(req, res);
-      return Service.successResponse({ _id: updUser.defaultAccount._id });
+      return Service.successResponse({ _id: updUser.defaultAccount._id }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
