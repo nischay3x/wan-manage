@@ -3212,6 +3212,7 @@ paths:
     post:
       operationId: pathlabelsPOST
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -3221,7 +3222,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Error'
+                $ref: 'components/schemas/PathLabel'
           description: Path label created
         "400":
           content:
@@ -3445,7 +3446,7 @@ paths:
       x-swagger-router-controller: PathLabels
       x-openapi-router-controller: PathLabelsController
       x-openapi-router-service: PathLabelsService
-        
+
 components:
   responses:
     NotFoundError:
@@ -4483,6 +4484,10 @@ components:
           type: string
         color:
           type: string
+      required:
+        - name
+        - description
+        - color
       type: object
     Error:
       properties:

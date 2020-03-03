@@ -1,5 +1,5 @@
-/* eslint-disable no-unused-vars */
 const Service = require('./Service');
+const PathLabels = require('../models/pathlabels');
 
 class PathLabelsService {
   /**
@@ -10,19 +10,20 @@ class PathLabelsService {
    * org String Organization to be filtered by (optional)
    * returns List
    **/
-  static pathlabelsGET ({ offset, limit, org }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse({}));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405
-          ));
-        }
-      }
-    );
+  static async pathlabelsGET ({ offset, limit, org }, { user }) {
+    try {
+      const pathLabels = await PathLabels.find(
+        { org: user.defaultOrg._id.toString() },
+        { name: 1, description: 1, color: 1 }
+      ).skip(offset).limit(limit);
+
+      return Service.successResponse(pathLabels);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
   }
 
   /**
@@ -31,19 +32,24 @@ class PathLabelsService {
    * id String Numeric ID of the Path label to delete
    * no response value expected for this operation
    **/
-  static pathlabelsIdDELETE ({ id }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405
-          ));
-        }
+  static async pathlabelsIdDELETE ({ id }, { user }) {
+    try {
+      const { deletedCount } = await PathLabels.deleteOne({
+        org: user.defaultOrg._id.toString(),
+        _id: id
+      });
+
+      if (deletedCount === 0) {
+        return Service.rejectResponse('Not found', 404);
       }
-    );
+
+      return Service.successResponse({}, 204);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
   }
 
   /**
@@ -53,62 +59,102 @@ class PathLabelsService {
    * org String Organization to be filtered by (optional)
    * returns PathLabel
    **/
-  static pathlabelsIdGET ({ id, org }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405
-          ));
+  static async pathlabelsIdGET ({ id, org }, { user }) {
+    try {
+      const pathLabel = await PathLabels.findOne(
+        {
+          org: user.defaultOrg._id.toString(),
+          _id: id
+        },
+        {
+          name: 1,
+          description: 1,
+          color: 1
         }
+      );
+
+      if (!pathLabel) {
+        return Service.rejectResponse('Not found', 404);
       }
-    );
+
+      return Service.successResponse(pathLabel);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
   }
 
   /**
    * Modify a Path label
    *
    * id String Numeric ID of the Path label to modify
-   * pathLabelRequest PathLabelRequest  (optional)
+   * pathLabelRequest PathLabelRequest
    * returns PathLabel
    **/
-  static pathlabelsIdPUT ({ id, pathLabelRequest }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405
-          ));
+  static async pathlabelsIdPUT ({ id, pathLabelRequest }, { user }) {
+    try {
+      const { name, description, color } = pathLabelRequest;
+      const pathLabel = await PathLabels.findOneAndUpdate(
+        {
+          org: user.defaultOrg._id.toString(),
+          _id: id
+        },
+        {
+          org: user.defaultOrg._id.toString(),
+          name: name,
+          description: description,
+          color: color
+        },
+        {
+          fields: { name: 1, description: 1, color: 1 },
+          new: true
         }
+      );
+
+      if (!pathLabel) {
+        return Service.rejectResponse('Not found', 404);
       }
-    );
+
+      return Service.successResponse(pathLabel);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
   }
 
   /**
    * Add a new Path label
    *
-   * pathLabelRequest PathLabelRequest  (optional)
-   * returns Error
+   * pathLabelRequest PathLabelRequest
+   * returns PathLabel
    **/
-  static pathlabelsPOST ({ pathLabelRequest }) {
-    return new Promise(
-      async (resolve) => {
-        try {
-          resolve(Service.successResponse(''));
-        } catch (e) {
-          resolve(Service.rejectResponse(
-            e.message || 'Invalid input',
-            e.status || 405
-          ));
-        }
-      }
-    );
+  static async pathlabelsPOST ({ pathLabelRequest }, { user }) {
+    try {
+      const { name, description, color } = pathLabelRequest;
+      const result = await PathLabels.create({
+        org: user.defaultOrg._id.toString(),
+        name: name,
+        description: description,
+        color: color
+      });
+
+      const pathLabel = (({ name, description, color, _id }) => ({
+        name,
+        description,
+        color,
+        _id
+      }))(result);
+      return Service.successResponse(pathLabel, 201);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
   }
 }
 
