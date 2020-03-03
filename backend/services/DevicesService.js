@@ -198,7 +198,7 @@ class DevicesService {
 
       const options = { upsert: false, useFindAndModify: false };
       await devices.updateMany(query, set, options);
-      return Service.successResponse();
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -225,7 +225,7 @@ class DevicesService {
       if (res.n === 0) {
         return Service.rejectResponse('Device not found');
       } else {
-        return Service.successResponse();
+        return Service.successResponse(null, 204);
       }
     } catch (e) {
       return Service.rejectResponse(
@@ -709,7 +709,7 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy.id = route.id;
       await dispatcher.apply(device, copy.method, user, copy);
-      return Service.successResponse({});
+      return Service.successResponse(route, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

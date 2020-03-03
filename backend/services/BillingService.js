@@ -87,7 +87,7 @@ class BillingService {
       const result = await flexibilling.applyCoupon({ customer_id: customerId, code });
 
       if (result) {
-        return Service.successResponse({ name: code });
+        return Service.successResponse({ name: code }, 201);
       } else {
         return Service.rejectResponse('Failed to apply coupon', 400);
       }
