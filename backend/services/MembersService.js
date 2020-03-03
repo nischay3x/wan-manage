@@ -35,16 +35,17 @@ const Organizations = require('../models/organizations');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
 
-const pick = (...keys) => obj => keys.reduce((a, e) => {
-  const objKeys = e.split('.');
-  let val = obj[objKeys[0]];
-  for (let i = 1; i < objKeys.length; i++) {
-    if (val && val[objKeys[i]]) val = val[objKeys[i]]; else val = null;
-  };
-  return { ...a, [objKeys.join('_')]: val };
-}, {});
-
 class MembersService {
+
+  static pick = (...keys) => obj => keys.reduce((a, e) => {
+    const objKeys = e.split('.');
+    let val = obj[objKeys[0]];
+    for (let i = 1; i < objKeys.length; i++) {
+      if (val && val[objKeys[i]]) val = val[objKeys[i]]; else val = null;
+    };
+    return { ...a, [objKeys.join('_')]: val ? val.toString(): null };
+  }, {});
+
   // check user parameters
   static checkMemberParameters (memberRequest, user) {
     if (
@@ -149,15 +150,6 @@ class MembersService {
    **/
   static async membersGET ({ offset, limit }, { user }) {
     // pick routine
-    const pick = (...keys) => obj => keys.reduce((a, e) => {
-      const objKeys = e.split('.');
-      let val = obj[objKeys[0]];
-      for (let i = 1; i < objKeys.length; i++) {
-        if (val && val[objKeys[i]]) val = val[objKeys[i]]; else val = null;
-      };
-      return { ...a, [objKeys.join('_')]: val };
-    }, {});
-
     try {
       let userPromise = null;
       // Check the user permission:
@@ -183,7 +175,7 @@ class MembersService {
           .populate('organization');
 
         const response = await memList.map(mem =>
-          pick(
+          MembersService.pick(
             '_id',
             'user._id',
             'user.name',
@@ -197,6 +189,7 @@ class MembersService {
             'role'
           )(mem)
         );
+
         return Service.successResponse(response);
       } else {
         return Service.successResponse([]);
@@ -272,7 +265,7 @@ class MembersService {
       }
 
       return Service.successResponse(
-        pick(
+        MembersService.pick(
           '_id',
           'user._id',
           'user.name',
@@ -332,7 +325,7 @@ class MembersService {
         .populate('account')
         .populate('organization');
 
-      const response = await memList.map(mem => pick(
+      const response = await memList.map(mem => MembersService.pick(
         '_id',
         'user._id',
         'user.name',

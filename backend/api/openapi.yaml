@@ -3953,8 +3953,6 @@ components:
         organization_name:
           type: string
         organization__id:
-          maxLength: 24
-          minLength: 24
           type: string
         role:
           $ref: '#/components/schemas/Role'
