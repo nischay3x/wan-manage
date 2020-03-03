@@ -6,7 +6,7 @@ const configs = require('./configs')();
 const swaggerUI = require('swagger-ui-express');
 const yamljs = require('yamljs');
 const express = require('express');
-const cors = require('cors');
+const cors = require('./routes/cors');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const { OpenApiValidator } = require('express-openapi-validator');
@@ -128,8 +128,8 @@ class ExpressServer {
     });
     this.app.use(rateLimiter);
 
-    // eneral settings here
-    this.app.use(cors());
+    // General settings here
+    this.app.use(cors.cors);
     this.app.use(bodyParser.json());
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
@@ -172,6 +172,7 @@ class ExpressServer {
     this.app.use('/spec', express.static(path.join(__dirname, 'api', 'openapi.yaml')));
     this.app.get('/hello', (req, res) => res.send('Hello World'));
 
+    this.app.use(cors.corsWithOptions);
     this.app.use(auth.verifyUserJWT);
     // this.app.use(auth.verifyPermission);
 
