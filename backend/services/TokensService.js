@@ -143,7 +143,7 @@ class TokensService {
         _id: token.id,
         name: token.name,
         token: token.token
-      });
+      }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
