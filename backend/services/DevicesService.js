@@ -822,9 +822,9 @@ class DevicesService {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;
 
-      const orgList = await getAccessTokenOrgList(user, org, false);
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
-        org: { $in: orgList }.toString(),
+        org: orgList[0]._id.toString(),
         id: null, // null get all devices stats
         startTime: startTime,
         endTime: endTime
@@ -849,9 +849,9 @@ class DevicesService {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;
 
-      const orgList = await getAccessTokenOrgList(user, org, false);
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
-        org: { $in: orgList }.toString(),
+        org: orgList[0]._id.toString(),
         id: id,
         startTime: startTime,
         endTime: endTime
