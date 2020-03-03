@@ -3568,21 +3568,23 @@ components:
           remaining: 2
       properties:
         _id:
-          maxLength: 24
-          minLength: 24
           type: integer
         type:
           type: string
+        data:
+          type: object
+        result:
+          type: object
         priority:
           type: integer
         progress:
           type: integer
         state:
-          type: integer
+          type: string
         created_at:
           type: string
         attempts:
-          $ref: '#/components/schemas/JobAttempt'
+          type: integer
       type: object
     DeviceRequest:
       example:

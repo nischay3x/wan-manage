@@ -57,6 +57,15 @@ class JobsService {
           status, (job) => result.push(job));
       }
 
+      // a little bit hack because of complex logic in UI
+      result.forEach(element => {
+        element._id = element.id;
+        element.attempts = element._attempts;
+        element.priority = 0 + element._priority;
+        element.progress = 0 + element._progress;
+        element.state = element._state;
+      });
+
       return Service.successResponse(result);
     } catch (e) {
       return Service.rejectResponse(
