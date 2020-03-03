@@ -55,7 +55,17 @@ class NotificationsService {
           'time device title details status machineId'
         ).populate('device', 'name -_id', devices);
 
-      return Service.successResponse(notifications);
+      const result = notifications.map(element => {
+        return {
+          _id: element._id.toString(),
+          count: element.count,
+          status: element.status,
+          details: element.details,
+          title: element.title
+        }
+      });
+
+      return Service.successResponse(result);
     } catch (e) {
       logger.warn('Failed to retrieve notifications', {
         params: {

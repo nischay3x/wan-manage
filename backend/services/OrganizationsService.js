@@ -121,7 +121,7 @@ class OrganizationsService {
           name: updUser.defaultOrg.name,
           account: updUser.defaultOrg.account ? updUser.defaultOrg.account.toString() : '',
           group: updUser.defaultOrg.group
-        }
+        };
         return Service.successResponse(result, 201);
       }
     } catch (e) {

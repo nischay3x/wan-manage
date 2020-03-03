@@ -111,6 +111,7 @@ class DevicesService {
       'labels',
       'staticroutes',
       'upgradeSchedule']);
+      retDevice.deviceStatus = retDevice.deviceStatus ? true : false;
 
     // pick interfaces
     const retInterfaces = item.interfaces.map(i => {
@@ -615,9 +616,15 @@ class DevicesService {
       }
 
       const device = deviceObject[0];
-      const routes = device.staticroutes.map(value => {
+      let routes = [];
+
+      if (device.staticroutes.length) {
+        routes = device.staticroutes;
+      }
+
+      routes = routes.map(value => {
         return {
-          id: value.id,
+          _id: value.id,
           destination_network: value.destination,
           gateway_ip: value.gateway,
           ifname: value.ifname,
@@ -709,7 +716,15 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy.id = route.id;
       await dispatcher.apply(device, copy.method, user, copy);
-      return Service.successResponse(route, 201);
+
+      const result = {
+        _id: route._id.toString(),
+        gateway: route.gateway,
+        destination: route.destination,
+        ifname: route.ifname
+      };
+
+      return Service.successResponse(result, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

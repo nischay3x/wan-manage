@@ -958,10 +958,7 @@ paths:
          content:
            application/json:
              schema:
-               items:
-                 $ref: '#/components/schemas/Device'
-               type: array
-               x-content-type: application/json
+               $ref: '#/components/schemas/Device'
          description: Successful operation
        "401":
          content:
@@ -1419,9 +1416,7 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/DeviceRouteInformation'
-                type: array
+                $ref: '#/components/schemas/DeviceRouteInformation'
           description: Successful operation
         "401":
           content:
@@ -1484,7 +1479,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceStaticRouteInformation'
+                $ref: '#/components/schemas/StaticRoute'
           description: Created
           headers:
             Location:
@@ -1566,7 +1561,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StaticRoute'
+                items:
+                  $ref: '#/components/schemas/StaticRoute'
+                type: array
           description: Successful operation
         "401":
           content:
@@ -3351,16 +3348,15 @@ components:
         token: token
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
         token:
-          readOnly: true
           type: string
         isValid:
           default: true
-          readOnly: true
           type: boolean
       type: object
     AccessTokenRequest:
@@ -3411,7 +3407,8 @@ components:
         token: token
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
@@ -3440,7 +3437,8 @@ components:
         _id: _id
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
@@ -3497,7 +3495,8 @@ components:
         group: group
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
@@ -3523,6 +3522,8 @@ components:
         details: Router state changed to "Not running"
       properties:
         _id:
+          maxLength: 24
+          minLength: 24
           type: string
         title:
           type: string
@@ -3567,6 +3568,8 @@ components:
           remaining: 2
       properties:
         _id:
+          maxLength: 24
+          minLength: 24
           type: integer
         type:
           type: string
@@ -3762,7 +3765,6 @@ components:
         _id:
           maxLength: 24
           minLength: 24
-          readOnly: true
           type: string
         machineId:
           type: string
@@ -3818,7 +3820,8 @@ components:
         time: time
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         time:
           type: string
@@ -3842,7 +3845,8 @@ components:
         _id: _id
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         pciaddr:
           type: string
@@ -3922,7 +3926,6 @@ components:
         _id:
           maxLength: 24
           minLength: 24
-          readOnly: true
           type: string
         user__id:
           maxLength: 24
@@ -4049,14 +4052,16 @@ components:
         destination: 1.1.0.0
         gateway: 1.1.1.1
       properties:
-        status:
-          $ref: '#/components/schemas/DeviceStatus'
-        destination:
+        _id:
           type: string
-        gateway:
+        destination_network:
+          type: string
+        gateway_ip:
           type: string
         ifname:
           type: string
+        status:
+          $ref: '#/components/schemas/DeviceStatus'
       type: object
     DeviceStatistics:
       example:
@@ -4153,6 +4158,8 @@ components:
         deviceBconf:
           type: boolean
         _id:
+          maxLength: 24
+          minLength: 24
           type: string
         __v:
           type: integer
@@ -4181,6 +4188,8 @@ components:
         gateway: gateway
       properties:
         _id:
+          maxLength: 24
+          minLength: 24
           type: string
         destination:
           description: Destination
@@ -4201,6 +4210,8 @@ components:
         interface: interface
         gateway: gateway
       properties:
+        _id:
+          type: string
         destination:
           description: Destination
           maxLength: 24
