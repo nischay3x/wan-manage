@@ -108,8 +108,8 @@ class TokensService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const result = await Tokens.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
-        { tokenRequest },
-        { upsert: false, runValidators: true, new: true });
+        { $set: tokenRequest },
+        { useFindAndModify: false, upsert: false, runValidators: true, new: true });
 
       const token = {
         _id: result.id,
@@ -118,7 +118,7 @@ class TokensService {
         createdAt: result.createdAt.toString()
       };
 
-      return Service.successResponse(token);
+      return Service.successResponse(token, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
