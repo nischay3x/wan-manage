@@ -22,9 +22,40 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 class JobsService {
+  /**
+   * Select the API fields from jobs Object
+   * @param {Object} item - jobs object
+   */
+  static selectJobsParams (item) {
+    item._id = item.id;
+    const madeAttempts = item._attempts ? item._attempts : 0;
+    item.attempts = {
+      max: item._max_attempts,
+      made: madeAttempts,
+      remaining: item._max_attempts - madeAttempts
+    };
+    item.priority = item._priority;
+    item.progress = item._progress;
+    item.state = item._state;
+    const retJob = pick(item, [
+      '_id', // type: integer
+      'type', // type: string
+      'data', // type: object
+      'result', // type: object
+      'created_at', // type: string
+      'attempts', // type: integer
+      'state', // type: string
+      'priority', // type: integer
+      'progress' // type: string
+    ]);
+
+    return retJob;
+  }
+
   /**
    * Get all Jobs
    *
@@ -48,23 +79,19 @@ class JobsService {
         await Promise.all(
           stateOpts.map(async (s) => {
             await deviceQueues.iterateJobsByOrg(orgList[0].toString(), s, (job) => {
-              result.push(job);
+              const parsedJob = JobsService.selectJobsParams(job);
+              result.push(parsedJob);
             });
           })
         );
       } else {
         await deviceQueues.iterateJobsByOrg(orgList[0].toString(),
-          status, (job) => result.push(job));
+          status, (job) => {
+            const parsedJob = JobsService.selectJobsParams(job);
+            result.push(parsedJob);
+          }
+        );
       }
-
-      // a little bit hack because of complex logic in UI
-      result.forEach(element => {
-        element._id = element.id;
-        element.attempts = element._attempts;
-        element.priority = 0 + element._priority;
-        element.progress = 0 + element._progress;
-        element.state = element._state;
-      });
 
       return Service.successResponse(result);
     } catch (e) {

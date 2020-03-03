@@ -3584,13 +3584,13 @@ components:
         priority:
           type: integer
         progress:
-          type: integer
+          type: string
         state:
           type: string
         created_at:
           type: string
         attempts:
-          type: integer
+          type: object
       type: object
     DeviceRequest:
       example:
