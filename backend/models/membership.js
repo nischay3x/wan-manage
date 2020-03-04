@@ -45,6 +45,7 @@ const setPermission = (get, post, put, del) => {
 // Permissions
 // Each number is a bitmask of permissions for Del (MSB), Put, Post, Get (LSB)
 const Permissions = new Schema({
+  jobs: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   billing: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   accounts: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   organizations: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
