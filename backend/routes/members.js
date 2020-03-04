@@ -291,8 +291,9 @@ membersRouter.route('/')
           <b>You have been invited to a flexiWAN
           ${req.body.userPermissionTo}. </b>`) + ((registerUser)
             ? `<b>Click below to set your password</b>
-          <p><a href="${configs.get('UIServerURL')}/reset-password?
-            email=${req.body.email}&t=${resetPWKey}">
+          <p><a href="${configs.get('UIServerURL')}/reset-password?email=${
+            req.body.email
+          }&t=${resetPWKey}">
             <button style="color:#fff;background-color:#F99E5B;
             border-color:#F99E5B;font-weight:400;text-align:center;
             vertical-align:middle;border:1px solid transparent;
