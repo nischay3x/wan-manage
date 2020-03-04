@@ -3228,10 +3228,7 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/Invoice'
-                type: array
-                x-content-type: application/json
+                $ref: '#/components/schemas/Billing'
           description: Successful operation
         "401":
           content:
@@ -3598,10 +3595,10 @@ components:
           type: WAN
           MAC: MAC
           routing: routing
-          IPv6Mask: 6
+          IPv6Mask: "64"
           isAssigned: true
           driver: driver
-          IPv4Mask: 0
+          IPv4Mask: "24"
           name: name
           pciaddr: pciaddr
           _id: _id
@@ -3611,10 +3608,10 @@ components:
           type: WAN
           MAC: MAC
           routing: routing
-          IPv6Mask: 6
+          IPv6Mask: "64"
           isAssigned: true
           driver: driver
-          IPv4Mask: 0
+          IPv4Mask: "24"
           name: name
           pciaddr: pciaddr
           _id: _id
@@ -3708,10 +3705,10 @@ components:
           type: WAN
           MAC: MAC
           routing: routing
-          IPv6Mask: 6
+          IPv6Mask: "64"
           isAssigned: true
           driver: driver
-          IPv4Mask: 0
+          IPv4Mask: "24"
           name: name
           pciaddr: pciaddr
           _id: _id
@@ -3721,10 +3718,10 @@ components:
           type: WAN
           MAC: MAC
           routing: routing
-          IPv6Mask: 6
+          IPv6Mask: "64"
           isAssigned: true
           driver: driver
-          IPv4Mask: 0
+          IPv4Mask: "24"
           name: name
           pciaddr: pciaddr
           _id: _id
@@ -3841,10 +3838,10 @@ components:
         type: WAN
         MAC: MAC
         routing: routing
-        IPv6Mask: 6
+        IPv6Mask: "64"
         isAssigned: true
         driver: driver
-        IPv4Mask: 0
+        IPv4Mask: "24"
         name: name
         pciaddr: pciaddr
         _id: _id
@@ -3873,13 +3870,13 @@ components:
           - LAN
           type: string
         IPv4Mask:
-          type: integer
+          type: string
         MAC:
           type: string
         name:
           type: string
         IPv6Mask:
-          type: integer
+          type: string
       type: object
     DeviceVersion:
       example:
@@ -4337,6 +4334,26 @@ components:
         status:
           type: string
         date:
+          type: string
+    BillingSummary:
+      properties:
+        _id:
+          type: string
+        current:
+          type: integer
+        max:
+          type: integer
+        account:
+          type: string
+    Billing:
+      properties:
+        invoices:
+          items:
+            $ref: '#/components/schemas/Invoice'
+          type: array
+        summary:
+          $ref: '#/components/schemas/BillingSummary'
+        subscription:
           type: string
     CouponRequest:
       properties:

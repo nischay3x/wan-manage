@@ -135,7 +135,7 @@ class ExpressServer {
     this.app.use(express.urlencoded({ extended: false }));
     this.app.use(cookieParser());
 
-    // // Routes allowed without authentication
+    // Routes allowed without authentication
     this.app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
 
     // Secure traffic only

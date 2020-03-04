@@ -57,13 +57,19 @@ class BillingService {
       }
 
       const summary = await flexibilling.getMaxDevicesRegisteredSummmary(user.defaultAccount.id);
-      const amount = await flexibilling.getCurrentUsage({ customer_id: customerId });
+      //const amount = await flexibilling.getCurrentUsage({ customer_id: customerId });
       const status = await flexibilling.getSubscriptionStatus({ customer_id: customerId });
+      const filteredSummary = {
+        _id: summary._id.toString(),
+        current: summary.current,
+        max: summary.max,
+        account: summary.account.toString(),
+      };
 
       return Service.successResponse({
         invoices: _invoices,
-        summary,
-        amount,
+        filteredSummary,
+        //amount,
         subscription: status
       });
     } catch (e) {
