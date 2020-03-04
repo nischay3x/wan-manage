@@ -3955,12 +3955,15 @@ components:
           type: string
         group:
           type: string
+          nullable: true
         organization_name:
           type: string
+          nullable: true
         organization__id:
           maxLength: 24
           minLength: 24
           type: string
+          nullable: true
         role:
           $ref: '#/components/schemas/Role'
       type: object

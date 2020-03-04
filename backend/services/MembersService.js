@@ -35,16 +35,48 @@ const Organizations = require('../models/organizations');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
 
-const pick = (...keys) => obj => keys.reduce((a, e) => {
-  const objKeys = e.split('.');
-  let val = obj[objKeys[0]];
-  for (let i = 1; i < objKeys.length; i++) {
-    if (val && val[objKeys[i]]) val = val[objKeys[i]]; else val = null;
-  };
-  return { ...a, [objKeys.join('_')]: val };
-}, {});
-
 class MembersService {
+  /**
+   * Select the API fields from mongo member Object list
+   * @param {Object} items - mongodb members object
+   */
+  static selectMembersParams (items) {
+    const pick = (...keys) => obj => keys.reduce((a, e) => {
+      const objKeys = e.split('.');
+      let val = obj[objKeys[0]];
+      for (let i = 1; i < objKeys.length; i++) {
+        if (val && val[objKeys[i]]) val = val[objKeys[i]]; else val = null;
+      };
+      return { ...a, [objKeys.join('_')]: val };
+    }, {});
+
+    const response = items.map(mem => {
+      const memItem = pick(
+        '_id',
+        'user._id',
+        'user.name',
+        'user.email',
+        'to',
+        'account.name',
+        'account._id',
+        'group',
+        'organization.name',
+        'organization._id',
+        'role'
+      )(mem);
+
+      memItem._id = memItem._id.toString();
+      memItem.user__id = memItem.user__id.toString();
+      memItem.account__id = memItem.account__id.toString();
+      memItem.organization__id = (memItem.organization__id)
+        ? memItem.organization__id.toString() : null;
+
+      return memItem;
+    });
+
+    return response;
+  }
+
   // check user parameters
   static checkMemberParameters (memberRequest, user) {
     if (
@@ -148,16 +180,6 @@ class MembersService {
    * returns List
    **/
   static async membersGET ({ offset, limit }, { user }) {
-    // pick routine
-    const pick = (...keys) => obj => keys.reduce((a, e) => {
-      const objKeys = e.split('.');
-      let val = obj[objKeys[0]];
-      for (let i = 1; i < objKeys.length; i++) {
-        if (val && val[objKeys[i]]) val = val[objKeys[i]]; else val = null;
-      };
-      return { ...a, [objKeys.join('_')]: val };
-    }, {});
-
     try {
       let userPromise = null;
       // Check the user permission:
@@ -182,21 +204,8 @@ class MembersService {
           .populate('account')
           .populate('organization');
 
-        const response = await memList.map(mem =>
-          pick(
-            '_id',
-            'user._id',
-            'user.name',
-            'user.email',
-            'to',
-            'account.name',
-            'account._id',
-            'group',
-            'organization.name',
-            'organization._id',
-            'role'
-          )(mem)
-        );
+        const response = MembersService.selectMembersParams(memList);
+
         return Service.successResponse(response);
       } else {
         return Service.successResponse([]);
@@ -271,21 +280,9 @@ class MembersService {
         }
       }
 
-      return Service.successResponse(
-        pick(
-          '_id',
-          'user._id',
-          'user.name',
-          'user.email',
-          'to',
-          'account.name',
-          'account._id',
-          'group',
-          'organization.name',
-          'organization._id',
-          'role'
-        )(member)
-      );
+      const response = MembersService.selectMembersParams([member]);
+
+      return Service.successResponse(response[0]);
     } catch (err) {
       logger.error('Error updating user', {
         params: {
@@ -332,19 +329,7 @@ class MembersService {
         .populate('account')
         .populate('organization');
 
-      const response = await memList.map(mem => pick(
-        '_id',
-        'user._id',
-        'user.name',
-        'user.email',
-        'to',
-        'account.name',
-        'account._id',
-        'group',
-        'organization.name',
-        'organization._id',
-        'role')(mem)
-      );
+      const response = MembersService.selectMembersParams(memList);
 
       return Service.successResponse(response, 200);
     } else {
@@ -417,6 +402,7 @@ class MembersService {
    * returns Member
    **/
   static async membersPOST ({ memberRequest }, { user }) {
+    let session;
     try {
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
@@ -444,12 +430,12 @@ class MembersService {
       let registerUser = null;
       const resetPWKey = randomKey(30);
 
-      const session = await mongoConns.getMainDB().startSession();
-      session.startTransaction();
+      session = await mongoConns.getMainDB().startSession();
+      await session.startTransaction();
 
       // Create a new unverified user
       // Associate to account and current organization
-      const existingUser = await Users.findOne({ username: memberRequest.email });
+      const existingUser = await Users.findOne({ username: memberRequest.email }).session(session);
       if (!existingUser) {
         registerUser = new Users({
           username: memberRequest.email,
@@ -474,7 +460,7 @@ class MembersService {
         }
       }
 
-      await membership.create([{
+      const registeredMember = await membership.create([{
         user: (existingUser) ? existingUser._id : registerUser._id,
         account: user.defaultAccount._id,
         group: memberRequest.userPermissionTo === 'group' ? memberRequest.userEntity : '',
@@ -491,6 +477,12 @@ class MembersService {
         registerUser.$session(session);
         registerUser.save();
       };
+
+      const populatedMember = await registeredMember[0]
+        .populate('account')
+        .populate('organization')
+        .execPopulate();
+      populatedMember.user = existingUser || registerUser;
 
       // Send email
       await mailer.sendMailHTML(
@@ -513,6 +505,7 @@ class MembersService {
       ('<p>Your friends @ flexiWAN</p>'));
 
       await session.commitTransaction();
+      session = null;
 
       // Send webhooks only for users invited as account owners
       // changing the user role later will not send another hook
@@ -548,8 +541,11 @@ class MembersService {
           }
         });
       }
-      return Service.successResponse(registerUser, 201);
+      const response = MembersService.selectMembersParams([populatedMember]);
+      const response0 = response[0];
+      return Service.successResponse(response0, 201);
     } catch (e) {
+      if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
