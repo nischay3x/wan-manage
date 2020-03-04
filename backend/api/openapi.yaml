@@ -57,7 +57,7 @@ paths:
                   $ref: '#/components/schemas/Token'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -93,6 +93,14 @@ paths:
       x-openapi-router-service: TokensService
     post:
       operationId: tokensPOST
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -176,11 +184,8 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/Token'
-                type: array
-                x-content-type: application/json
-          description: Successfull operation
+                $ref: '#/components/schemas/Token'
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -225,9 +230,16 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -278,6 +290,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -368,7 +387,7 @@ paths:
                   $ref: '#/components/schemas/AccessToken'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -404,6 +423,14 @@ paths:
       x-openapi-router-service: AccessTokensService
     post:
       operationId: accesstokensPOST
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -471,9 +498,16 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -508,73 +542,6 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Delete access token
-      tags:
-      - Access Tokens
-      x-swagger-router-controller: AccessTokens
-      x-openapi-router-controller: AccessTokensController
-      x-openapi-router-service: AccessTokensService
-    put:
-      operationId: accesstokensIdPUT
-      parameters:
-      - description: Numeric ID of the Access token to modify
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccessToken'
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/AccessToken'
-                type: array
-                x-content-type: application/json
-          description: Successfull operation
-        "400":
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Modify an access token
       tags:
       - Access Tokens
       x-swagger-router-controller: AccessTokens
@@ -717,6 +684,14 @@ paths:
   /devices/apply:
     post:
       operationId: devicesApplyPOST
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -766,6 +741,14 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/DevicesUpgradeRequest'
+      parameters: 
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "201":
           content:
@@ -828,6 +811,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -888,9 +878,16 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
        "204":
-         description: Successfull operation
+         description: Successful operation
        "401":
          content:
            application/json:
@@ -941,6 +938,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
        content:
          application/json:
@@ -951,10 +955,7 @@ paths:
          content:
            application/json:
              schema:
-               items:
-                 $ref: '#/components/schemas/Device'
-               type: array
-               x-content-type: application/json
+               $ref: '#/components/schemas/Device'
          description: Successful operation
        "401":
          content:
@@ -1007,6 +1008,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -1074,6 +1082,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -1263,7 +1278,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/Tunnel'
                 type: array
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1315,9 +1330,16 @@ paths:
         schema:
           type: integer
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1391,10 +1413,8 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/DeviceRouteInformation'
-                type: array
-          description: Successfull operation
+                $ref: '#/components/schemas/DeviceRouteInformation'
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1456,7 +1476,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceStaticRouteInformation'
+                $ref: '#/components/schemas/StaticRoute'
           description: Created
           headers:
             Location:
@@ -1538,8 +1558,10 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StaticRoute'
-          description: Successfull operation
+                items:
+                  $ref: '#/components/schemas/StaticRoute'
+                type: array
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1601,7 +1623,7 @@ paths:
         style: simple
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1671,7 +1693,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StaticRoute'
-          description: Successfull operation
+          description: Successful operation
         "400":
           description: Bad Request
         "401":
@@ -1729,8 +1751,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceStatistics'
-          description: Successfull operation
+                items:
+                  $ref: '#/components/schemas/DeviceStatistics'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1787,8 +1812,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceStatistics'
-          description: Successfull operation
+                items:
+                  $ref: '#/components/schemas/DeviceStatistics'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1871,7 +1899,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceLog'
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -1924,6 +1952,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -2043,6 +2078,59 @@ paths:
       x-swagger-router-controller: Jobs
       x-openapi-router-controller: JobsController
       x-openapi-router-service: JobsService
+  /jobs/all:
+    delete:
+      operationId: jobsDELETE
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete a job
+      tags:
+      - Jobs
+      x-swagger-router-controller: Jobs
+      x-openapi-router-controller: JobsController
+      x-openapi-router-service: JobsService
   /jobs/{id}:
     delete:
       operationId: jobsIdDELETE
@@ -2055,9 +2143,16 @@ paths:
         schema:
           type: integer
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -2118,6 +2213,27 @@ paths:
         schema:
           type: integer
         style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description: Operation to be executed
+        explode: true
+        in: query
+        name: op
+        required: false
+        schema:
+          type: string
+      - description: Filter by status to be executed
+        explode: true
+        in: query
+        name: status
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -2381,7 +2497,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Member'
-          description: Successfull operation
+          description: Successful operation
         "400":
           description: Bad Request
         "401":
@@ -2436,7 +2552,7 @@ paths:
         style: simple
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -2811,7 +2927,7 @@ paths:
                   $ref: '#/components/schemas/Organization'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -2906,6 +3022,68 @@ paths:
       x-swagger-router-controller: Organizations
       x-openapi-router-controller: OrganizationsController
       x-openapi-router-service: OrganizationsService
+  /organizations/select:
+    post:
+      operationId: organizationsSelectPOST
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationSelectRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Add new organization
+      tags:
+      - Organizations
+      x-swagger-router-controller: Organizations
+      x-openapi-router-controller: OrganizationsController
+      x-openapi-router-service: OrganizationsService
   /organizations/{id}:
     delete:
       operationId: organizationsIdDELETE
@@ -2920,7 +3098,7 @@ paths:
         style: simple
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -3054,7 +3232,7 @@ paths:
                   $ref: '#/components/schemas/Invoice'
                 type: array
                 x-content-type: application/json
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -3476,35 +3654,30 @@ components:
   schemas:
     AccessToken:
       example:
-        organization: organization
         isValid: true
         name: name
         _id: id
         token: token
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
-        organization:
-          type: string
         token:
-          readOnly: true
           type: string
         isValid:
           default: true
-          readOnly: true
           type: boolean
       type: object
     AccessTokenRequest:
       example:
-        organization: organization
         name: name
       properties:
         name:
           type: string
-        organization:
+        validityEntity:
           type: string
       type: object
     MemberRequest:
@@ -3542,20 +3715,19 @@ components:
       type: object
     Token:
       example:
-        org: organization
-        name: name
         _id: id
+        name: name
         token: token
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
-        org:
-          type: string
         token:
-          readOnly: true
+          type: string
+        createdAt:
           type: string
       type: object
     TokenRequest:
@@ -3577,7 +3749,8 @@ components:
         _id: _id
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
@@ -3634,7 +3807,8 @@ components:
         group: group
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
@@ -3660,6 +3834,8 @@ components:
         details: Router state changed to "Not running"
       properties:
         _id:
+          maxLength: 24
+          minLength: 24
           type: string
         title:
           type: string
@@ -3707,16 +3883,20 @@ components:
           type: integer
         type:
           type: string
+        data:
+          type: object
+        result:
+          type: object
         priority:
           type: integer
         progress:
-          type: integer
+          type: string
         state:
-          type: integer
+          type: string
         created_at:
           type: string
         attempts:
-          $ref: '#/components/schemas/JobAttempt'
+          type: object
       type: object
     DeviceRequest:
       example:
@@ -3899,7 +4079,6 @@ components:
         _id:
           maxLength: 24
           minLength: 24
-          readOnly: true
           type: string
         machineId:
           type: string
@@ -3955,7 +4134,8 @@ components:
         time: time
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         time:
           type: string
@@ -3979,7 +4159,8 @@ components:
         _id: _id
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         pciaddr:
           type: string
@@ -4059,7 +4240,6 @@ components:
         _id:
           maxLength: 24
           minLength: 24
-          readOnly: true
           type: string
         user__id:
           maxLength: 24
@@ -4079,12 +4259,15 @@ components:
           type: string
         group:
           type: string
+          nullable: true
         organization_name:
           type: string
+          nullable: true
         organization__id:
           maxLength: 24
           minLength: 24
           type: string
+          nullable: true
         role:
           $ref: '#/components/schemas/Role'
       type: object
@@ -4186,14 +4369,16 @@ components:
         destination: 1.1.0.0
         gateway: 1.1.1.1
       properties:
-        status:
-          $ref: '#/components/schemas/DeviceStatus'
-        destination:
+        _id:
           type: string
-        gateway:
+        destination_network:
+          type: string
+        gateway_ip:
           type: string
         ifname:
           type: string
+        status:
+          $ref: '#/components/schemas/DeviceStatus'
       type: object
     DeviceStatistics:
       example:
@@ -4290,6 +4475,8 @@ components:
         deviceBconf:
           type: boolean
         _id:
+          maxLength: 24
+          minLength: 24
           type: string
         __v:
           type: integer
@@ -4318,6 +4505,8 @@ components:
         gateway: gateway
       properties:
         _id:
+          maxLength: 24
+          minLength: 24
           type: string
         destination:
           description: Destination
@@ -4338,6 +4527,8 @@ components:
         interface: interface
         gateway: gateway
       properties:
+        _id:
+          type: string
         destination:
           description: Destination
           maxLength: 24
@@ -4365,6 +4556,11 @@ components:
           email:
             type: string
         type: object
+    OrganizationSelectRequest:
+      properties:
+        org:
+          type: string
+      type: object
     RegisterAccountRequest:
       example:
         userJobTitle: userJobTitle

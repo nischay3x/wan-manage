@@ -34,7 +34,7 @@ const accessTokenSchema = new Schema({
   organization: {
     type: Schema.Types.ObjectId,
     ref: 'organizations',
-    required: true
+    required: false
   },
   // access token description
   name: {

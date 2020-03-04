@@ -20,6 +20,7 @@ const Service = require('./Service');
 const jwt = require('jsonwebtoken');
 const configs = require('../configs.js')();
 const Tokens = require('../models/tokens');
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class TokensService {
   /**
@@ -31,13 +32,15 @@ class TokensService {
    **/
   static async tokensGET ({ org, offset, limit }, { user }) {
     try {
-      const result = await Tokens.find({ org: user.defaultOrg._id });
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const result = await Tokens.find({ org: { $in: orgList } });
 
       const tokens = result.map(item => {
         return {
           _id: item.id,
           name: item.name,
-          token: item.token
+          token: item.token,
+          createdAt: item.createdAt.toString()
         };
       });
 
@@ -56,14 +59,15 @@ class TokensService {
    * id String Numeric ID of the Token to delete
    * no response value expected for this operation
    **/
-  static async tokensIdDELETE ({ id }, { user }) {
+  static async tokensIdDELETE ({ id, org }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       await Tokens.remove({
         _id: id,
-        org: user.defaultOrg._id
+        org: { $in: orgList }
       });
 
-      return Service.successResponse();
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -72,11 +76,18 @@ class TokensService {
     }
   }
 
-  static async tokensIdGET ({ id }, { user }) {
+  static async tokensIdGET ({ id, org }, { user }) {
     try {
-      const token = await Tokens.findOne({ _id: id, org: user.defaultOrg._id });
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const result = await Tokens.findOne({ _id: id, org: { $in: orgList } });
 
-      return Service.successResponse([token]);
+      const token = {
+        _id: result.id,
+        name: result.name,
+        token: result.token,
+        createdAt: result.createdAt.toString()
+      };
+      return Service.successResponse(token);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -92,20 +103,22 @@ class TokensService {
    * tokenRequest TokenRequest  (optional)
    * returns Token
    **/
-  static async tokensIdPUT ({ id, tokenRequest }, { user }) {
+  static async tokensIdPUT ({ id, org, tokenRequest }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const result = await Tokens.findOneAndUpdate(
-        { _id: id, org: user.defaultOrg._id },
-        { tokenRequest },
-        { upsert: false, runValidators: true, new: true });
+        { _id: id, org: { $in: orgList } },
+        { $set: tokenRequest },
+        { useFindAndModify: false, upsert: false, runValidators: true, new: true });
 
       const token = {
         _id: result.id,
         name: result.name,
-        token: result.token
+        token: result.token,
+        createdAt: result.createdAt.toString()
       };
 
-      return Service.successResponse(token);
+      return Service.successResponse(token, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -120,24 +133,26 @@ class TokensService {
    * tokenRequest TokenRequest  (optional)
    * returns Token
    **/
-  static async tokensPOST ({ tokenRequest }, { user }) {
+  static async tokensPOST ({ org, tokenRequest }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const body = jwt.sign({
-        org: user.defaultOrg._id.toString(),
+        org: orgList[0].toString(),
         account: user.defaultAccount._id
       }, configs.get('deviceTokenSecretKey'));
 
       const token = await Tokens.create({
         name: tokenRequest.name,
-        org: user.defaultOrg._id.toString(),
+        org: orgList[0].toString(),
         token: body
       });
 
       return Service.successResponse({
         _id: token.id,
         name: token.name,
-        token: token.token
-      });
+        token: token.token,
+        createdAt: token.createdAt.toString()
+      }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

@@ -17,6 +17,7 @@
 
 const Service = require('./Service');
 const { devices, staticroutes } = require('../models/devices');
+const tunnelsModel = require('../models/tunnels');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -25,50 +26,12 @@ const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-
+const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
+const { validateDevice } = require('../deviceLogic/validators');
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class DevicesService {
-  static async queryDeviceStats ({ org, id, startTime, endTime }) {
-    const match = { org: mongoose.Types.ObjectId(org) };
-
-    if (id) match.device = mongoose.Types.ObjectId(id);
-    if (startTime && endTime) {
-      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
-    } else if (startTime) match.time = { $gte: startTime };
-    else if (endTime) match.time = { $lte: endTime };
-
-    const pipeline = [
-      { $match: match },
-      { $project: { time: 1, stats: { $objectToArray: '$stats' } } },
-      { $unwind: '$stats' },
-      {
-        $group:
-              {
-                _id: { time: '$time', interface: 'All' },
-                rx_bps: { $sum: '$stats.v.rx_bps' },
-                tx_bps: { $sum: '$stats.v.tx_bps' },
-                rx_pps: { $sum: '$stats.v.rx_pps' },
-                tx_pps: { $sum: '$stats.v.tx_pps' }
-              }
-      },
-      {
-        $project: {
-          _id: 0,
-          time: '$_id.time',
-          interface: '$_id.interface',
-          rx_bps: '$rx_bps',
-          tx_bps: '$tx_bps',
-          rx_pps: '$rx_pps',
-          tx_pps: '$tx_pps'
-        }
-      },
-      { $sort: { time: -1 } }
-    ];
-
-    return deviceStats.aggregate(pipeline).allowDiskUse(true);
-  }
-
   /**
    * Execute an action on the device side
    *
@@ -76,9 +39,15 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ deviceCommand }, { user }) {
+  static async devicesApplyPOST ({ org, deviceCommand }, { user }) {
     try {
-      return Service.successResponse();
+      // Find all devices of the organization
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const opDevices = await devices.find({ org: { $in: orgList } });
+      // Apply the device command
+      await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
+
+      return Service.successResponse({}, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -94,9 +63,20 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, deviceCommand }, { user }) {
+  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }) {
     try {
-      return Service.successResponse();
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const opDevice = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+
+      if (opDevice.length === 1) {
+        await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
+      } else {
+        return Service.rejectResponse('Device not found');
+      }
+      return Service.successResponse({}, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -131,10 +111,11 @@ class DevicesService {
       'labels',
       'staticroutes',
       'upgradeSchedule']);
+    retDevice.deviceStatus = (retDevice.deviceStatus === '1');
 
     // pick interfaces
     const retInterfaces = item.interfaces.map(i => {
-      return pick(i, [
+      const retIf = pick(i, [
         'IPv6',
         'PublicIP',
         'IPv4',
@@ -150,9 +131,16 @@ class DevicesService {
         '_id',
         'pathlabels'
       ]);
+      retIf._id = retIf._id.toString();
+      return retIf;
     });
 
     // Update with additional objects
+    retDevice._id = retDevice._id.toString();
+    retDevice.account = retDevice.account.toString();
+    retDevice.org = retDevice.org.toString();
+    retDevice.upgradeSchedule = pick(item.upgradeSchedule, ['jobQueued', '_id', 'time']);
+    retDevice.upgradeSchedule._id = retDevice.upgradeSchedule._id.toString();
     retDevice.versions = pick(item.versions, ['agent', 'router', 'device', 'vpp', 'frr']);
     retDevice.interfaces = retInterfaces;
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -172,7 +160,8 @@ class DevicesService {
    **/
   static async devicesGET ({ org, offset, limit }, { user }) {
     try {
-      const result = await devices.find({ org: user.defaultOrg._id })
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const result = await devices.find({ org: { $in: orgList } })
         .populate('interfaces.pathlabels');
 
       const devicesMap = result.map(item => {
@@ -188,16 +177,17 @@ class DevicesService {
     }
   }
 
-  static async devicesUpgdSchedPOST ({ devicesUpgradeRequest }, { user }) {
+  static async devicesUpgdSchedPOST ({ org, devicesUpgradeRequest }, { user }) {
     try {
-      const query = { _id: { $in: devicesUpgradeRequest.devices } };
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { _id: { $in: devicesUpgradeRequest.devices }, org: { $in: orgList } };
       const numOfIdsFound = await devices.countDocuments(query);
 
       // The request is considered invalid if not all device IDs
       // are found in the database. This is done to prevent a partial
       // schedule of the devices in case of a user's mistake.
       if (numOfIdsFound < devicesUpgradeRequest.devices.length) {
-        return Service.rejectResponse(new Error('Some devices were not found'), 404);
+        return Service.rejectResponse('Some devices were not found');
       }
 
       const set = {
@@ -211,7 +201,7 @@ class DevicesService {
 
       const options = { upsert: false, useFindAndModify: false };
       await devices.updateMany(query, set, options);
-      return Service.successResponse();
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -220,9 +210,10 @@ class DevicesService {
     }
   }
 
-  static async devicesIdUpgdSchedPOST ({ id, deviceUpgradeRequest }, { user }) {
+  static async devicesIdUpgdSchedPOST ({ id, org, deviceUpgradeRequest }, { user }) {
     try {
-      const query = { _id: id };
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { _id: id, org: { $in: orgList } };
       const set = {
         $set: {
           upgradeSchedule: {
@@ -235,9 +226,9 @@ class DevicesService {
       const options = { upsert: false, useFindAndModify: false };
       const res = await devices.updateOne(query, set, options);
       if (res.n === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       } else {
-        return Service.successResponse();
+        return Service.successResponse(null, 204);
       }
     } catch (e) {
       return Service.rejectResponse(
@@ -273,9 +264,10 @@ class DevicesService {
    * id String Numeric ID of the Device to retrieve
    * Returns Device
    **/
-  static async devicesIdGET ({ id }, { user }) {
+  static async devicesIdGET ({ id, org }, { user }) {
     try {
-      const result = await devices.findOne({ _id: id, org: user.defaultOrg._id })
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const result = await devices.findOne({ _id: id, org: { $in: orgList } })
         .populate('interfaces.pathlabels');
       const device = DevicesService.selectDeviceParams(result);
 
@@ -294,11 +286,15 @@ class DevicesService {
    * id String Numeric ID of the Device to retrieve configuration from
    * Returns Device Configuration
    **/
-  static async devicesIdConfigurationGET ({ id }, { user }) {
+  static async devicesIdConfigurationGET ({ id, org }, { user }) {
     try {
-      const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
       if (!device || device.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -321,7 +317,7 @@ class DevicesService {
             response: deviceConf.message
           }
         });
-        return Service.rejectResponse(new Error('Failed to get device configuration'), 500);
+        return Service.rejectResponse('Failed to get device configuration');
       }
 
       return Service.successResponse({
@@ -345,11 +341,15 @@ class DevicesService {
    * filter String Filter to be applied (optional)
    * returns DeviceLog
    **/
-  static async devicesIdLogsGET ({ id, offset, limit, filter }, { user }) {
+  static async devicesIdLogsGET ({ id, org, offset, limit, filter }, { user }) {
     try {
-      const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
       if (!device || device.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -400,36 +400,54 @@ class DevicesService {
    * id String Numeric ID of the Device to delete
    * no response value expected for this operation
    **/
-  static async devicesIdDELETE ({ id }, { user }) {
+  static async devicesIdDELETE ({ id, org }, { user }) {
+    let session;
     try {
+      session = await mongoConns.getMainDB().startSession();
+      await session.startTransaction();
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const tunnelCount = await tunnelsModel.countDocuments({
+        $or: [{ deviceA: id }, { deviceB: id }],
+        isActive: true,
+        org: { $in: orgList }
+      }).session(session);
+
+      if (tunnelCount > 0) {
+        logger.debug('Tunnels found when deleting device',
+          { params: { deviceId: id }, user: user });
+        throw new Error('All device tunnels must be deleted before deleting a device');
+      }
+
+      const delDevices = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      }).session(session);
+
+      if (!delDevices.length) throw new Error('Device for deletion not found');
+      connections.deviceDisconnect(delDevices[0].machineId);
+      const deviceCount = await devices.countDocuments({
+        account: delDevices[0].account
+      }).session(session);
+
+      // Unregister a device (by adding -1)
+      await flexibilling.registerDevice({
+        account: delDevices[0].account,
+        count: deviceCount,
+        increment: -1
+      }, session);
+
+      // Now we can remove the device
       await devices.remove({
         _id: id,
-        org: user.defaultOrg._id
-      });
+        org: { $in: orgList }
+      }).session(session);
 
-      // TBD: remove from billing
-      return Service.successResponse();
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
+      await session.commitTransaction();
+      session = null;
 
-  /**
-   * Execute an action on the device side
-   *
-   * id String Numeric ID of the Device to start
-   * action String Command to execute
-   * request object  (optional)
-   * no response value expected for this operation
-   **/
-  static async devicesIdExecutePOST (
-    { id, action, request }, { user }) {
-    try {
-      return Service.successResponse('');
+      return Service.successResponse(null, 204);
     } catch (e) {
+      if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
@@ -444,34 +462,73 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, deviceRequest }, { user }) {
+  static async devicesIdPUT ({ id, org, deviceRequest }, { user }) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
-      const origDevice = await devices.findOne({ _id: id, org: user.defaultOrg._id });
+
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const origDevice = await devices.findOne({
+        _id: id,
+        org: { $in: orgList }
+      }).session(session);
+
+      // Don't allow any changes if the device is not approved
+      if (!origDevice.isApproved && !deviceRequest.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+
+      // Validate device changes only for approved devices,
+      // and only if the request contains interfaces.
+      if (origDevice.isApproved && deviceRequest.interfaces) {
+        const { valid, err } = validateDevice(deviceRequest);
+        if (!valid) {
+          logger.warn('Device update failed',
+            {
+              params: { device: deviceRequest, err: err }
+            });
+          throw new Error('Device update failed');
+        }
+      }
+
+      // If device changed to not approved disconnect it's socket
+      if (deviceRequest.isApproved === false) connections.deviceDisconnect(origDevice.machineId);
+
+      // TBD: Remove these fields from the yaml PUT request
+      delete deviceRequest.machineId;
+      delete deviceRequest.org;
+      delete deviceRequest.hostname;
+      delete deviceRequest.ipList;
+      delete deviceRequest.fromToken;
+      delete deviceRequest.deviceToken;
+      delete deviceRequest.state;
+      delete deviceRequest.emailTokens;
+      delete deviceRequest.defaultAccount;
+      delete deviceRequest.defaultOrg;
+
+      // Currently we allow only one change at a time to the device,
+      // to prevent inconsistencies between the device and the MGMT database.
+      // Therefore, we block the request if there's a pending change in the queue.
+      if (origDevice.pendingDevModification) {
+        throw new Error('Only one device change is allowed at any time');
+      }
+
       const updDevice = await devices.findOneAndUpdate(
-        { _id: id, org: user.defaultOrg._id },
+        { _id: id, org: { $in: orgList } },
         deviceRequest,
         { new: true, upsert: false, runValidators: true }
-      );
+      ).session(session);
+
       await session.commitTransaction();
       session = null;
 
-      // TBD: Check to disconnect on device unapprove
-
-      // Apply modify device action
+      // If the change made to the device fields requires a change on the
+      // device itself, add a 'modify' job to the device's queue.
       if (origDevice) {
-        // TBD: Cange apply method
-        /*
-        req.body.method = 'modify';
-
-        dispatcher.apply([origDoc], req, res, next, {
-          newDevice: resp
-        }).then(() => {
-          return resolve({ ok: 1});
-        })
-        */
+        await dispatcher.apply([origDevice], 'modify', user, {
+          newDevice: updDevice
+        });
       }
       console.log('omer ' + id);
       return DevicesService.selectDeviceParams(updDevice);
@@ -493,11 +550,15 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async devicesIdRoutesGET ({ id, offset, limit }, { user }) {
+  static async devicesIdRoutesGET ({ id, org, offset, limit }, { user }) {
     try {
-      const device = await devices.find({ _id: mongoose.Types.ObjectId(id) });
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
       if (!device || device.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -522,7 +583,7 @@ class DevicesService {
           },
           req: null
         });
-        return Service.rejectResponse(new Error('Failed to get device routes'), 500);
+        return Service.rejectResponse('Failed to get device routes');
       }
       const response = {
         status: 'connected',
@@ -546,19 +607,27 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesGET ({ id, offset, limit }, { user }) {
+  static async devicesIdStaticroutesGET ({ id, org, offset, limit }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const deviceObject = await devices.find({
-        _id: mongoose.Types.ObjectId(id)
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
 
       const device = deviceObject[0];
-      const routes = device.staticroutes.map(value => {
+      let routes = [];
+
+      if (device.staticroutes.length) {
+        routes = device.staticroutes;
+      }
+
+      routes = routes.map(value => {
         return {
-          id: value.id,
+          _id: value.id,
           destination_network: value.destination,
           gateway_ip: value.gateway,
           ifname: value.ifname,
@@ -581,7 +650,7 @@ class DevicesService {
    * route String Numeric ID of the Route to delete
    * no response value expected for this operation
    **/
-  static async devicesIdStaticroutesRouteDELETE ({ id, route }, { user }) {
+  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }) {
     try {
       const device = await devices.findOneAndUpdate(
         { _id: mongoose.Types.ObjectId(id) },
@@ -595,8 +664,8 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy.id = route;
       copy.action = 'del';
-      dispatcher.apply(devices, copy.method, user, copy);
-      return Service.successResponse({ deviceId: device.id });
+      await dispatcher.apply(device, copy.method, user, copy);
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -612,14 +681,18 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns DeviceStaticRouteInformation
    **/
-  static async devicesIdStaticroutesPOST ({ id, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesPOST ({ id, org, staticRouteRequest }, { user }) {
     try {
-      const deviceObject = await devices.find({ _id: mongoose.Types.ObjectId(id) });
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
       if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
-        return Service.rejectResponse(new Error('Device must be first approved'), 400);
+        return Service.rejectResponse('Device must be first approved', 400);
       }
       const device = deviceObject[0];
 
@@ -645,8 +718,16 @@ class DevicesService {
 
       copy.method = 'staticroutes';
       copy.id = route.id;
-      dispatcher.apply(device, copy.method, user, copy);
-      return Service.successResponse({});
+      await dispatcher.apply(device, copy.method, user, copy);
+
+      const result = {
+        _id: route._id.toString(),
+        gateway: route.gateway,
+        destination: route.destination,
+        ifname: route.ifname
+      };
+
+      return Service.successResponse(result, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -663,14 +744,18 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesRoutePATCH ({ id, route, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesRoutePATCH ({ id, org, staticRouteRequest }, { user }) {
     try {
-      const deviceObject = await devices.find({ _id: mongoose.Types.ObjectId(id) });
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse(new Error('Device not found'), 404);
+        return Service.rejectResponse('Device not found');
       }
       if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
-        return Service.rejectResponse(new Error('Device must be first approved'), 400);
+        return Service.rejectResponse('Device must be first approved', 400);
       }
 
       const device = deviceObject[0];
@@ -678,7 +763,7 @@ class DevicesService {
 
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
-      dispatcher.apply(device, copy.method, user, copy);
+      await dispatcher.apply(device, copy.method, user, copy);
       return Service.successResponse({ deviceId: device.id });
     } catch (e) {
       return Service.rejectResponse(
@@ -686,6 +771,47 @@ class DevicesService {
         e.status || 500
       );
     }
+  }
+
+  static async queryDeviceStats ({ id, org, startTime, endTime }) {
+    const match = { org: mongoose.Types.ObjectId(org) };
+
+    if (id) match.device = mongoose.Types.ObjectId(id);
+    if (startTime && endTime) {
+      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
+    } else if (startTime) match.time = { $gte: startTime };
+    else if (endTime) match.time = { $lte: endTime };
+
+    const pipeline = [
+      { $match: match },
+      { $project: { time: 1, stats: { $objectToArray: '$stats' } } },
+      { $unwind: '$stats' },
+      {
+        $group:
+              {
+                _id: { time: '$time', interface: 'All' },
+                rx_bps: { $sum: '$stats.v.rx_bps' },
+                tx_bps: { $sum: '$stats.v.tx_bps' },
+                rx_pps: { $sum: '$stats.v.rx_pps' },
+                tx_pps: { $sum: '$stats.v.tx_pps' }
+              }
+      },
+      {
+        $project: {
+          _id: 0,
+          time: '$_id.time',
+          interface: '$_id.interface',
+          rx_bps: '$rx_bps',
+          tx_bps: '$tx_bps',
+          rx_pps: '$rx_pps',
+          tx_pps: '$tx_pps'
+        }
+      },
+      { $sort: { time: -1 } }
+    ];
+
+    const stats = await deviceStats.aggregate(pipeline).allowDiskUse(true);
+    return stats;
   }
 
   /**
@@ -699,9 +825,10 @@ class DevicesService {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;
 
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
-        org: user.defaultOrg._id.toString(),
-        id: null,
+        org: orgList[0]._id.toString(),
+        id: null, // null get all devices stats
         startTime: startTime,
         endTime: endTime
       });
@@ -720,13 +847,14 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesIdStatisticsGET ({ id }, { user }) {
+  static async devicesIdStatisticsGET ({ id, org }, { user }) {
     try {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;
 
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
-        org: user.defaultOrg._id.toString(),
+        org: orgList[0]._id.toString(),
         id: id,
         startTime: startTime,
         endTime: endTime

@@ -46,7 +46,7 @@ class UsersService {
       response.setHeader('Refresh-JWT', token);
       response.setHeader('Refresh-Token', refreshToken);
 
-      return Service.successResponse({ username: user.name });
+      return Service.successResponse({ username: user.name }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -101,7 +101,7 @@ class UsersService {
       }
 
       // In case of password reset, always return OK to not expose email addresses
-      return Service.successResponse({ status: 'password reset initiated' });
+      return Service.successResponse({ status: 'password reset initiated' }, 201);
     } catch (e) {
       logger.error('Account Password Reset process failed', { params: { reason: e.message } });
       return Service.rejectResponse(
@@ -121,7 +121,7 @@ class UsersService {
     try {
       // Validate password
       if (!auth.validatePassword(updatePasswordRequest.password)) {
-        return Service.rejectResponse(new Error('Bad Password'), 500);
+        return Service.rejectResponse('Bad Password', 403);
       }
 
       const registerUser = await Users.findOneAndUpdate(
@@ -141,7 +141,7 @@ class UsersService {
       await registerUser.setPassword(updatePasswordRequest.password);
       await registerUser.save();
 
-      return Service.successResponse({ status: 'password reset' });
+      return Service.successResponse({ status: 'password reset' }, 201);
     } catch (e) {
       logger.error('Account Password Udate process failed', { params: { reason: e.message } });
       return Service.rejectResponse(

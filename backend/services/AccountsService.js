@@ -60,6 +60,7 @@ class AccountsService {
         __v,
         ...rest
       } = account.toObject();
+      rest._id = rest._id.toString();
       return Service.successResponse(rest);
     } catch (e) {
       return Service.rejectResponse(
@@ -97,6 +98,7 @@ class AccountsService {
         __v,
         ...rest
       } = account.toObject();
+      rest._id = rest._id.toString();
       return Service.successResponse(rest);
     } catch (e) {
       return Service.rejectResponse(
@@ -117,7 +119,7 @@ class AccountsService {
 
     try {
       if (!user.defaultAccount || !user.defaultAccount._id || !user._id) {
-        return Service.rejectResponse(new Error('Error in selecting account'), 500);
+        return Service.rejectResponse('Error in selecting account', 500);
       }
 
       // If current account not changed, return OK
@@ -141,7 +143,7 @@ class AccountsService {
       user.defaultOrg = null;
 
       await orgUpdateFromNull(req, res);
-      return Service.successResponse({ _id: updUser.defaultAccount._id });
+      return Service.successResponse({ _id: updUser.defaultAccount._id }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

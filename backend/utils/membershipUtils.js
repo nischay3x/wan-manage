@@ -17,6 +17,7 @@
 
 const organizations = require('../models/organizations');
 const User = require('../models/users');
+const Accounts = require('../models/accounts');
 const { membership } = require('../models/membership');
 const { getToken } = require('../tokens');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -92,6 +93,38 @@ const getUserOrgByID = async (user, orgId) => {
     logger.error('Error getting organization', { params: { reason: err.message } });
     throw new Error('Error getting organization');
   }
+};
+
+/**
+ * Get Account Organization List when Access Token is used
+ * If no Access Token is used, return the default organization
+ * Otherwise, if no orgID is specified, return a list of all account organizations
+ * If orgId is specified, return this orgID if exist in the account organizations
+ *
+ * @param {Object} user - request user
+ * @param {String} orgId
+ * @param {Boolean} orgIdRequired - whether org must be specified for the operation
+ * @returns {List} List of organizations
+ */
+const getAccessTokenOrgList = async (user, orgId, orgIdRequired = false) => {
+  // No access token, return default orgId, if no orgId found, otherwise throw an error
+  if (!user.accessToken) {
+    if (!orgId) return [user.defaultOrg._id];
+    else throw new Error('Organization query parameter is only available in Access Key');
+  }
+  // Access token where org is required for the operation, must be specified
+  if (orgIdRequired && !orgId) {
+    throw new Error('Organization query parameter must be specified for this operation');
+  }
+  const account = await Accounts.findOne({ _id: user.jwtAccount });
+  // If Access token with orgId specified
+  if (orgId) {
+    // Return orgId if included in the account, otherwise throw an error
+    if (account.organizations.includes(orgId)) return [orgId];
+    else throw new Error('Organization not found');
+  }
+  // Access token without orgId, use all account organizations
+  return account.organizations;
 };
 
 /**
@@ -190,6 +223,7 @@ const orgUpdateFromNull = async ({ user }, res) => {
 module.exports = {
   getUserOrganizations: getUserOrganizations,
   getUserOrgByID: getUserOrgByID,
+  getAccessTokenOrgList: getAccessTokenOrgList,
   getUserAccounts: getUserAccounts,
   orgUpdateFromNull: orgUpdateFromNull
 };

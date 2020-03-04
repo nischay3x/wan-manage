@@ -18,11 +18,52 @@
 const Service = require('./Service');
 const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
-
-// not sure that it is needed
+const pick = require('lodash/pick');
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
+  /**
+   * Select the API fields from mongo Tunnel Object
+   *
+   * @param {mongo Tunnel Object} item
+   */
+  static selectTunnelParams (item) {
+    // Pick relevant fields
+    const retTunnel = pick(item, [
+      'num',
+      'isActive',
+      'interfaceA',
+      'interfaceB',
+      'deviceA',
+      'deviceAconf',
+      'deviceB',
+      'deviceBconf',
+      '_id']);
+
+    retTunnel.interfaceADetails =
+      retTunnel.deviceA.interfaces.filter((ifc) => {
+        return ifc._id.toString() === '' + retTunnel.interfaceA;
+      })[0];
+    retTunnel.interfaceBDetails =
+      retTunnel.deviceB.interfaces.filter((ifc) => {
+        return ifc._id.toString() === '' + retTunnel.interfaceB;
+      })[0];
+
+    const tunnelId = retTunnel.num;
+    // Add tunnel status
+    retTunnel.tunnelStatusA =
+      deviceStatus.getTunnelStatus(retTunnel.deviceA.machineId, tunnelId) || {};
+
+    // Add tunnel status
+    retTunnel.tunnelStatusB =
+      deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+
+    retTunnel._id = retTunnel._id.toString();
+
+    return retTunnel;
+  }
+
   /**
    * Retrieve device tunnels information
    *
@@ -31,18 +72,19 @@ class TunnelsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async tunnelsIdDELETE ({ id, offset, limit }, { user }) {
+  static async tunnelsIdDELETE ({ id, org, offset, limit }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const resp = await Tunnels.findOneAndUpdate(
         // Query
-        { _id: mongoose.Types.ObjectId(id), org: user.defaultOrg._id },
+        { _id: mongoose.Types.ObjectId(id), org: { $in: orgList } },
         // Update
         { isActive: false },
         // Options
         { upsert: false, new: true });
 
       if (resp != null) {
-        return Service.successResponse(resp);
+        return Service.successResponse(null, 204);
       } else {
         return Service.rejectResponse(404);
       }
@@ -64,41 +106,16 @@ class TunnelsService {
    **/
   static async tunnelsGET ({ org, offset, limit }, { user }) {
     try {
-      const response = await Tunnels.find({ org: user.defaultOrg._id, isActive: true })
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const response = await Tunnels.find({ org: { $in: orgList }, isActive: true })
         .populate('deviceA').populate('deviceB');
 
       // Populate interface details
-      response.forEach((d) => {
-        d.set('interfaceADetails',
-          d.deviceA.interfaces.filter((ifc) => {
-            return ifc._id.toString() === '' + d.interfaceA;
-          })[0],
-          { strict: false });
-        d.set('interfaceBDetails',
-          d.deviceB.interfaces.filter((ifc) => {
-            return ifc._id.toString() === '' + d.interfaceB;
-          })[0],
-          { strict: false });
-
-        const tunnelId = d.num;
-        // Add tunnel status
-        d.set(
-          'tunnelStatusA',
-          deviceStatus.getTunnelStatus(d.deviceA.machineId, tunnelId) ||
-            null,
-          { strict: false }
-        );
-
-        // Add tunnel status
-        d.set(
-          'tunnelStatusB',
-          deviceStatus.getTunnelStatus(d.deviceB.machineId, tunnelId) ||
-            null,
-          { strict: false }
-        );
+      const tunnelMap = response.map((d) => {
+        return TunnelsService.selectTunnelParams(d);
       });
 
-      return Service.successResponse(response);
+      return Service.successResponse(tunnelMap);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

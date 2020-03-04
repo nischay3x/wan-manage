@@ -19,6 +19,7 @@ const Service = require('./Service');
 
 const notificationsDb = require('../models/notifications');
 const { devices } = require('../models/devices');
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 class NotificationsService {
@@ -29,21 +30,46 @@ class NotificationsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async notificationsGET ({ offset, limit }, { user }) {
+  static async notificationsGET ({ org, offset, limit, op, status }, { user }) {
+    let orgList;
     try {
-      const query = { org: user.defaultOrg._id };
+      orgList = await getAccessTokenOrgList(user, org, false);
+      const query = { org: { $in: orgList } };
+      if (status) {
+        query.status = status;
+      }
 
       // If operation is 'count', return the amount
       // of notifications for each device
-      const notifications = await notificationsDb
-        .find(query, 'time device title details status machineId')
-        .populate('device', 'name -_id', devices);
+      const notifications = op === 'count'
+        ? await notificationsDb.aggregate([{ $match: query },
+          {
+            $group: {
+              _id: '$device',
+              count: { $sum: 1 }
+            }
+          }
+        ])
+        : await notificationsDb.find(
+          query,
+          'time device title details status machineId'
+        ).populate('device', 'name -_id', devices);
 
-      return Service.successResponse(notifications);
+      const result = notifications.map(element => {
+        return {
+          _id: element._id.toString(),
+          count: element.count,
+          status: element.status,
+          details: element.details,
+          title: element.title
+        }
+      });
+
+      return Service.successResponse(result);
     } catch (e) {
       logger.warn('Failed to retrieve notifications', {
         params: {
-          org: user.defaultOrg._id.toString(),
+          org: orgList,
           err: e.message
         }
       });

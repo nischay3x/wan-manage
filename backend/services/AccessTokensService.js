@@ -37,7 +37,6 @@ class AccessTokensService {
         return {
           _id: record.id,
           name: record.name,
-          organization: record.organization.name,
           token: record.token,
           isValid: record.isValid
         };
@@ -59,48 +58,12 @@ class AccessTokensService {
    **/
   static async accesstokensIdDELETE ({ id }, { user }) {
     try {
-      await AccessTokens.remove({
+      await AccessTokens.deleteOne({
         _id: id,
-        org: user.defaultOrg._id
+        account: user.defaultAccount._id
       });
 
-      return Service.successResponse();
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
-
-  /**
-   * Modify an access token
-   *
-   * id String Numeric ID of the Access token to modify
-   * accessToken AccessToken  (optional)
-   * returns List
-   **/
-  static async accesstokensIdPUT ({ id, accessToken }, { user }) {
-    const token = accessToken;
-
-    try {
-      await AccessTokens.update({
-        _id: id,
-        org: user.defaultOrg._id
-      }, { $set: token }, { upsert: false, multi: false, runValidators: true, new: true });
-
-      const result = await AccessTokens.findOne({
-        _id: id,
-        org: user.defaultOrg._id
-      });
-
-      const accessToken = {
-        _id: result.id,
-        name: result.name,
-        token: result.token
-      };
-
-      return Service.successResponse(accessToken);
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -117,17 +80,9 @@ class AccessTokensService {
    **/
   static async accesstokensPOST ({ accessTokenRequest }, { user }) {
     try {
-      const tokenIsValid = user.defaultAccount.organizations.find((record) => {
-        return record._id.toString() === accessTokenRequest.organization;
-      });
-
-      if (!tokenIsValid) {
-        return Service.rejectResponse('Invalid input', 405);
-      }
-
       const accessToken = new AccessTokens({
         account: user.defaultAccount._id,
-        organization: accessTokenRequest.organization,
+        organization: null,
         name: accessTokenRequest.name,
         token: '', // should be empty for now
         isValid: true
@@ -136,7 +91,7 @@ class AccessTokensService {
       const token = await getToken({ user }, {
         type: 'app_access_token',
         id: accessToken._id.toString(),
-        org: accessTokenRequest.organization
+        org: null
       }, false);
 
       accessToken.token = token;
@@ -146,7 +101,7 @@ class AccessTokensService {
         _id: accessToken.id,
         name: accessToken.name,
         token: accessToken.token
-      });
+      }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

@@ -15,7 +15,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const logger = require('../logger');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+
 const controllers = require('../controllers');
 const Services = require('../services');
 const createError = require('http-errors');

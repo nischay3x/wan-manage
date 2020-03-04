@@ -1,4 +1,3 @@
-// const { Middleware } = require('swagger-express-middleware');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -7,7 +6,7 @@ const configs = require('./configs')();
 const swaggerUI = require('swagger-ui-express');
 const yamljs = require('yamljs');
 const express = require('express');
-const cors = require('cors');
+const cors = require('./routes/cors');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
 const { OpenApiValidator } = require('express-openapi-validator');
@@ -51,14 +50,14 @@ class ExpressServer {
     this.openApiPath = openApiYaml;
     this.schema = yamljs.load(openApiYaml);
 
-    this.setupMiddleware();
-
     this.setupMiddleware = this.setupMiddleware.bind(this);
     this.addErrorHandler = this.addErrorHandler.bind(this);
     this.onError = this.onError.bind(this);
     this.onListening = this.onListening.bind(this);
     this.launch = this.launch.bind(this);
     this.close = this.close.bind(this);
+
+    this.setupMiddleware();
   }
 
   setupMiddleware () {
@@ -129,8 +128,8 @@ class ExpressServer {
     });
     this.app.use(rateLimiter);
 
-    // eneral settings here
-    this.app.use(cors());
+    // General settings here
+    this.app.use(cors.cors);
     this.app.use(bodyParser.json());
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: false }));
@@ -173,13 +172,15 @@ class ExpressServer {
     this.app.use('/spec', express.static(path.join(__dirname, 'api', 'openapi.yaml')));
     this.app.get('/hello', (req, res) => res.send('Hello World'));
 
+    this.app.use(cors.corsWithOptions);
     this.app.use(auth.verifyUserJWT);
     // this.app.use(auth.verifyPermission);
 
     try {
       // FIXME: temporary map the OLD routes
       // this.app.use('/api/devices', require('./routes/devices'));
-      this.app.use('/api/devicestats', require('./routes/deviceStats'));
+      // this.app.use('/api/devicestats', require('./routes/deviceStats'));
+      this.app.use('/api/jobs', require('./routes/deviceQueue'));
     } catch (error) {
       logger.error('Error: Can\'t connect OLD routes');
     }
@@ -197,11 +198,19 @@ class ExpressServer {
     //   res.json(req.query);
     // });
 
-    new OpenApiValidator({
-      apiSpecPath: this.openApiPath
-    }).install(this.app);
+    const validator = new OpenApiValidator({
+      apiSpec: this.openApiPath,
+      validateRequests: true,
+      validateResponses: configs.get('validateOpenAPIResponse')
+    });
 
-    this.app.use(openapiRouter());
+    validator
+      .install(this.app)
+      .then(async () => {
+        await this.app.use(openapiRouter());
+        await this.launch();
+        logger.info('Express server running');
+      });
   }
 
   addErrorHandler () {
@@ -230,7 +239,7 @@ class ExpressServer {
      ** */
     // eslint-disable-next-line no-unused-vars
     this.app.use((error, req, res, next) => {
-      const errorResponse = error.error || error.errors || error.message || 'Unknown error';
+      const errorResponse = error.error || error.message || error.errors || 'Unknown error';
       res.status(error.status || 500);
       res.type('json');
       res.json({ error: errorResponse });

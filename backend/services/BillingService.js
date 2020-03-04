@@ -33,7 +33,7 @@ class BillingService {
 
       if (!customerId) {
         logger.error('Account does not have link to billing system', { params: {} });
-        return Service.rejectResponse(new Error('Unknown account error'), 500);
+        return Service.rejectResponse('Account does not have link to billing system', 500);
       }
 
       const invoices = await flexibilling.retrieveInvoices({ customer_id: customerId });
@@ -75,14 +75,22 @@ class BillingService {
   }
 
   /**
-   * Delete a job
+   * Apply a coupon
    *
-   * id Integer Numeric ID of the Job to delete
    * no response value expected for this operation
    **/
   static async couponsPOST ({ couponsRequest }, { user }) {
     try {
-      return Service.successResponse(null, 204);
+      const customerId = user.defaultAccount.billingCustomerId;
+      const code = couponsRequest.name;
+
+      const result = await flexibilling.applyCoupon({ customer_id: customerId, code });
+
+      if (result) {
+        return Service.successResponse({ name: code }, 201);
+      } else {
+        return Service.rejectResponse('Failed to apply coupon', 400);
+      }
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

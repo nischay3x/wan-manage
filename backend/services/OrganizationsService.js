@@ -27,15 +27,33 @@ const Tokens = require('../models/tokens');
 const AccessTokens = require('../models/accesstokens');
 const { membership } = require('../models/membership');
 const Connections = require('../websocket/Connections')();
-
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const Flexibilling = require('../flexibilling');
-
-const { getUserOrganizations, orgUpdateFromNull } = require('../utils/membershipUtils');
+const { getUserOrganizations, getUserOrgByID, orgUpdateFromNull } =
+  require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
+const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getToken } = require('../tokens');
 
 class OrganizationsService {
+  /**
+   * Select the API fields from mongo organization Object
+   * @param {Object} item - mongodb organization object
+   */
+  static selectOrganizationParams (item) {
+    const retOrg = pick(item, [
+      'name',
+      '_id',
+      'account',
+      'group'
+    ]);
+    retOrg._id = retOrg._id.toString();
+    retOrg.account = retOrg.account.toString();
+
+    return retOrg;
+  }
+
   /**
    * Get all organizations
    *
@@ -46,9 +64,66 @@ class OrganizationsService {
   static async organizationsGET ({ offset, limit }, { user }) {
     try {
       const orgs = await getUserOrganizations(user);
-      const result = Object.keys(orgs).map((key) => { return orgs[key]; });
+      const result = Object.keys(orgs).map((key) => {
+        return OrganizationsService.selectOrganizationParams(orgs[key]);
+      });
 
-      return Service.successResponse(result);
+      const list = result.map(element => {
+        return {
+          _id: element._id.toString(),
+          name: element.name,
+          account: element.account ? element.account.toString() : '',
+          group: element.group
+        };
+      });
+
+      return Service.successResponse(list);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async organizationsSelectPOST ({ organizationSelectRequest }, { user }, res) {
+    try {
+      if (!user._id || !user.defaultAccount) {
+        return Service.rejectResponse('Error in selecting organization', 500);
+      }
+      // Check first that user is allowed for this organization
+      let org = [];
+      try {
+        org = await getUserOrgByID(user, organizationSelectRequest.org);
+      } catch (err) {
+        logger.error('Finding organization for user', { params: { reason: err.message } });
+        return Service.rejectResponse('Error selecting organization', 500);
+      }
+      if (org.length > 0) {
+        const updUser = await Users.findOneAndUpdate(
+          // Query, use the email and account
+          { _id: user._id, defaultAccount: user.defaultAccount._id },
+          // Update
+          { defaultOrg: organizationSelectRequest.org },
+          // Options
+          { upsert: false, new: true }
+        ).populate('defaultOrg');
+        // Success, return OK and refresh JWT with new values
+        user.defaultOrg = updUser.defaultOrg;
+        const token = await getToken({ user }, {
+          org: updUser.defaultOrg._id,
+          orgName: updUser.defaultOrg.name
+        });
+        res.setHeader('Refresh-JWT', token);
+
+        const result = {
+          _id: updUser.defaultOrg._id.toString(),
+          name: updUser.defaultOrg.name,
+          account: updUser.defaultOrg.account ? updUser.defaultOrg.account.toString() : '',
+          group: updUser.defaultOrg.group
+        };
+        return Service.successResponse(result, 201);
+      }
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -73,7 +148,8 @@ class OrganizationsService {
       // Find and remove organization from account
       // Only allow to delete current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
-      if (user.defaultOrg._id.toString() !== id) {
+      const orgList = await getAccessTokenOrgList(user, undefined, false);
+      if (orgList.includes(id)) {
         throw new Error('Please select an organization to delete it');
       }
 
@@ -106,16 +182,16 @@ class OrganizationsService {
       await AccessTokens.deleteMany({ organization: id }, { session: session });
 
       // Find all devices for organization
-      const orgDevices = await Devices.find({ org: id },
+      const orgDevices = await Devices.devices.find({ org: id },
         { machineId: 1, _id: 0 },
         { session: session });
 
       // Get the account total device count
-      const deviceCount = await Devices.countDocuments({ account: user.defaultAccount._id })
+      const deviceCount = await Devices.devices.countDocuments({ account: user.defaultAccount._id })
         .session(session);
 
       // Delete all devices
-      await Devices.deleteMany({ org: id }, { session: session });
+      await Devices.devices.deleteMany({ org: id }, { session: session });
       // Unregister a device (by removing the removed org number)
       await Flexibilling.registerDevice({
         account: user.defaultAccount._id,
@@ -127,7 +203,7 @@ class OrganizationsService {
       orgDevices.forEach((device) => Connections.deviceDisconnect(device.machineId));
 
       await session.commitTransaction();
-      return Service.successResponse(204);
+      return Service.successResponse(null, 204);
     } catch (e) {
       if (session) session.abortTransaction();
       logger.error('Error deleting organization', { params: { reason: e.message } });
@@ -150,7 +226,8 @@ class OrganizationsService {
     try {
       // Only allow to update current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
-      if (user.defaultOrg._id.toString() === id) {
+      const orgList = await getAccessTokenOrgList(user, undefined, false);
+      if (orgList.includes(id)) {
         const resultOrg = await Organizations.findOneAndUpdate(
           { _id: id },
           { $set: organizationRequest },
@@ -181,7 +258,8 @@ class OrganizationsService {
     try {
       const session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
-      const _org = await Organizations.create([organizationRequest], { session: session });
+      const orgBody = { ...organizationRequest, account: user.defaultAccount };
+      const _org = await Organizations.create([orgBody], { session: session });
       const org = _org[0];
       const updUser = await Users.findOneAndUpdate(
         // Query, use the email
@@ -206,7 +284,7 @@ class OrganizationsService {
       const token = await getToken({ user }, { org: org._id, orgName: org.name });
       response.setHeader('Refresh-JWT', token);
 
-      return Service.successResponse(org, 201);
+      return Service.successResponse(OrganizationsService.selectOrganizationParams(org), 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
