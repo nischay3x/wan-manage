@@ -137,7 +137,11 @@ const interfacesSchema = new Schema({
       message: 'type should be a valid interface type'
     },
     default: 'NONE'
-  }
+  },
+  pathlabels: [{
+    type: Schema.Types.ObjectId,
+    ref: 'PathLabels'
+  }]
 }, {
   timestamps: true
 });

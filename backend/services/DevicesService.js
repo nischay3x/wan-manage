@@ -147,7 +147,8 @@ class DevicesService {
         'IPv4Mask',
         'name',
         'pciaddr',
-        '_id'
+        '_id',
+        'pathlabels'
       ]);
     });
 
@@ -171,7 +172,8 @@ class DevicesService {
    **/
   static async devicesGET ({ org, offset, limit }, { user }) {
     try {
-      const result = await devices.find({ org: user.defaultOrg._id });
+      const result = await devices.find({ org: user.defaultOrg._id })
+        .populate('interfaces.pathlabels');
 
       const devicesMap = result.map(item => {
         return DevicesService.selectDeviceParams(item);
@@ -273,7 +275,8 @@ class DevicesService {
    **/
   static async devicesIdGET ({ id }, { user }) {
     try {
-      const result = await devices.findOne({ _id: id, org: user.defaultOrg._id });
+      const result = await devices.findOne({ _id: id, org: user.defaultOrg._id })
+        .populate('interfaces.pathlabels');
       const device = DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
@@ -446,9 +449,9 @@ class DevicesService {
     try {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
-      const origDevice = await devices.findOne({ id: id, org: user.defaultOrg._id });
+      const origDevice = await devices.findOne({ _id: id, org: user.defaultOrg._id });
       const updDevice = await devices.findOneAndUpdate(
-        { id: id, org: user.defaultOrg._id },
+        { _id: id, org: user.defaultOrg._id },
         deviceRequest,
         { new: true, upsert: false, runValidators: true }
       );
@@ -470,7 +473,7 @@ class DevicesService {
         })
         */
       }
-
+      console.log('omer ' + id);
       return DevicesService.selectDeviceParams(updDevice);
     } catch (e) {
       if (session) session.abortTransaction();
