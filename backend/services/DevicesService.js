@@ -145,7 +145,7 @@ class DevicesService {
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
-      ? deviceStatus.getDeviceStatus(retDevice.machineId) || 0 : 0;
+      ? deviceStatus.getDeviceStatus(retDevice.machineId) || {} : {};
 
     return retDevice;
   }
