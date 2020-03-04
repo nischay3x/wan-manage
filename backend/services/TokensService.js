@@ -39,7 +39,8 @@ class TokensService {
         return {
           _id: item.id,
           name: item.name,
-          token: item.token
+          token: item.token,
+          createdAt: item.createdAt.toString()
         };
       });
 
@@ -78,9 +79,15 @@ class TokensService {
   static async tokensIdGET ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const token = await Tokens.findOne({ _id: id, org: { $in: orgList } });
+      const result = await Tokens.findOne({ _id: id, org: { $in: orgList } });
 
-      return Service.successResponse([token]);
+      const token = {
+        _id: result.id,
+        name: result.name,
+        token: result.token,
+        createdAt: result.createdAt.toString()
+      };
+      return Service.successResponse(token);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -101,16 +108,17 @@ class TokensService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const result = await Tokens.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
-        { tokenRequest },
-        { upsert: false, runValidators: true, new: true });
+        { $set: tokenRequest },
+        { useFindAndModify: false, upsert: false, runValidators: true, new: true });
 
       const token = {
         _id: result.id,
         name: result.name,
-        token: result.token
+        token: result.token,
+        createdAt: result.createdAt.toString()
       };
 
-      return Service.successResponse(token);
+      return Service.successResponse(token, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -142,7 +150,8 @@ class TokensService {
       return Service.successResponse({
         _id: token.id,
         name: token.name,
-        token: token.token
+        token: token.token,
+        createdAt: token.createdAt.toString()
       }, 201);
     } catch (e) {
       return Service.rejectResponse(
