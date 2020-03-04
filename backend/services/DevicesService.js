@@ -109,7 +109,6 @@ class DevicesService {
       'ipList',
       // Internal array, objects
       'labels',
-      'staticroutes',
       'upgradeSchedule']);
     retDevice.deviceStatus = (retDevice.deviceStatus === "1") ? true : false;
 
@@ -134,14 +133,27 @@ class DevicesService {
       return retIf;
     });
 
+    const retStaticRoutes = item.staticroutes.map(r => {
+      const retRoute = pick(r, [
+        '_id',
+        'destination',
+        'gateway',
+        'interface'
+      ])
+      retRoute._id = retRoute._id.toString();
+      return retRoute;
+    })
+
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
     retDevice.org = retDevice.org.toString();
     retDevice.upgradeSchedule = pick(item.upgradeSchedule, ['jobQueued', '_id', 'time']);
     retDevice.upgradeSchedule._id = retDevice.upgradeSchedule._id.toString();
+    retDevice.upgradeSchedule.time = (retDevice.upgradeSchedule.time) ? retDevice.upgradeSchedule.time.toISOString() : null;
     retDevice.versions = pick(item.versions, ['agent', 'router', 'device', 'vpp', 'frr']);
     retDevice.interfaces = retInterfaces;
+    retDevice.staticroutes = retStaticRoutes;
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected

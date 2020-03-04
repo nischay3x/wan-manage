@@ -3516,7 +3516,7 @@ components:
         status: unread
         _id: 123
         title: Router state change
-        time: 2019-12-19T12:10:01.667Z
+        time: "2019-12-19T12:10:01.667Z"
         device: test0
         machineId: "123"
         details: Router state changed to "Not running"
@@ -3620,7 +3620,7 @@ components:
         upgradeSchedule:
           jobQueued: true
           _id: _id
-          time: time
+          time: "2019-12-19T12:10:01.667Z"
         description: description
         defaultRoute: defaultRoute
         deviceStatus: deviceStatus
@@ -3730,7 +3730,7 @@ components:
         upgradeSchedule:
           jobQueued: true
           _id: _id
-          time: time
+          time: "2019-12-19T12:10:01.667Z"
         description: description
         defaultRoute: defaultRoute
         deviceStatus: deviceStatus
@@ -3819,7 +3819,7 @@ components:
       example:
         jobQueued: true
         _id: _id
-        time: time
+        time: "2019-12-19T12:10:01.667Z"
       properties:
         _id:
           maxLength: 24
@@ -3827,6 +3827,7 @@ components:
           type: string
         time:
           type: string
+          nullable: true
         jobQueued:
           type: boolean
       type: object
