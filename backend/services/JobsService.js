@@ -107,10 +107,10 @@ class JobsService {
    *
    * no response value expected for this operation
    **/
-  static async jobsDELETE ({ org }, { user }) {
+  static async jobsDELETE ({ org, jobsDeleteRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), ['all']);
+      await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), jobsDeleteRequest);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(

@@ -2072,7 +2072,6 @@ paths:
       x-swagger-router-controller: Jobs
       x-openapi-router-controller: JobsController
       x-openapi-router-service: JobsService
-  /jobs/all:
     delete:
       operationId: jobsDELETE
       parameters:
@@ -2083,6 +2082,11 @@ paths:
         required: false
         schema:
           type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobsDeleteRequest'
       responses:
         "204":
           description: Successful operation
@@ -3633,6 +3637,12 @@ components:
         account:
           type: string
       type: object
+    JobsDeleteRequest:
+      properties:
+        ids:
+          items:
+            type: integer
+          type: array
     NotificationRequest:
       properties:
         count:
