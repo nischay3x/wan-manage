@@ -32,15 +32,16 @@ class TokensService {
    **/
   static async tokensGET ({ org, offset, limit }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await Tokens.find({ org: { $in: orgList } });
 
       const tokens = result.map(item => {
         return {
           _id: item.id,
+          org: item.org.toString(),
           name: item.name,
           token: item.token,
-          createdAt: item.createdAt.toString()
+          createdAt: item.createdAt.toISOString()
         };
       });
 
@@ -83,9 +84,10 @@ class TokensService {
 
       const token = {
         _id: result.id,
+        org: result.org.toString(),
         name: result.name,
         token: result.token,
-        createdAt: result.createdAt.toString()
+        createdAt: result.createdAt.toISOString()
       };
       return Service.successResponse(token);
     } catch (e) {
@@ -113,9 +115,10 @@ class TokensService {
 
       const token = {
         _id: result.id,
+        org: result.org.toString(),
         name: result.name,
         token: result.token,
-        createdAt: result.createdAt.toString()
+        createdAt: result.createdAt.toISOString()
       };
 
       return Service.successResponse(token, 201);
@@ -149,9 +152,10 @@ class TokensService {
 
       return Service.successResponse({
         _id: token.id,
+        org: token.org.toString(),
         name: token.name,
         token: token.token,
-        createdAt: token.createdAt.toString()
+        createdAt: token.createdAt.toISOString()
       }, 201);
     } catch (e) {
       return Service.rejectResponse(

@@ -3529,12 +3529,15 @@ components:
     Token:
       example:
         _id: id
+        org: org
         name: name
         token: token
       properties:
         _id:
           maxLength: 24
           minLength: 24
+          type: string
+        org:
           type: string
         name:
           type: string
