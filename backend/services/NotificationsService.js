@@ -41,7 +41,7 @@ class NotificationsService {
 
       // If operation is 'count', return the amount
       // of notifications for each device
-      const notifications = op === 'count'
+      const notifications = (op === 'count')
         ? await notificationsDb.aggregate([{ $match: query },
           {
             $group: {
@@ -55,13 +55,22 @@ class NotificationsService {
           'time device title details status machineId'
         ).populate('device', 'name -_id', devices);
 
-      const result = notifications.map(element => {
+      const result = (op === 'count')
+      ? notifications.map(element => {
         return {
           _id: element._id.toString(),
-          count: element.count,
+          count: element.count
+        }
+      })
+      : notifications.map(element => {
+        return {
+          _id: element._id.toString(),
           status: element.status,
           details: element.details,
-          title: element.title
+          title: element.title,
+          device: (element.device) ? element.device.name : null,
+          machineId: element.machineId,
+          time: element.time.toISOString()
         }
       });
 
@@ -79,6 +88,64 @@ class NotificationsService {
       );
     }
   }
+  /**
+   * Modify notification
+   *
+   * id String Numeric ID of the notification to modify
+   * org String Organization to be filtered by (optional)
+   * notificationsIDPutRequest NotificationsIDPutRequest
+   * returns Notification
+   **/
+  static async notificationsIdPUT({ id, org, notificationsIDPutRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      const res = await notificationsDb.updateOne(
+        { org: { $in: orgList }, _id: id },
+        { $set: { status: notificationsIDPutRequest.status } },
+        { upsert: false }
+      );
+      if (res.n === 0) throw new Error('Failed to update notifications');
+
+      return Service.successResponse({}, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify notifications
+   *
+   * org String Organization to be filtered by (optional)
+   * notificationsPutRequest NotificationsPutRequest
+   * no response value expected for this operation
+   **/
+  static async notificationsPUT({ org, notificationsPutRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { org: { $in: orgList } };
+      if (notificationsPutRequest.ids) query._id = { $in: notificationsPutRequest.ids };
+
+      const res = await notificationsDb.updateMany(
+        query,
+        { $set: { status: notificationsPutRequest.status } },
+        { upsert: false }
+      );
+      if (notificationsPutRequest.ids && res.n !== notificationsPutRequest.ids.length) {
+        throw new Error('Some notification IDs were not found');
+      }
+      return Service.successResponse(null, 204);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
 }
+
 
 module.exports = NotificationsService;

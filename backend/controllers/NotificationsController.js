@@ -25,6 +25,15 @@ class NotificationsController {
   async notificationsGET (request, response) {
     await Controller.handleRequest(request, response, this.service.notificationsGET);
   }
+
+  async notificationsIdPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsIdPUT);
+  }
+
+  async notificationsPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsPUT);
+  }
+
 }
 
 module.exports = NotificationsController;
