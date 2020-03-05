@@ -96,18 +96,33 @@ class NotificationsService {
    * notificationsIDPutRequest NotificationsIDPutRequest
    * returns Notification
    **/
-  static async notificationsIdPUT({ id, org, notificationsIDPutRequest }, { user }) {
+  static async notificationsIdPUT ({ id, org, notificationsIDPutRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-
+      const query = { org: { $in: orgList }, _id: id };
       const res = await notificationsDb.updateOne(
-        { org: { $in: orgList }, _id: id },
+        query,
         { $set: { status: notificationsIDPutRequest.status } },
         { upsert: false }
       );
       if (res.n === 0) throw new Error('Failed to update notifications');
 
-      return Service.successResponse({}, 200);
+      const notifications = await notificationsDb.find(
+        query,
+        'time device title details status machineId'
+      ).populate('device', 'name -_id', devices);
+
+      const result = {
+        _id: notifications[0]._id.toString(),
+        status: notifications[0].status,
+        details: notifications[0].details,
+        title: notifications[0].title,
+        device: (notifications[0].device) ? notifications[0].device.name : null,
+        machineId: notifications[0].machineId,
+        time: notifications[0].time.toISOString()
+      };
+
+      return Service.successResponse(result, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -123,7 +138,7 @@ class NotificationsService {
    * notificationsPutRequest NotificationsPutRequest
    * no response value expected for this operation
    **/
-  static async notificationsPUT({ org, notificationsPutRequest }, { user }) {
+  static async notificationsPUT ({ org, notificationsPutRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { org: { $in: orgList } };

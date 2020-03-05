@@ -124,7 +124,7 @@ class AccountsService {
 
       // If current account not changed, return OK
       if (user.defaultAccount._id.toString() === accountSelectRequest.account) {
-        return Service.successResponse({ _id: user.defaultAccount._id });
+        return Service.successResponse({ _id: user.defaultAccount._id.toString() }, 201);
       }
 
       // Get organizations for the new account
