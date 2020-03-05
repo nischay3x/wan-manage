@@ -304,7 +304,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
