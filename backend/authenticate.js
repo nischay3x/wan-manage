@@ -246,7 +246,7 @@ exports.verifyPermission = function (accessType, restCommand) {
   };
 };
 
-exports.verifyPermissionEx = function (serviceName, { method, user }) {
+exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
   const accessType = serviceName.replace('Service', '').toLowerCase();
   let restCommand = method.toLowerCase();
 
@@ -254,6 +254,9 @@ exports.verifyPermissionEx = function (serviceName, { method, user }) {
   if (restCommand === 'delete') {
     restCommand = 'del';
   }
+
+  // Override permission check for certain APIs
+  if (openapi.schema.operationId==="accountsSelectPOST") return true;
 
   return (user.perms[accessType] & permissionMasks[restCommand]);
 };
