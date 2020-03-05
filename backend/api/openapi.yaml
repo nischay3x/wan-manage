@@ -12,10 +12,8 @@ info:
   title: FlexiWAN API
   version: 1.0.0
 servers:
-- description: SwaggerHub API Auto Mocking
-  url: https://virtserver.swaggerhub.com/frozen-eye/flexiwanManage/1.0.0
 - description: Production server
-  url: https://manage.flexiwan.com/api/v1
+  url: https://manage.flexiwan.com/api
 - description: Local Development server
   url: https://local.flexiwan.com:3443/api
 paths:

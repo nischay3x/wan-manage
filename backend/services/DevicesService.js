@@ -110,7 +110,7 @@ class DevicesService {
       // Internal array, objects
       'labels',
       'upgradeSchedule']);
-    retDevice.deviceStatus = (retDevice.deviceStatus === "1") ? true : false;
+    retDevice.deviceStatus = (retDevice.deviceStatus === '1');
 
     // pick interfaces
     const retInterfaces = item.interfaces.map(i => {
@@ -139,10 +139,10 @@ class DevicesService {
         'destination',
         'gateway',
         'interface'
-      ])
+      ]);
       retRoute._id = retRoute._id.toString();
       return retRoute;
-    })
+    });
 
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
@@ -150,7 +150,8 @@ class DevicesService {
     retDevice.org = retDevice.org.toString();
     retDevice.upgradeSchedule = pick(item.upgradeSchedule, ['jobQueued', '_id', 'time']);
     retDevice.upgradeSchedule._id = retDevice.upgradeSchedule._id.toString();
-    retDevice.upgradeSchedule.time = (retDevice.upgradeSchedule.time) ? retDevice.upgradeSchedule.time.toISOString() : null;
+    retDevice.upgradeSchedule.time = (retDevice.upgradeSchedule.time)
+      ? retDevice.upgradeSchedule.time.toISOString() : null;
     retDevice.versions = pick(item.versions, ['agent', 'router', 'device', 'vpp', 'frr']);
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;

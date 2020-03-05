@@ -2,7 +2,8 @@ module.exports = {
   env: {
     commonjs: true,
     es6: true,
-    node: true
+    node: true,
+    "jest/globals": true
   },
   extends: [
     'standard'
@@ -22,8 +23,5 @@ module.exports = {
     "no-prototype-builtins": ["off"],
     "max-len": ["error", { "code": 100 }]
   },
-  "plugins": ["jest"],
-  "env": {
-    "jest/globals": true
-  }
+  "plugins": ["jest"]
 }

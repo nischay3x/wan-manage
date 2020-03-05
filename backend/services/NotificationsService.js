@@ -56,23 +56,23 @@ class NotificationsService {
         ).populate('device', 'name -_id', devices);
 
       const result = (op === 'count')
-      ? notifications.map(element => {
-        return {
-          _id: element._id.toString(),
-          count: element.count
-        }
-      })
-      : notifications.map(element => {
-        return {
-          _id: element._id.toString(),
-          status: element.status,
-          details: element.details,
-          title: element.title,
-          device: (element.device) ? element.device.name : null,
-          machineId: element.machineId,
-          time: element.time.toISOString()
-        }
-      });
+        ? notifications.map(element => {
+          return {
+            _id: element._id.toString(),
+            count: element.count
+          };
+        })
+        : notifications.map(element => {
+          return {
+            _id: element._id.toString(),
+            status: element.status,
+            details: element.details,
+            title: element.title,
+            device: (element.device) ? element.device.name : null,
+            machineId: element.machineId,
+            time: element.time.toISOString()
+          };
+        });
 
       return Service.successResponse(result);
     } catch (e) {
@@ -88,6 +88,7 @@ class NotificationsService {
       );
     }
   }
+
   /**
    * Modify notification
    *
@@ -161,6 +162,5 @@ class NotificationsService {
     }
   }
 }
-
 
 module.exports = NotificationsService;
