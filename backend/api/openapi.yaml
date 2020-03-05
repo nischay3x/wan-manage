@@ -1094,10 +1094,7 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/DeviceConfiguration'
-                type: array
-                x-content-type: application/json
+                $ref: '#/components/schemas/DeviceConfiguration'
           description: Successful operation
         "401":
           content:
@@ -4257,9 +4254,7 @@ components:
         message:
           type: string
         params:
-          items:
-            type: object
-          type: array
+          type: object
       type: object
     DeviceLog:
       example:
