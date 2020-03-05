@@ -110,7 +110,7 @@ class JobsService {
   static async jobsDELETE ({ org, jobsDeleteRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), jobsDeleteRequest);
+      await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), jobsDeleteRequest.ids);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
