@@ -256,7 +256,7 @@ exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
   }
 
   // Override permission check for certain APIs
-  if (openapi.schema.operationId==="accountsSelectPOST") return true;
+  if (openapi.schema.operationId === 'accountsSelectPOST') return true;
 
   return (user.perms[accessType] & permissionMasks[restCommand]);
 };
