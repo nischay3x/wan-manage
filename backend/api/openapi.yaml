@@ -625,14 +625,6 @@ paths:
   /devices/latestVersions:
     get:
       operationId: devicesLatestVersionsGET
-      parameters:
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
       responses:
        "200":
          content:
@@ -673,7 +665,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all registered devices
+      summary: Get devices latest available version
       tags:
       - Devices
       x-swagger-router-controller: Devices
@@ -2015,12 +2007,26 @@ paths:
         schema:
           type: integer
         style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       - description: A filter on the job status
         explode: true
         in: query
         name: status
-        required: false
+        required: true
         schema:
+          enum:
+          - all
+          - complete
+          - failed
+          - inactive
+          - delayed
+          - active
           type: string
         style: form
       responses:

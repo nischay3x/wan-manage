@@ -254,7 +254,7 @@ class DevicesService {
    *
    * returns DeviceLatestVersion
    **/
-  static async devicesLatestVersionsGET ({ org }) {
+  static async devicesLatestVersionsGET () {
     try {
       const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
       return Service.successResponse({
@@ -837,7 +837,7 @@ class DevicesService {
 
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
-        org: orgList[0]._id.toString(),
+        org: orgList[0].toString(),
         id: null, // null get all devices stats
         startTime: startTime,
         endTime: endTime
@@ -864,7 +864,7 @@ class DevicesService {
 
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
-        org: orgList[0]._id.toString(),
+        org: orgList[0].toString(),
         id: id,
         startTime: startTime,
         endTime: endTime
