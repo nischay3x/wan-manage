@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -14,15 +15,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const each = require('jest-each');
 const validators = require('../validators');
 
 describe('validateDeviceName', () => {
-    const tooLongDeviceName = 'a device name with more than fifty characters is not allowed';
-    const maxDeviceName = 'maximal___device___name___is___fifty___characters_';
+  const tooLongDeviceName = 'a device name with more than fifty characters is not allowed';
+  const maxDeviceName = 'maximal___device___name___is___fifty___characters_';
 
-    it.each
-        `
+  it.each`
         name                    | result
         ${'device1'}            | ${true}
         ${'device-1'}           | ${true}
@@ -40,17 +39,15 @@ describe('validateDeviceName', () => {
         ${tooLongDeviceName}    | ${false}
         ${null}                 | ${false}
         ${undefined}            | ${false}
-        `
-        ('Should return $result if device name is $name', ({name, result}) => {
-            expect(validators.validateDeviceName(name)).toEqual(result);
-        });
+  `('Should return $result if device name is $name', ({ name, result }) => {
+    expect(validators.validateDeviceName(name)).toEqual(result);
+  });
 });
 
 describe('validateDevDescription', () => {
-    const tooLongDescription = 'A device description should not contain more than fifty characters';
-    const maxDescriptionLength = 'A device description can be up to fifty characters';
-    it.each
-        `
+  const tooLongDescription = 'A device description should not contain more than fifty characters';
+  const maxDescriptionLength = 'A device description can be up to fifty characters';
+  it.each`
         desc                        | result
         ${'this is a device'}       | ${true}
         ${'THIS IS A DEVICE'}       | ${true}
@@ -65,17 +62,15 @@ describe('validateDevDescription', () => {
         ${tooLongDescription}       | ${false}
         ${null}                     | ${false}
         ${undefined}                | ${false}
-        `
-        ('Should return $result if device description is $desc', ({desc, result}) => {
-            expect(validators.validateDevDescription(desc)).toEqual(result);
-        });
+  `('Should return $result if device description is $desc', ({ desc, result }) => {
+    expect(validators.validateDevDescription(desc)).toEqual(result);
+  });
 });
 
 describe('validateDeviceSite', () => {
-    const tooLongSiteName = 'A device site name should not contain more than fifty characters';
-    const maxSiteNameLength = 'A device site can be up to fifty characters long  ';
-    it.each
-        `
+  const tooLongSiteName = 'A device site name should not contain more than fifty characters';
+  const maxSiteNameLength = 'A device site can be up to fifty characters long  ';
+  it.each`
         site                        | result
         ${'London'}                 | ${true}
         ${'Madrid center'}          | ${true}
@@ -90,17 +85,15 @@ describe('validateDeviceSite', () => {
         ${tooLongSiteName}          | ${false}
         ${null}                     | ${false}
         ${undefined}                | ${false}
-        `
-        ('Should return $result if device site name is $site', ({site, result}) => {
-            expect(validators.validateDeviceSite(site)).toEqual(result);
-        });
+  `('Should return $result if device site name is $site', ({ site, result }) => {
+    expect(validators.validateDeviceSite(site)).toEqual(result);
+  });
 });
 
 describe('validateHostName', () => {
-    const tooLongHostname = Array.from({ length: 254 }, () => { return 'a'; }).join('');
-    const maxHostnameLent = Array.from({ length: 253 }, () => { return 'a'; }).join('');
-    it.each
-        `
+  const tooLongHostname = Array.from({ length: 254 }, () => { return 'a'; }).join('');
+  const maxHostnameLent = Array.from({ length: 253 }, () => { return 'a'; }).join('');
+  it.each`
         host                        | result
         ${'hostname'}               | ${true}
         ${'HOSTNAME'}               | ${true}
@@ -114,15 +107,13 @@ describe('validateHostName', () => {
         ${tooLongHostname}          | ${false}
         ${null}                     | ${false}
         ${undefined}                | ${false}
-        `
-        (`Should return $result if device hostname is $host`, ({host, result}) => {
-            expect(validators.validateHostName(host)).toEqual(result);
-        });
+  `('Should return $result if device hostname is $host', ({ host, result }) => {
+    expect(validators.validateHostName(host)).toEqual(result);
+  });
 });
 
 describe('validateIpList', () => {
-    it.each
-        `
+  it.each`
         list                                            | result
         ${'192.168.1.1, 192.168.1.2, 192.168.1.3'}      | ${true}
         ${'192.168.1.1,192.168.1.2,192.168.1.3'}        | ${true}
@@ -132,17 +123,15 @@ describe('validateIpList', () => {
         ${undefined}                                    | ${false}
         ${'192.168.1.1 192.168.1.2'}                    | ${false}
         ${'10.0.0.1@10.0.0.2'}                          | ${false}
-        `
-        (`Should return $result if device IP list is $list`, ({list, result}) => {
-            expect(validators.validateIpList(list)).toEqual(result);
-        });
+  `('Should return $result if device IP list is $list', ({ list, result }) => {
+    expect(validators.validateIpList(list)).toEqual(result);
+  });
 });
 
 describe('validateMachineID', () => {
-    const tooLongMachineID = 'C9B35F0D-DF7C-43D5-8F8F-C2C576FEBAF7-C9B35F0D-DF7C-43D5';
-    const maxMachineID = 'C9B35F0D-C9B35F0D-C9B35F0D-C9B35F0D-C9B35F0D-C9B35';
-    it.each
-        `
+  const tooLongMachineID = 'C9B35F0D-DF7C-43D5-8F8F-C2C576FEBAF7-C9B35F0D-DF7C-43D5';
+  const maxMachineID = 'C9B35F0D-C9B35F0D-C9B35F0D-C9B35F0D-C9B35F0D-C9B35';
+  it.each`
         id                                              | result
         ${'C9B35F0D-DF7C-43D5-8F8F-C2C576FEBAF7'}       | ${true}
         ${'C9B35F0D'}                                   | ${true}
@@ -155,17 +144,15 @@ describe('validateMachineID', () => {
         ${'N9B35T0Z'}                                   | ${false}
         ${'C9B3.F0D'}                                   | ${false}
         ${'C9B3_F0D'}                                   | ${false}
-        `
-        (`Should return $result if machine ID is $list`, ({id, result}) => {
-            expect(validators.validateMachineID(id)).toEqual(result);
-        });
+  `('Should return $result if machine ID is $list', ({ id, result }) => {
+    expect(validators.validateMachineID(id)).toEqual(result);
+  });
 });
 
 describe('validateTokenName', () => {
-    const tooLongTokenName = 'token-name-longer-than-15';
-    const maxTokenName = '15-chars-token-';
-    it.each
-        `
+  const tooLongTokenName = 'token-name-longer-than-15';
+  const maxTokenName = '15-chars-token-';
+  it.each`
         name                    | result
         ${'Token'}              | ${true}
         ${'A-token'}            | ${true}
@@ -175,19 +162,17 @@ describe('validateTokenName', () => {
         ${'token.1'}            | ${true}
         ${'!@#%()[]:'}          | ${true}
         ${maxTokenName}         | ${true}
-        ${tooLongTokenName}     | ${false}        
-        ${''}                   | ${false}        
+        ${tooLongTokenName}     | ${false}
+        ${''}                   | ${false}
         ${null}                 | ${false}
         ${undefined}            | ${false}
-        `
-        ('Should return $result if token name is $name', ({name, result}) => {
-            expect(validators.validateTokenName(name)).toEqual(result);
-        });
+  `('Should return $result if token name is $name', ({ name, result }) => {
+    expect(validators.validateTokenName(name)).toEqual(result);
+  });
 });
 
 describe('validateIPv4', () => {
-    it.each
-        `
+  it.each`
         addr                    | result
         ${'192.168.100.1'}      | ${true}
         ${''}                   | ${true}
@@ -196,15 +181,13 @@ describe('validateIPv4', () => {
         ${1}                    | ${false}
         ${null}                 | ${false}
         ${undefined}            | ${false}
-        `
-        ('Should return $result if IPv4 address is $addr', ({addr, result}) => {
-            expect(validators.validateIPv4(addr)).toEqual(result);
-        });
+  `('Should return $result if IPv4 address is $addr', ({ addr, result }) => {
+    expect(validators.validateIPv4(addr)).toEqual(result);
+  });
 });
 
 describe('validateIPv4Mask', () => {
-    it.each
-        `
+  it.each`
         mask                    | result
         ${'0'}                  | ${true}
         ${'24'}                 | ${true}
@@ -214,15 +197,13 @@ describe('validateIPv4Mask', () => {
         ${'100'}                | ${false}
         ${null}                 | ${false}
         ${undefined}            | ${false}
-        `
-        ('Should return $result if IPv4 mask is $mask', ({mask, result}) => {
-            expect(validators.validateIPv4Mask(mask)).toEqual(result);
-        });
+  `('Should return $result if IPv4 mask is $mask', ({ mask, result }) => {
+    expect(validators.validateIPv4Mask(mask)).toEqual(result);
+  });
 });
 
 describe('validateIPv6', () => {
-    it.each
-        `
+  it.each`
         addr                    | result
         ${'::0001'}             | ${true}
         ${'ff02::0001'}         | ${true}
@@ -232,15 +213,13 @@ describe('validateIPv6', () => {
         ${1}                    | ${false}
         ${null}                 | ${false}
         ${undefined}            | ${false}
-        `
-        ('Should return $result if IPv6 address is $addr', ({addr, result}) => {
-            expect(validators.validateIPv6(addr)).toEqual(result);
-        });
+  `('Should return $result if IPv6 address is $addr', ({ addr, result }) => {
+    expect(validators.validateIPv6(addr)).toEqual(result);
+  });
 });
 
 describe('validateIPv6Mask', () => {
-    it.each
-        `
+  it.each`
         mask                    | result
         ${'0'}                  | ${true}
         ${'24'}                 | ${true}
@@ -250,16 +229,14 @@ describe('validateIPv6Mask', () => {
         ${'133'}                | ${false}
         ${null}                 | ${false}
         ${undefined}            | ${false}
-        `
-        ('Should return $result if IPv6 mask is $mask', ({mask, result}) => {
-            expect(validators.validateIPv6Mask(mask)).toEqual(result);
-        });
+  `('Should return $result if IPv6 mask is $mask', ({ mask, result }) => {
+    expect(validators.validateIPv6Mask(mask)).toEqual(result);
+  });
 });
 
 // Basic BDF format: xx:yy.zz, all values are hexadecimal
 describe('validatePCI basic BDF format', () => {
-    it.each
-        `
+  it.each`
         pci                     | result
         ${'00:02.00'}           | ${true}
         ${'0000:02.00'}         | ${true}
@@ -271,70 +248,60 @@ describe('validatePCI basic BDF format', () => {
         ${'00:00.100'}          | ${false}
         ${'TT:00.00'}           | ${false}
         ${'00:00.PP'}           | ${false}
-        `
-        ('Should return $result if pci address is $pci', ({pci, result}) => {
-            expect(validators.validatePciAddress(pci)).toEqual(result);
-        });
+  `('Should return $result if pci address is $pci', ({ pci, result }) => {
+    expect(validators.validatePciAddress(pci)).toEqual(result);
+  });
 });
 
 describe('validateIPaddr', () => {
-    it.each
-        `
+  it.each`
         addr                    | result
         ${'::0001'}             | ${true}
         ${'192.168.100.1'}      | ${true}
-        `
-        ('Should return $result if IP address is $addr', ({addr, result}) => {
-            expect(validators.validateIPaddr(addr)).toEqual(result);
-        });
+  `('Should return $result if IP address is $addr', ({ addr, result }) => {
+    expect(validators.validateIPaddr(addr)).toEqual(result);
+  });
 });
 
 // Extended BDF format: ww:xx:yy.zz, all values are hexadecimal
 describe('validatePCI extended BDF format', () => {
-        it.each
-        `
+  it.each`
         pci                     | result
         ${'0000:0000:00.12'}    | ${true}
         ${'0000:00:03.00'}      | ${true}
         ${'00:00:03.00'}        | ${true}
         ${'0:00:03.00'}         | ${false}
         ${'0:00:03.00'}         | ${false}
-        `
-        ('Should return $result if pci address is $pci', ({pci, result}) => {
-            expect(validators.validatePciAddress(pci)).toEqual(result);
-        });
+  `('Should return $result if pci address is $pci', ({ pci, result }) => {
+    expect(validators.validatePciAddress(pci)).toEqual(result);
+  });
 });
 
 // PCI address should be incase sensitive
 describe('validatePCI case sensitivity', () => {
-    it.each
-        `
+  it.each`
         pci                     | result
         ${'00:00:ab.00'}        | ${true}
         ${'00:00:AB.00'}        | ${true}
         ${'00:00:Ab.00'}        | ${true}
-        `
-        ('Should return $result if pci address is $pci', ({pci, result}) => {
-            expect(validators.validatePciAddress(pci)).toEqual(result);
-        });
+  `('Should return $result if pci address is $pci', ({ pci, result }) => {
+    expect(validators.validatePciAddress(pci)).toEqual(result);
+  });
 });
 
 describe('validatePCI empty values', () => {
-    it.each
-        `
+  it.each`
         pci                     | result
         ${''}                   | ${true}
         ${null}                 | ${false}
         ${undefined}            | ${false}
-        `
-        ('Should return $result if pci address is $pci', ({pci, result}) => {
-            expect(validators.validatePciAddress(pci)).toEqual(result);
-        });
-}); 
+   `('Should return $result if pci address is $pci', ({ pci, result }) => {
+    expect(validators.validatePciAddress(pci)).toEqual(result);
+  });
+});
 
 describe('validateIfcName', () => {
-    it.each
-        `
+  it.each`
         name                         | result
         ${'eth0'}                    | ${true}
         ${'lo0'}                     | ${true}
@@ -346,18 +313,16 @@ describe('validateIfcName', () => {
         ${'eth-0'}                   | ${false}
         ${'eth\0'}                   | ${false}
         ${'eth{0'}                   | ${false}
-        ${'tooLongInterfaceName'}    | ${false}        
-        `
-        ('Should return $result if interface name is $name', ({name, result}) => {
-            expect(validators.validateIfcName(name)).toEqual(result);
-        });
+        ${'tooLongInterfaceName'}    | ${false}
+  `('Should return $result if interface name is $name', ({ name, result }) => {
+    expect(validators.validateIfcName(name)).toEqual(result);
+  });
 });
 
 describe('validateDriverName', () => {
-    const maxDriverLengthName = 'ifc-driver-maximal-length-name';
-    const tooLongDriverName = 'a-too-long-interface-driver-name';
-    it.each
-        `
+  const maxDriverLengthName = 'ifc-driver-maximal-length-name';
+  const tooLongDriverName = 'a-too-long-interface-driver-name';
+  it.each`
         name                         | result
         ${'e1000'}                   | ${true}
         ${'fm10k'}                   | ${true}
@@ -370,16 +335,14 @@ describe('validateDriverName', () => {
         ${'driver@'}                 | ${false}
         ${'driver\0'}                | ${false}
         ${'driver{0'}                | ${false}
-        ${tooLongDriverName}         | ${false}        
-        `
-        ('Should return $result if driver name is $name', ({name, result}) => {
-            expect(validators.validateDriverName(name)).toEqual(result);
-        });
+        ${tooLongDriverName}         | ${false}
+  `('Should return $result if driver name is $name', ({ name, result }) => {
+    expect(validators.validateDriverName(name)).toEqual(result);
+  });
 });
 
 describe('validateMacAddress', () => {
-    it.each
-        `
+  it.each`
         addr                         | result
         ${'0a:00:0c:40:53:05'}       | ${true}
         ${'0a-00-0c-40-53-05'}       | ${true}
@@ -390,18 +353,16 @@ describe('validateMacAddress', () => {
         ${'0A-0B-0C'}                | ${false}
         ${'0A-0B-0C-0D-oE-0F-0G'}    | ${false}
         ${'0a:00:0t:40:53:05'}       | ${false}
-        ${'0A_0B_0C_0D_0E_0F'}       | ${false}        
-        ${'0a-00-0c-40-53:05'}       | ${false}        
+        ${'0A_0B_0C_0D_0E_0F'}       | ${false}
+        ${'0a-00-0c-40-53:05'}       | ${false}
         ${'0A0B0C0D0E0F'}            | ${false}
-        `
-        ('Should return $result if MAC address is $addr', ({addr, result}) => {
-            expect(validators.validateMacAddress(addr)).toEqual(result);
-        });
+  `('Should return $result if MAC address is $addr', ({ addr, result }) => {
+    expect(validators.validateMacAddress(addr)).toEqual(result);
+  });
 });
 
 describe('validateRoutingProto', () => {
-    it.each
-        `
+  it.each`
         protocol                     | result
         ${'OSPF'}                    | ${true}
         ${'ospf'}                    | ${true}
@@ -412,15 +373,13 @@ describe('validateRoutingProto', () => {
         ${undefined}                 | ${false}
         ${''}                        | ${false}
         ${'invalid-protocol'}        | ${false}
-        `
-        ('Should return $result if protocol is $protocol', ({protocol, result}) => {
-            expect(validators.validateRoutingProto(protocol)).toEqual(result);
-        });
+  `('Should return $result if protocol is $protocol', ({ protocol, result }) => {
+    expect(validators.validateRoutingProto(protocol)).toEqual(result);
+  });
 });
 
 describe('validateIfcType', () => {
-    it.each
-        `
+  it.each`
         type                    | result
         ${'WAN'}                | ${true}
         ${'wan'}                | ${true}
@@ -431,8 +390,7 @@ describe('validateIfcType', () => {
         ${undefined}            | ${false}
         ${''}                   | ${false}
         ${'invalid-type'}       | ${false}
-        `
-        ('Should return $result if interface type is $type', ({type, result}) => {
-            expect(validators.validateIfcType(type)).toEqual(result);
-        });
-})
+  `('Should return $result if interface type is $type', ({ type, result }) => {
+    expect(validators.validateIfcType(type)).toEqual(result);
+  });
+});

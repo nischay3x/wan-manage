@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -20,42 +21,43 @@ const mongoose = require('mongoose');
 let deviceStatsFullSchema;
 
 beforeEach(() => {
-    deviceStatsFullSchema = new deviceStats({
-        org: mongoose.Types.ObjectId('4edd40c86762e0fb12000001'),
-        device: mongoose.Types.ObjectId('4edd40c86762e0fb12000003'),
-        time: 1,
-    });
+  // eslint-disable-next-line new-cap
+  deviceStatsFullSchema = new deviceStats({
+    org: mongoose.Types.ObjectId('4edd40c86762e0fb12000001'),
+    device: mongoose.Types.ObjectId('4edd40c86762e0fb12000003'),
+    time: 1
+  });
 });
 
 describe('Minimal required deviceStats schema', () => {
-    it('Should be a valid deviceStats model if all required fields are present', () => {        
-        deviceStatsFullSchema.validate((err) => {
-            expect(err).toBe(null);
-         });
+  it('Should be a valid deviceStats model if all required fields are present', () => {
+    deviceStatsFullSchema.validate((err) => {
+      expect(err).toBe(null);
     });
+  });
 
-    it('Should be an invalid deviceStats model if org field is missing', () => {   
-        deviceStatsFullSchema.org = null;     
-        
-        deviceStatsFullSchema.validate((err) => {
-            expect(err.message).toBe("deviceStats validation failed: org: Path `org` is required.");
-        });
+  it('Should be an invalid deviceStats model if org field is missing', () => {
+    deviceStatsFullSchema.org = null;
+
+    deviceStatsFullSchema.validate((err) => {
+      expect(err.message).toBe('deviceStats validation failed: org: Path `org` is required.');
     });
+  });
 });
 
 describe('Token schema', () => {
-    it('Should be a valid deviceStats model if all required fields are valid', () => {        
-        deviceStatsFullSchema.validate((err) => {
-            expect(err).toBe(null);
-         });
+  it('Should be a valid deviceStats model if all required fields are valid', () => {
+    deviceStatsFullSchema.validate((err) => {
+      expect(err).toBe(null);
     });
+  });
 
-    it('Should be an invalid deviceStats model if org field is invalid', () => {   
-        deviceStatsFullSchema.org = 'invalid-org';     
-        
-        deviceStatsFullSchema.validate((err) => {
-            expect(err.message).toBe("deviceStats validation failed: org: Cast to ObjectID failed "
-            + "for value \"invalid-org\" at path \"org\"");
-        });
+  it('Should be an invalid deviceStats model if org field is invalid', () => {
+    deviceStatsFullSchema.org = 'invalid-org';
+
+    deviceStatsFullSchema.validate((err) => {
+      expect(err.message).toBe('deviceStats validation failed: org: Cast to ObjectID failed ' +
+            'for value "invalid-org" at path "org"');
     });
+  });
 });

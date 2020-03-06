@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -17,8 +18,7 @@
 const validators = require('../validators');
 
 describe('validateURL', () => {
-    it.each
-        `
+  it.each`
         url                                     | result
         ${'http://www.test.com'}                | ${true}
         ${'http://www.test.com/%20hello'}       | ${true}
@@ -28,15 +28,13 @@ describe('validateURL', () => {
         ${''}                                   | ${false}
         ${null}                                 | ${false}
         ${undefined}                            | ${false}
-        `
-        ('Should return $result if url is $url', ({url, result}) => {
-            expect(validators.validateURL(url)).toEqual(result);
-        });
+  `('Should return $result if url is $url', ({ url, result }) => {
+    expect(validators.validateURL(url)).toEqual(result);
+  });
 });
 
 describe('validateFileName', () => {
-    it.each
-        `
+  it.each`
         name                        | result
         ${'file.txt'}               | ${true}
         ${'file.log'}               | ${true}
@@ -48,15 +46,13 @@ describe('validateFileName', () => {
         ${''}                       | ${false}
         ${null}                     | ${false}
         ${undefined}                | ${false}
-        `
-        ('Should return $result if file name is $name', ({name, result}) => {
-            expect(validators.validateFileName(name)).toEqual(result);
-        });
+  `('Should return $result if file name is $name', ({ name, result }) => {
+    expect(validators.validateFileName(name)).toEqual(result);
+  });
 });
 
 describe('validateFieldName', () => {
-    it.each
-        `
+  it.each`
         name                        | result
         ${'Some field name'}        | ${true}
         ${'field name 1'}           | ${true}
@@ -66,8 +62,7 @@ describe('validateFieldName', () => {
         ${''}                       | ${false}
         ${null}                     | ${false}
         ${undefined}                | ${false}
-        `
-        ('Should return $result if file name is $name', ({name, result}) => {
-            expect(validators.validateFieldName(name)).toEqual(result);
-        });
+  `('Should return $result if file name is $name', ({ name, result }) => {
+    expect(validators.validateFieldName(name)).toEqual(result);
+  });
 });

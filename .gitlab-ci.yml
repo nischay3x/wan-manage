@@ -1,26 +1,49 @@
 image: node:latest
 
-services:
-  - redis:latest
-
-variables:
-  REDIS_URL: redis://redis:6379
-
 # This folder is cached between builds
 cache:
   paths:
   - node_modules/
 
+# CI pipeline stages:
+stages:
+  - build
+  - lint
+  - test
+
+#### Installing npm packages ####
+build:
+  stage: build
+  script:
+    - cd backend
+    - npm ci
+  artifacts:
+    untracked: true
+    paths:
+      - node_modules/
+
+#### Linting ####
+lint:
+  stage: lint
+  script:
+    - cd backend
+    - npx eslint ./
+
 #### Unit Tests ####
 test_backend:
+  stage: test
+  variables:
+    REDIS_URL: redis://redis:6379
+  services:
+    - redis:latest
   script:
    - cd backend
-   - npm ci
    - npm test
   timeout: 5m
 
 #### Package security auditing ####
 backend_npm_audit:
+  stage: test
   variables:
     BACKEND_PACKAGE_WHITE_LIST: "extend mongodb"
   script:

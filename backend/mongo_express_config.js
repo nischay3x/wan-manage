@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -21,9 +22,12 @@ const hostname = os.hostname();
 
 var mongo = {
   // setting the connection string will only give access to that database
-  // to see more databases you need to set mongodb.admin to true or add databases to the mongodb.auth list
+  // to see more databases you need to set mongodb.admin to true or add
+  // databases to the mongodb.auth list
+  // eslint-disable-next-line max-len
   connectionString: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwan?replicaSet=rs`
-  //connectionString: process.env.ME_CONFIG_MONGODB_SERVER ? '' : process.env.ME_CONFIG_MONGODB_URL,
+  // connectionString: process.env.ME_CONFIG_MONGODB_SERVER
+  // ? '' : process.env.ME_CONFIG_MONGODB_URL,
 };
 
 // Accesing Bluemix variable to get MongoDB info
@@ -42,21 +46,18 @@ var adminPassword = 'ME_CONFIG_MONGODB_ADMINPASSWORD';
 var dbAuthUsername = 'ME_CONFIG_MONGODB_AUTH_USERNAME';
 var dbAuthPassword = 'ME_CONFIG_MONGODB_AUTH_PASSWORD';
 
-function getFileEnv(envVariable) {
-
+function getFileEnv (envVariable) {
   var origVar = process.env[envVariable];
   var fileVar = process.env[envVariable + '_FILE'];
 
-  if (typeof fileVar !== 'undefined' &&  fileVar) {
-
+  if (typeof fileVar !== 'undefined' && fileVar) {
     const fs = require('fs');
 
     const path = fileVar;
 
-
     try {
       if (fs.existsSync(path)) {
-        //file exists
+        // file exists
         var varFromFile = fs.readFileSync(path).toString().split(/\r?\n/)[0].trim();
 
         return varFromFile;
@@ -65,45 +66,49 @@ function getFileEnv(envVariable) {
       console.error(err);
     }
   } else {
-
     return origVar;
   }
-
 }
 
-var meConfigMongodbServer = process.env.ME_CONFIG_MONGODB_SERVER ? process.env.ME_CONFIG_MONGODB_SERVER.split(',') : false;
+var meConfigMongodbServer = process.env.ME_CONFIG_MONGODB_SERVER
+  ? process.env.ME_CONFIG_MONGODB_SERVER.split(',')
+  : false;
 
 module.exports = {
   mongodb: {
     // if a connection string options such as server/port/etc are ignored
-    connectionString: mongo.connectionString || 
+    connectionString:
+      mongo.connectionString ||
       `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwan?replicaSet=rs`,
 
-    //server: mongodb hostname or IP address
-    //for replica set, use array of string instead
-    server: (meConfigMongodbServer.length > 1 ? meConfigMongodbServer : meConfigMongodbServer[0]) || mongo.host,
+    // server: mongodb hostname or IP address
+    // for replica set, use array of string instead
+    server: (meConfigMongodbServer.length > 1
+      ? meConfigMongodbServer
+      : meConfigMongodbServer[0]) || mongo.host,
     port: process.env.ME_CONFIG_MONGODB_PORT || mongo.port,
 
-    //ssl: connect to the server using secure SSL
+    // ssl: connect to the server using secure SSL
     ssl: process.env.ME_CONFIG_MONGODB_SSL || mongo.ssl,
 
-    //sslValidate: validate mongod server certificate against CA
+    // sslValidate: validate mongod server certificate against CA
     sslValidate: process.env.ME_CONFIG_MONGODB_SSLVALIDATE || true,
 
-    //sslCA: array of valid CA certificates
+    // sslCA: array of valid CA certificates
     sslCA: [],
 
-    //autoReconnect: automatically reconnect if connection is lost
+    // autoReconnect: automatically reconnect if connection is lost
     autoReconnect: true,
 
-    //poolSize: size of connection pool (number of connections to use)
+    // poolSize: size of connection pool (number of connections to use)
     poolSize: 4,
 
-    //set admin to true if you want to turn on admin features
-    //if admin is true, the auth list below will be ignored
-    //if admin is true, you will need to enter an admin username/password below (if it is needed)
+    // set admin to true if you want to turn on admin features
+    // if admin is true, the auth list below will be ignored
+    // if admin is true, you will need to enter an admin username/password below (if it is needed)
     admin: true,
-    //process.env.ME_CONFIG_MONGODB_ENABLE_ADMIN ? process.env.ME_CONFIG_MONGODB_ENABLE_ADMIN.toLowerCase() === 'true' : false,
+    // process.env.ME_CONFIG_MONGODB_ENABLE_ADMIN ?
+    // process.env.ME_CONFIG_MONGODB_ENABLE_ADMIN.toLowerCase() === 'true' : false,
 
     // >>>>  If you are using regular accounts, fill out auth details in the section below
     // >>>>  If you have admin auth, leave this section empty and skip to the next section
@@ -115,25 +120,26 @@ module.exports = {
       {
         database: process.env.ME_CONFIG_MONGODB_AUTH_DATABASE || mongo.db,
         username: getFileEnv(dbAuthUsername) || mongo.username,
-        password: getFileEnv(dbAuthPassword) || mongo.password,
-      },
+        password: getFileEnv(dbAuthPassword) || mongo.password
+      }
     ],
 
-    //  >>>>  If you are using an admin mongodb account, or no admin account exists, fill out section below
-    //  >>>>  Using an admin account allows you to view and edit all databases, and view stats
-    //leave username and password empty if no admin account exists
+    // If you are using an admin mongodb account or no admin account exists, fill out section below
+    // Using an admin account allows you to view and edit all databases, and view stats
+    // leave username and password empty if no admin account exists
     adminUsername: getFileEnv(adminUsername) || '',
     adminPassword: getFileEnv(adminPassword) || '',
 
-    //whitelist: hide all databases except the ones in this list  (empty list for no whitelist)
+    // whitelist: hide all databases except the ones in this list  (empty list for no whitelist)
     whitelist: [],
 
-    //blacklist: hide databases listed in the blacklist (empty list for no blacklist)
-    blacklist: [],
+    // blacklist: hide databases listed in the blacklist (empty list for no blacklist)
+    blacklist: []
   },
 
   site: {
-    // baseUrl: the URL that mongo express will be located at - Remember to add the forward slash at the start and end!
+    // baseUrl: the URL that mongo express will be located at -
+    // Remember to add the forward slash at the start and end!
     baseUrl: process.env.ME_CONFIG_SITE_BASEURL || '/',
     cookieKeyName: 'mongo-express',
     cookieSecret: process.env.ME_CONFIG_SITE_COOKIESECRET || 'cookiesecret',
@@ -143,70 +149,73 @@ module.exports = {
     sessionSecret: process.env.ME_CONFIG_SITE_SESSIONSECRET || 'sessionsecret',
     sslCert: process.env.ME_CONFIG_SITE_SSL_CRT_PATH || '',
     sslEnabled: process.env.ME_CONFIG_SITE_SSL_ENABLED || false,
-    sslKey: process.env.ME_CONFIG_SITE_SSL_KEY_PATH || '',
+    sslKey: process.env.ME_CONFIG_SITE_SSL_KEY_PATH || ''
   },
 
-  //set useBasicAuth to true if you want to authenticate mongo-express logins
-  //if admin is false, the basicAuthInfo list below will be ignored
-  //this will be true unless ME_CONFIG_BASICAUTH_USERNAME is set and is the empty string
+  // set useBasicAuth to true if you want to authenticate mongo-express logins
+  // if admin is false, the basicAuthInfo list below will be ignored
+  // this will be true unless ME_CONFIG_BASICAUTH_USERNAME is set and is the empty string
   useBasicAuth: getFileEnv(basicAuthUsername) !== '',
 
   basicAuth: {
     username: getFileEnv(basicAuthUsername) || 'admin',
-    password: getFileEnv(basicAuthPassword) || 'pass',
+    password: getFileEnv(basicAuthPassword) || 'pass'
   },
 
   options: {
     // Display startup text on console
     console: true,
 
-    //documentsPerPage: how many documents you want to see at once in collection view
+    // documentsPerPage: how many documents you want to see at once in collection view
     documentsPerPage: 10,
 
-    //editorTheme: Name of the theme you want to use for displaying documents
-    //See http://codemirror.net/demo/theme.html for all examples
+    // editorTheme: Name of the theme you want to use for displaying documents
+    // See http://codemirror.net/demo/theme.html for all examples
     editorTheme: process.env.ME_CONFIG_OPTIONS_EDITORTHEME || 'rubyblue',
 
     // Maximum size of a single property & single row
     // Reduces the risk of sending a huge amount of data when viewing collections
-    maxPropSize: (100 * 1000), // default 100KB
-    maxRowSize: (1000 * 1000), // default 1MB
+    maxPropSize: 100 * 1000, // default 100KB
+    maxRowSize: 1000 * 1000, // default 1MB
 
-    //The options below aren't being used yet
+    // The options below aren't being used yet
 
-    //cmdType: the type of command line you want mongo express to run
-    //values: eval, subprocess
+    // cmdType: the type of command line you want mongo express to run
+    // values: eval, subprocess
     //  eval - uses db.eval. commands block, so only use this if you have to
     //  subprocess - spawns a mongo command line as a subprocess and pipes output to mongo express
     cmdType: 'eval',
 
-    //subprocessTimeout: number of seconds of non-interaction before a subprocess is shut down
+    // subprocessTimeout: number of seconds of non-interaction before a subprocess is shut down
     subprocessTimeout: 300,
 
-    //readOnly: if readOnly is true, components of writing are not visible.
+    // readOnly: if readOnly is true, components of writing are not visible.
     readOnly: process.env.ME_CONFIG_OPTIONS_READONLY || false,
 
-    //collapsibleJSON: if set to true, jsons will be displayed collapsible
+    // collapsibleJSON: if set to true, jsons will be displayed collapsible
     collapsibleJSON: true,
 
-    //collapsibleJSONDefaultUnfold: if collapsibleJSON is set to `true`, this defines default level
+    // collapsibleJSONDefaultUnfold: if collapsibleJSON is set to `true`, this defines default level
     //  to which JSONs are displayed unfolded; use number or "all" to unfold all levels
     collapsibleJSONDefaultUnfold: 1,
 
-    //gridFSEnabled: if gridFSEnabled is set to 'true', you will be able to manage uploaded files ( ak. grids, gridFS )
+    // gridFSEnabled: if gridFSEnabled is set to 'true', you will
+    // be able to manage uploaded files ( ak. grids, gridFS )
     gridFSEnabled: process.env.ME_CONFIG_SITE_GRIDFS_ENABLED || false,
 
     // logger: this object will be used to initialize router logger (morgan)
     logger: {},
 
-    //confirmDelete: if confirmDelete is set to 'true', a modal for confirming deletion is displayed before deleting a document/collection
+    // confirmDelete: if confirmDelete is set to 'true', a modal for
+    // confirming deletion is displayed before deleting a document/collection
     confirmDelete: false,
 
-    //noExport: if noExport is set to true, we won't show export buttons
-    noExport: false,
+    // noExport: if noExport is set to true, we won't show export buttons
+    noExport: false
   },
 
-  // Specify the default keyname that should be picked from a document to display in collections list.
+  // Specify the default keyname that should be picked from a
+  // document to display in collections list.
   // Keynames can be specified for every database and collection.
   // If no keyname is specified, it defaults to '_id', which is a mandatory field.
   // For Example :
@@ -217,7 +226,5 @@ module.exports = {
   //     "city":"name"
   //   }
   // }
-  defaultKeyNames: {
-
-  },
+  defaultKeyNames: {}
 };

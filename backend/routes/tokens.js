@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -25,36 +26,39 @@ tokensRouter.use(bodyParser.json());
 
 // Error formatter
 const formatErr = (err, msg) => {
-    // Check for unique error
-    if (err.name === 'MongoError' && err.code === 11000) {
-        return ({"status":500, "error":"Token " + msg.name + " already exists"});
-    } else if (err.message) {
-        return ({"status":500, "error":err.message});
-    } else {
-        return ({"status":500, "error":"Unable to format error"});
-    }
+  // Check for unique error
+  if (err.name === 'MongoError' && err.code === 11000) {
+    return ({ status: 500, error: 'Token ' + msg.name + ' already exists' });
+  } else if (err.message) {
+    return ({ status: 500, error: err.message });
+  } else {
+    return ({ status: 500, error: 'Unable to format error' });
+  }
 };
 
 // Generate token
-const genToken = function(data) {
-    return jwt.sign(data, configs.get('deviceTokenSecretKey'));
+const genToken = function (data) {
+  return jwt.sign(data, configs.get('deviceTokenSecretKey'));
 };
 
 // check update
-const checkUpdReq = (qtype, req) => new Promise(function(resolve, reject) {
-    if (qtype === 'POST') {
-        req.body.token = genToken({"org": req.user.defaultOrg._id.toString(), "account": req.user.defaultAccount._id});
-        req.body.org = req.user.defaultOrg._id.toString();
-    } else {
-        // Don't allow to update the token
-        delete req.body.token;
-    }
-    if (qtype === 'PUT') {
-        // Don't allow to update the unchangeable fields
-        delete req.body.token;
-        delete req.body.org;
-    }
-    resolve({'ok':1}); 
+const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
+  if (qtype === 'POST') {
+    req.body.token = genToken({
+      org: req.user.defaultOrg._id.toString(),
+      account: req.user.defaultAccount._id
+    });
+    req.body.org = req.user.defaultOrg._id.toString();
+  } else {
+    // Don't allow to update the token
+    delete req.body.token;
+  }
+  if (qtype === 'PUT') {
+    // Don't allow to update the unchangeable fields
+    delete req.body.token;
+    delete req.body.org;
+  }
+  resolve({ ok: 1 });
 });
 
 // wrapper

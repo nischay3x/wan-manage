@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -16,7 +17,7 @@
 
 const createError = require('http-errors');
 const configs = require('./configs')();
-const logger = require('./logging/logging')({module: module.filename, type: 'req'});
+const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 const mgmtVersion = configs.get('agentApiVersion');
 
 /**
@@ -24,85 +25,85 @@ const mgmtVersion = configs.get('agentApiVersion');
  * @param {String} versionString
  */
 const getMajorVersion = (versionString) => {
-    return parseInt(versionString.split('.')[0], 10);
+  return parseInt(versionString.split('.')[0], 10);
 };
 
 const mgmtMajorVersion = getMajorVersion(mgmtVersion);
 
 const isSemVer = (version) => {
-    return /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/.test(version);
+  return /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/.test(version);
 };
 
 const isVppVersion = (version) => {
-    return /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?(-[a-z0-9]{1,10})?$/i.test(
-      version
-    );
+  return /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?(-[a-z0-9]{1,10})?$/i.test(
+    version
+  );
 };
 
 const isAgentVersionCompatible = (agentVersion) => {
-    const majorNum = parseInt(agentVersion.split('.')[0], 10);
+  const majorNum = parseInt(agentVersion.split('.')[0], 10);
 
-    return isNaN(majorNum) ?
-        false :
-        (majorNum === mgmtMajorVersion || majorNum === mgmtMajorVersion - 1);
+  return isNaN(majorNum)
+    ? false
+    : (majorNum === mgmtMajorVersion || majorNum === mgmtMajorVersion - 1);
 };
 
 const routerVersionsCompatible = (ver1, ver2) => {
-    [majorVer1, majorVer2] = [ver1, ver2].map(ver => {
-        return parseInt((ver || '').split(".")[0], 10);
-    });
-    return (isNaN(majorVer1) || isNaN(majorVer2)) ?
-        false :
-        majorVer1 === majorVer2;
+  const [majorVer1, majorVer2] = [ver1, ver2].map(ver => {
+    return parseInt((ver || '').split('.')[0], 10);
+  });
+  return (isNaN(majorVer1) || isNaN(majorVer2))
+    ? false
+    : majorVer1 === majorVer2;
 };
 
 const verifyAgentVersion = (version) => {
-    if(!isSemVer(version)) {
-        return {
-            valid: false,
-            statusCode: 400,
-            err: `Invalid device version: ${version ? version : 'none'}`
-        };
-    }
-
-    if(!isAgentVersionCompatible(version)) {
-        return {
-            valid: false,
-            statusCode: 400,
-            err: `Incompatible versions: management version: ${mgmtVersion} agent version: ${version}`
-        };
-    }
+  if (!isSemVer(version)) {
     return {
-        valid: true,
-        statusCode: 200,
-        err: ""
+      valid: false,
+      statusCode: 400,
+      err: `Invalid device version: ${version || 'none'}`
     };
+  }
+
+  if (!isAgentVersionCompatible(version)) {
+    return {
+      valid: false,
+      statusCode: 400,
+      err: `Incompatible versions: management version: ${mgmtVersion} agent version: ${version}`
+    };
+  }
+  return {
+    valid: true,
+    statusCode: 200,
+    err: ''
+  };
 };
 
 // Express middleware for /register API
 const checkDeviceVersion = (req, res, next) => {
-    const agentVer = req.body.fwagent_version;
-    const { valid, statusCode, err } = verifyAgentVersion(agentVer);
-    if(!valid) {
-        logger.warn("Device version validation failed", {
-                params: {
-                    agentVersion: agentVer,
-                    reason: err,
-                    machineId: req.body.machine_id
-                },
-                req: req
-            });
-        return next(createError(statusCode, err));
-    }
-    next();
+  const agentVer = req.body.fwagent_version;
+  const { valid, statusCode, err } = verifyAgentVersion(agentVer);
+  if (!valid) {
+    logger.warn('Device version validation failed', {
+      params: {
+        agentVersion: agentVer,
+        reason: err,
+        machineId: req.body.machine_id
+      },
+      req: req
+    });
+    return next(createError(statusCode, err));
+  }
+  next();
 };
 
 module.exports = {
-    getMajorVersion: getMajorVersion,
-    isAgentVersionCompatible: isAgentVersionCompatible,
-    isSemVer: isSemVer,
-    isVppVersion: isVppVersion,
-    verifyAgentVersion: verifyAgentVersion,
-    checkDeviceVersion : checkDeviceVersion,
-    routerVersionsCompatible: routerVersionsCompatible
+  getMajorVersion: getMajorVersion,
+  isAgentVersionCompatible: isAgentVersionCompatible,
+  isSemVer: isSemVer,
+  isVppVersion: isVppVersion,
+  verifyAgentVersion: verifyAgentVersion,
+  checkDeviceVersion: checkDeviceVersion,
+  routerVersionsCompatible: routerVersionsCompatible
 };

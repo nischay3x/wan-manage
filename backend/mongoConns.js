@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -16,44 +17,46 @@
 
 const configs = require('./configs')();
 const mongoose = require('mongoose');
-const logger = require('./logging/logging')({module: module.filename, type: 'mongodb'});
+const logger = require('./logging/logging')({ module: module.filename, type: 'mongodb' });
 
 class MongoConns {
-    constructor() {
-        this.getMainDB = this.getMainDB.bind(this);
-        this.getAnalyticsDB = this.getAnalyticsDB.bind(this);
+  constructor () {
+    this.getMainDB = this.getMainDB.bind(this);
+    this.getAnalyticsDB = this.getAnalyticsDB.bind(this);
 
-        this.mainDB = mongoose.createConnection(configs.get('mongoUrl'), {
-                useNewUrlParser: true,
-                useCreateIndex: true 
-            });
-        this.mainDB.then((db) => {
-            logger.info("Connected to MongoDB mainDB");
-        }, (err) => { logger.error("Failed to connect to mainDB", {params: {err: err.message}}); });
+    this.mainDB = mongoose.createConnection(configs.get('mongoUrl'), {
+      useNewUrlParser: true,
+      useCreateIndex: true
+    });
+    this.mainDB.then((db) => {
+      logger.info('Connected to MongoDB mainDB');
+    }, (err) => { logger.error('Failed to connect to mainDB', { params: { err: err.message } }); });
 
-        this.analyticsDB = mongoose.createConnection(configs.get('mongoAnalyticsUrl'), {
-            useNewUrlParser: true,
-            useCreateIndex: true 
-        });
-        this.analyticsDB.then((db) => {
-            logger.info("Connected to MongoDB analyticsDB");
-        }, (err) => { logger.error("Failed to connect to analyticsDB", {params: {err: err.message}}); });   
-    }
+    this.analyticsDB = mongoose.createConnection(configs.get('mongoAnalyticsUrl'), {
+      useNewUrlParser: true,
+      useCreateIndex: true
+    });
+    this.analyticsDB.then((db) => {
+      logger.info('Connected to MongoDB analyticsDB');
+    }, (err) => {
+      logger.error('Failed to connect to analyticsDB', { params: { err: err.message } });
+    });
+  }
 
-    getMainDB() {
-        return this.mainDB;
-    }
+  getMainDB () {
+    return this.mainDB;
+  }
 
-    getAnalyticsDB() {
-        return this.analyticsDB;
-    }
+  getAnalyticsDB () {
+    return this.analyticsDB;
+  }
 }
 
 var mongoConns = null;
 module.exports = function () {
-    if (mongoConns) return mongoConns;
-    else {
-        mongoConns = new MongoConns();
-        return mongoConns;
-    }
+  if (mongoConns) return mongoConns;
+  else {
+    mongoConns = new MongoConns();
+    return mongoConns;
+  }
 };

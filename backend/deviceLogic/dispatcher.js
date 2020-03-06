@@ -1,5 +1,6 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2019-2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -15,7 +16,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // File used to dispatch the apply logic to the right function
-const createError = require('http-errors');
 const start = require('./start');
 const stop = require('./stop');
 const modify = require('./modifyDevice');
@@ -23,9 +23,12 @@ const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
 const configs = require('../configs')();
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'),configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 
-const logger = require('../logging/logging')({module: module.filename, type: 'req'});
+const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 /**
  * Holds the apply, complete, error and remove callbacks for each device task
@@ -34,72 +37,74 @@ const logger = require('../logging/logging')({module: module.filename, type: 're
  * The callback method are receive the job ID of the relevant job.
  * @type {Object}
  */
-const errorNOOP = (jobId, jobData) => {};   // Nothing to do on error
+const errorNOOP = (jobId, jobData) => {}; // Nothing to do on error
 const methods = {
-    'start': {
-        apply:start.apply,
-        complete:start.complete,
-        error:errorNOOP
-    },
-    'stop': {
-        apply:stop.apply,
-        complete:stop.complete,
-        error:errorNOOP
-    },
-    'modify': {
-        apply:modify.apply,
-        complete:modify.complete,
-        error:modify.error,
-        remove:modify.remove
-    },
-    'tunnels': {
-        apply:tunnels.apply.applyTunnelAdd,
-        complete:tunnels.complete.completeTunnelAdd,
-        error: tunnels.error.errorTunnelAdd
-    },
-    'deltunnels': {
-        apply:tunnels.apply.applyTunnelDel,
-        complete:tunnels.complete.completeTunnelDel,
-        error:errorNOOP
-    },
-    'staticroutes': {
-        apply: staticroutes.apply,
-        complete: staticroutes.complete,
-        error: staticroutes.error,
-        remove: staticroutes.remove
-    },
-    'upgrade' : {
-        apply: upgrade.apply,
-        complete: upgrade.complete,
-        error: upgrade.error,
-        remove: upgrade.remove
-    }
+  start: {
+    apply: start.apply,
+    complete: start.complete,
+    error: errorNOOP
+  },
+  stop: {
+    apply: stop.apply,
+    complete: stop.complete,
+    error: errorNOOP
+  },
+  modify: {
+    apply: modify.apply,
+    complete: modify.complete,
+    error: modify.error,
+    remove: modify.remove
+  },
+  tunnels: {
+    apply: tunnels.apply.applyTunnelAdd,
+    complete: tunnels.complete.completeTunnelAdd,
+    error: tunnels.error.errorTunnelAdd
+  },
+  deltunnels: {
+    apply: tunnels.apply.applyTunnelDel,
+    complete: tunnels.complete.completeTunnelDel,
+    error: errorNOOP
+  },
+  staticroutes: {
+    apply: staticroutes.apply,
+    complete: staticroutes.complete,
+    error: staticroutes.error,
+    remove: staticroutes.remove
+  },
+  upgrade: {
+    apply: upgrade.apply,
+    complete: upgrade.complete,
+    error: upgrade.error,
+    remove: upgrade.remove
+  }
 };
 
 // Register remove callbacks for relevant methods.
 Object.entries(methods).forEach(([method, functions]) => {
-    if(functions.hasOwnProperty('remove')) {
-        deviceQueues.registerJobRemoveCallback(method, functions.remove);
-    }
-  });
+  if (functions.hasOwnProperty('remove')) {
+    deviceQueues.registerJobRemoveCallback(method, functions.remove);
+  }
+});
 /**
  * Calls the apply method for to the method
- * specified in the req.body object.
+ *
  * @param  {Array}    devices     an array of devices
- * @param  {Object}   req         express request object
- * @param  {Object}   res         express response object
- * @param  {Callback} next        express next() callback
+ * @param  {String}   method      apply methond to execute
+ * @param  {Object}   user        User data
  * @param  {Object}   data=null   additional data per caller's choice
  * @return {void}
  */
-const apply = (devices, req, res, next, data=null) => {
-    logger.info("Apply method called", {params: {method: req.body.method || null}, req: req});
-    const method = methods.hasOwnProperty(req.body.method) ?
-        methods[req.body.method].apply : null;
-    if (!method) {
-        return next(createError(400, "Apply method not found"));
-    }
-    return method(devices, req, res, next, data);
+const apply = async (devices, method, user, data = null) => {
+  logger.info('Apply method called', {
+    params: { method: method || null, user: user, data: data }
+  });
+  const methodFunc = methods.hasOwnProperty(method)
+    ? methods[method].apply : null;
+  if (!methodFunc) {
+    throw new Error('Apply method not found');
+  }
+  const job = await methodFunc(devices, user, data);
+  return job;
 };
 
 /**
@@ -110,13 +115,17 @@ const apply = (devices, req, res, next, data=null) => {
  * @return {void}
  */
 const complete = (jobId, jobResult) => {
-    logger.info("Dispatcher complete callback called", {params: {jobId: jobId, result: jobResult}});
-    const method = methods.hasOwnProperty(jobResult.method) ? methods[jobResult.method].complete : null;
-    if (method != null) {
-        return method(jobId, jobResult.data);
-    } else {
-        logger.info('Complete method not found', {params: {jobId: jobId}});
-    }
+  logger.debug('Dispatcher complete callback', {
+    params: { jobId: jobId, result: jobResult }
+  });
+  const method = methods.hasOwnProperty(jobResult.method)
+    ? methods[jobResult.method].complete
+    : null;
+  if (method != null) {
+    return method(jobId, jobResult.data);
+  } else {
+    logger.info('Complete method not found', { params: { jobId: jobId } });
+  }
 };
 
 /**
@@ -127,17 +136,17 @@ const complete = (jobId, jobResult) => {
  * @return {void}
  */
 const error = (jobId, jobResult) => {
-    logger.info("Dispatcher error callback called", {params: {jobId: jobId, result: jobResult}});
-    const method = methods.hasOwnProperty(jobResult.method) ? methods[jobResult.method].error : null;
-    if (method != null) {
-        return method(jobId, jobResult.data);
-    } else {
-        logger.info('error method not found', {params: {jobId: jobId}});
-    }
+  logger.info('Dispatcher error callback called', { params: { jobId: jobId, result: jobResult } });
+  const method = methods.hasOwnProperty(jobResult.method) ? methods[jobResult.method].error : null;
+  if (method != null) {
+    return method(jobId, jobResult.data);
+  } else {
+    logger.info('error method not found', { params: { jobId: jobId } });
+  }
 };
 
 module.exports = {
-    apply: apply,
-    complete: complete,
-    error: error
+  apply: apply,
+  complete: complete,
+  error: error
 };

@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -18,8 +19,8 @@ require('winston-mongodb');
 const os = require('os');
 const configs = require('../configs')();
 const { createLogger, format, transports } = require('winston');
-const { combine, timestamp, json, colorize, printf} = format;
-const maxLevelLength = 'verbose'.length;  // Used for log header alignment
+const { combine, timestamp, json, colorize, printf } = format;
+const maxLevelLength = 'verbose'.length; // Used for log header alignment
 
 // Env specific information
 const hostname = os.hostname();
@@ -29,16 +30,15 @@ const hostname = os.hostname();
  * @return {Object}     request log header object
  */
 const createRequestEntry = (req) => {
-    return req ?
-        {
-            reqId: req.id,
-            user: req.userId || '',
-            ip: req.ip,
-            method: req.method,
-            url: req.url
-        }
-        :
-        {};
+  return req
+    ? {
+      reqId: req.id,
+      user: req.userId || '',
+      ip: req.ip,
+      method: req.method,
+      url: req.url
+    }
+    : {};
 };
 
 /**
@@ -47,13 +47,12 @@ const createRequestEntry = (req) => {
  * @return {Object}     job log header object
  */
 const createJobEntry = (job) => {
-    return job? {
-        id: job.id,
-        deviceId: job.data.metadata.target,
-        org: job.data.metadata.org
-    }
-    :
-    {};
+  return job ? {
+    id: job.id,
+    deviceId: job.data.metadata.target,
+    org: job.data.metadata.org
+  }
+    : {};
 };
 
 /**
@@ -62,11 +61,10 @@ const createJobEntry = (job) => {
  * @return {Object}          periodic log header object
  */
 const createPeriodicEntry = (periodic) => {
-    return periodic ? {
-        task: periodic.task
-    }
-    :
-    {};
+  return periodic ? {
+    task: periodic.task
+  }
+    : {};
 };
 
 /**
@@ -74,9 +72,9 @@ const createPeriodicEntry = (periodic) => {
  * @return {Object} host log entry object
  */
 const createEnvEntry = () => {
-    return {
-        hostname: hostname
-    };
+  return {
+    hostname: hostname
+  };
 };
 
 /**
@@ -86,51 +84,51 @@ const createEnvEntry = () => {
  * @return {Object}      formatted log entry
  */
 const createLogEntry = (info) => {
-    const logEntry = {};
-    const logType = info.header.type;
+  const logEntry = {};
+  const logType = info.header.type;
 
-    // Global log fields
-    logEntry.level = info.level;
-    logEntry.module = info.header.module;
-    logEntry.type = logType;
-    logEntry.env = createEnvEntry();
+  // Global log fields
+  logEntry.level = info.level;
+  logEntry.module = info.header.module;
+  logEntry.type = logType;
+  logEntry.env = createEnvEntry();
 
-    // Event type additional fields
-    logEntry.req = createRequestEntry(info.ctx.req);
-    logEntry.job = createJobEntry(info.ctx.job);
-    logEntry.periodic = createPeriodicEntry(info.ctx.periodic);
+  // Event type additional fields
+  logEntry.req = createRequestEntry(info.ctx.req);
+  logEntry.job = createJobEntry(info.ctx.job);
+  logEntry.periodic = createPeriodicEntry(info.ctx.periodic);
 
-    // Event message + data
-    logEntry.event = {
-        message: info.message,
-        params: info.ctx.params ? info.ctx.params : {}
-    };
+  // Event message + data
+  logEntry.event = {
+    message: info.message,
+    params: info.ctx.params ? info.ctx.params : {}
+  };
 
-    return logEntry;
+  return logEntry;
 };
 
 const fileLogFormat = combine(
-    format(info => {
-        info = createLogEntry(info);
-        return info;
-    })(),
-    timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
-    json()
+  format(info => {
+    info = createLogEntry(info);
+    return info;
+  })(),
+  timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
+  json()
 );
 
 const consolLogFormat = combine(
-    format(info => {
-        info.level =
+  format(info => {
+    info.level =
             info.level.toUpperCase() +
-            Array(maxLevelLength - info.level.length).join(" ");
-        info.params = info.ctx.params ? `, params: ${JSON.stringify(info.ctx.params)}` : '';
-        return info;
-    })(),
-    colorize(),
-    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-    printf(
-      info => `[${info.timestamp}, ${info.level}]: ${info.message}${info.params}`
-    )
+            Array(maxLevelLength - info.level.length).join(' ');
+    info.params = info.ctx.params ? `, params: ${JSON.stringify(info.ctx.params)}` : '';
+    return info;
+  })(),
+  colorize(),
+  timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+  printf(
+    info => `[${info.timestamp}, ${info.level}]: ${info.message}${info.params}`
+  )
 );
 /**
  * A factory method for creating a logger based
@@ -139,47 +137,48 @@ const consolLogFormat = combine(
  * @return {Object}     winston logger object
  */
 const loggerFactory = (env) => {
-    if (env === 'development') {
-        const logger = createLogger({
-            level: configs.get('logLevel'),
-            transports: [
-                new transports.File({
-                    filename: configs.get('logFilePath'),
-                    format: fileLogFormat
-                }),
-                new transports.Console({ format: consolLogFormat }),
-            ],
-        });
-        return logger;
-    } else if(env === 'testing') {
-        // Use console.log() in unit tests, as winston logger
-        // throws errors when used in unit tests.
-        const testLogger = (msg, ctx={}) => { console.log(msg.message); };
-        const testLoggerObj =  {
-            error: testLogger,
-            warn: testLogger,
-            info: testLogger,
-            verbose: testLogger,
-            debug: testLogger,
-            silly: testLogger
-       };
-       return testLoggerObj;
-    }
-
-    // Default logger for any other environment
+  if (env === 'development') {
     const logger = createLogger({
-        level: configs.get('logLevel'),
-        transports: [
-            new transports.File({
-                filename: configs.get('logFilePath'),
-                format: fileLogFormat,
-                maxsize:'300000000', // Max file size is 300MB
-                maxFiles:'5',
-                tailable: true
-         }),
-        ],
+      level: configs.get('logLevel'),
+      transports: [
+        new transports.File({
+          filename: configs.get('logFilePath'),
+          format: fileLogFormat,
+          maxsize: '300000000', // Max file size is 300MB
+          maxFiles: '5',
+          tailable: true
+        }), new transports.Console({ format: consolLogFormat })
+      ]
     });
     return logger;
+  } else if (env === 'testing') {
+    // Use console.log() in unit tests, as winston logger
+    // throws errors when used in unit tests.
+    const testLogger = (msg, ctx = {}) => { console.log(msg.message); };
+    const testLoggerObj = {
+      error: testLogger,
+      warn: testLogger,
+      info: testLogger,
+      verbose: testLogger,
+      debug: testLogger,
+      silly: testLogger
+    };
+    return testLoggerObj;
+  }
+
+  // Default logger for any other environment
+  const logger = createLogger({
+    level: configs.get('logLevel'),
+    transports: [
+      new transports.File({
+        filename: configs.get('logFilePath'),
+        format: fileLogFormat,
+        maxsize: '300000000', // Max file size is 300MB
+        maxFiles: '5'
+      })
+    ]
+  });
+  return logger;
 };
 
 let logger = null;
@@ -188,67 +187,67 @@ let logger = null;
  * @return {Object} a winston logger
  */
 const getLogger = () => {
-    if (!logger) logger = loggerFactory(configs.get('environment'));
-    return logger;
+  if (!logger) logger = loggerFactory(configs.get('environment'));
+  return logger;
 };
 /**
  * @param  {{module: string, type: string}} header an object passed to the 'require' statement
  * @return {void}
  */
 const enforceHeaderFields = (header) => {
-    if(!(header.hasOwnProperty('module') &&
+  if (!(header.hasOwnProperty('module') &&
         header.hasOwnProperty('type'))) {
-        throw (new Error('Not all header fields were passed when requiring a logger'));
-    }
+    throw (new Error('Not all header fields were passed when requiring a logger'));
+  }
 };
 
 module.exports = function (header) {
-    // Enforce passing global header fields upon requiring the log.
-    // This code throws if not all mandatory fields are passed
-    enforceHeaderFields(header);
+  // Enforce passing global header fields upon requiring the log.
+  // This code throws if not all mandatory fields are passed
+  enforceHeaderFields(header);
 
-    return {
-        error: function (msg, ctx={}) {
-            getLogger().error({
-                message: msg,
-                ctx: ctx,
-                header: header
-            });
-        },
-        warn: function (msg, ctx={}) {
-            getLogger().warn({
-                message: msg,
-                ctx: ctx,
-                header: header
-            });
-        },
-        info: function (msg, ctx={}) {
-            getLogger().info({
-                message: msg,
-                ctx: ctx,
-                header: header
-            });
-        },
-        verbose: function (msg, ctx={}) {
-            getLogger().verbose({
-                message: msg,
-                ctx: ctx,
-                header: header
-            });
-        },
-        debug: function (msg, ctx={}) {
-            getLogger().debug({
-                message: msg,
-                ctx: ctx,
-                header: header
-            });
-        },
-        silly: function (msg, ctx={}) {
-            getLogger().silly({
-                message: msg,
-                ctx: ctx,
-                header: header
-            });
-        }
-    };
+  return {
+    error: function (msg, ctx = {}) {
+      getLogger().error({
+        message: msg,
+        ctx: ctx,
+        header: header
+      });
+    },
+    warn: function (msg, ctx = {}) {
+      getLogger().warn({
+        message: msg,
+        ctx: ctx,
+        header: header
+      });
+    },
+    info: function (msg, ctx = {}) {
+      getLogger().info({
+        message: msg,
+        ctx: ctx,
+        header: header
+      });
+    },
+    verbose: function (msg, ctx = {}) {
+      getLogger().verbose({
+        message: msg,
+        ctx: ctx,
+        header: header
+      });
+    },
+    debug: function (msg, ctx = {}) {
+      getLogger().debug({
+        message: msg,
+        ctx: ctx,
+        header: header
+      });
+    },
+    silly: function (msg, ctx = {}) {
+      getLogger().silly({
+        message: msg,
+        ctx: ctx,
+        header: header
+      });
+    }
+  };
 };

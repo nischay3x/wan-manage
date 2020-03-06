@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -25,17 +26,17 @@ var baseCharsHex = '0123456789abcdef';
  * @param  {number|string} base=62 Chars to use. If == 'hex', uses a hex base
  * @return {string} a random string
  */
-function getRandom(size, base=62) {
+function getRandom (size, base = 62) {
+  let baseChars;
+  if (base === 16) baseChars = baseCharsHex;
+  else baseChars = baseChars62;
 
-    if (base === 16) baseChars = baseCharsHex;
-    else baseChars = baseChars62;
-
-    len = size? Number.isInteger(size)? Math.abs(size) : 1 : 1;
-    res = "";
-    while (len--) {
-        res += baseChars.charAt(parseInt(crandom() * baseChars.length, 10));
-      }
-      return res;
+  let len = size ? Number.isInteger(size) ? Math.abs(size) : 1 : 1;
+  let res = '';
+  while (len--) {
+    res += baseChars.charAt(parseInt(crandom() * baseChars.length, 10));
+  }
+  return res;
 }
 
 module.exports = getRandom;
