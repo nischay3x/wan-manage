@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -24,20 +25,20 @@ const mongoConns = require('../mongoConns.js')();
  * A schema for the documents that stores device latest software version
  */
 const deviceSwVersionSchema = new Schema({
-    // device version
-    versions: {
-        type: Object,
-        required: true,
-    },
-    // version support end
-    versionDeadline: {
-        type: Date,
-        required: true,
-        default: Date.now
-    }
+  // device version
+  versions: {
+    type: Object,
+    required: true
+  },
+  // version support end
+  versionDeadline: {
+    type: Date,
+    required: true,
+    default: Date.now
+  }
 
-},{
-    timestamps: true
+}, {
+  timestamps: true
 });
 
 // Default exports

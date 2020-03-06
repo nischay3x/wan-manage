@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -21,16 +22,16 @@ var ExtractJwt = require('passport-jwt').ExtractJwt;
 var User = require('./models/users');
 const Accesstoken = require('./models/accesstokens');
 const { verifyToken, getToken } = require('./tokens');
-const {permissionMasks} = require('./models/membership');
-const {orgUpdateFromNull} = require('./routes/membershipUtils');
+const { permissionMasks } = require('./models/membership');
+const { orgUpdateFromNull } = require('./utils/membershipUtils');
 var configs = require('./configs')();
 const createError = require('http-errors');
 const reCaptcha = require('./utils/recaptcha')(configs.get('captchaKey'));
-const logger = require('./logging/logging')({module: module.filename, type: 'req'});
+const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 var jwt = require('jsonwebtoken');
 
 // Choose whether to add the username or ID for logging purposes
-const useUserName = configs.get('logUserName') || false; 
+const useUserName = configs.get('logUserName') || false;
 
 // Serialize username and password to the user model
 passport.serializeUser(User.serializeUser());
@@ -43,43 +44,46 @@ exports.localPassport = passport.use(new LocalStrategy(User.authenticate()));
 var opts = {};
 opts.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
 opts.secretOrKey = configs.get('userTokenSecretKey');
-exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwt_payload, done) => {
-    // check if token exists
-    if (jwt_payload.type === "app_access_token") {
-        try {
-            const token = await Accesstoken.findOne({ _id: jwt_payload.id });
-            if (!token) {
-                return done(null, false, { message: "Invalid token used" });
-            }
-        } catch (error) {
-            return done(new Error(error.message), false);
-        }
+exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done) => {
+  // check if token exists
+  if (jwtPayload.type === 'app_access_token') {
+    try {
+      const token = await Accesstoken.findOne({ _id: jwtPayload.id });
+      if (!token) {
+        return done(null, false, { message: 'Invalid token used' });
+      }
+    } catch (error) {
+      return done(new Error(error.message), false);
     }
+  }
 
-    User
-    .findOne({ _id: jwt_payload._id })
+  User
+    .findOne({ _id: jwtPayload._id })
     .populate('defaultOrg')
     .populate('defaultAccount')
     .exec((err, user) => {
-        if (err) {
-            return done(err, false);
-        } else if (user) {
-            const res = setUserPerms(user, jwt_payload);
-            return res === true ?
-                done(null, user) :
-                done(null, false, { message: "Invalid Token" });
-        } else {
-            done(null, false, { message: "Invalid Token" });
-        }
+      if (err) {
+        return done(err, false);
+      } else if (user) {
+        const res = setUserPerms(user, jwtPayload);
+        return res === true
+          ? done(null, user)
+          : done(null, false, { message: 'Invalid Token' });
+      } else {
+        done(null, false, { message: 'Invalid Token' });
+      }
     });
 }));
 
-const setUserPerms = (user, jwt_payload) => {
-    if (user.defaultAccount && user.defaultAccount._id.toString() === jwt_payload.account) {
-        user.perms = jwt_payload.perms;
-        return true;
-    }
-    return false;
+const setUserPerms = (user, jwtPayload) => {
+  if (user.defaultAccount && user.defaultAccount._id.toString() === jwtPayload.account) {
+    user.perms = jwtPayload.perms;
+    user.accessToken = (jwtPayload.type === 'app_access_token');
+    user.jwtAccount = jwtPayload.account;
+    user.jwtOrg = jwtPayload.org;
+    return true;
+  }
+  return false;
 };
 
 // const extractUserFromToken = (req) => {
@@ -93,130 +97,140 @@ const setUserPerms = (user, jwt_payload) => {
 //     }
 // };
 
-// Authentication verification for local and JWT strategy, and populate req.user 
-exports.verifyUserLocal = async function(req, res, next) {
-    // Verify captcha
-    if (! await reCaptcha.verifyReCaptcha(req.body.captcha)) return next(createError(401, "Wrong Captcha"));
+// Authentication verification for local and JWT strategy, and populate req.user
+exports.verifyUserLocal = async function (req, res, next) {
+  // Verify captcha
+  if (!await reCaptcha.verifyReCaptcha(req.body.captcha)) {
+    return next(createError(401, 'Wrong Captcha'));
+  }
 
-    // Continue with verifying password
-    passport.authenticate('local', {session: false}, async (err, user, info) => {
-        if (err || !user) {
-            const [errMsg, status, responseMsg] = err ? 
-                    [err.message, 500, 'Internal server error'] : 
-                    [info.message, 401, info.message];
-            
-            logger.warn('User authentication failed', {
-                params:{user: req.body.username, err: (err||info).name, message: errMsg}, req: req}
-            );
-            return next(createError(status, responseMsg));
-        } else {
-            if (user.state !== 'verified') {
-                return next(createError(401, "Account not verified, check your e-mail and verify"));
-            } else {
-                try {
-                    await user.populate('defaultOrg').populate('defaultAccount').execPopulate();
-                } catch (err) {
-                    logger.error('Could not get user info', {params:{user: req.body.username, message: err.message}, req: req});
-                    return next(createError(500, "Could not get user info"));
-                }
-                req.user = user;
-                // Try to update organization if null
-                await orgUpdateFromNull(req, res);                
-                // Add userId to the request for logging purposes.
-                req.userId = useUserName ? user.username : user.id;
-                return next();
-            }
-        }
-    }) (req, res, next);
-};
+  // Continue with verifying password
+  passport.authenticate('local', { session: false }, async (err, user, info) => {
+    if (err || !user) {
+      const [errMsg, status, responseMsg] = err
+        ? [err.message, 500, 'Internal server error']
+        : [info.message, 401, info.message];
 
-exports.verifyUserJWT = function(req, res, next) {
-    // Allow options to pass through without verification for preflight options requests
-    if (req.method === 'OPTIONS') {
-        logger.debug('verifyUserJWT: OPTIONS request');
-        return next();
-    // Check if an API call
-    } else if (req.url.startsWith("/api")) {
-        passport.authenticate('jwt', {session: false}, async (err, user, info) => {
-            if (err || !user) {
-                // If the JWT token has expired, but the request
-                // contains a valid refresh token, accept the request
-                // and attach a new token to the response.
-                // TBD: Maintain refresh tokens in database and add
-                // check also if the refresh token hasn't been revoked.
-                if (info && info.name === 'TokenExpiredError' &&
-                    req.headers['refresh-token']) {
-                    try {
-                        const refreshToken = req.headers['refresh-token'];
-                        await verifyToken(refreshToken);
-                        const decodedToken = jwt.decode(refreshToken);
-                        const userDetails = await User
-                            .findOne({_id: decodedToken._id})
-                            .populate('defaultOrg')
-                            .populate('defaultAccount');
-
-                        // Don't return a token if user was deleted
-                        // since the refresh token has been issued.
-                        if (!userDetails) return next(createError(401));
-
-                        // Attach the token to the headers and let
-                        // the request continue to the next middleware.
-                        req.user = userDetails;
-                        const token = await getToken(req);
-                        res.setHeader('Refresh-JWT', token);
-
-                        // Manually set the user details and permissions
-                        // since passport's JWT strategy callback will not
-                        // be called.
-                        const jwtPayload = jwt.decode(token);
-                        setUserPerms(userDetails, jwtPayload);
-                        user = userDetails;
-                    } catch(err) {
-                        if (req.header('Origin') !== undefined) {
-                            res.setHeader('Access-Control-Allow-Origin', req.header('Origin'));
-                        }
-                        if (err.name === 'TokenExpiredError') {
-                            logger.info('User refresh token expired', {params: {err: err.message}, req: req});
-                            return next(createError(401, 'session expired'));
-                        }
-                        logger.warn('User token refresh failed', {params: {err: err.message}, req: req});
-                        return err.name === 'MongoError' ?
-                            next(createError(500)) :
-                            next(createError(401));
-                    }
-                } else {
-                    if (req.header('Origin') !== undefined) {
-                        res.setHeader('Access-Control-Allow-Origin', req.header('Origin'));
-                    }
-                    const [errMsg, status, responseMsg] = err ?
-                        [err.message, 500, 'Internal server error'] :
-                        [info.message, 401, info.message];
-
-                        logger.warn('JWT verification failed', {params: {err: errMsg}, req: req});
-                        return next(createError(status, responseMsg));
-                    }
-            }
-            // Set refresh JWT to empty if a new token was not generated,
-            // update later if necessary. If not set Firefox bug uses garbage value.
-            if(!res.getHeaders()['refresh-jwt']) res.setHeader('Refresh-JWT', '');
-            req.user = user;
-            // Try to update organization if null
-            await orgUpdateFromNull(req, res);
-            // Add userId to the request for logging purposes.
-            req.userId = useUserName ? user.username : user.id;
-
-            return next();
-        }) (req, res, next);
+      logger.warn('User authentication failed', {
+        params: {
+          user: req.body.username,
+          err: (err || info).name,
+          message: errMsg
+        },
+        req: req
+      });
+      return next(createError(status, responseMsg));
     } else {
-        // For non API calls, continue
+      if (user.state !== 'verified') {
+        return next(createError(401, 'Account not verified, check your e-mail and verify'));
+      } else {
+        try {
+          await user.populate('defaultOrg').populate('defaultAccount').execPopulate();
+        } catch (err) {
+          logger.error('Could not get user info', {
+            params: { user: req.body.username, message: err.message },
+            req: req
+          });
+          return next(createError(500, 'Could not get user info'));
+        }
+        req.user = user;
+        // Try to update organization if null
+        await orgUpdateFromNull(req, res);
+        // Add userId to the request for logging purposes.
+        req.userId = useUserName ? user.username : user.id;
         return next();
+      }
     }
+  })(req, res, next);
 };
 
-exports.verifyAdmin = function(req, res, next) {
-    // Allow access to admin users only
-    return !req.user.admin ?
-        next(createError(403, 'not authorized')) : next();
+exports.verifyUserJWT = function (req, res, next) {
+  // Allow options to pass through without verification for preflight options requests
+  if (req.method === 'OPTIONS') {
+    logger.debug('verifyUserJWT: OPTIONS request');
+    return next();
+    // Check if an API call
+  } else if (req.url.startsWith('/api')) {
+    passport.authenticate('jwt', { session: false }, async (err, user, info) => {
+      if (err || !user) {
+        // If the JWT token has expired, but the request
+        // contains a valid refresh token, accept the request
+        // and attach a new token to the response.
+        // TBD: Maintain refresh tokens in database and add
+        // check also if the refresh token hasn't been revoked.
+        if (info && info.name === 'TokenExpiredError' &&
+                    req.headers['refresh-token']) {
+          try {
+            const refreshToken = req.headers['refresh-token'];
+            await verifyToken(refreshToken);
+            const decodedToken = jwt.decode(refreshToken);
+            const userDetails = await User
+              .findOne({ _id: decodedToken._id })
+              .populate('defaultOrg')
+              .populate('defaultAccount');
+
+            // Don't return a token if user was deleted
+            // since the refresh token has been issued.
+            if (!userDetails) return next(createError(401));
+
+            // Attach the token to the headers and let
+            // the request continue to the next middleware.
+            req.user = userDetails;
+            const token = await getToken(req);
+            res.setHeader('Refresh-JWT', token);
+
+            // Manually set the user details and permissions
+            // since passport's JWT strategy callback will not
+            // be called.
+            const jwtPayload = jwt.decode(token);
+            setUserPerms(userDetails, jwtPayload);
+            user = userDetails;
+          } catch (err) {
+            if (req.header('Origin') !== undefined) {
+              res.setHeader('Access-Control-Allow-Origin', req.header('Origin'));
+            }
+            if (err.name === 'TokenExpiredError') {
+              logger.info('User refresh token expired', { params: { err: err.message }, req: req });
+              return next(createError(401, 'session expired'));
+            }
+            logger.warn('User token refresh failed', { params: { err: err.message }, req: req });
+            return err.name === 'MongoError'
+              ? next(createError(500))
+              : next(createError(401));
+          }
+        } else {
+          if (req.header('Origin') !== undefined) {
+            res.setHeader('Access-Control-Allow-Origin', req.header('Origin'));
+          }
+          const [errMsg, status, responseMsg] = err
+            ? [err.message, 500, 'Internal server error']
+            : [info.message, 401, info.message];
+
+          logger.warn('JWT verification failed', { params: { err: errMsg }, req: req });
+          return next(createError(status, responseMsg));
+        }
+      }
+      // Set refresh JWT to empty if a new token was not generated,
+      // update later if necessary. If not set Firefox bug uses garbage value.
+      if (!res.getHeaders()['refresh-jwt']) res.setHeader('Refresh-JWT', '');
+      req.user = user;
+      // Try to update organization if null
+      await orgUpdateFromNull(req, res);
+      // Add userId to the request for logging purposes.
+      req.userId = useUserName ? user.username : user.id;
+
+      return next();
+    })(req, res, next);
+  } else {
+    // For non API calls, continue
+    return next();
+  }
+};
+
+exports.verifyAdmin = function (req, res, next) {
+  // Allow access to admin users only
+  return !req.user.admin
+    ? next(createError(403, 'not authorized')) : next();
 };
 
 /**
@@ -226,14 +240,27 @@ exports.verifyAdmin = function(req, res, next) {
  * Return middleware to check permissions for that type
  */
 exports.verifyPermission = function (accessType, restCommand) {
-    return function(req, res, next) {
-        if (req.user.perms[accessType] & permissionMasks[restCommand]) return next();
-        next(createError(403, "You don't have permission to perform this operation"));
-    }
+  return function (req, res, next) {
+    if (req.user.perms[accessType] & permissionMasks[restCommand]) return next();
+    next(createError(403, "You don't have permission to perform this operation"));
+  };
+};
+
+exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
+  const accessType = serviceName.replace('Service', '').toLowerCase();
+  let restCommand = method.toLowerCase();
+
+  // below is a hotfix for membership permissions
+  if (restCommand === 'delete') {
+    restCommand = 'del';
+  }
+
+  // Override permission check for certain APIs
+  if (openapi.schema.operationId === 'accountsSelectPOST') return true;
+
+  return (user.perms[accessType] & permissionMasks[restCommand]);
 };
 
 exports.validatePassword = function (password) {
-    return (password !== null && password !== undefined && password.length >=8);
-}
-
-
+  return (password !== null && password !== undefined && password.length >= 8);
+};

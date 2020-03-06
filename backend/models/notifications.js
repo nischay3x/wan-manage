@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -22,61 +23,61 @@ const mongoConns = require('../mongoConns.js')();
  * Notifications Database Schema
  */
 const notificationsSchema = new Schema({
-    // organization
-    org: {
-        type: Schema.Types.ObjectId,
-        ref: 'organizations',
-        required: true
-    },
-    // account
-    account: {
-        type: Schema.Types.ObjectId,
-        ref: 'accounts',
-        required: true
-    },
-    // title
-    title: {
-        type: String,
-        required: true,
-    },
-    // timestamp
-    time: {
-        type: Date,
-        required: true,
-    },
-    // device
-    device: {
-        type: Schema.Types.ObjectId,
-        ref: 'devices',
-        required: true,
-    },
-    // machineId (device id)
-    machineId: {
-        type: String,
-        required: true,
-    },
-    // additional details, description
-    details: {
-        type: String,
-        required: true,
-    },
-    // notification status
-    status: {
-        type: String,
-        required: true,
-        default: "unread"
-    }
-},{
-    timestamps: true
+  // organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true
+  },
+  // account
+  account: {
+    type: Schema.Types.ObjectId,
+    ref: 'accounts',
+    required: true
+  },
+  // title
+  title: {
+    type: String,
+    required: true
+  },
+  // timestamp
+  time: {
+    type: Date,
+    required: true
+  },
+  // device
+  device: {
+    type: Schema.Types.ObjectId,
+    ref: 'devices',
+    required: true
+  },
+  // machineId (device id)
+  machineId: {
+    type: String,
+    required: true
+  },
+  // additional details, description
+  details: {
+    type: String,
+    required: true
+  },
+  // notification status
+  status: {
+    type: String,
+    required: true,
+    default: 'unread'
+  }
+}, {
+  timestamps: true
 });
 
 // Remove read notifications created more than a week ago
 notificationsSchema.index(
-    { createdAt: 1 },
-    {
-        expireAfterSeconds: 604800,
-        partialFilterExpression: { status: "read" }
-    }
+  { createdAt: 1 },
+  {
+    expireAfterSeconds: 604800,
+    partialFilterExpression: { status: 'read' }
+  }
 );
 
 // Default exports

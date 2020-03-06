@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -16,46 +17,51 @@
 
 const configs = require('../configs')();
 const periodic = require('./periodic')();
-const deviceQueues = require('../utils/deviceQueue')(configs.get('kuePrefix'),configs.get('redisUrl'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 
 /***
  * This class runs once a day and to checks
  * device jobs and delete more than a week old jobs
  ***/
- class DeviceQueues {
-    /**
+class DeviceQueues {
+  /**
     * Creates a DeviceQueues instance
     */
-    constructor() {
-        this.start = this.start.bind(this);
-        this.periodicCheckJobs = this.periodicCheckJobs.bind(this);
-    }
-    /**
+  constructor () {
+    this.start = this.start.bind(this);
+    this.periodicCheckJobs = this.periodicCheckJobs.bind(this);
+  }
+
+  /**
      * Starts the check_deviceJobs periodic task
      * @return {void}
      */
-    start() {
-        periodic.registerTask('check_deviceJobs', this.periodicCheckJobs, 86400000); // run once a day
-        periodic.startTask('check_deviceJobs');
-    }
-    /**
+  start () {
+    periodic.registerTask('check_deviceJobs', this.periodicCheckJobs, 86400000); // run once a day
+    periodic.startTask('check_deviceJobs');
+  }
+
+  /**
      * Removes completed/failed/inactive jobs that
      * are more than a week old
      * @return {void}
      */
-    periodicCheckJobs() {
-        // Delete 7 days old jobs
-        deviceQueues.removeJobs('complete', 604800000);
-        deviceQueues.removeJobs('failed', 604800000);
-        deviceQueues.removeJobs('inactive', 604800000);
-    }
+  periodicCheckJobs () {
+    // Delete 7 days old jobs
+    deviceQueues.removeJobs('complete', 604800000);
+    deviceQueues.removeJobs('failed', 604800000);
+    deviceQueues.removeJobs('inactive', 604800000);
+  }
 }
 
 var checkjobs = null;
 module.exports = function () {
-    if (checkjobs) return checkjobs;
-    else {
-        checkjobs = new DeviceQueues();
-        return checkjobs;
-    }
+  if (checkjobs) return checkjobs;
+  else {
+    checkjobs = new DeviceQueues();
+    return checkjobs;
+  }
 };

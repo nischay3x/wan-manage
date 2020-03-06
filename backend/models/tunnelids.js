@@ -1,4 +1,5 @@
-// flexiWAN SD-WAN software - flexiEdge, flexiManage. For more information go to https://flexiwan.com
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
@@ -14,7 +15,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const validators = require('./validators');
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
@@ -22,20 +22,20 @@ const mongoConns = require('../mongoConns.js')();
 // This table holds unique ids per organization
 // This number is translsated into the IP address of a device
 const tunnelIDSchema = new Schema({
-    // Organization
-    org: {
-        type: Schema.Types.ObjectId,
-        ref: 'organizations',
-        required: true,
-        unique: true
-    },
-    // Next available ID per org
-    nextAvailID: {
-        type: Number,
-        required: [true, "Next available number must be set"]
-    }
-},{
-    timestamps: true
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true,
+    unique: true
+  },
+  // Next available ID per org
+  nextAvailID: {
+    type: Number,
+    required: [true, 'Next available number must be set']
+  }
+}, {
+  timestamps: true
 });
 
 // Default exports
