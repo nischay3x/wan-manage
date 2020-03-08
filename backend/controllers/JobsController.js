@@ -33,6 +33,10 @@ class JobsController {
   async jobsIdDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.jobsIdDELETE);
   }
+
+  async jobsIdGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.jobsIdGET);
+  }
 }
 
 module.exports = JobsController;

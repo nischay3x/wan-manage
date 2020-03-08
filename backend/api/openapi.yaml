@@ -688,8 +688,20 @@ paths:
             schema:
               $ref: '#/components/schemas/DeviceCommand'
       responses:
-        "204":
-          description: No Content
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Job IDs Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
         "401":
           content:
             application/json:
@@ -1951,8 +1963,20 @@ paths:
             schema:
               $ref: '#/components/schemas/DeviceCommand'
       responses:
-        "204":
-          description: No Content
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
         "401":
           content:
             application/json:
@@ -2136,6 +2160,70 @@ paths:
       x-openapi-router-controller: JobsController
       x-openapi-router-service: JobsService
   /jobs/{id}:
+    get:
+      operationId: jobsIdGET
+      parameters:
+      - description: Numeric ID of the Job to get
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get Job by ID
+      tags:
+      - Jobs
+      x-swagger-router-controller: Jobs
+      x-openapi-router-controller: JobsController
+      x-openapi-router-service: JobsService
     delete:
       operationId: jobsIdDELETE
       parameters:
@@ -3643,6 +3731,12 @@ components:
         account:
           type: string
       type: object
+    ApplyJobsResponse:
+      properties:
+        ids:
+          items:
+            type: integer
+          type: array
     JobsDeleteRequest:
       properties:
         ids:
@@ -4148,15 +4242,6 @@ components:
       - connected
       - disconnected
       type: string
-    DeviceStaticRouteRequest:
-      properties:
-        destination:
-          type: string
-        gateway:
-          type: string
-        ifname:
-          type: string
-      type: object
     DeviceRouteInformation:
       example:
         osRoutes:
@@ -4215,24 +4300,6 @@ components:
       properties:
         metric:
           type: integer
-      type: object
-    DeviceStaticRouteInformation:
-      example:
-        status: connected
-        ifname: eth0
-        destination: 1.1.0.0
-        gateway: 1.1.1.1
-      properties:
-        _id:
-          type: string
-        destination_network:
-          type: string
-        gateway_ip:
-          type: string
-        ifname:
-          type: string
-        status:
-          $ref: '#/components/schemas/DeviceStatus'
       type: object
     DeviceStatistics:
       example:
@@ -4353,7 +4420,7 @@ components:
       example:
         destination: destination
         _id: _id
-        interface: interface
+        ifname: interface
         gateway: gateway
       properties:
         _id:
@@ -4376,8 +4443,9 @@ components:
     StaticRoute:
       example:
         destination: destination
-        interface: interface
+        ifname: interface
         gateway: gateway
+        status: "completed"
       properties:
         _id:
           type: string
@@ -4389,9 +4457,12 @@ components:
           description: Gateway to use
           maxLength: 24
           type: string
-        interface:
+        ifname:
           description: Interface name
           maxLength: 24
+          type: string
+        status:
+          description: Route status
           type: string
       type: object
     ResetPasswordRequest:

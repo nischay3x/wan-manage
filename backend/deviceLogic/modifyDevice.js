@@ -179,8 +179,9 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
   const tasks = [{ entity: 'agent', message: 'modify-device', params: messageParams }];
   const job = await queueJob(org, user, tasks, device, removedTunnels);
-  return job;
+  return [job];
 };
+
 /**
  * Reconstructs tunnels that were removed before
  * sending a modify-device message to a device.
@@ -415,7 +416,8 @@ const apply = async (device, user, data) => {
         throw (new Error(err));
       }
       await setJobPendingInDB(device[0]._id, org, true);
-      await queueModifyDeviceJob(device[0], modifyParams, userName, org);
+      const jobs = await queueModifyDeviceJob(device[0], modifyParams, userName, org);
+      return jobs;
     }
   } catch (err) {
     logger.error('Failed to queue modify device job', {

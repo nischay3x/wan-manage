@@ -45,9 +45,10 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevices = await devices.find({ org: { $in: orgList } });
       // Apply the device command
-      await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
+      const retJobs = await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
+      const jobIds = retJobs.flat().map(job => job.id);
 
-      return Service.successResponse({}, 204);
+      return Service.successResponse({ ids: jobIds }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -71,12 +72,11 @@ class DevicesService {
         org: { $in: orgList }
       });
 
-      if (opDevice.length === 1) {
-        await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
-      } else {
-        return Service.rejectResponse('Device not found');
-      }
-      return Service.successResponse({}, 204);
+      if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
+
+      const retJobs = await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
+      const jobIds = retJobs.flat().map(job => job.id);
+      return Service.successResponse({ ids: jobIds }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -638,8 +638,8 @@ class DevicesService {
       routes = routes.map(value => {
         return {
           _id: value.id,
-          destination_network: value.destination,
-          gateway_ip: value.gateway,
+          destination: value.destination,
+          gateway: value.gateway,
           ifname: value.ifname,
           status: value.status
         };
@@ -670,7 +670,13 @@ class DevicesService {
         }
       );
 
-      const copy = Object.assign({}, route);
+      if (!device) throw new Error('Device not found');
+      const deleteRoute = device.staticroutes.filter((s) => {
+        return (s.id === route);
+      });
+
+      if (deleteRoute.length !== 1) throw new Error('Static rotue not found');
+      const copy = Object.assign({}, deleteRoute[0].toObject());
       copy.method = 'staticroutes';
       copy.id = route;
       copy.action = 'del';
@@ -708,8 +714,8 @@ class DevicesService {
 
       // eslint-disable-next-line new-cap
       const route = new staticroutes({
-        destination: staticRouteRequest.destination_network,
-        gateway: staticRouteRequest.gateway_ip,
+        destination: staticRouteRequest.destination,
+        gateway: staticRouteRequest.gateway,
         ifname: staticRouteRequest.ifname,
         status: 'waiting'
       });

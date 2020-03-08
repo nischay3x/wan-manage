@@ -145,6 +145,33 @@ class JobsService {
       );
     }
   }
+
+  /**
+   * Get Job by ID
+   *
+   * id Integer Numeric ID of the Job to get
+   * org String Organization to be filtered by (optional)
+   * returns Job
+   **/
+  static async jobsIdGET ({ id, org }, { user }) {
+    try {
+      // Generate and send the result
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      let result = {};
+      await deviceQueues.iterateJobsIdsByOrg(orgList[0].toString(),
+        [id], (job) => {
+          const parsedJob = JobsService.selectJobsParams(job);
+          result = parsedJob;
+        }
+      );
+      return Service.successResponse(result);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Service Error',
+        e.status || 500
+      );
+    }
+  }
 }
 
 module.exports = JobsService;
