@@ -4631,6 +4631,8 @@ components:
           type: string
         devices:
           type: object
+        meta:
+          type: object
     Invoice:
       properties:
         id:

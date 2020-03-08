@@ -530,7 +530,7 @@ class DevicesService {
           newDevice: updDevice
         });
       }
-      console.log('omer ' + id);
+
       return DevicesService.selectDeviceParams(updDevice);
     } catch (e) {
       if (session) session.abortTransaction();
