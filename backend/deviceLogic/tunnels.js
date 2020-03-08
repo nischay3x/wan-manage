@@ -76,40 +76,49 @@ const applyTunnelAdd = async (devices, user, data) => {
           throw new Error('Cannot create tunnels between devices with mismatching router versions');
         }
 
-        // Find device A WAN interface
-        let deviceAIntf = null;
-        deviceA.interfaces.forEach((intf) => {
-          if (intf.isAssigned === true && intf.type === 'WAN') {
-            deviceAIntf = intf;
-          }
+        // Find device A WAN interfaces
+        const deviceAIntfs = deviceA.interfaces.filter(intf => {
+          return intf.isAssigned === true && intf.type === 'WAN';
         });
 
-        // Find device B WAN interface
-        var deviceBIntf = null;
-        deviceB.interfaces.forEach((intf) => {
-          if (intf.isAssigned === true && intf.type === 'WAN') {
-            deviceBIntf = intf;
-          }
+        // Find device B WAN interfaces
+        const deviceBIntfs = deviceB.interfaces.filter(intf => {
+          return intf.isAssigned === true && intf.type === 'WAN';
         });
 
         const devicesInfo = {
-          deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name },
-          deviceB: { hostname: deviceB.hostname, interface: deviceBIntf.name }
+          deviceA: { hostname: deviceA.hostname, interface: deviceAIntfs.name },
+          deviceB: { hostname: deviceB.hostname, interface: deviceBIntfs.name }
         };
         logger.debug('Connecting tunnel between devices', { params: { devicesInfo } });
 
         // Create a tunnel from device A to device B WAN interface
-        // TBD: add tunnels through multiple WAN interfaces
+        // Create a tunnel between each WAN interface on device A to
+        // each of the WAN interfaces on device B. This code should be
+        // modified when adding Path labels, to create tunnels
+        // between each WAN interface on device A and all of the WAN
+        // interfaces on device B with the same path label
         // TBD: key exchange should be dynamic
-        if (deviceAIntf && deviceBIntf) {
-          logger.info('Connecting tunnel between (' + deviceA.hostname + ',' + deviceAIntf.name +
-                        ') and (' + deviceB.hostname + ',' + deviceBIntf.name + ')');
-
-          // Check if tunnel exist, if already exist skip the configuration
-          // Use a copy of devices objects as promise runs later
-          dbTasks.push(getTunnelPromise(userName, org,
-            { ...deviceA.toObject() }, { ...deviceB.toObject() },
-            { ...deviceAIntf.toObject() }, { ...deviceBIntf.toObject() }));
+        if (deviceAIntfs.length && deviceBIntfs.length) {
+          deviceAIntfs.forEach(wanIfcA => {
+            deviceBIntfs.forEach(wanIfcB => {
+              logger.debug('Adding tunnel between devices', {
+                params: {
+                  deviceA: deviceA.hostname,
+                  deviceB: deviceB.hostname,
+                  interfaces: {
+                    interfaceA: wanIfcA.name,
+                    interfaceB: wanIfcB.name
+                  }
+                }
+              });
+              // If a tunnel already exists, skip the configuration
+              // Use a copy of devices objects as promise runs later
+              dbTasks.push(getTunnelPromise(userName, org,
+                { ...deviceA.toObject() }, { ...deviceB.toObject() },
+                { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
+            });
+          });
         } else {
           logger.info('Failed to connect tunnel between devices', {
             params: {

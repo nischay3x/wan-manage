@@ -86,36 +86,16 @@ describe('validateDevice', () => {
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an invalid device if it has more than two assigned interfaces', () => {
-    device.interfaces.push({
-      name: 'eth3',
-      pciaddr: '00:02.01',
-      driver: 'igb-1000',
-      MAC: 'ab:45:90:ed:89:17',
-      IPv4: '172.23.100.1',
-      IPv4Mask: '24',
-      IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7346',
-      IPv6Mask: '64',
-      PublicIP: '172.23.100.1',
-      isAssigned: true,
-      routing: 'None',
-      type: 'WAN'
-    });
-    failureObject.err = 'There should be exactly one LAN and one WAN interfaces';
-    const result = validateDevice(device);
-    expect(result).toMatchObject(failureObject);
-  });
-
   it('Should be an invalid device if it has zero assigned LAN interfaces', () => {
     device.interfaces[0].type = 'Not-LAN';
-    failureObject.err = 'There should be exactly one LAN and one WAN interfaces';
+    failureObject.err = 'There should be at least one LAN and one WAN interfaces';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid device if it has zero assigned WAN interfaces', () => {
     device.interfaces[1].type = 'Not-WAN';
-    failureObject.err = 'There should be exactly one LAN and one WAN interfaces';
+    failureObject.err = 'There should be at least one LAN and one WAN interfaces';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
