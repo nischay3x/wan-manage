@@ -1,5 +1,6 @@
 const Service = require('./Service');
 const PathLabels = require('../models/pathlabels');
+const { devices } = require('../models/devices');
 
 class PathLabelsService {
   /**
@@ -34,6 +35,14 @@ class PathLabelsService {
    **/
   static async pathlabelsIdDELETE ({ id }, { user }) {
     try {
+      // Don't allow to delete a label which is being used
+      // Improve this code when adding tunnels/policies.
+      const count = await devices.countDocuments({ 'interfaces.pathlabels': id });
+      if (count > 0) {
+        const message = 'Cannot delete a path label that is being used';
+        return Service.rejectResponse(message, 400);
+      }
+
       const { deletedCount } = await PathLabels.deleteOne({
         org: user.defaultOrg._id.toString(),
         _id: id

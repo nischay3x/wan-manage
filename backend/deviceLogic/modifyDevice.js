@@ -41,7 +41,11 @@ const isEqual = require('lodash/isEqual');
  */
 const prepareIfcParams = (interfaces) => {
   return interfaces.map(ifc => {
-    return omit(ifc, ['_id', 'PublicIP', 'isAssigned']);
+    const newIfc = omit(ifc, ['_id', 'PublicIP', 'isAssigned', 'pathlabels']);
+    newIfc.multilink = {
+      labels: ifc.pathlabels
+    };
+    return newIfc;
   });
 };
 /**
@@ -292,7 +296,6 @@ const apply = async (device, user, data) => {
   // Compare the array of interfaces, and return
   // an array of the interfaces that have changed
   // First, extract only the relevant interface fields
-
   const [origInterfaces, origIsAssigned] = [
     device[0].interfaces.map(ifc => {
       return ({
@@ -303,7 +306,8 @@ const apply = async (device, user, data) => {
         PublicIP: ifc.PublicIP,
         routing: ifc.routing,
         type: ifc.type,
-        isAssigned: ifc.isAssigned
+        isAssigned: ifc.isAssigned,
+        pathlabels: ifc.pathlabels
       });
     }),
     device[0].interfaces.map(ifc => {
@@ -325,7 +329,8 @@ const apply = async (device, user, data) => {
         PublicIP: ifc.PublicIP,
         routing: ifc.routing,
         type: ifc.type,
-        isAssigned: ifc.isAssigned
+        isAssigned: ifc.isAssigned,
+        pathlabels: ifc.pathlabels
       });
     }),
 

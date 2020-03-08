@@ -162,7 +162,7 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.find({ org: { $in: orgList } })
-        .populate('interfaces.pathlabels');
+        .populate('interfaces.pathlabels', '_id name description color');
 
       const devicesMap = result.map(item => {
         return DevicesService.selectDeviceParams(item);
@@ -268,7 +268,7 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
-        .populate('interfaces.pathlabels');
+        .populate('interfaces.pathlabels', '_id name description color');
       const device = DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);

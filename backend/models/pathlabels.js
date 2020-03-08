@@ -16,8 +16,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
+const Schema = mongoose.Schema;
 const {
   validateLabelName,
   validateDescription,
@@ -27,6 +27,11 @@ const {
 /**
  * Path labels Schema
  */
+
+// Define a getter on object ID that
+// converts it to a string
+Schema.ObjectId.get(v => v ? v.toString() : v);
+
 const pathLabelSchema = new Schema({
   org: {
     type: Schema.Types.ObjectId,
