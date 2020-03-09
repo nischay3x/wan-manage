@@ -688,7 +688,7 @@ paths:
             schema:
               $ref: '#/components/schemas/DeviceCommand'
       responses:
-        "201":
+        "202":
           content:
             application/json:
               schema:
@@ -1963,7 +1963,7 @@ paths:
             schema:
               $ref: '#/components/schemas/DeviceCommand'
       responses:
-        "201":
+        "202":
           content:
             application/json:
               schema:
@@ -2014,6 +2014,21 @@ paths:
     get:
       operationId: jobsGET
       parameters:
+      - description: A filter on the job status
+        explode: true
+        in: query
+        name: status
+        required: true
+        schema:
+          enum:
+          - all
+          - complete
+          - failed
+          - inactive
+          - delayed
+          - active
+          type: string
+        style: form
       - description: The number of items to skip before starting to collect the result
           set
         explode: true
@@ -2031,6 +2046,13 @@ paths:
         schema:
           type: integer
         style: form
+      - description: A filter on specific job ids (comma separated)
+        explode: true
+        in: query
+        name: ids
+        required: false
+        schema:
+          type: string
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -2038,21 +2060,6 @@ paths:
         required: false
         schema:
           type: string
-      - description: A filter on the job status
-        explode: true
-        in: query
-        name: status
-        required: true
-        schema:
-          enum:
-          - all
-          - complete
-          - failed
-          - inactive
-          - delayed
-          - active
-          type: string
-        style: form
       responses:
         "200":
           content:
@@ -2063,6 +2070,8 @@ paths:
                 type: array
                 x-content-type: application/json
           description: Successful operation
+        "400":
+          description: Bad Request
         "401":
           content:
             application/json:
@@ -3308,6 +3317,57 @@ paths:
       x-openapi-router-controller: OrganizationsController
       x-openapi-router-service: OrganizationsService
   /organizations/{id}:
+    get:
+      operationId: organizationsIdGET
+      parameters:
+      - description: Numeric ID of the Organization to get
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get Organization by ID
+      tags:
+      - Organizations
+      x-swagger-router-controller: Organizations
+      x-openapi-router-controller: OrganizationsController
+      x-openapi-router-service: OrganizationsService
     delete:
       operationId: organizationsIdDELETE
       parameters:
@@ -3703,14 +3763,14 @@ components:
     OrganizationRequest:
       example:
         name: name
-        account: account
         group: group
+      required:
+        - name
+        - group
       properties:
         name:
           type: string
         group:
-          type: string
-        account:
           type: string
       type: object
     Organization:

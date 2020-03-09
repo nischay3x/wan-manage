@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
+const configs = require('../configs')();
 const { devices, staticroutes } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const connections = require('../websocket/Connections')();
@@ -39,7 +40,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ org, deviceCommand }, { user }) {
+  static async devicesApplyPOST ({ org, deviceCommand }, { user }, response) {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -47,8 +48,10 @@ class DevicesService {
       // Apply the device command
       const retJobs = await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
       const jobIds = retJobs.flat().map(job => job.id);
-
-      return Service.successResponse({ ids: jobIds }, 201);
+      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        jobIds.join('%2C')}&org=${orgList[0]}`;
+      response.setHeader('Location', location);
+      return Service.successResponse({ ids: jobIds }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -64,7 +67,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }) {
+  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevice = await devices.find({
@@ -76,7 +79,10 @@ class DevicesService {
 
       const retJobs = await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
       const jobIds = retJobs.flat().map(job => job.id);
-      return Service.successResponse({ ids: jobIds }, 201);
+      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        jobIds.join('%2C')}&org=${orgList[0]}`;
+      response.setHeader('Location', location);
+      return Service.successResponse({ ids: jobIds }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
