@@ -205,15 +205,15 @@ class DeviceQueues {
       if (init) {
         job
           .on('complete', (res) => {
-            resolve(res);
+            return resolve(res);
           })
           .on('failed', (failErr) => {
-            reject(new Error(failErr));
+            return reject(new Error(failErr));
           });
       }
       job.save((err) => {
-        if (err) reject(new Error(err));
-        else if (!init) resolve(job);
+        if (err) return reject(new Error(err));
+        else if (!init) return resolve(job);
       });
     });
   }
@@ -228,29 +228,30 @@ class DeviceQueues {
       { params: { deviceId: deviceId, queue: this.deviceQueues[deviceId] } });
     return new Promise((resolve, reject) => {
       if (!this.deviceQueues[deviceId]) {
-        reject(new Error('DeviceQueues: Trying to pause an undefined queue, deviceID=' + deviceId));
-        return;
+        return reject(
+          new Error('DeviceQueues: Trying to pause an undefined queue, deviceID=' + deviceId)
+        );
       }
       if (this.deviceQueues[deviceId].paused) {
-        resolve(); // Already paused
         logger.info('Queue already paused, succeeded',
           { params: { deviceId: deviceId, queue: this.deviceQueues[deviceId] } });
-        return;
+        return resolve(); // Already paused
       }
       if (!this.deviceQueues[deviceId].context) {
-        reject(new Error('DeviceQueues: Pausing a queue with no context, deviceID=' + deviceId));
-        return;
+        return reject(
+          new Error('DeviceQueues: Pausing a queue with no context, deviceID=' + deviceId)
+        );
       }
       // Pause immediatly
       this.deviceQueues[deviceId].context.pause(0, (err) => {
         if (err) {
-          reject(err);
+          return reject(err);
         }
       });
-      resolve();
       logger.info('Queue paused, succeeded',
         { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
       this.deviceQueues[deviceId].paused = true;
+      return resolve();
     });
   }
 
@@ -284,11 +285,12 @@ class DeviceQueues {
     return new Promise((resolve, reject) => {
       kue.Job.rangeByState(state, 0, -1, 'asc', async function (err, jobs) {
         if (err) {
-          reject(new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err));
-          return;
+          return reject(
+            new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
+          );
         }
         jobs.forEach((job) => callback(job));
-        resolve();
+        return resolve();
       });
     });
   }
@@ -314,17 +316,34 @@ class DeviceQueues {
       try {
         kue.Job.rangeByState(state, 0, -1, 'asc', function (err, jobs) {
           if (err) {
-            reject(new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err));
-            return;
+            return reject(
+              new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
+            );
           }
           jobs.forEach(async (job) => {
             if (job.data.metadata.org === org) callback(job);
           });
-          resolve();
+          return resolve();
         });
       } catch (err) {
-        reject(err);
+        return reject(err);
       }
+    });
+  }
+
+  /**
+   * Get one job by ID
+   * @param  {integer}    id Job ID
+   * @param  {Callback}   callback callback to be called per job
+   */
+  getOneJob (id, callback) {
+    return new Promise((resolve, reject) => {
+      kue.Job.get(id, (err, job) => {
+        if (err) return reject(err);
+        const result = callback(job);
+        if (result.error) reject(new Error(result.message));
+        resolve(job);
+      });
     });
   }
 
@@ -335,24 +354,22 @@ class DeviceQueues {
      * @param  {Callback}   callback callback to be called per job
      * @return {void}
      */
-  iterateJobsIdsByOrg (org, jobIDs, callback) {
-    return new Promise((resolve, reject) => {
-      try {
-        jobIDs.forEach(async (id) => {
-          await kue.Job.get(id, async (err, job) => {
-            if (err) reject(err);
-            if (!job) reject(new Error('DeviceQueues: Iterated job not found for ID=' + id));
-            if (!job.data.metadata.org === org) {
-              reject(new Error('DeviceQueues: Iteration org not authorized, org=' + org));
-            }
-            callback(job);
-          });
-        });
-        resolve();
-      } catch (err) {
-        reject(err);
-      }
+  async iterateJobsIdsByOrg (org, jobIDs, callback) {
+    const promises = [];
+    jobIDs.forEach(async (id) => {
+      promises.push(this.getOneJob(id, (job) => {
+        if (!job) {
+          return { error: true, message: `Job ${id} not found` };
+        }
+        if (!(job.data.metadata.org === org)) {
+          return { error: true, message: 'Job not found in org' };
+        }
+        callback(job);
+        return { error: false, message: '' };
+      }));
     });
+    const results = await Promise.all(promises);
+    return results;
   }
 
   /**
@@ -384,8 +401,9 @@ class DeviceQueues {
   async getCount (state) {
     return new Promise((resolve, reject) => {
       this.queue[state + 'Count']((err, total) => {
-        if (err) reject(new Error('DeviceQueues: getCount error, state=' + state + ', err=' + err));
-        else resolve(total);
+        if (err) {
+          return reject(new Error('DeviceQueues: getCount error, state=' + state + ', err=' + err));
+        } else return resolve(total);
       });
     });
   }

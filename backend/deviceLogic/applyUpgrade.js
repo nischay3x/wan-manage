@@ -110,6 +110,8 @@ const apply = async (devicesIn, user, data) => {
   // as there's a pending upgrade task in a device's queue.
   const deviceIDs = opDevices.map(dev => { return dev._id; });
   await setQueuedUpgradeFlag(deviceIDs, org, true);
+
+  return jobResults;
 };
 
 /**

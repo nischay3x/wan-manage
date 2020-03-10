@@ -43,11 +43,11 @@ const apply = async (device, user, data) => {
     throw new Error('Command is not supported for the current agent version');
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
     const tasks = [];
-    const routeId = data.id;
+    const routeId = data._id;
 
     let message = 'add-route';
     let titlePrefix = 'Add';
-    const params = { addr: data.destination_network, via: data.gateway_ip };
+    const params = { addr: data.destination, via: data.gateway };
 
     if (data.ifname) {
       params.pci = data.ifname;
@@ -71,7 +71,7 @@ const apply = async (device, user, data) => {
       null);
 
     logger.info('Add static route job queued', { params: { job: job } });
-    return job;
+    return [job];
   }
 };
 
