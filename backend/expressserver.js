@@ -181,6 +181,7 @@ class ExpressServer {
       // this.app.use('/api/devices', require('./routes/devices'));
       // this.app.use('/api/devicestats', require('./routes/deviceStats'));
       // this.app.use('/api/jobs', require('./routes/deviceQueue'));
+      this.app.use('/api/portals', require('./routes/portals'));
     } catch (error) {
       logger.error('Error: Can\'t connect OLD routes');
     }
@@ -262,9 +263,11 @@ class ExpressServer {
         case 'EACCES':
           console.error(bind + ' requires elevated privileges');
           process.exit(1);
+          break;
         case 'EADDRINUSE':
           console.error(bind + ' is already in use');
           process.exit(1);
+          break;
         default:
           throw error;
       }
