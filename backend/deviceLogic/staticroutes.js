@@ -43,7 +43,7 @@ const apply = async (device, user, data) => {
     throw new Error('Command is not supported for the current agent version');
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
     const tasks = [];
-    const routeId = data.id;
+    const routeId = data._id;
 
     let message = 'add-route';
     let titlePrefix = 'Add';

@@ -681,10 +681,10 @@ class DevicesService {
         return (s.id === route);
       });
 
-      if (deleteRoute.length !== 1) throw new Error('Static rotue not found');
+      if (deleteRoute.length !== 1) throw new Error('Static route not found');
       const copy = Object.assign({}, deleteRoute[0].toObject());
       copy.method = 'staticroutes';
-      copy.id = route;
+      copy._id = route;
       copy.action = 'del';
       await dispatcher.apply(device, copy.method, user, copy);
       return Service.successResponse(null, 204);
@@ -739,7 +739,7 @@ class DevicesService {
       const copy = Object.assign({}, staticRouteRequest);
 
       copy.method = 'staticroutes';
-      copy.id = route.id;
+      copy._id = route.id;
       await dispatcher.apply(device, copy.method, user, copy);
 
       const result = {
