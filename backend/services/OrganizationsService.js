@@ -169,7 +169,7 @@ class OrganizationsService {
       // Only allow to delete current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
       const orgList = await getAccessTokenOrgList(user, undefined, false);
-      if (orgList.includes(id)) {
+      if (!orgList.includes(id)) {
         throw new Error('Please select an organization to delete it');
       }
 
