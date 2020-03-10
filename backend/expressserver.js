@@ -259,6 +259,7 @@ class ExpressServer {
       const bind = 'Port ' + port;
 
       // handle specific listen errors with friendly messages
+      /* eslint-disable no-unreachable */
       switch (error.code) {
         case 'EACCES':
           console.error(bind + ' requires elevated privileges');
