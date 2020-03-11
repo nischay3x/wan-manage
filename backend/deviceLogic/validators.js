@@ -46,24 +46,31 @@ const validateIPv4Mask = mask => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateDevice = (device) => {
-  // Get all assigned interface. There should be exactly
+  // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
   const assignedIfs = interfaces.filter(ifc => { return ifc.isAssigned; });
-  const [wanIf, lanIf] = [
-    assignedIfs.find(ifc => { return ifc.type === 'WAN'; }),
-    assignedIfs.find(ifc => { return ifc.type === 'LAN'; })
+  const [wanIfcs, lanIfcs] = [
+    assignedIfs.filter(ifc => { return ifc.type === 'WAN'; }),
+    assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
 
-  if (assignedIfs.length !== 2 || (!wanIf || !lanIf)) {
+  if (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0)) {
     return {
       valid: false,
-      err: 'There should be exactly one LAN and one WAN interfaces'
+      err: 'There should be at least one LAN and one WAN interfaces'
     };
   }
 
-  // Check that both interfaces have valid IP addresses and masks
   for (const ifc of assignedIfs) {
+    // Assigned interfaces must be either WAN or LAN
+    if (!['WAN', 'LAN'].includes(ifc.type)) {
+      return {
+        valid: false,
+        err: `Invalid interface type for ${ifc.name}: ${ifc.type}`
+      };
+    }
+
     if (!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') {
       return {
         valid: false,
@@ -71,19 +78,31 @@ const validateDevice = (device) => {
                       ? 'IPv4 mask' : 'IP address'}`
       };
     }
+
+    // OSPF is not allowed on WAN interfaces
+    if (ifc.type === 'WAN' && ifc.routing === 'OSPF') {
+      return {
+        valid: false,
+        err: 'OSPF should not be configured on WAN interface'
+      };
+    }
   }
 
   // LAN and WAN interfaces must not be on the same subnet
   // WAN IP address and default GW IP addresses must be on the same subnet
-  const wanSubnet = `${wanIf.IPv4}/${wanIf.IPv4Mask}`;
-  const lanSubnet = `${lanIf.IPv4}/${lanIf.IPv4Mask}`;
-  // const defaultGwSubnet = `${device.defaultRoute}/32`;
+  for (const wanIfc of wanIfcs) {
+    for (const lanIfc of lanIfcs) {
+      const wanSubnet = `${wanIfc.IPv4}/${wanIfc.IPv4Mask}`;
+      const lanSubnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
+      // const defaultGwSubnet = `${device.defaultRoute}/32`;
 
-  if (cidr.overlap(wanSubnet, lanSubnet)) {
-    return {
-      valid: false,
-      err: 'WAN and LAN IP addresses have an overlap'
-    };
+      if (cidr.overlap(wanSubnet, lanSubnet)) {
+        return {
+          valid: false,
+          err: 'WAN and LAN IP addresses have an overlap'
+        };
+      }
+    }
   }
 
   /*
@@ -94,15 +113,6 @@ const validateDevice = (device) => {
         };
     }
     */
-
-  // Currently, we do not support routing on the WAN interface
-  if (wanIf.routing === 'OSPF') {
-    return {
-      valid: false,
-      err: 'OSPF should not be configured on WAN interface'
-    };
-  }
-
   return { valid: true, err: '' };
 };
 

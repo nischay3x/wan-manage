@@ -174,7 +174,8 @@ const loggerFactory = (env) => {
         filename: configs.get('logFilePath'),
         format: fileLogFormat,
         maxsize: '300000000', // Max file size is 300MB
-        maxFiles: '5'
+        maxFiles: '5',
+        tailable: true
       })
     ]
   });
