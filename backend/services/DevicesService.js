@@ -504,7 +504,7 @@ class DevicesService {
             {
               params: { device: deviceRequest, err: err }
             });
-          throw new Error('Device update failed');
+          throw new Error(err);
         }
       }
 
