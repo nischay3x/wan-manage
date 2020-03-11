@@ -3913,7 +3913,7 @@ components:
           IPv4: IPv4
           type: WAN
           MAC: MAC
-          routing: routing
+          routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
           driver: driver
@@ -3926,7 +3926,7 @@ components:
           IPv4: IPv4
           type: WAN
           MAC: MAC
-          routing: routing
+          routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
           driver: driver
@@ -4023,7 +4023,7 @@ components:
           IPv4: IPv4
           type: WAN
           MAC: MAC
-          routing: routing
+          routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
           driver: driver
@@ -4036,7 +4036,7 @@ components:
           IPv4: IPv4
           type: WAN
           MAC: MAC
-          routing: routing
+          routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
           driver: driver
@@ -4157,7 +4157,7 @@ components:
         IPv4: IPv4
         type: WAN
         MAC: MAC
-        routing: routing
+        routing: OSPF
         IPv6Mask: "64"
         isAssigned: true
         driver: driver
@@ -4183,11 +4183,15 @@ components:
         isAssigned:
           type: boolean
         routing:
+          enum:
+          - OSPF
+          - NONE
           type: string
         type:
           enum:
           - WAN
           - LAN
+          - NONE
           type: string
         IPv4Mask:
           type: string
