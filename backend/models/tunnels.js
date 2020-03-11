@@ -64,6 +64,11 @@ const tunnelSchema = new Schema({
   deviceBconf: {
     type: Boolean,
     default: false
+  },
+  // The path label assigned to the tunnel
+  pathlabel: {
+    type: Schema.Types.ObjectId,
+    ref: 'PathLabels'
   }
 }, {
   timestamps: true

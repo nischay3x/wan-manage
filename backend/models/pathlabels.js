@@ -54,6 +54,12 @@ const pathLabelSchema = new Schema({
       message: 'Path label description format is invalid'
     }
   },
+  type: {
+    type: String,
+    enum: ['DIA', 'Tunnel'],
+    default: 'DIA',
+    required: true
+  },
   color: {
     type: String,
     required: true,

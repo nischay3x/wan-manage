@@ -96,7 +96,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
 const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   const removedTunnels = [];
   const interfacesIdsSet = new Set();
-  const modifiedIfcsSet = new Set();
+  const modifiedIfcsMap = {};
   messageParams.reconnect = false;
 
   // Changes in the interfaces require reconstruction of all tunnels
@@ -115,7 +115,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
     const { interfaces } = messageParams.modify_interfaces;
     interfaces.forEach(ifc => {
       interfacesIdsSet.add(ifc._id);
-      modifiedIfcsSet.add(ifc._id);
+      modifiedIfcsMap[ifc._id] = ifc;
     });
   }
 
@@ -131,7 +131,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       .populate('deviceB');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB } = tunnel;
+      let { deviceA, deviceB, pathlabel, num } = tunnel;
 
       // Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
@@ -157,13 +157,18 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         deviceA.machineId,
         deviceB.machineId,
         deviceA._id,
-        deviceB._id
+        deviceB._id,
+        num,
+        pathlabel
       );
       // Maintain a list of all removed tunnels for adding them back
       // after the interface changes are applied on the device.
       // Add the tunnel to this list only if the interface connected
       // to this tunnel has changed any property except for 'isAssigned'
-      if (modifiedIfcsSet.has(ifc._id)) removedTunnels.push(tunnel._id);
+      // and only if the label of the tunnel is assigned to the interface
+      if (ifc._id in modifiedIfcsMap && modifiedIfcsMap[ifc._id].pathlabels.includes(pathlabel)) {
+        removedTunnels.push(tunnel._id);
+      }
     }
   }
   // Prepare and queue device modification job
@@ -200,7 +205,7 @@ const reconstructTunnels = async (removedTunnels, org, user) => {
     .populate('deviceB');
 
   for (const tunnel of tunnels) {
-    const { deviceA, deviceB } = tunnel;
+    const { deviceA, deviceB, pathlabel } = tunnel;
     const ifcA = deviceA.interfaces.find(ifc => {
       return ifc._id.toString() === tunnel.interfaceA.toString();
     });
@@ -209,7 +214,13 @@ const reconstructTunnels = async (removedTunnels, org, user) => {
     });
 
     const { agent } = deviceB.versions;
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(tunnel.num, ifcA, ifcB, agent);
+    const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
+      tunnel.num,
+      ifcA,
+      ifcB,
+      agent,
+      pathlabel
+    );
     await queueTunnel(
       true,
       // eslint-disable-next-line max-len
@@ -221,7 +232,9 @@ const reconstructTunnels = async (removedTunnels, org, user) => {
       deviceA.machineId,
       deviceB.machineId,
       deviceA._id,
-      deviceB._id
+      deviceB._id,
+      tunnel.num,
+      pathlabel
     );
   }
 };

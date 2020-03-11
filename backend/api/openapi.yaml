@@ -4840,7 +4840,8 @@ components:
         _id: id
         name: name
         description: description
-        color: color
+        color: color,
+        type: type
       properties:
         _id:
           readOnly: true
@@ -4851,6 +4852,16 @@ components:
           type: string
         color:
           type: string
+        type:
+          enum:
+          - DIA
+          - Tunnel
+          type: string
+      required:
+      - name
+      - description
+      - color
+      - type
       type: object
     PathLabelRequest:
       example:
@@ -4868,6 +4879,7 @@ components:
         - name
         - description
         - color
+        - type
       type: object
     Error:
       properties:

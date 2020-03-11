@@ -1,6 +1,7 @@
 const Service = require('./Service');
 const PathLabels = require('../models/pathlabels');
 const { devices } = require('../models/devices');
+const tunnels = require('../models/tunnels');
 
 class PathLabelsService {
   /**
@@ -15,7 +16,7 @@ class PathLabelsService {
     try {
       const pathLabels = await PathLabels.find(
         { org: user.defaultOrg._id.toString() },
-        { name: 1, description: 1, color: 1 }
+        { name: 1, description: 1, color: 1, type: 1 }
       ).skip(offset).limit(limit);
 
       return Service.successResponse(pathLabels);
@@ -36,8 +37,11 @@ class PathLabelsService {
   static async pathlabelsIdDELETE ({ id }, { user }) {
     try {
       // Don't allow to delete a label which is being used
-      // Improve this code when adding tunnels/policies.
-      const count = await devices.countDocuments({ 'interfaces.pathlabels': id });
+      // Improve this code when adding policies.
+      // Error message should be per use case
+      let count = await devices.countDocuments({ 'interfaces.pathlabels': id });
+      count += await tunnels.countDocuments({ isActive: true, pathlabel: id });
+
       if (count > 0) {
         const message = 'Cannot delete a path label that is being used';
         return Service.rejectResponse(message, 400);
@@ -78,7 +82,8 @@ class PathLabelsService {
         {
           name: 1,
           description: 1,
-          color: 1
+          color: 1,
+          type: 1
         }
       );
 
@@ -104,7 +109,7 @@ class PathLabelsService {
    **/
   static async pathlabelsIdPUT ({ id, pathLabelRequest }, { user }) {
     try {
-      const { name, description, color } = pathLabelRequest;
+      const { name, description, color, type } = pathLabelRequest;
       const pathLabel = await PathLabels.findOneAndUpdate(
         {
           org: user.defaultOrg._id.toString(),
@@ -114,10 +119,11 @@ class PathLabelsService {
           org: user.defaultOrg._id.toString(),
           name: name,
           description: description,
-          color: color
+          color: color,
+          type: type
         },
         {
-          fields: { name: 1, description: 1, color: 1 },
+          fields: { name: 1, description: 1, color: 1, type: 1 },
           new: true
         }
       );
@@ -143,19 +149,21 @@ class PathLabelsService {
    **/
   static async pathlabelsPOST ({ pathLabelRequest }, { user }) {
     try {
-      const { name, description, color } = pathLabelRequest;
+      const { name, description, color, type } = pathLabelRequest;
       const result = await PathLabels.create({
         org: user.defaultOrg._id.toString(),
         name: name,
         description: description,
-        color: color
+        color: color,
+        type: type
       });
 
-      const pathLabel = (({ name, description, color, _id }) => ({
+      const pathLabel = (({ name, description, color, _id, type }) => ({
         name,
         description,
         color,
-        _id
+        _id,
+        type
       }))(result);
       return Service.successResponse(pathLabel, 201);
     } catch (e) {

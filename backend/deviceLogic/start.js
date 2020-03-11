@@ -81,6 +81,9 @@ const apply = async (device, user, data) => {
         ifParams.pci = intf.pciaddr;
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         ifParams.type = intf.type;
+        ifParams.multilink = {
+          labels: intf.pathlabels
+        };
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
         // Only if WAN defined and no other routing defined
         if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
