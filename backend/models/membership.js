@@ -96,7 +96,8 @@ const preDefinedPermissions = {
     members: setPermission(1, 1, 1, 1),
     tunnels: setPermission(1, 1, 1, 1),
     accesstokens: setPermission(0, 0, 0, 0),
-    notifications: setPermission(1, 1, 1, 1)
+    notifications: setPermission(1, 1, 1, 1),
+    pathlabels: setPermission(1, 1, 1, 1)
   },
   account_viewer: {
     jobs: setPermission(1, 0, 0, 0),
