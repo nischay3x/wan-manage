@@ -72,5 +72,5 @@ const pathLabelSchema = new Schema({
   timestamps: true
 });
 
-// default exports
+pathLabelSchema.index({ org: 1, name: 1 }, { unique: true });
 module.exports = mongoConns.getMainDB().model('PathLabels', pathLabelSchema);

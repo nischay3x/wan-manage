@@ -3669,6 +3669,14 @@ paths:
       x-openapi-router-service: PathLabelsService
     post:
       operationId: pathlabelsPOST
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -3792,6 +3800,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -3862,6 +3877,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "204":
           description: Successfull operation

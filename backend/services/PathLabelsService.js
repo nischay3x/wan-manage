@@ -2,6 +2,7 @@ const Service = require('./Service');
 const PathLabels = require('../models/pathlabels');
 const { devices } = require('../models/devices');
 const tunnels = require('../models/tunnels');
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class PathLabelsService {
   /**
@@ -14,8 +15,9 @@ class PathLabelsService {
    **/
   static async pathlabelsGET ({ offset, limit, org }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org);
       const pathLabels = await PathLabels.find(
-        { org: user.defaultOrg._id.toString() },
+        { org: { $in: orgList } },
         { name: 1, description: 1, color: 1, type: 1 }
       ).skip(offset).limit(limit);
 
@@ -34,7 +36,7 @@ class PathLabelsService {
    * id String Numeric ID of the Path label to delete
    * no response value expected for this operation
    **/
-  static async pathlabelsIdDELETE ({ id }, { user }) {
+  static async pathlabelsIdDELETE ({ id, org }, { user }) {
     try {
       // Don't allow to delete a label which is being used
       // Improve this code when adding policies.
@@ -47,8 +49,9 @@ class PathLabelsService {
         return Service.rejectResponse(message, 400);
       }
 
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const { deletedCount } = await PathLabels.deleteOne({
-        org: user.defaultOrg._id.toString(),
+        org: { $in: orgList },
         _id: id
       });
 
@@ -74,9 +77,10 @@ class PathLabelsService {
    **/
   static async pathlabelsIdGET ({ id, org }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const pathLabel = await PathLabels.findOne(
         {
-          org: user.defaultOrg._id.toString(),
+          org: { $in: orgList },
           _id: id
         },
         {
@@ -107,12 +111,13 @@ class PathLabelsService {
    * pathLabelRequest PathLabelRequest
    * returns PathLabel
    **/
-  static async pathlabelsIdPUT ({ id, pathLabelRequest }, { user }) {
+  static async pathlabelsIdPUT ({ id, org, pathLabelRequest }, { user }) {
     try {
       const { name, description, color, type } = pathLabelRequest;
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const pathLabel = await PathLabels.findOneAndUpdate(
         {
-          org: user.defaultOrg._id.toString(),
+          org: { $in: orgList },
           _id: id
         },
         {
@@ -147,11 +152,12 @@ class PathLabelsService {
    * pathLabelRequest PathLabelRequest
    * returns PathLabel
    **/
-  static async pathlabelsPOST ({ pathLabelRequest }, { user }) {
+  static async pathlabelsPOST ({ org, pathLabelRequest }, { user }) {
     try {
       const { name, description, color, type } = pathLabelRequest;
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const result = await PathLabels.create({
-        org: user.defaultOrg._id.toString(),
+        org: orgList[0].toString(),
         name: name,
         description: description,
         color: color,
