@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
+const configs = require('../configs')();
 const { devices, staticroutes } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const connections = require('../websocket/Connections')();
@@ -39,16 +40,19 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ org, deviceCommand }, { user }) {
+  static async devicesApplyPOST ({ org, deviceCommand }, { user }, response) {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevices = await devices.find({ org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type');
       // Apply the device command
-      await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
-
-      return Service.successResponse({}, 204);
+      const retJobs = await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
+      const jobIds = retJobs.flat().map(job => job.id);
+      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        jobIds.join('%2C')}&org=${orgList[0]}`;
+      response.setHeader('Location', location);
+      return Service.successResponse({ ids: jobIds }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -64,7 +68,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }) {
+  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevice = await devices.find({
@@ -72,12 +76,14 @@ class DevicesService {
         org: { $in: orgList }
       });
 
-      if (opDevice.length === 1) {
-        await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
-      } else {
-        return Service.rejectResponse('Device not found');
-      }
-      return Service.successResponse({}, 204);
+      if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
+
+      const retJobs = await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
+      const jobIds = retJobs.flat().map(job => job.id);
+      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        jobIds.join('%2C')}&org=${orgList[0]}`;
+      response.setHeader('Location', location);
+      return Service.successResponse({ ids: jobIds }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -502,7 +508,7 @@ class DevicesService {
             {
               params: { device: deviceRequest, err: err }
             });
-          throw new Error('Device update failed');
+          throw new Error(err);
         }
       }
 
@@ -642,8 +648,8 @@ class DevicesService {
       routes = routes.map(value => {
         return {
           _id: value.id,
-          destination_network: value.destination,
-          gateway_ip: value.gateway,
+          destination: value.destination,
+          gateway: value.gateway,
           ifname: value.ifname,
           status: value.status
         };
@@ -674,9 +680,15 @@ class DevicesService {
         }
       );
 
-      const copy = Object.assign({}, route);
+      if (!device) throw new Error('Device not found');
+      const deleteRoute = device.staticroutes.filter((s) => {
+        return (s.id === route);
+      });
+
+      if (deleteRoute.length !== 1) throw new Error('Static route not found');
+      const copy = Object.assign({}, deleteRoute[0].toObject());
       copy.method = 'staticroutes';
-      copy.id = route;
+      copy._id = route;
       copy.action = 'del';
       await dispatcher.apply(device, copy.method, user, copy);
       return Service.successResponse(null, 204);
@@ -712,8 +724,8 @@ class DevicesService {
 
       // eslint-disable-next-line new-cap
       const route = new staticroutes({
-        destination: staticRouteRequest.destination_network,
-        gateway: staticRouteRequest.gateway_ip,
+        destination: staticRouteRequest.destination,
+        gateway: staticRouteRequest.gateway,
         ifname: staticRouteRequest.ifname,
         status: 'waiting'
       });
@@ -731,7 +743,7 @@ class DevicesService {
       const copy = Object.assign({}, staticRouteRequest);
 
       copy.method = 'staticroutes';
-      copy.id = route.id;
+      copy._id = route.id;
       await dispatcher.apply(device, copy.method, user, copy);
 
       const result = {

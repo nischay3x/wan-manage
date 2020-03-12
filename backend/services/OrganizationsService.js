@@ -133,6 +133,26 @@ class OrganizationsService {
   }
 
   /**
+   * Get organization
+   *
+   * id String Numeric ID of the Organization to get
+   * returns Organization
+   **/
+  static async organizationsIdGET ({ id }, { user }) {
+    try {
+      // Find org with the correct ID
+      const resultOrg = await getUserOrgByID(user, id);
+      if (resultOrg.length !== 1) throw new Error('Unable to find organization');
+      return Service.successResponse(OrganizationsService.selectOrganizationParams(resultOrg[0]));
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Delete organization
    *
    * id String Numeric ID of the Organization to delete
@@ -149,7 +169,7 @@ class OrganizationsService {
       // Only allow to delete current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
       const orgList = await getAccessTokenOrgList(user, undefined, false);
-      if (orgList.includes(id)) {
+      if (!orgList.includes(id)) {
         throw new Error('Please select an organization to delete it');
       }
 
@@ -228,15 +248,16 @@ class OrganizationsService {
       // are set properly for updating this organization
       const orgList = await getAccessTokenOrgList(user, undefined, false);
       if (orgList.includes(id)) {
+        const { name, group } = organizationRequest;
         const resultOrg = await Organizations.findOneAndUpdate(
           { _id: id },
-          { $set: organizationRequest },
+          { $set: { name, group } },
           { upsert: false, multi: false, new: true, runValidators: true }
         );
         // Update token
         const token = await getToken({ user }, { orgName: organizationRequest.name });
         response.setHeader('Refresh-JWT', token);
-        return Service.successResponse(resultOrg);
+        return Service.successResponse(OrganizationsService.selectOrganizationParams(resultOrg));
       } else {
         throw new Error('Please select an organization to update it');
       }

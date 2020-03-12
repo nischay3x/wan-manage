@@ -133,7 +133,7 @@ const apply = async (device, user, data) => {
     );
 
   logger.info('Start device job queued', { job: job });
-  return job;
+  return [job];
 };
 
 /**

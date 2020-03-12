@@ -87,7 +87,8 @@ class DevicesController {
   }
 
   async devicesIdStaticroutesRouteDELETE (request, response) {
-    await Controller.handleRequest(request, response, this.service.devicesIdStaticroutesDELETE);
+    await Controller.handleRequest(request, response,
+      this.service.devicesIdStaticroutesRouteDELETE);
   }
 
   async devicesIdStaticroutesPOST (request, response) {
@@ -95,7 +96,7 @@ class DevicesController {
   }
 
   async devicesIdStaticroutesRoutePATCH (request, response) {
-    await Controller.handleRequest(request, response, this.service.devicesIdStaticroutesPUT);
+    await Controller.handleRequest(request, response, this.service.devicesIdStaticroutesRoutePATCH);
   }
 
   async devicesStatisticsGET (request, response) {

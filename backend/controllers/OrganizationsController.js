@@ -26,6 +26,10 @@ class OrganizationsController {
     await Controller.handleRequest(request, response, this.service.organizationsGET);
   }
 
+  async organizationsIdGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.organizationsIdGET);
+  }
+
   async organizationsIdDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.organizationsIdDELETE);
   }

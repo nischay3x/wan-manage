@@ -159,6 +159,7 @@ const applyTunnelAdd = async (devices, user, data) => {
     logger.debug('Running tunnel promises', { params: { tunnels: dbTasks.length } });
     const values = await Promise.all(dbTasks);
     logger.debug('Operation completed', { params: { values: values } });
+    return values;
   } else {
     logger.error('At least 2 devices must be selected to create tunnels', { params: {} });
     throw new Error('At least 2 devices must be selected to create tunnels');
@@ -217,7 +218,7 @@ const errorTunnelAdd = async (jobId, res) => {
     .then(
       async tunnel => {
         if (tunnel != null) {
-          await oneTunnelDel(
+          const jobs = await oneTunnelDel(
             tunnel._id,
             res.username,
             res.org,
@@ -234,6 +235,7 @@ const errorTunnelAdd = async (jobId, res) => {
               });
             }
           );
+          return jobs;
         } else {
           logger.error('errorTunnelAdd no tunnel found', {
             params: {
@@ -243,6 +245,7 @@ const errorTunnelAdd = async (jobId, res) => {
               isActive: true
             }
           });
+          return [];
         }
       },
       err => {
@@ -255,6 +258,7 @@ const errorTunnelAdd = async (jobId, res) => {
             message: err.message
           }
         });
+        return [];
       }
     )
     .catch(err => {
@@ -267,6 +271,7 @@ const errorTunnelAdd = async (jobId, res) => {
           message: err.message
         }
       });
+      return [];
     });
 };
 
@@ -406,7 +411,7 @@ const getTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
             });
         } else {
           logger.info('Tunnel found, will be checked via periodic task');
-          resolve(true);
+          resolve([]);
         }
       }, (err) => {
         logger.error('Tunnels find error', { params: { reason: err.message } });
@@ -779,7 +784,8 @@ const applyTunnelDel = async (devices, user, data) => {
     const userName = user.username;
 
     try {
-      await oneTunnelDel(tunnelID, userName, org);
+      const jobs = await oneTunnelDel(tunnelID, userName, org);
+      return jobs;
     } catch (err) {
       logger.error('Attempt to delete more than one tunnel or no devices found', { params: {} });
       throw new Error('Attempt to delete more than one tunnel or no devices found');
@@ -792,7 +798,7 @@ const applyTunnelDel = async (devices, user, data) => {
  * @param  {number}   tunnelID   the id of the tunnel to be deleted
  * @param  {string}   user       the user id of the requesting user
  * @param  {string}   org        the user's organization id
- * @return {void}
+ * @return {array}    jobs created
  */
 const oneTunnelDel = async (tunnelID, user, org) => {
   const tunnelResp = await tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })

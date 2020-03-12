@@ -251,9 +251,19 @@ exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
   let restCommand = method.toLowerCase();
 
   // below is a hotfix for membership permissions
+  switch (restCommand) {
+    case 'delete':
+      restCommand = 'del';
+      break;
+    case 'patch':
+      restCommand = 'post';
+      break;
+  }
+
   if (restCommand === 'delete') {
     restCommand = 'del';
   }
+  if (restCommand === 'patch') {}
 
   // Override permission check for certain APIs
   switch (openapi.schema.operationId) {

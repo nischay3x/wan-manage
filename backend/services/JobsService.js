@@ -64,17 +64,32 @@ class JobsService {
    * status String A filter on the job status (optional)
    * returns List
    **/
-  static async jobsGET ({ offset, limit, org, status }, { user }) {
+  static async jobsGET ({ offset, limit, org, status, ids }, { user }) {
     try {
       const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
       // Check state provided is allowed
       if (!stateOpts.includes(status) && status !== 'all') {
-        return Service.rejectResponse(400, 'Unsupported query state');
+        return Service.rejectResponse('Unsupported query state', 400);
+      }
+      if (status !== 'all' && ids !== undefined) {
+        return Service.rejectResponse('When using Job IDs, status must be "all"', 400);
       }
 
       // Generate and send the result
       const orgList = await getAccessTokenOrgList(user, org, true);
       const result = [];
+
+      if (ids !== undefined) {
+        // Convert Ids to strings
+        const intIds = ids.split(',').map(id => +id);
+        await deviceQueues.iterateJobsIdsByOrg(orgList[0].toString(),
+          intIds, (job) => {
+            const parsedJob = JobsService.selectJobsParams(job);
+            result.push(parsedJob);
+          }
+        );
+        return Service.successResponse(result);
+      }
       if (status === 'all') {
         await Promise.all(
           stateOpts.map(async (s) => {
@@ -141,6 +156,33 @@ class JobsService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get Job by ID
+   *
+   * id Integer Numeric ID of the Job to get
+   * org String Organization to be filtered by (optional)
+   * returns Job
+   **/
+  static async jobsIdGET ({ id, org }, { user }) {
+    try {
+      // Generate and send the result
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      let result = {};
+      await deviceQueues.iterateJobsIdsByOrg(orgList[0].toString(),
+        [id], (job) => {
+          const parsedJob = JobsService.selectJobsParams(job);
+          result = parsedJob;
+        }
+      );
+      return Service.successResponse(result);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Service Error',
         e.status || 500
       );
     }
