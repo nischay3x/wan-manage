@@ -3310,7 +3310,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Add new organization
+      summary: Select organization
       tags:
       - Organizations
       x-swagger-router-controller: Organizations
