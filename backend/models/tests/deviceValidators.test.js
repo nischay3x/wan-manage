@@ -44,7 +44,7 @@ describe('validateDeviceName', () => {
   });
 });
 
-describe('validateDevDescription', () => {
+describe('validateDescription', () => {
   const tooLongDescription = 'A device description should not contain more than fifty characters';
   const maxDescriptionLength = 'A device description can be up to fifty characters';
   it.each`
@@ -63,7 +63,7 @@ describe('validateDevDescription', () => {
         ${null}                     | ${false}
         ${undefined}                | ${false}
   `('Should return $result if device description is $desc', ({ desc, result }) => {
-    expect(validators.validateDevDescription(desc)).toEqual(result);
+    expect(validators.validateDescription(desc)).toEqual(result);
   });
 });
 
