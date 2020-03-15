@@ -90,7 +90,7 @@ const validateIfcType = type => {
 const validateDeviceName = name => {
   return name === '' || /^[a-z0-9-_ .!#%():@[\]]{1,50}$/i.test(name || '');
 };
-const validateDevDescription = desc => {
+const validateDescription = desc => {
   return desc === '' || /^[a-z0-9-_ .!#%():@[\]]{1,50}$/i.test(desc || '');
 };
 const validateDeviceSite = site => {
@@ -98,7 +98,7 @@ const validateDeviceSite = site => {
 };
 
 // Hostname validation according to RFC 952, RFC 1123
-// Allow also underscore as some system allowed it
+// Allow also underscore as some systems allow it
 const validateHostName = (name) => { return /^[a-z0-9-_.]{1,253}$/i.test(name || ''); };
 const validateIpList = (list) => {
   if (isEmpty(list)) return false;
@@ -125,6 +125,9 @@ const validateUserName = name => {
 };
 const validateEmail = (mail) => { return !isEmpty(mail) && email.validate(mail); };
 
+const validateLabelName = (name) => { return /^[a-z0-9-_ .]{3,30}$/i.test(name || ''); };
+const validateLabelColor = (color) => { return /^#[0-9A-F]{6}$/i.test(color); };
+
 module.exports = {
   validateIPv4,
   validateIPv4WithMask,
@@ -139,7 +142,7 @@ module.exports = {
   validateRoutingProto,
   validateIfcType,
   validateDeviceName,
-  validateDevDescription,
+  validateDescription,
   validateDeviceSite,
   validateHostName,
   validateIpList,
@@ -150,5 +153,7 @@ module.exports = {
   validateFieldName,
   validateUserName,
   validateEmail,
-  validateIsPhoneNumber
+  validateIsPhoneNumber,
+  validateLabelName,
+  validateLabelColor
 };

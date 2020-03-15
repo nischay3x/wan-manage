@@ -26,6 +26,7 @@ const TokensService = require('./TokensService');
 const TunnelsService = require('./TunnelsService');
 const UsersService = require('./UsersService');
 const BillingService = require('./BillingService');
+const PathLabelsService = require('./PathLabelsService');
 
 module.exports = {
   AccessTokensService,
@@ -38,5 +39,6 @@ module.exports = {
   TokensService,
   TunnelsService,
   UsersService,
-  BillingService
+  BillingService,
+  PathLabelsService
 };
