@@ -164,9 +164,12 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // Maintain a list of all removed tunnels for adding them back
       // after the interface changes are applied on the device.
       // Add the tunnel to this list only if the interface connected
-      // to this tunnel has changed any property except for 'isAssigned'
-      // and only if the label of the tunnel is assigned to the interface
-      if (ifc._id in modifiedIfcsMap && modifiedIfcsMap[ifc._id].pathlabels.includes(pathlabel)) {
+      // to this tunnel has changed any property except for 'isAssigned'.
+      // If the tunnel has a path label, add the tunnel only if the interface
+      // that is changed has the tunnel's path label in its path labels list.
+      const { pathlabels } = modifiedIfcsMap[ifc._id];
+      const pathLabelIncluded = !pathlabel || pathlabels.includes(pathlabel);
+      if (ifc._id in modifiedIfcsMap && pathLabelIncluded) {
         removedTunnels.push(tunnel._id);
       }
     }

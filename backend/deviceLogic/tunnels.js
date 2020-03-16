@@ -105,41 +105,45 @@ const applyTunnelAdd = async (devices, user, data) => {
 
         // Create a tunnel between each WAN interface on device A to
         // each of the WAN interfaces on device B according to the path
-        // labels assigned to the interfaces
+        // labels assigned to the interfaces. If the list of path labels
+        // IDs contains the ID 'FFFFFF', create tunnels between all common
+        // path labels across all WAN interfaces.
         // TBD: key exchange should be dynamic
+        const specifiedLabels = data.meta.pathLabels;
+        const createForAllLabels = specifiedLabels.includes('FFFFFF');
         if (deviceAIntfs.length && deviceBIntfs.length) {
           deviceAIntfs.forEach(wanIfcA => {
             deviceBIntfs.forEach(wanIfcB => {
-            // Create a list of path labels that are
-            // common to both interfaces
               const ifcALabels = wanIfcA.pathlabels;
               const ifcBLabels = wanIfcB.pathlabels;
-              const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
-              for (const label of labelsIntersection) {
-                // Skip tunnel creation for labels of type "DIA"
-                // (Direct Internet Access) or if the label is not
-                // included in the list of labels specified by the user
-                const specifiedLabels = data.meta.pathLabels;
-                const shouldSkipTunnel = label.type === 'DIA'
-                  ? true : specifiedLabels.length && !specifiedLabels.includes(label._id);
-                if (shouldSkipTunnel) continue;
 
-                logger.debug('Adding tunnel between devices', {
-                  params: {
-                    deviceA: deviceA.hostname,
-                    deviceB: deviceB.hostname,
-                    interfaces: {
-                      interfaceA: wanIfcA.name,
-                      interfaceB: wanIfcB.name
-                    },
-                    label: label
-                  }
-                });
-                // If a tunnel already exists, skip the configuration
-                // Use a copy of devices objects as promise runs later
-                dbTasks.push(getTunnelPromise(userName, org, label._id,
-                  { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                  { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
+              // If no path labels were selected, create a tunnel
+              // only if both interfaces aren't assigned with labels
+              if (specifiedLabels.length === 0) {
+                if (ifcALabels.length === 0 && ifcBLabels.length === 0) {
+                  dbTasks.push(getTunnelPromise(userName, org, null,
+                    { ...deviceA.toObject() }, { ...deviceB.toObject() },
+                    { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
+                }
+              } else {
+                // Create a list of path labels that are common to both interfaces.
+                const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
+                for (const label of labelsIntersection) {
+                  // Skip tunnel creation for labels of type "DIA"
+                  // (Direct Internet Access) or if the label is not
+                  // included in the list of labels specified by the user
+                  const shouldSkipTunnel =
+                    label.type === 'DIA'
+                      ? true
+                      : !createForAllLabels &&
+                        !specifiedLabels.includes(label._id);
+                  if (shouldSkipTunnel) continue;
+                  // If a tunnel already exists, skip the configuration
+                  // Use a copy of devices objects as promise runs later
+                  dbTasks.push(getTunnelPromise(userName, org, label._id,
+                    { ...deviceA.toObject() }, { ...deviceB.toObject() },
+                    { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
+                }
               }
             });
           });
@@ -206,14 +210,12 @@ const errorTunnelAdd = async (jobId, res) => {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
     return;
   }
-  const { deviceA, deviceB, org, pathlabel } = res;
+  const { deviceA, deviceB, org } = res;
   tunnelsModel
     .findOne({
-      deviceA: deviceA,
-      deviceB: deviceB,
+      num: res.tunnelId,
       org: org,
-      isActive: true,
-      pathlabel: pathlabel
+      isActive: true
     })
     .then(
       async tunnel => {
@@ -251,9 +253,9 @@ const errorTunnelAdd = async (jobId, res) => {
       err => {
         logger.error('errorTunnelAdd error', {
           params: {
-            deviceA: res.deviceA,
-            deviceB: res.deviceB,
-            org: res.org,
+            deviceA: deviceA,
+            deviceB: deviceB,
+            org: org,
             isActive: true,
             message: err.message
           }
@@ -264,9 +266,9 @@ const errorTunnelAdd = async (jobId, res) => {
     .catch(err => {
       logger.error('errorTunnelAdd error', {
         params: {
-          deviceA: res.deviceA,
-          deviceB: res.deviceB,
-          org: res.org,
+          deviceA: deviceA,
+          deviceB: deviceB,
+          org: org,
           isActive: true,
           message: err.message
         }
@@ -287,19 +289,23 @@ const errorTunnelAdd = async (jobId, res) => {
  */
 const getTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
   deviceAIntf, deviceBIntf) => {
-  logger.debug('getTunnelPromise between', {
-    params:
-        {
-          deviceA: { hostname: deviceA.hostname },
-          deviceB: { hostname: deviceB.hostname }
-        }
+  logger.debug('Adding tunnel between devices', {
+    params: {
+      deviceA: deviceA.hostname,
+      deviceB: deviceB.hostname,
+      interfaces: {
+        interfaceA: deviceAIntf.name,
+        interfaceB: deviceBIntf.name
+      },
+      label: pathLabel
+    }
   });
 
   var tPromise = new Promise(function (resolve, reject) {
     tunnelsModel.find({
       $or: [
-        { deviceA: deviceA._id, deviceB: deviceB._id },
-        { deviceB: deviceA._id, deviceA: deviceB._id }
+        { interfaceA: deviceAIntf._id, interfaceB: deviceBIntf._id },
+        { interfaceB: deviceAIntf._id, interfaceA: deviceBIntf._id }
       ],
       isActive: true,
       pathlabel: pathLabel,
@@ -580,7 +586,7 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer, 
     mtu: 1350,
     routing: 'ospf',
     multilink: {
-      labels: [pathLabel]
+      labels: pathLabel ? [pathLabel] : []
     }
   };
 
@@ -608,7 +614,7 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer, 
     mtu: 1350,
     routing: 'ospf',
     multilink: {
-      labels: [pathLabel]
+      labels: pathLabel ? [pathLabel] : []
     }
   };
 
