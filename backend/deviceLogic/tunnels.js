@@ -210,10 +210,10 @@ const errorTunnelAdd = async (jobId, res) => {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
     return;
   }
-  const { deviceA, deviceB, org } = res;
+  const { deviceA, deviceB, org, tunnelId } = res;
   tunnelsModel
     .findOne({
-      num: res.tunnelId,
+      num: tunnelId,
       org: org,
       isActive: true
     })
@@ -241,6 +241,7 @@ const errorTunnelAdd = async (jobId, res) => {
         } else {
           logger.error('errorTunnelAdd no tunnel found', {
             params: {
+              tunnelId: tunnelId,
               deviceA: res.deviceA,
               deviceB: res.deviceB,
               org: res.org,
@@ -253,6 +254,7 @@ const errorTunnelAdd = async (jobId, res) => {
       err => {
         logger.error('errorTunnelAdd error', {
           params: {
+            tunnelId: tunnelId,
             deviceA: deviceA,
             deviceB: deviceB,
             org: org,
@@ -1016,5 +1018,6 @@ module.exports = {
   },
   prepareTunnelRemoveJob: prepareTunnelRemoveJob,
   prepareTunnelAddJob: prepareTunnelAddJob,
-  queueTunnel: queueTunnel
+  queueTunnel: queueTunnel,
+  oneTunnelDel: oneTunnelDel
 };
