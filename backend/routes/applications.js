@@ -24,23 +24,23 @@ applicationsRouter.use(bodyParser.json());
 
 // Error formatter
 const formatErr = (err, msg) => {
-	// Check for unique error
-	if (err.name === 'MongoError' && err.code === 11000) {
-		return ({ status: 500, error: 'Application ' + msg.name + ' already exists' });
-	} else if (err.message) {
-		return ({ status: 500, error: err.message });
-	} else {
-		return ({ status: 500, error: 'Unable to format error' });
-	}
+  // Check for unique error
+  if (err.name === 'MongoError' && err.code === 11000) {
+    return ({ status: 500, error: 'Application ' + msg.name + ' already exists' });
+  } else if (err.message) {
+    return ({ status: 500, error: err.message });
+  } else {
+    return ({ status: 500, error: 'Unable to format error' });
+  }
 };
 
 // check update
 const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
-	resolve({ ok: 1 });
+  resolve({ ok: 1 });
 });
 
 // wrapper
 wrapper.assignRoutes(applicationsRouter, 'applications', '/', tokens, formatErr, checkUpdReq);
 
 // Default exports
-module.exports = applicationsRouter;  
+module.exports = applicationsRouter;

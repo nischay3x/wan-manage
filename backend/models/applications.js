@@ -24,36 +24,36 @@ const mongoConns = require('../mongoConns.js')();
  * TODO: This is draft, needs discussion about the right schema.
  */
 const rulesSchema = new Schema({
-	// IP
-	// TODO: add validator
-	ip: {
-		type: String,
-		required: true
-	},
-	// IP Prefix
-	// TODO: add validator
-	ipPrefix: {
-		type: String,
-		required: true,
-	},
-	// Port Range Low
-	// TODO: add validator
-	portRangeLow: {
-		type: String,
-		required: true,
-	},
-	// Port Range High
-	// TODO: add validator
-	portRangeHigh: {
-		type: String,
-		required: true,
-	},
-	// Protocol
-	protocol: {
-		type: String,
-		enum: ['TCP', 'UDP'],
-		required: true,
-	},
+  // IP
+  // TODO: add validator
+  ip: {
+    type: String,
+    required: true
+  },
+  // IP Prefix
+  // TODO: add validator
+  ipPrefix: {
+    type: String,
+    required: true
+  },
+  // Port Range Low
+  // TODO: add validator
+  portRangeLow: {
+    type: String,
+    required: true
+  },
+  // Port Range High
+  // TODO: add validator
+  portRangeHigh: {
+    type: String,
+    required: true
+  },
+  // Protocol
+  protocol: {
+    type: String,
+    enum: ['TCP', 'UDP'],
+    required: true
+  }
 });
 
 /**
@@ -61,49 +61,48 @@ const rulesSchema = new Schema({
  * TODO: This is draft, needs discussion about the right schema.
  */
 const applicationsSchema = new Schema({
-	// Organization
-	org: {
-		type: Schema.Types.ObjectId,
-		ref: 'organizations',
-		required: true
-	},
-	// Application name
-	app: {
-		type: String,
-		required: true
-	},
-	// Category name
-	category: {
-		type: String,
-		required: true,
-		maxlength: [128, 'Category name must be at most 128']
-	},
-	// Sub-category name
-	subcategory: {
-		type: String,
-		required: true,
-		maxlength: [128, 'Sub-category name must be at most 128']
-	},
-	// Importance
-	importance: {
-		type: String,
-		enum: ['1', '2', '3'],
-		required: true,
-		maxlength: [1, 'Sub-category name must be at most 1']
-	},
-	// List of rules
-	rules: [rulesSchema],
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true
+  },
+  // Application name
+  app: {
+    type: String,
+    required: true
+  },
+  // Category name
+  category: {
+    type: String,
+    required: true,
+    maxlength: [128, 'Category name must be at most 128']
+  },
+  // Sub-category name
+  subcategory: {
+    type: String,
+    required: true,
+    maxlength: [128, 'Sub-category name must be at most 128']
+  },
+  // Importance
+  importance: {
+    type: String,
+    enum: ['1', '2', '3'],
+    required: true,
+    maxlength: [1, 'Sub-category name must be at most 1']
+  },
+  // List of rules
+  rules: [rulesSchema]
 }, {
-	timestamps: true
+  timestamps: true
 });
 
 // indexing
-applicationSchema.index({ app: 1, org: 1 }, { unique: true });
+applicationsSchema.index({ app: 1, org: 1 }, { unique: true });
 
 // Default exports
 module.exports =
 {
-	applications: mongoConns.getMainDB().model('applications', applicationsSchema),
-	rules: mongoConns.getMainDB().model('rules', rulesSchema)
+  applications: mongoConns.getMainDB().model('applications', applicationsSchema),
+  rules: mongoConns.getMainDB().model('rules', rulesSchema)
 };
-

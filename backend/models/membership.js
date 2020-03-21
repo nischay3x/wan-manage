@@ -50,7 +50,7 @@ const Permissions = new Schema({
   accounts: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   organizations: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   devices: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
-  tokens: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },  
+  tokens: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   applications: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   members: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   tunnels: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
