@@ -25,7 +25,6 @@ class ApplicationsController {
   async applicationsGET (request, response) {
     await Controller.handleRequest(request, response, this.service.applicationsGET);
   }
-
 }
 
 module.exports = ApplicationsController;
