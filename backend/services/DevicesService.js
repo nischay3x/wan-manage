@@ -17,7 +17,7 @@
 
 const Service = require('./Service');
 const configs = require('../configs')();
-const { devices, staticroutes } = require('../models/devices');
+const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
@@ -152,6 +152,27 @@ class DevicesService {
       return retRoute;
     });
 
+    const retDhcpList = item.dhcp.map(d => {
+      const retDhcp = pick(d, [
+        '_id',
+        'interface',
+        'rangeStart',
+        'rangeEnd',
+        'dns',
+        'status'
+      ]);
+
+      const macAssignList = d.macAssign.map(m => {
+        return pick(m, [
+          'host', 'mac', 'ipv4'
+        ]);
+      });
+
+      retDhcp.macAssign = macAssignList;
+      retDhcp._id = retDhcp._id.toString();
+      return retDhcp;
+    });
+
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
@@ -163,6 +184,7 @@ class DevicesService {
     retDevice.versions = pick(item.versions, ['agent', 'router', 'device', 'vpp', 'frr']);
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
+    retDevice.dhcp = retDhcpList;
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
@@ -887,6 +909,163 @@ class DevicesService {
       });
       return Service.successResponse(stats);
     } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Delete DHCP
+   *
+   * id String Numeric ID of the Device
+   * dhcpId String Numeric ID of the DHCP to delete
+   * org String Organization to be filtered by (optional)
+   * no response value expected for this operation
+   **/
+  static async devicesIdDhcpDhcpIdDELETE ({ id, dhcpId, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      return Service.successResponse({}, 204);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get DHCP by ID
+   *
+   * id String Numeric ID of the Device
+   * dhcpId String Numeric ID of the DHCP to get
+   * org String Organization to be filtered by (optional)
+   * returns Dhcp
+   **/
+  static async devicesIdDhcpDhcpIdGET ({ id, dhcpId, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      return Service.successResponse({}, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify DHCP
+   *
+   * id String Numeric ID of the Device
+   * dhcpId String Numeric ID of the DHCP to modify
+   * org String Organization to be filtered by (optional)
+   * dhcpRequest DhcpRequest  (optional)
+   * returns Dhcp
+   **/
+  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org, dhcpRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      // Set Location header
+      return Service.successResponse({}, 202);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Retrieve device DHCP information
+   *
+   * id String Numeric ID of the Device to fetch information about
+   * offset Integer The number of items to skip before starting to collect the result set (optional)
+   * limit Integer The numbers of items to return (optional)
+   * org String Organization to be filtered by (optional)
+   * returns List
+   **/
+  static async devicesIdDhcpGET ({ id, offset, limit, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      return Service.successResponse({}, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Add DHCP server
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by (optional)
+   * dhcpRequest DhcpRequest  (optional)
+   * returns Dhcp
+   **/
+  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user }, response) {
+    let session;
+    try {
+      session = await mongoConns.getMainDB().startSession();
+      await session.startTransaction();
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      }).session(session);
+      if (!deviceObject || deviceObject.length === 0) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject[0].isApproved) {
+        throw new Error('Device must be first approved');
+      }
+      const device = deviceObject[0];
+
+      const dhcpData = {
+        interface: dhcpRequest.interface,
+        rangeStart: dhcpRequest.rangeStart,
+        rangeEnd: dhcpRequest.rangeEnd,
+        dns: dhcpRequest.dns,
+        macAssign: dhcpRequest.macAssign,
+        status: 'waiting'
+      };
+
+      // eslint-disable-next-line new-cap
+      const dhcp = new dhcpModel(dhcpData);
+      dhcp.$session(session);
+
+      await devices.findOneAndUpdate(
+        { _id: device._id },
+        {
+          $push: {
+            dhcp: dhcp
+          }
+        },
+        { new: true }
+      ).session(session);
+
+      const copy = Object.assign({}, dhcpRequest);
+
+      copy.method = 'dhcp';
+      copy._id = dhcp.id;
+      copy.action = 'add';
+      const retJobs = await dispatcher.apply(device, copy.method, user, copy);
+      const jobIds = retJobs.flat().map(job => job.id);
+      const result = { ...dhcpData, _id: dhcp._id.toString() };
+      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        jobIds.join('%2C')}&org=${orgList[0]}`;
+      response.setHeader('Location', location);
+
+      await session.commitTransaction();
+      session = null;
+
+      return Service.successResponse(result, 202);
+    } catch (e) {
+      if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500

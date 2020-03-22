@@ -239,8 +239,8 @@ const DHCPSchema = new Schema({
       message: 'IP end range should be a valid ipv4 address'
     }
   },
-  DNS: [String],
-  MACAssigned: [MACAssignmentSchema],
+  dns: [String],
+  macAssign: [MACAssignmentSchema],
   status: {
     type: String,
     default: 'failed'
@@ -462,6 +462,6 @@ module.exports =
   interfaces: mongoConns.getMainDB().model('interfaces', interfacesSchema),
   versions: mongoConns.getMainDB().model('versions', deviceVersionsSchema),
   staticroutes: mongoConns.getMainDB().model('staticroutes', staticroutesSchema),
-  dhcp: mongoConns.getMainDB().model('dhcp', DHCPSchema),
+  dhcpModel: mongoConns.getMainDB().model('dhcp', DHCPSchema),
   upgradeSchedule: mongoConns.getMainDB().model('upgradeSchedule', versionUpgradeSchema)
 };
