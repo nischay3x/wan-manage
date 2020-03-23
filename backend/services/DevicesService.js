@@ -990,7 +990,17 @@ class DevicesService {
       });
       if (resultDhcp.length !== 1) throw new Error('DHCP ID not found');
 
-      return Service.successResponse(resultDhcp[0], 200);
+      const result = {
+        _id: resultDhcp[0].id,
+        interface: resultDhcp[0].interface,
+        rangeStart: resultDhcp[0].rangeStart,
+        rangeEnd: resultDhcp[0].rangeEnd,
+        dns: resultDhcp[0].dns,
+        macAssign: resultDhcp[0].macAssign,
+        status: resultDhcp[0].status
+      };
+
+      return Service.successResponse(result, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -1076,11 +1086,26 @@ class DevicesService {
 
       if (!device) throw new Error('Device not found');
       let result = [];
-      if (device.dhcp && device.dhcp.length > 0 && offset < device.dhcp.length) {
-        const end = Math.min(offset + limit, device.dhcp.length);
-        result = device.dhcp.slice(offset, end);
+      const start = offset || 0;
+      const size = limit || device.dhcp.length;
+      if (device.dhcp && device.dhcp.length > 0 && start < device.dhcp.length) {
+        const end = Math.min(start + size, device.dhcp.length);
+        result = device.dhcp.slice(start, end);
       }
-      return Service.successResponse(result, 200);
+
+      const mappedResult = result.map(r => {
+        return {
+          _id: r.id,
+          interface: r.interface,
+          rangeStart: r.rangeStart,
+          rangeEnd: r.rangeEnd,
+          dns: r.dns,
+          macAssign: r.macAssign,
+          status: r.status
+        };
+      });
+
+      return Service.successResponse(mappedResult, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
