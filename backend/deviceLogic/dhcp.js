@@ -26,7 +26,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'j
 const { getMajorVersion } = require('../versioning');
 
 /**
- * Queues an add-route or delete-route job to a device.
+ * Queues an add dhcp or delete dhcp job to a device.
  * @async
  * @param  {Array}    device    an array of the devices to be modified
  * @param  {Object}   user      User object
@@ -56,30 +56,36 @@ const apply = async (device, user, data) => {
     throw new Error('Command is not supported for the current agent version');
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
     const tasks = [];
-    const routeId = data._id;
+    const dhcpId = data._id;
 
-    let message = 'add-dhcp-config';
-    let titlePrefix = 'Add';
-    const params = {
-      interface: data.interface,
-      range_start: data.rangeStart,
-      range_end: data.rangeEnd,
-      dns: data.dns,
-      mac_assign: data.macAssign
-    };
+    let message;
+    let titlePrefix;
+    let params;
 
-    if (data.action === 'del') {
+    if (data.action === 'add') {
+      message = 'add-dhcp-config';
+      titlePrefix = 'Add';
+      params = {
+        interface: data.interface,
+        range_start: data.rangeStart,
+        range_end: data.rangeEnd,
+        dns: data.dns,
+        mac_assign: data.macAssign
+      };
+    } else {
       titlePrefix = 'Delete';
       message = 'remove-dhcp-config';
+      params = {
+        interface: data.interface
+      };
     }
-
     tasks.push({ entity: 'agent', message, params });
 
     const job = await deviceQueues.addJob(machineId, userName, org,
       // Data
       { title: `${titlePrefix} DHCP in device ${device.hostname}`, tasks: tasks },
       // Response data
-      { method: 'dhcp', data: { deviceId: device.id, routeId: routeId, message } },
+      { method: 'dhcp', data: { deviceId: device.id, dhcpId: dhcpId, message } },
       // Metadata
       { priority: 'low', attempts: 1, removeOnComplete: false },
       // Complete callback
@@ -91,7 +97,7 @@ const apply = async (device, user, data) => {
 };
 
 /**
- * Called when add/remove route job completed and
+ * Called when add/remove dhcp job completed and
  * updates the status of the operation.
  * @async
  * @param  {number} jobId Kue job ID number
@@ -99,20 +105,22 @@ const apply = async (device, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('Add static route job complete', { params: { result: res, jobId: jobId } });
+  logger.info('DHCP job complete', { params: { result: res, jobId: jobId } });
 
-  if (!res || !res.deviceId || !res.message || !res.routeId) {
-    logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
+  if (!res || !res.deviceId || !res.message || !res.dhcpId) {
+    logger.warn('DHCP job complete got an invalid job result', {
+      params: { result: res, jobId: jobId }
+    });
     return;
   }
   try {
-    if (res.message === 'remove-route') {
+    if (res.message === 'remove-dhcp-config') {
       await devices.findOneAndUpdate(
         { _id: mongoose.Types.ObjectId(res.deviceId) },
         {
           $pull: {
-            staticroutes: {
-              _id: mongoose.Types.ObjectId(res.routeId)
+            dhcp: {
+              _id: mongoose.Types.ObjectId(res.dhcpId)
             }
           }
         }
@@ -120,19 +128,21 @@ const complete = async (jobId, res) => {
     } else {
       await devices.findOneAndUpdate(
         { _id: mongoose.Types.ObjectId(res.deviceId) },
-        { $set: { 'staticroutes.$[elem].status': 'complete' } },
+        { $set: { 'dhcp.$[elem].status': 'complete' } },
         {
-          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.routeId) }]
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.dhcpId) }]
         }
       );
     }
   } catch (error) {
-    logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
+    logger.warn('Complete DHCP job, failed to update database', {
+      params: { result: res, jobId: jobId }
+    });
   }
 };
 
 /**
-* Called if add/remove route job failed and
+* Called if add/remove dhcp job failed and
  * updates the status of the operation.
  * @async
  * @param  {number} jobId Kue job ID number
@@ -140,33 +150,35 @@ const complete = async (jobId, res) => {
  * @return {void}
  */
 const error = async (jobId, res) => {
-  logger.info('Static route job failed', { params: { result: res, jobId: jobId } });
+  logger.info('DHCP job failed', { params: { result: res, jobId: jobId } });
 
   try {
-    if (res.message === 'remove-route') {
+    if (res.message === 'remove-dhcp-config') {
       await devices.findOneAndUpdate(
         { _id: mongoose.Types.ObjectId(res.deviceId) },
-        { $set: { 'staticroutes.$[elem].status': 'remove-failed' } },
+        { $set: { 'dhcp.$[elem].status': 'remove-failed' } },
         {
-          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.routeId) }]
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.dhcpId) }]
         }
       );
     } else {
       await devices.findOneAndUpdate(
         { _id: mongoose.Types.ObjectId(res.deviceId) },
-        { $set: { 'staticroutes.$[elem].status': 'add-failed' } },
+        { $set: { 'dhcp.$[elem].status': 'add-failed' } },
         {
-          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.routeId) }]
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.dhcpId) }]
         }
       );
     }
   } catch (error) {
-    logger.warn('Failed to update database', { params: { result: res, jobId: jobId } });
+    logger.warn('DHCP job error, failed to update database', {
+      params: { result: res, jobId: jobId }
+    });
   }
 };
 
 /**
- * Called when add-route/remove-route job is removed only
+ * Called when add dhcp/remove-dhcp job is removed only
  * for tasks that were deleted before completion/failure.
  * @async
  * @param  {Object} job Kue job
@@ -174,16 +186,18 @@ const error = async (jobId, res) => {
  */
 const remove = async (job) => {
   if (['inactive', 'delayed', 'active'].includes(job._state)) {
-    logger.info('Rolling back device changes for removed task', { params: { job: job } });
+    logger.info('DHCP remove job, mark as deleted', {
+      params: { job: job }
+    });
     const deviceId = job.data.response.data.deviceId;
-    const routeId = job.data.response.data.routeId;
+    const dhcpId = job.data.response.data.dhcpId;
 
     try {
       await devices.findOneAndUpdate(
         { _id: mongoose.Types.ObjectId(deviceId) },
-        { $set: { 'staticroutes.$[elem].status': 'job-deleted' } },
+        { $set: { 'dhcp.$[elem].status': 'job-deleted' } },
         {
-          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(routeId) }]
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }]
         }
       );
     } catch (error) {

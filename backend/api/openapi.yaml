@@ -1995,8 +1995,16 @@ paths:
         schema:
           type: string
       responses:
-        "204":
+        "202":
           description: Successful operation
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
         "401":
           content:
             application/json:
@@ -4601,6 +4609,7 @@ components:
         state: 5
         type: type
         priority: 6
+        error: error
         attempts:
           max: 7
           made: 5
@@ -4616,6 +4625,8 @@ components:
           type: object
         priority:
           type: integer
+        error:
+          type: string
         progress:
           type: string
         state:
