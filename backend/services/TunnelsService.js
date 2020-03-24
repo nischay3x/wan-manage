@@ -39,7 +39,8 @@ class TunnelsService {
       'deviceAconf',
       'deviceB',
       'deviceBconf',
-      '_id']);
+      '_id',
+      'pathlabel']);
 
     retTunnel.interfaceADetails =
       retTunnel.deviceA.interfaces.filter((ifc) => {
@@ -107,8 +108,13 @@ class TunnelsService {
   static async tunnelsGET ({ org, offset, limit }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const response = await Tunnels.find({ org: { $in: orgList }, isActive: true })
-        .populate('deviceA').populate('deviceB');
+      const response = await Tunnels.find({
+        org: { $in: orgList },
+        isActive: true
+      })
+        .populate('deviceA')
+        .populate('deviceB')
+        .populate('pathlabel');
 
       // Populate interface details
       const tunnelMap = response.map((d) => {

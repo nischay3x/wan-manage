@@ -27,6 +27,7 @@ const TokensController = require('./TokensController');
 const TunnelsController = require('./TunnelsController');
 const UsersController = require('./UsersController');
 const BillingController = require('./BillingController');
+const PathLabelsController = require('./PathLabelsController');
 
 module.exports = {
   AccessTokensController,
@@ -40,5 +41,6 @@ module.exports = {
   TokensController,
   TunnelsController,
   UsersController,
-  BillingController
+  BillingController,
+  PathLabelsController
 };

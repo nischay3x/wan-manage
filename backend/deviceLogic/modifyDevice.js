@@ -23,7 +23,8 @@ const deviceQueues = require('../utils/deviceQueue')(
 const {
   prepareTunnelRemoveJob,
   prepareTunnelAddJob,
-  queueTunnel
+  queueTunnel,
+  oneTunnelDel
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
@@ -41,7 +42,11 @@ const isEqual = require('lodash/isEqual');
  */
 const prepareIfcParams = (interfaces) => {
   return interfaces.map(ifc => {
-    return omit(ifc, ['_id', 'PublicIP', 'isAssigned']);
+    const newIfc = omit(ifc, ['_id', 'PublicIP', 'isAssigned', 'pathlabels']);
+    newIfc.multilink = {
+      labels: ifc.pathlabels
+    };
+    return newIfc;
   });
 };
 /**
@@ -92,7 +97,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
 const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   const removedTunnels = [];
   const interfacesIdsSet = new Set();
-  const modifiedIfcsSet = new Set();
+  const modifiedIfcsMap = {};
   messageParams.reconnect = false;
 
   // Changes in the interfaces require reconstruction of all tunnels
@@ -111,7 +116,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
     const { interfaces } = messageParams.modify_interfaces;
     interfaces.forEach(ifc => {
       interfacesIdsSet.add(ifc._id);
-      modifiedIfcsSet.add(ifc._id);
+      modifiedIfcsMap[ifc._id] = ifc;
     });
   }
 
@@ -127,7 +132,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       .populate('deviceB');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB } = tunnel;
+      let { deviceA, deviceB, pathlabel, num, _id } = tunnel;
 
       // Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
@@ -141,25 +146,36 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         return ifc._id.toString() === tunnel.interfaceB.toString();
       });
 
+      // For interface changes such as IP/mask we remove the tunnel
+      // and readd it after the change has been applied on the device.
+      // In such cases, we don't remove the tunnel from the database,
+      // but rather only queue remove/add tunnel jobs to the devices.
+      // For interfaces that are unassigned, or which path labels have
+      // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
-      await queueTunnel(
-        false,
-        // eslint-disable-next-line max-len
-        `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
-        tasksDeviceA,
-        tasksDeviceB,
-        user,
-        org,
-        deviceA.machineId,
-        deviceB.machineId,
-        deviceA._id,
-        deviceB._id
-      );
-      // Maintain a list of all removed tunnels for adding them back
-      // after the interface changes are applied on the device.
-      // Add the tunnel to this list only if the interface connected
-      // to this tunnel has changed any property except for 'isAssigned'
-      if (modifiedIfcsSet.has(ifc._id)) removedTunnels.push(tunnel._id);
+      const pathlabels = modifiedIfcsMap[ifc._id] ? modifiedIfcsMap[ifc._id].pathlabels : null;
+      const pathLabelRemoved = pathlabel && !(pathlabels || []).includes(pathlabel);
+
+      if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
+        await oneTunnelDel(_id, user, org);
+      } else {
+        await queueTunnel(
+          false,
+          // eslint-disable-next-line max-len
+          `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
+          tasksDeviceA,
+          tasksDeviceB,
+          user,
+          org,
+          deviceA.machineId,
+          deviceB.machineId,
+          deviceA._id,
+          deviceB._id,
+          num,
+          pathlabel
+        );
+        removedTunnels.push(tunnel._id);
+      }
     }
   }
   // Prepare and queue device modification job
@@ -197,7 +213,7 @@ const reconstructTunnels = async (removedTunnels, org, user) => {
     .populate('deviceB');
 
   for (const tunnel of tunnels) {
-    const { deviceA, deviceB } = tunnel;
+    const { deviceA, deviceB, pathlabel } = tunnel;
     const ifcA = deviceA.interfaces.find(ifc => {
       return ifc._id.toString() === tunnel.interfaceA.toString();
     });
@@ -206,7 +222,13 @@ const reconstructTunnels = async (removedTunnels, org, user) => {
     });
 
     const { agent } = deviceB.versions;
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(tunnel.num, ifcA, ifcB, agent);
+    const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
+      tunnel.num,
+      ifcA,
+      ifcB,
+      agent,
+      pathlabel
+    );
     await queueTunnel(
       true,
       // eslint-disable-next-line max-len
@@ -218,7 +240,9 @@ const reconstructTunnels = async (removedTunnels, org, user) => {
       deviceA.machineId,
       deviceB.machineId,
       deviceA._id,
-      deviceB._id
+      deviceB._id,
+      tunnel.num,
+      pathlabel
     );
   }
 };
@@ -293,7 +317,6 @@ const apply = async (device, user, data) => {
   // Compare the array of interfaces, and return
   // an array of the interfaces that have changed
   // First, extract only the relevant interface fields
-
   const [origInterfaces, origIsAssigned] = [
     device[0].interfaces.map(ifc => {
       return ({
@@ -304,7 +327,8 @@ const apply = async (device, user, data) => {
         PublicIP: ifc.PublicIP,
         routing: ifc.routing,
         type: ifc.type,
-        isAssigned: ifc.isAssigned
+        isAssigned: ifc.isAssigned,
+        pathlabels: ifc.pathlabels
       });
     }),
     device[0].interfaces.map(ifc => {
@@ -326,7 +350,8 @@ const apply = async (device, user, data) => {
         PublicIP: ifc.PublicIP,
         routing: ifc.routing,
         type: ifc.type,
-        isAssigned: ifc.isAssigned
+        isAssigned: ifc.isAssigned,
+        pathlabels: ifc.pathlabels
       });
     }),
 

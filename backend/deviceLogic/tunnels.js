@@ -29,6 +29,17 @@ const deviceQueues = require('../utils/deviceQueue')(
 const { routerVersionsCompatible } = require('../versioning');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
+const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
+  const intersection = ifcLabelsA.filter(ifcLabel => {
+    const idx = ifcLabelsB.findIndex(label => {
+      return label._id.toString() === ifcLabel._id.toString();
+    });
+    return idx !== -1;
+  });
+
+  return intersection;
+};
+
 /**
  * This function is called when adding new tunnels
  * @async
@@ -92,31 +103,48 @@ const applyTunnelAdd = async (devices, user, data) => {
         };
         logger.debug('Connecting tunnel between devices', { params: { devicesInfo } });
 
-        // Create a tunnel from device A to device B WAN interface
         // Create a tunnel between each WAN interface on device A to
-        // each of the WAN interfaces on device B. This code should be
-        // modified when adding Path labels, to create tunnels
-        // between each WAN interface on device A and all of the WAN
-        // interfaces on device B with the same path label
+        // each of the WAN interfaces on device B according to the path
+        // labels assigned to the interfaces. If the list of path labels
+        // IDs contains the ID 'FFFFFF', create tunnels between all common
+        // path labels across all WAN interfaces.
         // TBD: key exchange should be dynamic
+        const specifiedLabels = data.meta.pathLabels;
+        const createForAllLabels = specifiedLabels.includes('FFFFFF');
         if (deviceAIntfs.length && deviceBIntfs.length) {
           deviceAIntfs.forEach(wanIfcA => {
             deviceBIntfs.forEach(wanIfcB => {
-              logger.debug('Adding tunnel between devices', {
-                params: {
-                  deviceA: deviceA.hostname,
-                  deviceB: deviceB.hostname,
-                  interfaces: {
-                    interfaceA: wanIfcA.name,
-                    interfaceB: wanIfcB.name
-                  }
+              const ifcALabels = wanIfcA.pathlabels;
+              const ifcBLabels = wanIfcB.pathlabels;
+
+              // If no path labels were selected, create a tunnel
+              // only if both interfaces aren't assigned with labels
+              if (specifiedLabels.length === 0) {
+                if (ifcALabels.length === 0 && ifcBLabels.length === 0) {
+                  dbTasks.push(getTunnelPromise(userName, org, null,
+                    { ...deviceA.toObject() }, { ...deviceB.toObject() },
+                    { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
                 }
-              });
-              // If a tunnel already exists, skip the configuration
-              // Use a copy of devices objects as promise runs later
-              dbTasks.push(getTunnelPromise(userName, org,
-                { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
+              } else {
+                // Create a list of path labels that are common to both interfaces.
+                const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
+                for (const label of labelsIntersection) {
+                  // Skip tunnel creation for labels of type "DIA"
+                  // (Direct Internet Access) or if the label is not
+                  // included in the list of labels specified by the user
+                  const shouldSkipTunnel =
+                    label.type === 'DIA'
+                      ? true
+                      : !createForAllLabels &&
+                        !specifiedLabels.includes(label._id);
+                  if (shouldSkipTunnel) continue;
+                  // If a tunnel already exists, skip the configuration
+                  // Use a copy of devices objects as promise runs later
+                  dbTasks.push(getTunnelPromise(userName, org, label._id,
+                    { ...deviceA.toObject() }, { ...deviceB.toObject() },
+                    { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
+                }
+              }
             });
           });
         } else {
@@ -152,13 +180,13 @@ const applyTunnelAdd = async (devices, user, data) => {
 const completeTunnelAdd = (jobId, res) => {
   logger.info('Tunnel add complete. Updating tunnel connectivity',
     { params: { result: res, jobId: jobId } });
-  if (!res || !res.deviceA || !res.deviceB || !res.target || !res.username || !res.org) {
+  if (!res || !res.tunnelId || !res.target || !res.username || !res.org) {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
     return;
   }
 
   updateTunnelIsConnected(tunnelsModel, res.org,
-    res.deviceA, res.deviceB, res.target, true)(null, (err, res) => {
+    res.tunnelId, res.target, true)(null, (err, res) => {
     if (err) {
       logger.error('Update tunnel connectivity failed', {
         params: { jobId: jobId, reason: err.message }
@@ -182,45 +210,67 @@ const errorTunnelAdd = async (jobId, res) => {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
     return;
   }
-
-  tunnelsModel.findOne({ deviceA: res.deviceA, deviceB: res.deviceB, org: res.org, isActive: true })
-    .then(async (tunnel) => {
-      if (tunnel != null) {
-        const jobs = await oneTunnelDel(tunnel._id, res.username, res.org,
-          (msg) => { logger.info('One tunnel del', { params: { message: msg } }); },
-          () => {
-            logger.info('Tunnel deleted', {
-              params: {
-                org: res.org,
-                tunnelId: tunnel._id,
-                tunnelNum: tunnel.num
-              }
-            });
+  const { deviceA, deviceB, org, tunnelId } = res;
+  tunnelsModel
+    .findOne({
+      num: tunnelId,
+      org: org,
+      isActive: true
+    })
+    .then(
+      async tunnel => {
+        if (tunnel != null) {
+          const jobs = await oneTunnelDel(
+            tunnel._id,
+            res.username,
+            res.org,
+            msg => {
+              logger.info('One tunnel del', { params: { message: msg } });
+            },
+            () => {
+              logger.info('Tunnel deleted', {
+                params: {
+                  org: res.org,
+                  tunnelId: tunnel._id,
+                  tunnelNum: tunnel.num
+                }
+              });
+            }
+          );
+          return jobs;
+        } else {
+          logger.error('errorTunnelAdd no tunnel found', {
+            params: {
+              tunnelId: tunnelId,
+              deviceA: res.deviceA,
+              deviceB: res.deviceB,
+              org: res.org,
+              isActive: true
+            }
           });
-        return jobs;
-      } else {
-        logger.error('errorTunnelAdd no tunnel found',
-          { params: { deviceA: res.deviceA, deviceB: res.deviceB, org: res.org, isActive: true } });
+          return [];
+        }
+      },
+      err => {
+        logger.error('errorTunnelAdd error', {
+          params: {
+            tunnelId: tunnelId,
+            deviceA: deviceA,
+            deviceB: deviceB,
+            org: org,
+            isActive: true,
+            message: err.message
+          }
+        });
         return [];
       }
-    }, (err) => {
+    )
+    .catch(err => {
       logger.error('errorTunnelAdd error', {
         params: {
-          deviceA: res.deviceA,
-          deviceB: res.deviceB,
-          org: res.org,
-          isActive: true,
-          message: err.message
-        }
-      });
-      return [];
-    })
-    .catch((err) => {
-      logger.error('errorTunnelAdd error', {
-        params: {
-          deviceA: res.deviceA,
-          deviceB: res.deviceB,
-          org: res.org,
+          deviceA: deviceA,
+          deviceB: deviceB,
+          org: org,
           isActive: true,
           message: err.message
         }
@@ -239,23 +289,28 @@ const errorTunnelAdd = async (jobId, res) => {
  * @param  {Object}   deviceAIntf device A tunnel interface
  * @param  {Object}   deviceBIntf device B tunnel interface
  */
-const getTunnelPromise = (user, org, deviceA, deviceB,
+const getTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
   deviceAIntf, deviceBIntf) => {
-  logger.debug('getTunnelPromise between', {
-    params:
-        {
-          deviceA: { hostname: deviceA.hostname },
-          deviceB: { hostname: deviceB.hostname }
-        }
+  logger.debug('Adding tunnel between devices', {
+    params: {
+      deviceA: deviceA.hostname,
+      deviceB: deviceB.hostname,
+      interfaces: {
+        interfaceA: deviceAIntf.name,
+        interfaceB: deviceBIntf.name
+      },
+      label: pathLabel
+    }
   });
 
   var tPromise = new Promise(function (resolve, reject) {
     tunnelsModel.find({
       $or: [
-        { deviceA: deviceA._id, deviceB: deviceB._id },
-        { deviceB: deviceA._id, deviceA: deviceB._id }
+        { interfaceA: deviceAIntf._id, interfaceB: deviceBIntf._id },
+        { interfaceB: deviceAIntf._id, interfaceA: deviceBIntf._id }
       ],
       isActive: true,
+      pathlabel: pathLabel,
       org: org
     })
       .then((tunnelFound) => {
@@ -281,7 +336,7 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
 
                 // Configure tunnel using this num
                 const tunnelJobs = await addTunnel(user, org, tunnelnum,
-                  deviceA, deviceB, deviceAIntf, deviceBIntf);
+                  deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
 
                 return resolve(tunnelJobs);
               } else { // No deleted tunnel found, get a new one
@@ -301,7 +356,7 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
 
                   // Configure tunnel using this num
                   const tunnelJobs = await addTunnel(user, org, tunnelnum,
-                    deviceA, deviceB, deviceAIntf, deviceBIntf);
+                    deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
 
                   return resolve(tunnelJobs);
                 }, (err) => {
@@ -328,7 +383,7 @@ const getTunnelPromise = (user, org, deviceA, deviceB,
                       logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
                       // Configure tunnel using this num
                       const tunnelJobs = await addTunnel(user, org, tunnelnum,
-                        deviceA, deviceB, deviceAIntf, deviceBIntf);
+                        deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
 
                       return resolve(tunnelJobs);
                     }, (err) => {
@@ -403,7 +458,9 @@ const queueTunnel = async (
   devAMachineID,
   devBMachineID,
   devAOid,
-  devBOid
+  devBOid,
+  tunnelId,
+  pathLabel
 ) => {
   try {
     const devices = { deviceA: devAOid, deviceB: devBOid };
@@ -422,8 +479,10 @@ const queueTunnel = async (
         data: {
           username: user,
           org: org,
+          tunnelId: tunnelId,
           deviceA: devAOid,
           deviceB: devBOid,
+          pathlabel: pathLabel,
           target: 'deviceAconf'
         }
       },
@@ -453,8 +512,10 @@ const queueTunnel = async (
         data: {
           username: user,
           org: org,
+          tunnelId: tunnelId,
           deviceA: devAOid,
           deviceB: devBOid,
+          pathlabel: pathLabel,
           target: 'deviceBconf'
         }
       },
@@ -488,7 +549,7 @@ const queueTunnel = async (
  * @param  {string} devBagentVer device B version
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer) => {
+const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer, pathLabel) => {
   // Generate from the tunnel ID: IP A/B, MAC A/B, SA A/B, 4 IPsec Keys
   const tunnelParams = generateTunnelParams(tunnelnum);
   const tunnelKeys = generateRandomKeys();
@@ -525,7 +586,10 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer) 
     addr: tunnelParams.ip1 + '/31',
     mac: tunnelParams.mac1,
     mtu: 1350,
-    routing: 'ospf'
+    routing: 'ospf',
+    multilink: {
+      labels: pathLabel ? [pathLabel] : []
+    }
   };
 
   paramsDeviceB.src = deviceBIntf.IPv4;
@@ -550,7 +614,10 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer) 
     addr: tunnelParams.ip2 + '/31',
     mac: tunnelParams.mac2,
     mtu: 1350,
-    routing: 'ospf'
+    routing: 'ospf',
+    multilink: {
+      labels: pathLabel ? [pathLabel] : []
+    }
   };
 
   // Saving configuration for device A
@@ -576,13 +643,24 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer) 
  * @param  {Callback} reject       promise resolve callback
  * @return {void}
  */
-const addTunnel = async (user, org, tunnelnum, deviceA, deviceB, deviceAIntf, deviceBIntf) => {
+const addTunnel = async (
+  user,
+  org,
+  tunnelnum,
+  deviceA,
+  deviceB,
+  deviceAIntf,
+  deviceBIntf,
+  pathLabel
+) => {
   const devicesInfo = {
     deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name },
     deviceB: { hostname: deviceB.hostname, interface: deviceBIntf.name }
   };
 
-  logger.info('Adding Tunnel between devices', { params: { devices: devicesInfo } });
+  logger.info('Adding Tunnel between devices', {
+    params: { devices: devicesInfo }
+  });
 
   await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
@@ -598,7 +676,8 @@ const addTunnel = async (user, org, tunnelnum, deviceA, deviceB, deviceAIntf, de
       deviceA: deviceA._id,
       interfaceA: deviceAIntf._id,
       deviceB: deviceB._id,
-      interfaceB: deviceBIntf._id
+      interfaceB: deviceBIntf._id,
+      pathlabel: pathLabel
     },
     // Options
     { upsert: true }
@@ -609,7 +688,8 @@ const addTunnel = async (user, org, tunnelnum, deviceA, deviceB, deviceAIntf, de
     tunnelnum,
     deviceAIntf,
     deviceBIntf,
-    agent
+    agent,
+    pathLabel
   );
 
   const tunnelJobs = await queueTunnel(
@@ -630,7 +710,9 @@ const addTunnel = async (user, org, tunnelnum, deviceA, deviceB, deviceAIntf, de
     deviceA.machineId,
     deviceB.machineId,
     deviceA._id,
-    deviceB._id
+    deviceB._id,
+    tunnelnum,
+    pathLabel
   );
 
   return tunnelJobs;
@@ -640,8 +722,7 @@ const addTunnel = async (user, org, tunnelnum, deviceA, deviceB, deviceAIntf, de
  * Update tunnel device configuration
  * @param  {Object}  tunnelsModel mongoose tunnel schema
  * @param  {string}  org          organization initiated the request
- * @param  {string}  devAOid      device A mongodb object id
- * @param  {string}  devBOid      device B mongodb object id
+ * @param  {string}  tunnelId     the id of the tunnel to update
  * @param  {string}  target       which parameter to update in the model
  * @param  {boolean} isAdd        update to configuration of true or false
  * @return {void}
@@ -649,19 +730,14 @@ const addTunnel = async (user, org, tunnelnum, deviceA, deviceB, deviceAIntf, de
 const updateTunnelIsConnected = (
   tunnelsModel,
   org,
-  devAOid,
-  devBOid,
+  tunnelId,
   target,
   isAdd
 ) => (inp, callback) => {
   const params = {
     org: org,
     target: target,
-    isAdd: isAdd,
-    devices: {
-      deviceA: devAOid,
-      deviceB: devBOid
-    }
+    isAdd: isAdd
   };
   logger.info('Updating tunnels connectivity', { params: params });
   const update = {};
@@ -670,7 +746,7 @@ const updateTunnelIsConnected = (
   tunnelsModel
     .findOneAndUpdate(
       // Query
-      { deviceA: devAOid, deviceB: devBOid, org: org },
+      { num: tunnelId, org: org },
       // Update
       update,
       // Options
@@ -742,6 +818,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   // Define devices
   const deviceA = tunnelResp.deviceA;
   const deviceB = tunnelResp.deviceB;
+  const pathLabel = tunnelResp.pathlabel;
 
   // Populate interface details
   const deviceAIntf = tunnelResp.deviceA.interfaces
@@ -752,7 +829,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   const tunnelnum = tunnelResp.num;
 
   const tunnelJobs = await delTunnel(user, org, tunnelnum, deviceA, deviceB,
-    deviceAIntf, deviceBIntf);
+    deviceAIntf, deviceBIntf, pathLabel);
 
   logger.info('Deleting tunnels from database');
   const resp = await tunnelsModel.findOneAndUpdate(
@@ -840,7 +917,8 @@ const delTunnel = async (
   deviceA,
   deviceB,
   deviceAIntf,
-  deviceBIntf
+  deviceBIntf,
+  pathLabel
 ) => {
   const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
     tunnelnum,
@@ -866,7 +944,9 @@ const delTunnel = async (
       deviceA.machineId,
       deviceB.machineId,
       deviceA._id,
-      deviceB._id
+      deviceB._id,
+      tunnelnum,
+      pathLabel
     );
     logger.debug('Tunnel jobs queued', { params: { jobA: tunnelJobs[0], jobB: tunnelJobs[1] } });
     return tunnelJobs;
@@ -938,5 +1018,6 @@ module.exports = {
   },
   prepareTunnelRemoveJob: prepareTunnelRemoveJob,
   prepareTunnelAddJob: prepareTunnelAddJob,
-  queueTunnel: queueTunnel
+  queueTunnel: queueTunnel,
+  oneTunnelDel: oneTunnelDel
 };

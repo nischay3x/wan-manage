@@ -44,7 +44,8 @@ class DevicesService {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const opDevices = await devices.find({ org: { $in: orgList } });
+      const opDevices = await devices.find({ org: { $in: orgList } })
+        .populate('interfaces.pathlabels', '_id name description color type');
       // Apply the device command
       const retJobs = await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
       const jobIds = retJobs.flat().map(job => job.id);
@@ -133,7 +134,8 @@ class DevicesService {
         'IPv4Mask',
         'name',
         'pciaddr',
-        '_id'
+        '_id',
+        'pathlabels'
       ]);
       retIf._id = retIf._id.toString();
       return retIf;
@@ -179,7 +181,8 @@ class DevicesService {
   static async devicesGET ({ org, offset, limit }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await devices.find({ org: { $in: orgList } });
+      const result = await devices.find({ org: { $in: orgList } })
+        .populate('interfaces.pathlabels', '_id name description color type');
 
       const devicesMap = result.map(item => {
         return DevicesService.selectDeviceParams(item);
@@ -284,7 +287,8 @@ class DevicesService {
   static async devicesIdGET ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await devices.findOne({ _id: id, org: { $in: orgList } });
+      const result = await devices.findOne({ _id: id, org: { $in: orgList } })
+        .populate('interfaces.pathlabels', '_id name description color type');
       const device = DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
