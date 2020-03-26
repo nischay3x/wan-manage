@@ -1987,6 +1987,16 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Force delete
+        explode: false
+        in: query
+        name: force
+        required: false
+        schema:
+          enum:
+          - yes
+          - no
+          type: string
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -5278,6 +5288,7 @@ components:
       properties:
         host:
           description: Device hostname
+          minLength: 1
           maxLength: 253
           type: string
         mac:
@@ -5289,6 +5300,7 @@ components:
           maxLength: 20
           type: string
       required:
+      - host
       - mac
       - ipv4
     DhcpRequest:

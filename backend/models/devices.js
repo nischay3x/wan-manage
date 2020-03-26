@@ -27,7 +27,7 @@ const interfacesSchema = new Schema({
   // interface name
   name: {
     type: String,
-    minlength: 1,
+    minlength: [1, 'Name length must be at least 1'],
     maxlength: [50, 'Name length must be at most 50'],
     validate: {
       validator: validators.validateIfcName,
@@ -184,11 +184,11 @@ const MACAssignmentSchema = new Schema({
     type: String,
     minlength: [1, 'Host length must be at least 1'],
     maxlength: [253, 'Host length must be at most 253'],
+    required: [true, 'Host must be set'],
     validate: {
       validator: validators.validateHostName,
       message: 'Host should contain English characters, digits, hyphens and dots'
-    },
-    default: ''
+    }
   },
   mac: {
     type: String,
@@ -215,7 +215,7 @@ const MACAssignmentSchema = new Schema({
 const DHCPSchema = new Schema({
   interface: {
     type: String,
-    minlength: 1,
+    minlength: [1, 'Interface length must be at least 1'],
     maxlength: [50, 'Interface length must be at most 50'],
     required: [true, 'Interface must be set'],
     validate: {
