@@ -17,7 +17,7 @@
 
 const Service = require('./Service');
 const configs = require('../configs')();
-const { devices, staticroutes } = require('../models/devices');
+const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
@@ -26,6 +26,7 @@ const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
+const uniqBy = require('lodash/uniqBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
@@ -152,6 +153,27 @@ class DevicesService {
       return retRoute;
     });
 
+    const retDhcpList = item.dhcp.map(d => {
+      const retDhcp = pick(d, [
+        '_id',
+        'interface',
+        'rangeStart',
+        'rangeEnd',
+        'dns',
+        'status'
+      ]);
+
+      const macAssignList = d.macAssign.map(m => {
+        return pick(m, [
+          'host', 'mac', 'ipv4'
+        ]);
+      });
+
+      retDhcp.macAssign = macAssignList;
+      retDhcp._id = retDhcp._id.toString();
+      return retDhcp;
+    });
+
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
@@ -163,6 +185,7 @@ class DevicesService {
     retDevice.versions = pick(item.versions, ['agent', 'router', 'device', 'vpp', 'frr']);
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
+    retDevice.dhcp = retDhcpList;
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
@@ -672,8 +695,12 @@ class DevicesService {
    **/
   static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const device = await devices.findOneAndUpdate(
-        { _id: mongoose.Types.ObjectId(id) },
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        },
         { $set: { 'staticroutes.$[elem].status': 'waiting' } },
         {
           arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(id) }]
@@ -887,6 +914,323 @@ class DevicesService {
       });
       return Service.successResponse(stats);
     } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Delete DHCP
+   *
+   * id String Numeric ID of the Device
+   * dhcpId String Numeric ID of the DHCP to delete
+   * org String Organization to be filtered by (optional)
+   * no response value expected for this operation
+   **/
+  static async devicesIdDhcpDhcpIdDELETE ({ id, dhcpId, force, org }, { user }, response) {
+    try {
+      const isForce = (force === 'yes');
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const device = await devices.findOneAndUpdate(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        },
+        { $set: { 'dhcp.$[elem].status': 'del-wait' } },
+        {
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }],
+          new: false
+        }
+      );
+
+      if (!device) throw new Error('Device not found');
+      const deleteDhcp = device.dhcp.filter((s) => {
+        return (s.id === dhcpId);
+      });
+
+      if (deleteDhcp.length !== 1) throw new Error('DHCP ID not found');
+
+      const deleteDhcpObj = deleteDhcp[0].toObject();
+
+      // If previous status was del-wait, no need to resend the job
+      if (deleteDhcpObj.status !== 'del-wait') {
+        const copy = Object.assign({}, deleteDhcpObj);
+        copy.method = 'dhcp';
+        copy._id = dhcpId;
+        copy.action = 'del';
+        const retJobs = await dispatcher.apply(device, copy.method, user, copy);
+        const jobIds = retJobs.flat().map(job => job.id);
+        const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+          jobIds.join('%2C')}&org=${orgList[0]}`;
+        response.setHeader('Location', location);
+      }
+
+      // If force delete specified, delete the entry regardless of the job status
+      if (isForce) {
+        await devices.findOneAndUpdate(
+          { _id: device._id },
+          {
+            $pull: {
+              dhcp: {
+                _id: mongoose.Types.ObjectId(dhcpId)
+              }
+            }
+          }
+        );
+      }
+
+      return Service.successResponse({}, 202);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get DHCP by ID
+   *
+   * id String Numeric ID of the Device
+   * dhcpId String Numeric ID of the DHCP to get
+   * org String Organization to be filtered by (optional)
+   * returns Dhcp
+   **/
+  static async devicesIdDhcpDhcpIdGET ({ id, dhcpId, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const device = await devices.findOne(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }
+      );
+
+      if (!device) throw new Error('Device not found');
+      const resultDhcp = device.dhcp.filter((s) => {
+        return (s.id === dhcpId);
+      });
+      if (resultDhcp.length !== 1) throw new Error('DHCP ID not found');
+
+      const result = {
+        _id: resultDhcp[0].id,
+        interface: resultDhcp[0].interface,
+        rangeStart: resultDhcp[0].rangeStart,
+        rangeEnd: resultDhcp[0].rangeEnd,
+        dns: resultDhcp[0].dns,
+        macAssign: resultDhcp[0].macAssign,
+        status: resultDhcp[0].status
+      };
+
+      return Service.successResponse(result, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify DHCP
+   *
+   * id String Numeric ID of the Device
+   * dhcpId String Numeric ID of the DHCP to modify
+   * org String Organization to be filtered by (optional)
+   * dhcpRequest DhcpRequest  (optional)
+   * returns Dhcp
+   **/
+  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org, dhcpRequest }, { user }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+      const dhcpFiltered = deviceObject.dhcp.filter((s) => {
+        return (s.id === dhcpId);
+      });
+      if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
+
+      const dhcpObject = dhcpFiltered[0].toObject();
+
+      // allow to patch only in the case of failed
+      if (dhcpObject.status.includes('failed')) throw new Error('Only allowed for failed jobs');
+
+      const copy = Object.assign({}, dhcpObject);
+      copy.method = 'dhcp';
+      copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
+      const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
+      const jobIds = retJobs.flat().map(job => job.id);
+      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        jobIds.join('%2C')}&org=${orgList[0]}`;
+      response.setHeader('Location', location);
+
+      const dhcpData = {
+        _id: dhcpObject.id,
+        interface: dhcpObject.interface,
+        rangeStart: dhcpObject.rangeStart,
+        rangeEnd: dhcpObject.rangeEnd,
+        dns: dhcpObject.dns,
+        macAssign: dhcpObject.macAssign,
+        status: dhcpObject.status
+      };
+
+      return Service.successResponse(dhcpData, 202);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Retrieve device DHCP information
+   *
+   * id String Numeric ID of the Device to fetch information about
+   * offset Integer The number of items to skip before starting to collect the result set (optional)
+   * limit Integer The numbers of items to return (optional)
+   * org String Organization to be filtered by (optional)
+   * returns List
+   **/
+  static async devicesIdDhcpGET ({ id, offset, limit, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }
+      );
+
+      if (!device) throw new Error('Device not found');
+      let result = [];
+      const start = offset || 0;
+      const size = limit || device.dhcp.length;
+      if (device.dhcp && device.dhcp.length > 0 && start < device.dhcp.length) {
+        const end = Math.min(start + size, device.dhcp.length);
+        result = device.dhcp.slice(start, end);
+      }
+
+      const mappedResult = result.map(r => {
+        return {
+          _id: r.id,
+          interface: r.interface,
+          rangeStart: r.rangeStart,
+          rangeEnd: r.rangeEnd,
+          dns: r.dns,
+          macAssign: r.macAssign,
+          status: r.status
+        };
+      });
+
+      return Service.successResponse(mappedResult, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Validate that the dhcp request
+   * @param {Object} dhcpRequest - request values
+   * @throw error, if not valid
+   */
+  static validateDhcpRequest (dhcpRequest) {
+    // Check that no repeated mac, host or IP
+    const macLen = dhcpRequest.macAssign.length;
+    const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
+    const uniqHosts = uniqBy(dhcpRequest.macAssign, 'host');
+    const uniqIPs = uniqBy(dhcpRequest.macAssign, 'ipv4');
+    if (uniqMacs.length !== macLen) throw new Error('MAC bindings MACs are not unique');
+    if (uniqHosts.length !== macLen) throw new Error('MAC bindings hosts are not unique');
+    if (uniqIPs.length !== macLen) throw new Error('MAC bindings IPs are not unique');
+  }
+
+  /**
+   * Add DHCP server
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by (optional)
+   * dhcpRequest DhcpRequest  (optional)
+   * returns Dhcp
+   **/
+  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user }, response) {
+    let session;
+    try {
+      session = await mongoConns.getMainDB().startSession();
+      await session.startTransaction();
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      DevicesService.validateDhcpRequest(dhcpRequest);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      }).session(session);
+      if (!deviceObject) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+
+      // Verify that no dhcp has been defined for the interface
+      const dhcpObject = deviceObject.dhcp.filter((s) => {
+        return (s.interface === dhcpRequest.interface);
+      });
+      if (dhcpObject.length > 0) throw new Error('DHCP already configured for that interface');
+
+      const dhcpData = {
+        interface: dhcpRequest.interface,
+        rangeStart: dhcpRequest.rangeStart,
+        rangeEnd: dhcpRequest.rangeEnd,
+        dns: dhcpRequest.dns,
+        macAssign: dhcpRequest.macAssign,
+        status: 'add-wait'
+      };
+
+      // eslint-disable-next-line new-cap
+      const dhcp = new dhcpModel(dhcpData);
+      dhcp.$session(session);
+
+      await devices.findOneAndUpdate(
+        { _id: deviceObject._id },
+        {
+          $push: {
+            dhcp: dhcp
+          }
+        },
+        { new: true }
+      ).session(session);
+
+      const copy = Object.assign({}, dhcpRequest);
+
+      copy.method = 'dhcp';
+      copy._id = dhcp.id;
+      copy.action = 'add';
+      const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
+      const jobIds = retJobs.flat().map(job => job.id);
+      const result = { ...dhcpData, _id: dhcp._id.toString() };
+      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        jobIds.join('%2C')}&org=${orgList[0]}`;
+      response.setHeader('Location', location);
+
+      await session.commitTransaction();
+      session = null;
+
+      return Service.successResponse(result, 202);
+    } catch (e) {
+      if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
