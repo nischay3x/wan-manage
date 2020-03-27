@@ -1465,6 +1465,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -1552,6 +1559,13 @@ paths:
         schema:
           type: integer
         style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -1620,6 +1634,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "204":
           description: Successful operation
@@ -1681,6 +1702,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
