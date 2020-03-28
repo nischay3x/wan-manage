@@ -16,6 +16,9 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
+const Applications = require('../models/applications');
+const mongoConns = require('../mongoConns.js')();
+const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class ApplicationsService {
   static async applicationsGET ({ org, offset, limit }, { user }) {
@@ -23,7 +26,7 @@ class ApplicationsService {
       console.log('Inside applicationsGET');
       // TODO: currently returns hard-coded data, needs to be
       // TODO: retrieved from DB
-      const applications = [{
+      const applicationsFake = [{
         app: 'google-dns',
         _id: '5e72f859a7bb9d2c5305aa86',
         category: 'network',
@@ -64,7 +67,39 @@ class ApplicationsService {
           protocol: 'TCP'
         }]
       }];
-      return Service.successResponse(applications);
+      return Service.successResponse(applicationsFake);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Add new application
+   *
+   * organizationRequest OrganizationRequest  (optional)
+   * returns Application
+   **/
+  static async applicationsPOST ({ org, applicationRequest }, { user }, response) {
+    try {
+      const session = await mongoConns.getMainDB().startSession();
+      await session.startTransaction();
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      console.warn(`orgList ${orgList[0].toString()}`);
+      const orgBody = { ...applicationRequest, account: user.defaultAccount };
+      console.warn('applicationsPOST: calling Applications.create');
+      orgBody.org = orgList[0].toString();
+      const _org = await Applications.applications.create([orgBody], { session: session });
+      const org1 = _org[0];
+      // return Service.successResponse(org1, 201);
+      return Service.successResponse({
+        _id: org1.id,
+        org: org1.org.toString(),
+        app: org1.app,
+        createdAt: org1.createdAt.toISOString()
+      }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
