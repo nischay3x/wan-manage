@@ -17,16 +17,31 @@
 
 const Service = require('./Service');
 const Applications = require('../models/applications');
-const mongoConns = require('../mongoConns.js')();
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class ApplicationsService {
   static async applicationsGET ({ org, offset, limit }, { user }) {
+    console.log('Inside applicationsGET');
     try {
-      console.log('Inside applicationsGET');
-      // TODO: currently returns hard-coded data, needs to be
-      // TODO: retrieved from DB
-      const applicationsFake = [{
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const result = await Applications.applications.find({ org: { $in: orgList } });
+
+      let applications = result.map(item => {
+        return {
+          _id: item.id,
+          org: item.org.toString(),
+          app: item.app,
+          category: item.category,
+          subcategory: item.subcategory,
+          importance: item.importance,
+          rules: item.rules,
+          createdAt: item.createdAt.toISOString()
+        };
+      });
+
+      // TODO: currently appending some hard-coded data, needs to be
+      // TODO: retrieved from external URL
+      applications = applications.concat([{
         app: 'google-dns',
         _id: '5e72f859a7bb9d2c5305aa86',
         category: 'network',
@@ -66,8 +81,9 @@ class ApplicationsService {
           portRangeHigh: 2074,
           protocol: 'TCP'
         }]
-      }];
-      return Service.successResponse(applicationsFake);
+      }]);
+
+      return Service.successResponse(applications);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -84,21 +100,16 @@ class ApplicationsService {
    **/
   static async applicationsPOST ({ org, applicationRequest }, { user }, response) {
     try {
-      const session = await mongoConns.getMainDB().startSession();
-      await session.startTransaction();
       const orgList = await getAccessTokenOrgList(user, org, true);
-      console.warn(`orgList ${orgList[0].toString()}`);
-      const orgBody = { ...applicationRequest, account: user.defaultAccount };
-      console.warn('applicationsPOST: calling Applications.create');
-      orgBody.org = orgList[0].toString();
-      const _org = await Applications.applications.create([orgBody], { session: session });
-      const org1 = _org[0];
-      // return Service.successResponse(org1, 201);
+      const applicationBody = { ...applicationRequest, account: user.defaultAccount };
+      applicationBody.org = orgList[0].toString();
+      const _applicationList = await Applications.applications.create([applicationBody]);
+      const applicationItem = _applicationList[0];
       return Service.successResponse({
-        _id: org1.id,
-        org: org1.org.toString(),
-        app: org1.app,
-        createdAt: org1.createdAt.toISOString()
+        _id: applicationItem.id,
+        org: applicationItem.org.toString(),
+        app: applicationItem.app,
+        createdAt: applicationItem.createdAt.toISOString()
       }, 201);
     } catch (e) {
       return Service.rejectResponse(
