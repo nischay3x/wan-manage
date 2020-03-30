@@ -1147,7 +1147,7 @@ class DevicesService {
       const dhcpObject = dhcpFiltered[0].toObject();
 
       // allow to patch only in the case of failed
-      if (dhcpObject.status === 'add-failed' || dhcpObject.status === 'remove-failed') {
+      if (dhcpObject.status !== 'add-failed' && dhcpObject.status !== 'remove-failed') {
         throw new Error('Only allowed for add or removed failed jobs');
       }
 
