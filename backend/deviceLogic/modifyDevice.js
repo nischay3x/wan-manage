@@ -285,6 +285,28 @@ const rollBackDeviceChanges = async (origDevice) => {
   );
   if (result.nModified !== 1) throw new Error('device document was not updated');
 };
+
+/**
+ * Validate if any dhcp is assigned on a modified interface
+ * @param {Object} device - original device
+ * @param {List} modifiedInterfaces - list of modified interfaces
+ */
+const validateDhcpConfig = (device, modifiedInterfaces) => {
+  const assignedDhcps = device.dhcp.map(d => d.interface);
+  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.pci));
+  if (modifiedDhcp.length > 0) {
+    // get first interface from device
+    const firstIf = device.interfaces.filter(i => i.pciaddr === modifiedDhcp[0].pci);
+    const result = {
+      valid: false,
+      err: `DHCP defined on interface ${
+        firstIf[0].name
+      }, please remove it before modifying this interface`
+    };
+    return result;
+  }
+  return { valid: true, err: '' };
+};
 /**
  * Creates and queues the modify-device job. It compares
  * the current view of the device in the database with
@@ -440,6 +462,12 @@ const apply = async (device, user, data) => {
         await rollBackDeviceChanges(device[0]);
         throw (new Error(err));
       }
+      const dhcpValidation = validateDhcpConfig(device[0], interfaces);
+      if (!dhcpValidation.valid) {
+        // Rollback device changes in database and return error
+        await rollBackDeviceChanges(device[0]);
+        throw (new Error(dhcpValidation.err));
+      }
       await setJobPendingInDB(device[0]._id, org, true);
       const jobs = await queueModifyDeviceJob(device[0], modifyParams, userName, org);
       return jobs;
@@ -455,7 +483,7 @@ const apply = async (device, user, data) => {
         params: { err: err.message, device: device[0]._id }
       });
     }
-    throw (new Error('Internal server error'));
+    throw (new Error(err.message || 'Internal server error'));
   }
 };
 

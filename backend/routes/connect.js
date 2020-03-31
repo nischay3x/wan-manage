@@ -154,7 +154,7 @@ connectRouter.route('/register')
                           account: decoded.account,
                           org: decoded.org
                         };
-                        if (!await webHooks.sendToWebHook(configs.get('webHookRegisterDeviceURL'),
+                        if (!await webHooks.sendToWebHook(configs.get('webHookRegisterDeviceUrl'),
                           webHookMessage,
                           configs.get('webHookRegisterDeviceSecret'))) {
                           logger.error('Web hook call failed for registered device',

@@ -50,7 +50,7 @@ class DevicesService {
       // Apply the device command
       const retJobs = await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
       const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
       return Service.successResponse({ ids: jobIds }, 202);
@@ -81,7 +81,7 @@ class DevicesService {
 
       const retJobs = await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
       const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
       return Service.successResponse({ ids: jobIds }, 202);
@@ -962,7 +962,7 @@ class DevicesService {
         copy.action = 'del';
         const retJobs = await dispatcher.apply(device, copy.method, user, copy);
         const jobIds = retJobs.flat().map(job => job.id);
-        const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
           jobIds.join('%2C')}&org=${orgList[0]}`;
         response.setHeader('Location', location);
       }
@@ -1070,7 +1070,7 @@ class DevicesService {
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
 
@@ -1221,7 +1221,7 @@ class DevicesService {
       const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const jobIds = retJobs.flat().map(job => job.id);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
 

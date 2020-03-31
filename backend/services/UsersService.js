@@ -77,7 +77,7 @@ class UsersService {
       // Send email if user found
       if (resp) {
         await mailer.sendMailHTML(
-          'noreply@flexiwan.com',
+          configs.get('mailerFromAddress'),
           resetPasswordRequest.email,
           'Reset Password for Your flexiWAN Account',
           `<h2>Reset Password for your flexiWAN Account</h2>
@@ -86,7 +86,7 @@ class UsersService {
                    click below to reset your password. If you do not know who this is,
                    ignore this message.</b>
                 <p><a href="${configs.get(
-                  'UIServerURL'
+                  'uiServerUrl'
                 )}/reset-password?email=${
                   resetPasswordRequest.email
           }&t=${validateKey}"><button style="color:#fff;
