@@ -170,6 +170,15 @@ const staticroutesSchema = new Schema({
   ifname: {
     type: String
   },
+  // metric
+  metric: {
+    type: String,
+    default: '',
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'Metric should be a number'
+    }
+  },
   // status
   status: {
     type: String,
