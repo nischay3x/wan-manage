@@ -675,6 +675,7 @@ class DevicesService {
           destination: value.destination,
           gateway: value.gateway,
           ifname: value.ifname,
+          metric: value.metric,
           status: value.status
         };
       });
@@ -755,6 +756,7 @@ class DevicesService {
         destination: staticRouteRequest.destination,
         gateway: staticRouteRequest.gateway,
         ifname: staticRouteRequest.ifname,
+        metric: staticRouteRequest.metric,
         status: 'waiting'
       });
 
@@ -778,7 +780,8 @@ class DevicesService {
         _id: route._id.toString(),
         gateway: route.gateway,
         destination: route.destination,
-        ifname: route.ifname
+        ifname: route.ifname,
+        metric: route.metric
       };
 
       return Service.successResponse(result, 201);

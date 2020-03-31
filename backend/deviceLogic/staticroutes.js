@@ -53,6 +53,10 @@ const apply = async (device, user, data) => {
       params.pci = data.ifname;
     }
 
+    if (data.metric) {
+      params.metric = data.metric;
+    }
+
     if (data.action === 'del') {
       titlePrefix = 'Delete';
       message = 'remove-route';

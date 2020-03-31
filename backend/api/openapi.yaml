@@ -5343,10 +5343,11 @@ components:
       type: object
     StaticRouteRequest:
       example:
-        destination: destination
         _id: _id
-        ifname: interface
+        destination: destination
+        interface: interface
         gateway: gateway
+        metric: metric
       properties:
         _id:
           maxLength: 24
@@ -5364,12 +5365,16 @@ components:
           description: Interface name
           maxLength: 24
           type: string
+        metric:
+          description: Route metric
+          type: string
       type: object
     StaticRoute:
       example:
         destination: destination
         ifname: interface
         gateway: gateway
+        metric: metric
         status: "completed"
       properties:
         _id:
@@ -5385,6 +5390,9 @@ components:
         ifname:
           description: Interface name
           maxLength: 24
+          type: string
+        metric:
+          description: Route metric
           type: string
         status:
           description: Route status
