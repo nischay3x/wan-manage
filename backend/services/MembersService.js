@@ -486,14 +486,14 @@ class MembersService {
 
       // Send email
       await mailer.sendMailHTML(
-        'noreply@flexiwan.com',
+        configs.get('mailerFromAddress'),
         memberRequest.email,
         'You are invited to a flexiWAN Account',
         (`<h2>flexiWAN Account Invitation</h2>
         <b>You have been invited to a flexiWAN
         ${memberRequest.userPermissionTo}. </b>`) + ((registerUser)
           ? `<b>Click below to set your password</b>
-        <p><a href="${configs.get('UIServerURL')}/reset-password?email=${
+        <p><a href="${configs.get('uiServerUrl')}/reset-password?email=${
           memberRequest.email
         }&t=${resetPWKey}">
           <button style="color:#fff;background-color:#F99E5B;
@@ -528,7 +528,7 @@ class MembersService {
           companyDesc: '',
           state: (existingUser) ? existingUser.state : 'unverified'
         };
-        if (!await webHooks.sendToWebHook(configs.get('webHookAddUserURL'),
+        if (!await webHooks.sendToWebHook(configs.get('webHookAddUserUrl'),
           webHookMessage,
           configs.get('webHookAddUserSecret'))) {
           logger.error('Web hook call failed', { params: { message: webHookMessage } });
