@@ -62,30 +62,59 @@ const apply = async (device, user, data) => {
     let titlePrefix;
     let params;
 
-    if (data.action === 'add') {
-      message = 'add-dhcp-config';
-      titlePrefix = 'Add';
-      params = {
-        interface: data.interface,
-        range_start: data.rangeStart,
-        range_end: data.rangeEnd,
-        dns: data.dns,
-        mac_assign: data.macAssign
-      };
-    } else {
-      titlePrefix = 'Delete';
-      message = 'remove-dhcp-config';
-      params = {
-        interface: data.interface
-      };
+    switch (data.action) {
+      case 'add':
+        message = 'add-dhcp-config';
+        titlePrefix = 'Add';
+        params = {
+          interface: data.interface,
+          range_start: data.rangeStart,
+          range_end: data.rangeEnd,
+          dns: data.dns,
+          mac_assign: data.macAssign
+        };
+        break;
+      case 'del':
+        titlePrefix = 'Delete';
+        message = 'remove-dhcp-config';
+        params = {
+          interface: data.interface
+        };
+        break;
+      case 'modify':
+        titlePrefix = 'Modify';
+        message = 'modify-device';
+        params = {
+          modify_dhcp_config: {
+            dhcp_configs: [{
+              interface: data.interface,
+              range_start: data.rangeStart,
+              range_end: data.rangeEnd,
+              dns: data.dns,
+              mac_assign: data.macAssign
+            }]
+          }
+        };
+        break;
+      default:
+        return [];
     }
+
     tasks.push({ entity: 'agent', message, params });
 
     const job = await deviceQueues.addJob(machineId, userName, org,
       // Data
       { title: `${titlePrefix} DHCP in device ${device.hostname}`, tasks: tasks },
       // Response data
-      { method: 'dhcp', data: { deviceId: device.id, dhcpId: dhcpId, message } },
+      {
+        method: 'dhcp',
+        data: {
+          deviceId: device.id,
+          dhcpId: dhcpId,
+          ...(data.origDhcp) && { origDhcp: data.origDhcp },
+          message
+        }
+      },
       // Metadata
       { priority: 'low', attempts: 1, removeOnComplete: false },
       // Complete callback
@@ -142,6 +171,22 @@ const complete = async (jobId, res) => {
 };
 
 /**
+ * Rollback modify dhcp job
+ * @param {String} deviceId - Id of the device the DHCP belongs to
+ * @param {Object} origDhcp - Original DHCP
+ */
+const rollbackDhcpChanges = async (deviceId, origDhcp) => {
+  const result = await devices.update(
+    { _id: deviceId },
+    { $set: { 'dhcp.$[elem]': origDhcp } },
+    { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(origDhcp._id) }] }
+  );
+
+  console.log(JSON.stringify(result));
+  if (result.nModified !== 1) throw new Error('Failed to restore DHCP');
+};
+
+/**
 * Called if add/remove dhcp job failed and
  * updates the status of the operation.
  * @async
@@ -153,26 +198,41 @@ const error = async (jobId, res) => {
   logger.info('DHCP job failed', { params: { result: res, jobId: jobId } });
 
   try {
-    if (res.message === 'remove-dhcp-config') {
-      await devices.findOneAndUpdate(
-        { _id: mongoose.Types.ObjectId(res.deviceId) },
-        { $set: { 'dhcp.$[elem].status': 'remove-failed' } },
-        {
-          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.dhcpId) }]
-        }
-      );
-    } else {
-      await devices.findOneAndUpdate(
-        { _id: mongoose.Types.ObjectId(res.deviceId) },
-        { $set: { 'dhcp.$[elem].status': 'add-failed' } },
-        {
-          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.dhcpId) }]
-        }
-      );
+    switch (res.message) {
+      case 'add-dhcp-config':
+        await devices.findOneAndUpdate(
+          { _id: mongoose.Types.ObjectId(res.deviceId) },
+          { $set: { 'dhcp.$[elem].status': 'add-failed' } },
+          {
+            arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.dhcpId) }]
+          }
+        );
+        break;
+      case 'remove-dhcp-config':
+        await devices.findOneAndUpdate(
+          { _id: mongoose.Types.ObjectId(res.deviceId) },
+          { $set: { 'dhcp.$[elem].status': 'remove-failed' } },
+          {
+            arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.dhcpId) }]
+          }
+        );
+        break;
+      case 'modify-device':
+        await rollbackDhcpChanges(res.deviceId, res.origDhcp);
+        await devices.findOneAndUpdate(
+          { _id: mongoose.Types.ObjectId(res.deviceId) },
+          { $set: { 'dhcp.$[elem].status': 'modify-failed' } },
+          {
+            arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(res.dhcpId) }]
+          }
+        );
+        break;
+      default:
+        throw new Error('Unable to find message type');
     }
   } catch (error) {
     logger.warn('DHCP job error, failed to update database', {
-      params: { result: res, jobId: jobId }
+      params: { result: res, jobId: jobId, message: error.message }
     });
   }
 };
@@ -193,6 +253,9 @@ const remove = async (job) => {
     const dhcpId = job.data.response.data.dhcpId;
 
     try {
+      if (job.data.response.data.message === 'modify-device') {
+        await rollbackDhcpChanges(deviceId, job.data.response.data.origDhcp);
+      }
       await devices.findOneAndUpdate(
         { _id: mongoose.Types.ObjectId(deviceId) },
         { $set: { 'dhcp.$[elem].status': 'job-deleted' } },
@@ -201,7 +264,7 @@ const remove = async (job) => {
         }
       );
     } catch (error) {
-      logger.warn('Failed to update database', { params: { job: job } });
+      logger.warn('Failed to remove DHCP job', { params: { job: job, message: error.message } });
     }
   }
 };

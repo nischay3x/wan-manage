@@ -115,6 +115,10 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdDhcpDhcpIdGET);
   }
 
+  async devicesIdDhcpDhcpIdPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdDhcpDhcpIdPUT);
+  }
+
   async devicesIdDhcpDhcpIdPATCH (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdDhcpDhcpIdPATCH);
   }

@@ -28,9 +28,9 @@ const configEnv = {
   // This is the default configuration, override by the following sections
   default: {
     // URL of the rest server
-    restServerURL: 'https://local.flexiwan.com:3443',
+    restServerUrl: 'https://local.flexiwan.com:3443',
     // URL of the UI server
-    UIServerURL: 'https://local.flexiwan.com:3000',
+    uiServerUrl: 'https://local.flexiwan.com:3000',
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
     userTokenSecretKey: 'abcdefg1234567',
     // Whether to validate open API response. True for testing and dev, False for production,
@@ -87,7 +87,7 @@ const configEnv = {
     // In production it can be set
     redirectHttpsPort: 3443,
     // Should we redirect to https, should be set to false if running behind a secure proxy such as CloudFlare
-    shouldRedirectHTTPS: true,
+    shouldRedirectHttps: true,
     // Certificate key location, under bin directory
     // On production if the key located in the Let's encrypt directory, it's possible to link to it using:
     // sudo ln -s /etc/letsencrypt/live/app.flexiwan.com/privkey.pem ~/FlexiWanSite/bin/cert.app.flexiwan.com/domain.key
@@ -116,17 +116,19 @@ const configEnv = {
     mailerPort: 25,
     // Bypass mailer certificate validation
     mailerBypassCert: false,
+    // From address used when sending emails
+    mailerFromAddress: 'noreply@flexiwan.com',
     // Software version query link
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     // Software version update email link. ${version} is replaced in run time
     // eslint-disable-next-line no-template-curly-in-string
     SwVersionUpdateUrl: 'https://sandbox.flexiwan.com/Templates/notification_email_${version}.json',
     // Web hooks add user URL, used to send for new uses, '' to bypass hook
-    webHookAddUserURL: '',
+    webHookAddUserUrl: '',
     // Web hooks add user secret, send in addition to the message for filtering
     webHookAddUserSecret: 'ABC',
     // Web hooks register device URL, used to send for new registered devices, '' to bypass hook
-    webHookRegisterDeviceURL: '',
+    webHookRegisterDeviceUrl: '',
     // Web hooks register device secret, send in addition to the message for filtering
     webHookRegisterDeviceSecret: 'ABC'
   },
@@ -153,9 +155,9 @@ const configEnv = {
 
   // Override for production environment
   production: {
-    restServerURL: 'https://app.flexiwan.com:443',
-    UIServerURL: 'https://app.flexiwan.com:443',
-    shouldRedirectHTTPS: false,
+    restServerUrl: 'https://app.flexiwan.com:443',
+    uiServerUrl: 'https://app.flexiwan.com:443',
+    shouldRedirectHttps: false,
     redirectHttpsPort: 443,
     agentBroker: 'app.flexiwan.com:443',
     validateOpenAPIResponse: false,
@@ -173,9 +175,9 @@ const configEnv = {
 
   // Override for manage environment for production
   manage: {
-    restServerURL: 'https://manage.flexiwan.com:443',
-    UIServerURL: 'https://manage.flexiwan.com:443',
-    shouldRedirectHTTPS: false,
+    restServerUrl: 'https://manage.flexiwan.com:443',
+    uiServerUrl: 'https://manage.flexiwan.com:443',
+    shouldRedirectHttps: false,
     redirectHttpsPort: 443,
     kuePrefix: 'mngdeviceq',
     agentBroker: 'manage.flexiwan.com:443',
@@ -195,9 +197,9 @@ const configEnv = {
 
   // Override for appqa01 environment
   appqa01: {
-    restServerURL: 'https://appqa01.flexiwan.com:443',
-    UIServerURL: 'https://appqa01.flexiwan.com:443',
-    shouldRedirectHTTPS: false,
+    restServerUrl: 'https://appqa01.flexiwan.com:443',
+    uiServerUrl: 'https://appqa01.flexiwan.com:443',
+    shouldRedirectHttps: false,
     redirectHttpsPort: 443,
     userTokenExpiration: 300,
     userIpReqRateLimit: 3000,
@@ -223,7 +225,15 @@ class Configs {
     const environment = this.getEnv();
     console.log('environment=' + environment);
     const combinedConfig = { ...configEnv.default, ...configEnv[environment], environment: environment };
-    // Override with environment variables
+
+    // Allow to override any configuration value from environment
+    Object.keys(combinedConfig).forEach(k => {
+      // get upper case snake case variable
+      const uSnakeCase = k.split(/(?=[A-Z])/).join('_').toUpperCase();
+      combinedConfig[k] = process.env[uSnakeCase] || combinedConfig[k];
+    });
+
+    // Override with predefined special environment variables
     combinedConfig.userTokenSecretKey = process.env.USER_SECRET_KEY || combinedConfig.userTokenSecretKey;
     combinedConfig.deviceTokenSecretKey = process.env.DEVICE_SECRET_KEY || combinedConfig.deviceTokenSecretKey;
     combinedConfig.captchaKey = process.env.CAPTCHA_KEY || combinedConfig.captchaKey;
@@ -232,10 +242,10 @@ class Configs {
     combinedConfig.mongoAnalyticsUrl = process.env.MONGO_ANALYTICS_URL || combinedConfig.mongoAnalyticsUrl;
     combinedConfig.billingApiKey = process.env.FLEXIBILLING_API_KEY || combinedConfig.billingApiKey;
     combinedConfig.redisUrl = process.env.REDIS_URL || combinedConfig.redisUrl;
-    combinedConfig.webHookAddUserURL = process.env.WEBHOOK_ADD_USER_URL || combinedConfig.webHookAddUserURL;
+    combinedConfig.webHookAddUserUrl = process.env.WEBHOOK_ADD_USER_URL || combinedConfig.webHookAddUserUrl;
     combinedConfig.webHookAddUserSecret = process.env.WEBHOOK_ADD_USER_KEY || combinedConfig.webHookAddUserSecret;
-    combinedConfig.webHookRegisterDeviceURL = process.env.WEBHOOK_REGISTER_DEVICE_URL ||
-      combinedConfig.webHookRegisterDeviceURL;
+    combinedConfig.webHookRegisterDeviceUrl = process.env.WEBHOOK_REGISTER_DEVICE_URL ||
+      combinedConfig.webHookRegisterDeviceUrl;
     combinedConfig.webHookRegisterDeviceSecret = process.env.WEBHOOK_REGISTER_DEVICE_KEY ||
       combinedConfig.webHookRegisterDeviceSecret;
 

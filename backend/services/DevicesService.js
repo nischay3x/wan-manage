@@ -27,6 +27,7 @@ const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
 const uniqBy = require('lodash/uniqBy');
+const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
@@ -50,7 +51,7 @@ class DevicesService {
       // Apply the device command
       const retJobs = await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
       const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
       return Service.successResponse({ ids: jobIds }, 202);
@@ -81,7 +82,7 @@ class DevicesService {
 
       const retJobs = await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
       const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
       return Service.successResponse({ ids: jobIds }, 202);
@@ -674,6 +675,7 @@ class DevicesService {
           destination: value.destination,
           gateway: value.gateway,
           ifname: value.ifname,
+          metric: value.metric,
           status: value.status
         };
       });
@@ -754,6 +756,7 @@ class DevicesService {
         destination: staticRouteRequest.destination,
         gateway: staticRouteRequest.gateway,
         ifname: staticRouteRequest.ifname,
+        metric: staticRouteRequest.metric,
         status: 'waiting'
       });
 
@@ -777,7 +780,8 @@ class DevicesService {
         _id: route._id.toString(),
         gateway: route.gateway,
         destination: route.destination,
-        ifname: route.ifname
+        ifname: route.ifname,
+        metric: route.metric
       };
 
       return Service.successResponse(result, 201);
@@ -962,7 +966,7 @@ class DevicesService {
         copy.action = 'del';
         const retJobs = await dispatcher.apply(device, copy.method, user, copy);
         const jobIds = retJobs.flat().map(job => job.id);
-        const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+        const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
           jobIds.join('%2C')}&org=${orgList[0]}`;
         response.setHeader('Location', location);
       }
@@ -1042,7 +1046,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org, dhcpRequest }, { user }, response) {
+  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -1055,22 +1059,107 @@ class DevicesService {
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
       }
+      // Currently we allow only one change at a time to the device
+      if (deviceObject.pendingDevModification ||
+              deviceObject.dhcp.some(d => d.status.includes('wait'))) {
+        throw new Error('Only one device change is allowed at any time');
+      }
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
       if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
+      const origDhcp = dhcpFiltered[0].toObject();
+      const origCmpDhcp = {
+        _id: origDhcp._id.toString(),
+        dns: origDhcp.dns,
+        interface: origDhcp.interface,
+        macAssign: origDhcp.macAssign.map(m => ({ host: m.host, mac: m.mac, ipv4: m.ipv4 })),
+        rangeStart: origDhcp.rangeStart,
+        rangeEnd: origDhcp.rangeEnd
+      };
 
+      const dhcpData = {
+        _id: dhcpId,
+        interface: dhcpRequest.interface,
+        rangeStart: dhcpRequest.rangeStart,
+        rangeEnd: dhcpRequest.rangeEnd,
+        dns: dhcpRequest.dns,
+        macAssign: dhcpRequest.macAssign,
+        status: 'add-wait'
+      };
+
+      // Check if any difference exists between request to current dhcp,
+      // in that case no need to resend data
+      if (!isEqual(dhcpRequest, origCmpDhcp)) {
+        const copy = Object.assign({}, dhcpRequest);
+        copy.method = 'dhcp';
+        copy.action = 'modify';
+        copy.origDhcp = origCmpDhcp;
+        const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
+        const jobIds = retJobs.flat().map(job => job.id);
+        const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+          jobIds.join('%2C')}&org=${orgList[0]}`;
+        response.setHeader('Location', location);
+
+        await devices.findOneAndUpdate(
+          { _id: deviceObject._id },
+          { $set: { 'dhcp.$[elem]': dhcpData } },
+          { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }] });
+      }
+
+      return Service.successResponse(dhcpData, 202);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * ReApply DHCP
+   *
+   * id String Numeric ID of the Device
+   * dhcpId String Numeric ID of the DHCP to modify
+   * org String Organization to be filtered by (optional)
+   * dhcpRequest DhcpRequest  (optional)
+   * returns Dhcp
+   **/
+  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org }, { user }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+      // Currently we allow only one change at a time to the device
+      if (deviceObject.pendingDevModification ||
+        deviceObject.dhcp.some(d => d.status.includes('wait'))) {
+        throw new Error('Only one device change is allowed at any time');
+      }
+      const dhcpFiltered = deviceObject.dhcp.filter((s) => {
+        return (s.id === dhcpId);
+      });
+      if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
       const dhcpObject = dhcpFiltered[0].toObject();
 
       // allow to patch only in the case of failed
-      if (dhcpObject.status.includes('failed')) throw new Error('Only allowed for failed jobs');
+      if (dhcpObject.status !== 'add-failed' && dhcpObject.status !== 'remove-failed') {
+        throw new Error('Only allowed for add or removed failed jobs');
+      }
 
       const copy = Object.assign({}, dhcpObject);
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
 
@@ -1221,7 +1310,7 @@ class DevicesService {
       const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const jobIds = retJobs.flat().map(job => job.id);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
+      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
 
