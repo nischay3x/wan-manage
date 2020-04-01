@@ -16,20 +16,17 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
-const Applications = require('../models/applications');
-const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const ImportedApplications = require('../models/importedapplications');
 
-class ApplicationsService {
-  static async applicationsGET ({ org, offset, limit }, { user }) {
+class ImportedApplicationsService {
+  static async importedapplicationsGET ({ org, offset, limit }, { user }) {
     console.log('Inside applicationsGET');
     try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await Applications.applications.find({ org: { $in: orgList } });
+      const result = await ImportedApplications.importedapplications.find();
 
       const applications = result.map(item => {
         return {
           _id: item.id,
-          org: item.org.toString(),
           app: item.app,
           category: item.category,
           subcategory: item.subcategory,
@@ -47,33 +44,6 @@ class ApplicationsService {
       );
     }
   }
-
-  /**
-   * Add new application
-   *
-   * organizationRequest OrganizationRequest  (optional)
-   * returns Application
-   **/
-  static async applicationsPOST ({ org, applicationRequest }, { user }, response) {
-    try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
-      const applicationBody = { ...applicationRequest, account: user.defaultAccount };
-      applicationBody.org = orgList[0].toString();
-      const _applicationList = await Applications.applications.create([applicationBody]);
-      const applicationItem = _applicationList[0];
-      return Service.successResponse({
-        _id: applicationItem.id,
-        org: applicationItem.org.toString(),
-        app: applicationItem.app,
-        createdAt: applicationItem.createdAt.toISOString()
-      }, 201);
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
 }
 
-module.exports = ApplicationsService;
+module.exports = ImportedApplicationsService;

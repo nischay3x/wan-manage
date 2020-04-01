@@ -23,7 +23,7 @@ const mongoConns = require('../mongoConns.js')();
  * Rules Database Schema (TBD)
  * TODO: This is draft, needs discussion about the right schema.
  */
-const rulesSchema = new Schema({
+const rulesSchema1 = new Schema({
   // IP
   // TODO: add validator
   ip: {
@@ -57,16 +57,11 @@ const rulesSchema = new Schema({
 });
 
 /**
- * Application Database Schema (TBD)
+ * Application Database Default Schema (TBD)
+ * Main difference from the main schema - not tied to organisation
  * TODO: This is draft, needs discussion about the right schema.
  */
-const applicationsSchema = new Schema({
-  // Organization
-  org: {
-    type: Schema.Types.ObjectId,
-    ref: 'organizations',
-    required: true
-  },
+const importedapplicationsSchema = new Schema({
   // Application id
   appId: {
     type: Number,
@@ -101,17 +96,17 @@ const applicationsSchema = new Schema({
     maxlength: [1, 'Sub-category name must be at most 1']
   },
   // List of rules
-  rules: [rulesSchema]
+  rules: [rulesSchema1]
 }, {
   timestamps: true
 });
 
 // indexing
-applicationsSchema.index({ app: 1, org: 1 }, { unique: true });
+importedapplicationsSchema.index({ app: 1 }, { unique: true });
 
 // Default exports
 module.exports =
 {
-  applications: mongoConns.getMainDB().model('applications', applicationsSchema),
-  rules: mongoConns.getMainDB().model('rules', rulesSchema)
+  importedapplications: mongoConns.getMainDB().model(
+    'importedapplications', importedapplicationsSchema)
 };

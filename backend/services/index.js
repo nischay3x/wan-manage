@@ -24,6 +24,7 @@ const NotificationsService = require('./NotificationsService');
 const OrganizationsService = require('./OrganizationsService');
 const TokensService = require('./TokensService');
 const ApplicationsService = require('./ApplicationsService');
+const ImportedApplicationsService = require('./ImportedApplicationsService');
 const TunnelsService = require('./TunnelsService');
 const UsersService = require('./UsersService');
 const BillingService = require('./BillingService');
@@ -39,6 +40,7 @@ module.exports = {
   OrganizationsService,
   TokensService,
   ApplicationsService,
+  ImportedApplicationsService,
   TunnelsService,
   UsersService,
   BillingService,
