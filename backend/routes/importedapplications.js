@@ -17,10 +17,10 @@
 
 const express = require('express');
 const bodyParser = require('body-parser');
-const applications = require('../models/applications');
+const importedapplications = require('../models/importedapplications');
 const wrapper = require('./wrapper');
-const applicationsRouter = express.Router();
-applicationsRouter.use(bodyParser.json());
+const importedapplicationsRouter = express.Router();
+importedapplicationsRouter.use(bodyParser.json());
 
 // Error formatter
 const formatErr = (err, msg) => {
@@ -40,7 +40,8 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
 });
 
 // wrapper
-wrapper.assignRoutes(applicationsRouter, 'applications', '/', applications, formatErr, checkUpdReq);
+wrapper.assignRoutes(importedapplicationsRouter,
+  'importedapplications', '/', importedapplications, formatErr, checkUpdReq);
 
 // Default exports
-module.exports = applicationsRouter;
+module.exports = importedapplicationsRouter;
