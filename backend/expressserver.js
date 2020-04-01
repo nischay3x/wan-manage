@@ -101,7 +101,7 @@ class ExpressServer {
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
       // Allow Let's encrypt certbot to access its certificate dirctory
-      if (!configs.get('shouldRedirectHTTPS') ||
+      if (!configs.get('shouldRedirectHttps') ||
           req.secure || req.url.startsWith('/.well-known/acme-challenge')) {
         return next();
       } else {
@@ -141,7 +141,7 @@ class ExpressServer {
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
       // Allow Let's encrypt certbot to access its certificate dirctory
-      if (!configs.get('shouldRedirectHTTPS') ||
+      if (!configs.get('shouldRedirectHttps') ||
           req.secure || req.url.startsWith('/.well-known/acme-challenge')) {
         return next();
       } else {
@@ -300,7 +300,7 @@ class ExpressServer {
 
       // setup wss here
       this.wss = new WebSocket.Server({
-        server: configs.get('shouldRedirectHTTPS') ? this.secureServer : this.server,
+        server: configs.get('shouldRedirectHttps') ? this.secureServer : this.server,
         verifyClient: connections.verifyDevice
       });
 

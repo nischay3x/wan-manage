@@ -159,12 +159,12 @@ router.route('/register')
       })
       .then(() => {
         const p = mailer.sendMailHTML(
-          'noreply@flexiwan.com',
+          configs.get('mailerFromAddress'),
           req.body.email,
           'Verify Your flexiWAN Account',
           `<h2>Thank you for joining flexiWAN</h2>
             <b>Click below to verify your account:</b>
-            <p><a href="${configs.get('UIServerURL')}/verify-account?email=${
+            <p><a href="${configs.get('uiServerUrl')}/verify-account?email=${
             req.body.email
           }&t=${
             registerUser.emailTokens.verify
@@ -201,7 +201,7 @@ router.route('/register')
           companyDesc: '',
           state: 'unverified'
         };
-        if (!await webHooks.sendToWebHook(configs.get('webHookAddUserURL'),
+        if (!await webHooks.sendToWebHook(configs.get('webHookAddUserUrl'),
           webHookMessage,
           configs.get('webHookAddUserSecret'))) {
           logger.error('Web hook call failed', { params: { message: webHookMessage } });
@@ -252,7 +252,7 @@ router.route('/reverify-account')
         // Send email if user found
         if (resp) {
           const p = mailer.sendMailHTML(
-            'noreply@flexiwan.com',
+            configs.get('mailerFromAddress'),
             req.body.email,
             'Re-Verify Your flexiWAN Account',
             `<h2>Re-Verify Your flexiWAN Account</h2>
@@ -260,7 +260,7 @@ router.route('/reverify-account')
                    click below to re-verify your account. If you do not know who this is,
                    ignore this message.</b>
                 <p><a href="${configs.get(
-                  'UIServerURL'
+                  'uiServerUrl'
                 )}/verify-account?email=${
               req.body.email
             }&t=${validateKey}"><button style="color:#fff;background-color:#F99E5B;
@@ -338,7 +338,7 @@ const resetPassword = (req, res, next) => {
       // Send email if user found
       if (resp) {
         const p = mailer.sendMailHTML(
-          'noreply@flexiwan.com',
+          configs.get('mailerFromAddress'),
           req.body.email,
           'Reset Password for Your flexiWAN Account',
           `<h2>Reset Password for your flexiWAN Account</h2>
@@ -346,7 +346,7 @@ const resetPassword = (req, res, next) => {
                    click below to reset your password. If you do not know who this is,
                    ignore this message.</b>
                 <p><a href="${configs.get(
-                  'UIServerURL'
+                  'uiServerUrl'
                 )}/reset-password?email=${
             req.body.email
           }&t=${validateKey}"><button style="color:#fff;

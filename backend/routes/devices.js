@@ -547,6 +547,7 @@ devicesRouter.route('/:deviceId/staticroutes')
           destination_network: value.destination,
           gateway_ip: value.gateway,
           ifname: value.ifname,
+          metric: value.metric,
           status: value.status
         };
       });
@@ -572,6 +573,7 @@ devicesRouter.route('/:deviceId/staticroutes')
         destination: req.body.destination_network,
         gateway: req.body.gateway_ip,
         ifname: req.body.ifname,
+        metric: req.body.metric,
         status: 'waiting'
       });
 
