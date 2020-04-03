@@ -87,18 +87,18 @@ const applicationsSchema = new Schema({
     required: true,
     maxlength: [128, 'Category name must be at most 128']
   },
-  // Sub-category name
-  subcategory: {
+  // Service Class name
+  serviceClass: {
     type: String,
     required: true,
-    maxlength: [128, 'Sub-category name must be at most 128']
+    maxlength: [128, 'Service Class name must be at most 128']
   },
   // Importance
   importance: {
     type: String,
     enum: ['1', '2', '3'],
     required: true,
-    maxlength: [1, 'Sub-category name must be at most 1']
+    maxlength: [1, 'Service Class name must be at most 1']
   },
   // List of rules
   rules: [rulesSchema]
