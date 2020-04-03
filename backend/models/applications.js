@@ -30,21 +30,9 @@ const rulesSchema = new Schema({
     type: String,
     required: true
   },
-  // IP Prefix
+  // Ports
   // TODO: add validator
-  ipPrefix: {
-    type: String,
-    required: true
-  },
-  // Port Range Low
-  // TODO: add validator
-  portRangeLow: {
-    type: String,
-    required: true
-  },
-  // Port Range High
-  // TODO: add validator
-  portRangeHigh: {
+  ports: {
     type: String,
     required: true
   },
