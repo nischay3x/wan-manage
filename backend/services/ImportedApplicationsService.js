@@ -29,7 +29,7 @@ class ImportedApplicationsService {
           _id: item.id,
           app: item.app,
           category: item.category,
-          subcategory: item.subcategory,
+          serviceClass: item.serviceClass,
           importance: item.importance,
           rules: item.rules,
           createdAt: item.createdAt.toISOString()
