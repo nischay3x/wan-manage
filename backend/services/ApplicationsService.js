@@ -18,6 +18,7 @@
 const Service = require('./Service');
 const Applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const mongoose = require('mongoose');
 
 class ApplicationsService {
   static async applicationsGET ({ org, offset, limit }, { user }) {
@@ -59,6 +60,8 @@ class ApplicationsService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const applicationBody = { ...applicationRequest, account: user.defaultAccount };
       applicationBody.org = orgList[0].toString();
+      applicationBody.appId = 1;
+      applicationBody._id = mongoose.Types.ObjectId(32000); // TODO: needs discussion
       const _applicationList = await Applications.applications.create([applicationBody]);
       const applicationItem = _applicationList[0];
       return Service.successResponse({
