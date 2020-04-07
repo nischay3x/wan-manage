@@ -3,7 +3,6 @@
 Below is a list of 3rd party open source used by flexiManage Server by license type.
 For the full list of open source used by flexiWAN check [this page](https://docs.flexiwan.com/overview/open-source.html)
 
-
 ### Apache
 
 Name | Web Page | License | Modified? | Copyrights 
@@ -289,6 +288,26 @@ isemail | https://www.npmjs.com/package/isemail | BSD-3 | No | 2008-2011, Domini
     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
     
 ```
+### ISC
+
+Name | Web Page | License | Modified? | Copyrights 
+--- | --- | --- | --- | ---
+eslint-plugin-promise | https://www.npmjs.com/package/eslint-plugin-promise | ISC | No | MMXV jden, 2016 Jamund Ferguson 
+
+```
+
+    Copyright <Copyright Owner>
+
+    Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee 
+    is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE 
+    INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE 
+    FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS 
+    OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING 
+    OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+    
+```
 ### MIT
 
 Name | Web Page | License | Modified? | Copyrights 
@@ -329,6 +348,15 @@ valid-url | https://www.npmjs.com/package/valid-url | MIT | No | 2013 Odysseas T
 winston | https://www.npmjs.com/package/winston | MIT | No | 2010 Charlie Robbins 
 ws | https://www.npmjs.com/package/ws | MIT | No | 2011 Einar Otto Stangvik 
 python-mailtrap (Dev) | https://pypi.org/project/mailtrap/ | MIT | No | 2015 Marcin Sztolcman 
+eslint | https://www.npmjs.com/package/eslint | MIT | No | JS Foundation and other contributors 
+eslint-config-standard | https://www.npmjs.com/package/eslint-config-standard | MIT | No | Feross Aboukhadijeh 
+eslint-plugin-import | https://www.npmjs.com/package/eslint-plugin-import | MIT | No | 2015 Ben Mosher 
+eslint-plugin-jest | https://www.npmjs.com/package/eslint-plugin-jest | MIT | No | 2018 Jonathan Kim 
+eslint-plugin-node | https://www.npmjs.com/package/eslint-plugin-node | MIT | No | 2015 Toru Nagashima 
+eslint-plugin-standard | https://www.npmjs.com/package/eslint-plugin-standard | MIT | No | 2015 Jamund Ferguson 
+express-openapi-validator | https://www.npmjs.com/package/express-openapi-validator | MIT | No | 2019 Carmine M. DiMascio 
+yamljs | https://www.npmjs.com/package/yamljs | MIT | No | 2010 Jeremy Faivre 
+openapi-generator-cli | https://www.npmjs.com/package/@openapitools/openapi-generator-cli | MIT | No | 2018 HarmoWatch / Kay Schecker 
 
 ```
 

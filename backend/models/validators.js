@@ -31,6 +31,7 @@ const isValidURL = (url) => { return urlValidator.isUri(url) !== undefined; };
 const isValidFileName = (name) => {
   return !isEmpty(name) && name !== '' && filenamify(name) === name;
 };
+const validateIsNumber = (val) => !isNaN(Number(val));
 
 const validateIsPhoneNumber = (number) => {
   try {

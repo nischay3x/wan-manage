@@ -31,7 +31,7 @@ class PathLabelsService {
    **/
   static async pathlabelsGET ({ offset, limit, org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org);
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const pathLabels = await PathLabels.find(
         { org: { $in: orgList } },
         { name: 1, description: 1, color: 1, type: 1 }
@@ -57,6 +57,7 @@ class PathLabelsService {
       // Don't allow to delete a label which is being used
       // Improve this code when adding policies.
       // Error message should be per use case
+      const orgList = await getAccessTokenOrgList(user, org, true);
       let count = await devices.countDocuments({ 'interfaces.pathlabels': id });
       count += await tunnels.countDocuments({ isActive: true, pathlabel: id });
 
@@ -65,7 +66,6 @@ class PathLabelsService {
         return Service.rejectResponse(message, 400);
       }
 
-      const orgList = await getAccessTokenOrgList(user, org, true);
       const { deletedCount } = await PathLabels.deleteOne({
         org: { $in: orgList },
         _id: id
@@ -93,7 +93,7 @@ class PathLabelsService {
    **/
   static async pathlabelsIdGET ({ id, org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const pathLabel = await PathLabels.findOne(
         {
           org: { $in: orgList },

@@ -795,7 +795,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Create new access token
+      summary: Schedule upgrade of devices
       tags:
       - Devices
       x-swagger-router-controller: Devices
@@ -1465,6 +1465,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -1552,6 +1559,13 @@ paths:
         schema:
           type: integer
         style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -1620,6 +1634,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "204":
           description: Successful operation
@@ -1681,6 +1702,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -1731,6 +1759,495 @@ paths:
       summary: Modify static route
       tags:
       - Static Routes
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/dhcp:
+    post:
+      operationId: devicesIdDhcpPOST
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DhcpRequest'
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dhcp'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Add DHCP server
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+    get:
+      operationId: devicesIdDhcpGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Dhcp'
+                type: array
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve device DHCP information
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/dhcp/{dhcpId}:
+    get:
+      operationId: devicesIdDhcpDhcpIdGET
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Numeric ID of the DHCP to get
+        explode: false
+        in: path
+        name: dhcpId
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dhcp'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get DHCP by ID
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+    delete:
+      operationId: devicesIdDhcpDhcpIdDELETE
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Numeric ID of the DHCP to delete
+        explode: false
+        in: path
+        name: dhcpId
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Force delete
+        explode: false
+        in: query
+        name: force
+        required: false
+        schema:
+          enum:
+          - yes
+          - no
+          type: string
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "202":
+          description: Successful operation
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete DHCP
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+    put:
+      operationId: devicesIdDhcpDhcpIdPUT
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Numeric ID of the DHCP to modify
+        explode: false
+        in: path
+        name: dhcpId
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DhcpRequest'
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dhcp'
+          description: Successful operation
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify DHCP
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+    patch:
+      operationId: devicesIdDhcpDhcpIdPATCH
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Numeric ID of the DHCP to modify
+        explode: false
+        in: path
+        name: dhcpId
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dhcp'
+          description: Successful operation
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: ReApply DHCP
+      tags:
+      - Devices
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
@@ -3310,7 +3827,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Add new organization
+      summary: Select organization
       tags:
       - Organizations
       x-swagger-router-controller: Organizations
@@ -4612,6 +5129,7 @@ components:
         state: 5
         type: type
         priority: 6
+        error: error
         attempts:
           max: 7
           made: 5
@@ -4627,6 +5145,8 @@ components:
           type: object
         priority:
           type: integer
+        error:
+          type: string
         progress:
           type: string
         state:
@@ -4698,6 +5218,7 @@ components:
         fromToken: fromToken
         account: account
         ipList: ipList
+        dhcp: dhcp list
       properties:
         machineId:
           type: string
@@ -4732,6 +5253,10 @@ components:
         staticroutes:
           items:
             $ref: '#/components/schemas/StaticRoute'
+          type: array
+        dhcp:
+          items:
+            $ref: '#/components/schemas/Dhcp'
           type: array
         upgradeSchedule:
           $ref: '#/components/schemas/UpgradeSchedule'
@@ -4813,6 +5338,7 @@ components:
         fromToken: fromToken
         account: account
         ipList: ipList
+        dhcp: dhcp list
       properties:
         _id:
           maxLength: 24
@@ -4851,6 +5377,10 @@ components:
         staticroutes:
           items:
             $ref: '#/components/schemas/StaticRoute'
+          type: array
+        dhcp:
+          items:
+            $ref: '#/components/schemas/Dhcp'
           type: array
         upgradeSchedule:
           $ref: '#/components/schemas/UpgradeSchedule'
@@ -5157,7 +5687,7 @@ components:
     DevicesUpgradeRequest:
       type: object
       properties:
-        ids:
+        devices:
           type: array
           items:
             type: string
@@ -5213,10 +5743,11 @@ components:
       type: object
     StaticRouteRequest:
       example:
-        destination: destination
         _id: _id
-        ifname: interface
+        destination: destination
+        interface: interface
         gateway: gateway
+        metric: metric
       properties:
         _id:
           maxLength: 24
@@ -5234,12 +5765,16 @@ components:
           description: Interface name
           maxLength: 24
           type: string
+        metric:
+          description: Route metric
+          type: string
       type: object
     StaticRoute:
       example:
         destination: destination
         ifname: interface
         gateway: gateway
+        metric: metric
         status: "completed"
       properties:
         _id:
@@ -5256,6 +5791,109 @@ components:
           description: Interface name
           maxLength: 24
           type: string
+        metric:
+          description: Route metric
+          type: string
+        status:
+          description: Route status
+          type: string
+      type: object
+    DhcpMacAssign:
+      example:
+        host: "host1"
+        mac: "08:00:27:fd:00:00"
+        ipv4: "20.20.20.20"
+      properties:
+        host:
+          description: Device hostname
+          minLength: 1
+          maxLength: 253
+          type: string
+        mac:
+          description: MAC Address
+          maxLength: 20
+          type: string
+        ipv4:
+          description: IPv4 Address
+          maxLength: 20
+          type: string
+      required:
+      - host
+      - mac
+      - ipv4
+    DhcpRequest:
+      example:
+        interface: "0000:00:08.00"
+        rangeStart: "20.20.20.2"
+        rangeEnd: "20.20.20.255"
+        dns: ["8.8.8.8", "8.8.8.4"]
+        macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
+      properties:
+        interface:
+          description: Interface PCI Address
+          maxLength: 24
+          type: string
+        rangeStart:
+          description: Start IP Range
+          maxLength: 20
+          type: string
+        rangeEnd:
+          description: End IP Range
+          maxLength: 20
+          type: string
+        dns:
+          description: List of DNS address
+          items:
+            type: string
+            maxLength: 20
+          type: array
+        macAssign:
+          description: List of MAC Assignments
+          items:
+            $ref: '#/components/schemas/DhcpMacAssign'
+          type: array
+      required:
+      - interface
+      - rangeStart
+      - rangeEnd
+      type: object
+    Dhcp:
+      example:
+        _id: "5e5f662f1b0eba50742b6223"
+        interface: "0000:00:08.00"
+        rangeStart: "20.20.20.2"
+        rangeEnd: "20.20.20.255"
+        dns: ["8.8.8.8", "8.8.8.4"]
+        macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
+        status: "completed"
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        interface:
+          description: Interface PCI Address
+          maxLength: 24
+          type: string
+        rangeStart:
+          description: Start IP Range
+          maxLength: 20
+          type: string
+        rangeEnd:
+          description: End IP Range
+          maxLength: 20
+          type: string
+        dns:
+          description: List of DNS address
+          items:
+            type: string
+            maxLength: 20
+          type: array
+        macAssign:
+          description: List of MAC Assignments
+          items:
+            $ref: '#/components/schemas/DhcpMacAssign'
+          type: array
         status:
           description: Route status
           type: string

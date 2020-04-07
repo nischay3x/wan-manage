@@ -53,6 +53,8 @@ class JobsService {
       'progress' // type: string
     ]);
 
+    retJob.error = item._error;
+
     return retJob;
   }
 

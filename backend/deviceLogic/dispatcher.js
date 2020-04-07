@@ -23,6 +23,7 @@ const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
 const mlpolicy = require('./mlpolicy');
+const dhcp = require('./dhcp');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -71,6 +72,12 @@ const methods = {
     complete: staticroutes.complete,
     error: staticroutes.error,
     remove: staticroutes.remove
+  },
+  dhcp: {
+    apply: dhcp.apply,
+    complete: dhcp.complete,
+    error: dhcp.error,
+    remove: dhcp.remove
   },
   upgrade: {
     apply: upgrade.apply,

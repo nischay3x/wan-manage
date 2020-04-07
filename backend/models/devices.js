@@ -27,7 +27,7 @@ const interfacesSchema = new Schema({
   // interface name
   name: {
     type: String,
-    minlength: 1,
+    minlength: [1, 'Name length must be at least 1'],
     maxlength: [50, 'Name length must be at most 50'],
     validate: {
       validator: validators.validateIfcName,
@@ -170,7 +170,86 @@ const staticroutesSchema = new Schema({
   ifname: {
     type: String
   },
+  // metric
+  metric: {
+    type: String,
+    default: '',
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'Metric should be a number'
+    }
+  },
   // status
+  status: {
+    type: String,
+    default: 'failed'
+  }
+}, {
+  timestamps: true
+});
+
+const MACAssignmentSchema = new Schema({
+  host: {
+    type: String,
+    minlength: [1, 'Host length must be at least 1'],
+    maxlength: [253, 'Host length must be at most 253'],
+    required: [true, 'Host must be set'],
+    validate: {
+      validator: validators.validateHostName,
+      message: 'Host should contain English characters, digits, hyphens and dots'
+    }
+  },
+  mac: {
+    type: String,
+    maxlength: [20, 'MAC length must be at most 20'],
+    required: [true, 'MAC must be set'],
+    validate: {
+      validator: validators.validateMacAddress,
+      message: 'MAC should be a valid MAC address'
+    },
+    default: ''
+  },
+  ipv4: {
+    type: String,
+    maxlength: [20, 'IPv4 length must be at most 20'],
+    required: [true, 'IPv4 must be set'],
+    validate: {
+      validator: validators.validateIPv4,
+      message: 'IPv4 should be a vaild ip address'
+    },
+    default: ''
+  }
+});
+
+const DHCPSchema = new Schema({
+  interface: {
+    type: String,
+    minlength: [1, 'Interface length must be at least 1'],
+    maxlength: [50, 'Interface length must be at most 50'],
+    required: [true, 'Interface must be set'],
+    validate: {
+      validator: validators.validateIfcName,
+      message: 'Interface should be a vaild interface name'
+    }
+  },
+  rangeStart: {
+    type: String,
+    required: [true, 'Start range must be set'],
+    validate: {
+      validator: validators.validateIPv4,
+      message: 'IP start range should be a valid ipv4 address'
+    }
+  },
+  rangeEnd: {
+    type: String,
+    required: [true, 'End range must be set'],
+    validate: {
+      validator: validators.validateIPv4,
+      message: 'IP end range should be a valid ipv4 address'
+    }
+  },
+  dns: [String],
+  macAssign: [MACAssignmentSchema],
   status: {
     type: String,
     default: 'failed'
@@ -378,6 +457,8 @@ const deviceSchema = new Schema({
   },
   // list of static routes configured on device
   staticroutes: [staticroutesSchema],
+  // LAN side DHCP
+  dhcp: [DHCPSchema],
   // schedule for upgrade process
   upgradeSchedule: {
     type: versionUpgradeSchema,
@@ -408,5 +489,6 @@ module.exports =
   interfaces: mongoConns.getMainDB().model('interfaces', interfacesSchema),
   versions: mongoConns.getMainDB().model('versions', deviceVersionsSchema),
   staticroutes: mongoConns.getMainDB().model('staticroutes', staticroutesSchema),
+  dhcpModel: mongoConns.getMainDB().model('dhcp', DHCPSchema),
   upgradeSchedule: mongoConns.getMainDB().model('upgradeSchedule', versionUpgradeSchema)
 };

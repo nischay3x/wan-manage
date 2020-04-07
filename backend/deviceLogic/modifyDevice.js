@@ -23,7 +23,8 @@ const deviceQueues = require('../utils/deviceQueue')(
 const {
   prepareTunnelRemoveJob,
   prepareTunnelAddJob,
-  queueTunnel
+  queueTunnel,
+  oneTunnelDel
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
@@ -131,7 +132,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       .populate('deviceB');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, pathlabel, num } = tunnel;
+      let { deviceA, deviceB, pathlabel, num, _id } = tunnel;
 
       // Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
@@ -145,28 +146,34 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         return ifc._id.toString() === tunnel.interfaceB.toString();
       });
 
+      // For interface changes such as IP/mask we remove the tunnel
+      // and readd it after the change has been applied on the device.
+      // In such cases, we don't remove the tunnel from the database,
+      // but rather only queue remove/add tunnel jobs to the devices.
+      // For interfaces that are unassigned, or which path labels have
+      // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
-      await queueTunnel(
-        false,
-        // eslint-disable-next-line max-len
-        `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
-        tasksDeviceA,
-        tasksDeviceB,
-        user,
-        org,
-        deviceA.machineId,
-        deviceB.machineId,
-        deviceA._id,
-        deviceB._id,
-        num,
-        pathlabel
-      );
-      // Maintain a list of all removed tunnels for adding them back
-      // after the interface changes are applied on the device.
-      // Add the tunnel to this list only if the interface connected
-      // to this tunnel has changed any property except for 'isAssigned'
-      // and only if the label of the tunnel is assigned to the interface
-      if (ifc._id in modifiedIfcsMap && modifiedIfcsMap[ifc._id].pathlabels.includes(pathlabel)) {
+      const pathlabels = modifiedIfcsMap[ifc._id] ? modifiedIfcsMap[ifc._id].pathlabels : null;
+      const pathLabelRemoved = pathlabel && !(pathlabels || []).includes(pathlabel);
+
+      if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
+        await oneTunnelDel(_id, user, org);
+      } else {
+        await queueTunnel(
+          false,
+          // eslint-disable-next-line max-len
+          `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
+          tasksDeviceA,
+          tasksDeviceB,
+          user,
+          org,
+          deviceA.machineId,
+          deviceB.machineId,
+          deviceA._id,
+          deviceB._id,
+          num,
+          pathlabel
+        );
         removedTunnels.push(tunnel._id);
       }
     }
@@ -277,6 +284,28 @@ const rollBackDeviceChanges = async (origDevice) => {
     { upsert: false }
   );
   if (result.nModified !== 1) throw new Error('device document was not updated');
+};
+
+/**
+ * Validate if any dhcp is assigned on a modified interface
+ * @param {Object} device - original device
+ * @param {List} modifiedInterfaces - list of modified interfaces
+ */
+const validateDhcpConfig = (device, modifiedInterfaces) => {
+  const assignedDhcps = device.dhcp.map(d => d.interface);
+  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.pci));
+  if (modifiedDhcp.length > 0) {
+    // get first interface from device
+    const firstIf = device.interfaces.filter(i => i.pciaddr === modifiedDhcp[0].pci);
+    const result = {
+      valid: false,
+      err: `DHCP defined on interface ${
+        firstIf[0].name
+      }, please remove it before modifying this interface`
+    };
+    return result;
+  }
+  return { valid: true, err: '' };
 };
 /**
  * Creates and queues the modify-device job. It compares
@@ -433,6 +462,12 @@ const apply = async (device, user, data) => {
         await rollBackDeviceChanges(device[0]);
         throw (new Error(err));
       }
+      const dhcpValidation = validateDhcpConfig(device[0], interfaces);
+      if (!dhcpValidation.valid) {
+        // Rollback device changes in database and return error
+        await rollBackDeviceChanges(device[0]);
+        throw (new Error(dhcpValidation.err));
+      }
       await setJobPendingInDB(device[0]._id, org, true);
       const jobs = await queueModifyDeviceJob(device[0], modifyParams, userName, org);
       return jobs;
@@ -448,7 +483,7 @@ const apply = async (device, user, data) => {
         params: { err: err.message, device: device[0]._id }
       });
     }
-    throw (new Error('Internal server error'));
+    throw (new Error(err.message || 'Internal server error'));
   }
 };
 

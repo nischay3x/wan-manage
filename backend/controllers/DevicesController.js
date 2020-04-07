@@ -106,6 +106,30 @@ class DevicesController {
   async devicesIdStatisticsGET (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdStatisticsGET);
   }
+
+  async devicesIdDhcpDhcpIdDELETE (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdDhcpDhcpIdDELETE);
+  }
+
+  async devicesIdDhcpDhcpIdGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdDhcpDhcpIdGET);
+  }
+
+  async devicesIdDhcpDhcpIdPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdDhcpDhcpIdPUT);
+  }
+
+  async devicesIdDhcpDhcpIdPATCH (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdDhcpDhcpIdPATCH);
+  }
+
+  async devicesIdDhcpGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdDhcpGET);
+  }
+
+  async devicesIdDhcpPOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdDhcpPOST);
+  }
 }
 
 module.exports = DevicesController;
