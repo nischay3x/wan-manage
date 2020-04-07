@@ -114,6 +114,7 @@ class DevicesService {
       'fromToken',
       'account',
       'ipList',
+      'policies',
       // Internal array, objects
       'labels',
       'upgradeSchedule']);
@@ -182,7 +183,8 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.find({ org: { $in: orgList } })
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.multilink.policy', '_id name description');
 
       const devicesMap = result.map(item => {
         return DevicesService.selectDeviceParams(item);
@@ -288,7 +290,8 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.multilink.policy', '_id name description');
       const device = DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);

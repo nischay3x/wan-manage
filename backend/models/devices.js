@@ -228,6 +228,21 @@ const deviceVersionsSchema = new Schema({
 });
 
 /**
+ * Device policy schema
+ */
+const devicePolicySchema = new Schema({
+  _id: false,
+  policy: {
+    type: Schema.Types.ObjectId,
+    ref: 'MultiLinkPolicies'
+  },
+  status: {
+    type: String,
+    enum: ['installing', 'installed', 'uninstalling']
+  }
+});
+
+/**
  * Version Upgrade Database Schema
  */
 const versionUpgradeSchema = new Schema({
@@ -376,6 +391,9 @@ const deviceSchema = new Schema({
   pendingDevModification: {
     type: Boolean,
     default: false
+  },
+  policies: {
+    multilink: devicePolicySchema
   }
 },
 {
