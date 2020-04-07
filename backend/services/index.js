@@ -27,10 +27,7 @@ const TunnelsService = require('./TunnelsService');
 const UsersService = require('./UsersService');
 const BillingService = require('./BillingService');
 const PathLabelsService = require('./PathLabelsService');
-<<<<<<< HEAD
 const MLPoliciesService = require('./MultiLinkPoliciesService');
-=======
->>>>>>> 0cce98226822e0613271774530c7a23f86477abf
 
 module.exports = {
   AccessTokensService,

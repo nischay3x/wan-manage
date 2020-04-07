@@ -28,10 +28,7 @@ const TunnelsController = require('./TunnelsController');
 const UsersController = require('./UsersController');
 const BillingController = require('./BillingController');
 const PathLabelsController = require('./PathLabelsController');
-<<<<<<< HEAD
 const MLPoliciesController = require('./MultiLinkPoliciesController');
-=======
->>>>>>> 0cce98226822e0613271774530c7a23f86477abf
 
 module.exports = {
   AccessTokensController,

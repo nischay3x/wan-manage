@@ -161,5 +161,6 @@ module.exports = {
   validateLabelName,
   validateLabelColor,
   validatePolicyName,
-  validateRuleName
+  validateRuleName,
+  validateIsNumber
 };
