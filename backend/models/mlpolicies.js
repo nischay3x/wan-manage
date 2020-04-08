@@ -21,7 +21,7 @@ const Schema = mongoose.Schema;
 const {
   validatePolicyName,
   validateRuleName,
-  validateIPv4
+  validateIPv4WithMask
 } = require('./validators');
 
 // Define a getter on object ID that
@@ -58,7 +58,7 @@ const multiLinkRuleSchema = new Schema({
         type: String,
         maxlength: [20, 'ipv4 length must be at most 20'],
         validate: {
-          validator: validateIPv4,
+          validator: validateIPv4WithMask,
           message: 'IPv4 should be a valid ip address'
         }
       },
