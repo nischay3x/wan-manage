@@ -795,7 +795,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Create new access token
+      summary: Schedule upgrade of devices
       tags:
       - Devices
       x-swagger-router-controller: Devices
@@ -5287,7 +5287,7 @@ components:
     DevicesUpgradeRequest:
       type: object
       properties:
-        ids:
+        devices:
           type: array
           items:
             type: string
