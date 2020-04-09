@@ -52,6 +52,26 @@ npm install
 npm start
 ```
 
+### Creating a user
+To create your first user, use the procedure below:
+1) Register a new user:
+```
+curl -X POST -k "https://local.flexiwan.com:3443/api/users/register" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"accountName\":\"account\",\"userFirstName\":\"user\",\"userLastName\":\"lastname\",\"email\":\"user@example.com\",\"password\":\"xxxxxxxx\",\"userJobTitle\":\"eng\",\"userPhoneNumber\":\"\",\"country\":\"US\",\"companySize\":\"0-10\",\"serviceType\":\"Provider\",\"numberSites\":\"10\",\"companyType\":\"\",\"companyDesc\":\"\",\"captcha\":\"\"}"
+```
+2) You should get an email to user@example.com with a verification link. Copy the email and token and execute the verification API:
+```
+curl -X POST -k "https://local.flexiwan.com:3443/api/users/verify-account" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"token\":\"<token on received email>\"}"
+```
+3) Execute a login API:
+```
+curl -X POST -sD - -k "https://local.flexiwan.com:3443/api/users/login" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"username\":\"user@example.com\",\"password\":\"xxxxxxxx\",\"captcha\":\"\"}"
+```
+Check the response header and use the Refresh-JWT as bearer token for any REST API.
+```
+Refresh-JWT: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI1ZTh...TlNo
+```
+Check the documentation REST API section for more details.  You can create an access-key for your account API key.
+
 ### Documentation
 For full documentation of flexiManage, please refer to [flexiManage documentation](https://docs.flexiwan.com/management/management-login.html).
 
