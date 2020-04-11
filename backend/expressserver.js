@@ -49,6 +49,13 @@ class ExpressServer {
     this.app = express();
     this.openApiPath = openApiYaml;
     this.schema = yamljs.load(openApiYaml);
+    const servers = this.schema.servers.filter(s => s.url.includes(configs.get('restServerUrl')));
+    if (servers.length === 0) {
+      this.schema.servers.unshift({
+        description: 'Local Server',
+        url: configs.get('restServerUrl') + '/api'
+      });
+    }
 
     this.setupMiddleware = this.setupMiddleware.bind(this);
     this.addErrorHandler = this.addErrorHandler.bind(this);
