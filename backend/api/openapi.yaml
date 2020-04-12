@@ -4651,9 +4651,9 @@ paths:
       summary: Get all Imported Applications
       tags:
       - Imported Applications
-      x-swagger-router-controller: ImportedApplications
-      x-openapi-router-controller: ImportedApplicationsController
-      x-openapi-router-service: ImportedApplicationsService     
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService     
 
 components:
   responses:

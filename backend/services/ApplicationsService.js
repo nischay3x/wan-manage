@@ -17,6 +17,7 @@
 
 const Service = require('./Service');
 const Applications = require('../models/applications');
+const ImportedApplications = require('../models/importedapplications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const mongoose = require('mongoose');
 
@@ -70,6 +71,32 @@ class ApplicationsService {
         app: applicationItem.app,
         createdAt: applicationItem.createdAt.toISOString()
       }, 201);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async importedapplicationsGET ({ org, offset, limit }, { user }) {
+    console.log('Inside importedapplicationsGET');
+    try {
+      const result = await ImportedApplications.importedapplications.find();
+
+      const applications = result.map(item => {
+        return {
+          _id: item.id,
+          app: item.app,
+          category: item.category,
+          serviceClass: item.serviceClass,
+          importance: item.importance,
+          rules: item.rules,
+          createdAt: item.createdAt.toISOString()
+        };
+      });
+
+      return Service.successResponse(applications);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

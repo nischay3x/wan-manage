@@ -25,7 +25,6 @@ const NotificationsController = require('./NotificationsController');
 const OrganizationsController = require('./OrganizationsController');
 const TokensController = require('./TokensController');
 const ApplicationsController = require('./ApplicationsController');
-const ImportedApplicationsController = require('./ImportedApplicationsController');
 const TunnelsController = require('./TunnelsController');
 const UsersController = require('./UsersController');
 const BillingController = require('./BillingController');
@@ -42,7 +41,6 @@ module.exports = {
   OrganizationsController,
   TokensController,
   ApplicationsController,
-  ImportedApplicationsController,
   TunnelsController,
   UsersController,
   BillingController,
