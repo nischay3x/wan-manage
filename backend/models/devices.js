@@ -313,11 +313,13 @@ const devicePolicySchema = new Schema({
   _id: false,
   policy: {
     type: Schema.Types.ObjectId,
-    ref: 'MultiLinkPolicies'
+    ref: 'MultiLinkPolicies',
+    default: null
   },
   status: {
     type: String,
-    enum: ['installing', 'installed', 'uninstalling']
+    enum: ['', 'installing', 'installed', 'uninstalling'],
+    default: ''
   }
 });
 
@@ -474,7 +476,10 @@ const deviceSchema = new Schema({
     default: false
   },
   policies: {
-    multilink: devicePolicySchema
+    multilink: {
+      type: devicePolicySchema,
+      default: devicePolicySchema
+    }
   }
 },
 {
