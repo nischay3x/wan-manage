@@ -85,6 +85,29 @@ const queueMlPolicyJob = (deviceList, op, policy, user, org) => {
   return Promise.allSettled(jobs);
 };
 
+const getOpDevices = async (devicesObj, org, policy) => {
+  // If the list of devices is provided in the request
+  // return their IDs, otherwise, extract device IDs
+  // of all devices that are currently running the policy
+  const devicesList = Object.keys(devicesObj);
+  if (devicesList.length > 0) return devicesList;
+
+  // Select only devices on which the policy is already
+  // installed or in the process of installation, to make
+  // sure the policy is not reinstalled on devices that
+  // are in the process of uninstalling the policy.
+  const result = await devices.find(
+    {
+      org: org,
+      'policies.multilink.policy': policy,
+      'policies.multilink.status': { $in: ['installing', 'installed'] }
+    },
+    { _id: 1 }
+  );
+
+  return result.map(device => device._id);
+};
+
 /**
  * Creates and queues add/remove policy jobs.
  * @async
@@ -97,7 +120,7 @@ const apply = async (deviceList, user, data) => {
   const org = user.defaultOrg._id.toString();
   const { op, id } = data.meta;
 
-  let MLPolicy, session;
+  let MLPolicy, session, deviceIds;
   try {
     session = await mongoConns.getMainDB().startSession();
     await session.withTransaction(async () => {
@@ -125,8 +148,8 @@ const apply = async (deviceList, user, data) => {
       }
 
       // Extract the device IDs to operate on
-      const deviceIds = data.devices
-        ? Object.keys(data.devices)
+      deviceIds = data.devices
+        ? await getOpDevices(data.devices, org, MLPolicy._id)
         : [deviceList[0]._id];
 
       // Update devices policy in the database
@@ -147,23 +170,12 @@ const apply = async (deviceList, user, data) => {
     session.endSession();
   }
 
-  // Queue add/remove policy jobs
-  let opDevices;
-  if (data.devices) {
-    const selectedDevices = data.devices;
-    opDevices =
-        deviceList && selectedDevices
-          ? deviceList.filter(device => {
-            const inSelected = selectedDevices.hasOwnProperty(device._id);
-            return !!inSelected;
-          })
-          : [];
-  } else {
-    opDevices = deviceList;
-  }
-
   // Queue policy jobs. Fail the request if
   // there are jobs that failed to be queued
+  const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
+  const opDevices = deviceList.filter(device => {
+    return deviceIdsSet.has(device._id.toString());
+  });
   const jobs = await queueMlPolicyJob(opDevices, op, MLPolicy, user, org);
   const failedToQueue = jobs.filter(job => job.status === 'rejected');
   if (failedToQueue.length !== 0) {
