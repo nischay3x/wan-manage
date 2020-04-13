@@ -94,6 +94,7 @@ class ApplicationsService {
           importance: item.importance,
           rules: item.rules.map(rulesItem => {
             return {
+              id: rulesItem.id,
               protocol: rulesItem.protocol,
               ports: rulesItem.ports,
               ip: rulesItem.ip
