@@ -28,19 +28,19 @@ const rulesSchema1 = new Schema({
   // TODO: add validator
   ip: {
     type: String,
-    required: true
+    required: false
   },
   // Ports
   // TODO: add validator
   ports: {
     type: String,
-    required: true
+    required: false
   },
   // Protocol
   protocol: {
     type: String,
-    enum: ['TCP', 'UDP'],
-    required: true
+    enum: ['tcp', 'udp'],
+    required: false
   }
 });
 
@@ -49,9 +49,9 @@ const rulesSchema1 = new Schema({
  * Main difference from the main schema - not tied to organisation
  * TODO: This is draft, needs discussion about the right schema.
  */
-const importedapplicationsSchema = new Schema({
+const applicationSchema = new Schema({
   // Application id
-  appId: {
+  id: {
     type: Number,
     required: true,
     validate: {
@@ -60,7 +60,7 @@ const importedapplicationsSchema = new Schema({
     }
   },
   // Application name
-  app: {
+  name: {
     type: String,
     required: true
   },
@@ -83,14 +83,37 @@ const importedapplicationsSchema = new Schema({
     required: true,
     maxlength: [1, 'Service Class name must be at most 1']
   },
+  // Description
+  description: {
+    type: String,
+    required: true,
+    maxlength: [128, 'Service Class name must be at most 128']
+  },
   // List of rules
   rules: [rulesSchema1]
 }, {
   timestamps: true
 });
 
+const metaSchema = new Schema({
+  time: {
+    type: Number,
+    required: true
+  }
+});
+
+const importedapplicationsSchema = new Schema({
+  // meta
+  meta: {
+    type: metaSchema,
+    required: true
+  },
+  // List of top rules
+  rules: [applicationSchema]
+});
+
 // indexing
-importedapplicationsSchema.index({ app: 1 }, { unique: true });
+applicationSchema.index({ app: 1 }, { unique: true });
 
 // Default exports
 module.exports =

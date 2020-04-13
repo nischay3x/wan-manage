@@ -60,6 +60,7 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const applicationBody = { ...applicationRequest, account: user.defaultAccount };
+      // TODO: move next 3 rows to spread operator above
       applicationBody.org = orgList[0].toString();
       applicationBody.appId = 1;
       applicationBody._id = mongoose.Types.ObjectId(32000); // TODO: needs discussion
@@ -79,20 +80,25 @@ class ApplicationsService {
     }
   }
 
-  static async importedapplicationsGET ({ org, offset, limit }, { user }) {
+  static async importedapplicationsGET ({ offset, limit }, { user }) {
     console.log('Inside importedapplicationsGET');
     try {
       const result = await ImportedApplications.importedapplications.find();
 
-      const applications = result.map(item => {
+      const applications = result[0].rules.map(item => {
         return {
-          _id: item.id,
-          app: item.app,
+          id: item.id,
+          name: item.name,
           category: item.category,
           serviceClass: item.serviceClass,
           importance: item.importance,
-          rules: item.rules,
-          createdAt: item.createdAt.toISOString()
+          rules: item.rules.map(rulesItem => {
+            return {
+              protocol: rulesItem.protocol,
+              ports: rulesItem.ports,
+              ip: rulesItem.ip
+            };
+          })
         };
       });
 

@@ -4603,13 +4603,6 @@ paths:
         schema:
           type: integer
         style: form
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
 
       responses:
         "200":
