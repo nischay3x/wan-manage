@@ -25,6 +25,7 @@ const deviceQueues = require('./periodic/deviceQueue')();
 const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
 const notifyUsers = require('./periodic/notifyUsers')();
+const appRules = require('./periodic/appRules')();
 
 // rate limiter
 const rateLimit = require('express-rate-limit');
@@ -104,6 +105,7 @@ class ExpressServer {
     deviceSwVersion.start();
     deviceSwUpgrade.start();
     notifyUsers.start();
+    appRules.start();
 
     // Secure traffic only
     this.app.all('*', (req, res, next) => {

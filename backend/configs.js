@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -130,7 +130,9 @@ const configEnv = {
     // Web hooks register device URL, used to send for new registered devices, '' to bypass hook
     webHookRegisterDeviceUrl: '',
     // Web hooks register device secret, send in addition to the message for filtering
-    webHookRegisterDeviceSecret: 'ABC'
+    webHookRegisterDeviceSecret: 'ABC',
+    // Global application rules file location
+    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
   },
 
   // Override for development environment, default environment if not specified
@@ -144,7 +146,8 @@ const configEnv = {
     userTokenExpiration: 604800,
     useFlexiBilling: false,
     logLevel: 'debug',
-    mailerPort: 1025
+    mailerPort: 1025,
+    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
@@ -192,7 +195,8 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80']
+    corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80'],
+    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
   },
 
   // Override for appqa01 environment
@@ -216,7 +220,8 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
+    corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
+    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
   }
 };
 
