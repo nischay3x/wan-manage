@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const Service = require('./Service');
 const PathLabels = require('../models/pathlabels');
+const MultiLinkPolicies = require('../models/mlpolicies');
 const { devices } = require('../models/devices');
 const tunnels = require('../models/tunnels');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -55,11 +56,12 @@ class PathLabelsService {
   static async pathlabelsIdDELETE ({ id, org }, { user }) {
     try {
       // Don't allow to delete a label which is being used
-      // Improve this code when adding policies.
-      // Error message should be per use case
       const orgList = await getAccessTokenOrgList(user, org, true);
       let count = await devices.countDocuments({ 'interfaces.pathlabels': id });
       count += await tunnels.countDocuments({ isActive: true, pathlabel: id });
+      count += await MultiLinkPolicies.countDocuments({
+        'rules.action.links.pathlabels': id
+      });
 
       if (count > 0) {
         const message = 'Cannot delete a path label that is being used';
