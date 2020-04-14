@@ -863,7 +863,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all registered devices
+      summary: Get device by ID
       tags:
       - Devices
       x-swagger-router-controller: Devices
@@ -5287,6 +5287,7 @@ components:
           name: name
           pciaddr: pciaddr
           _id: _id
+          pathlabels: path labels list
         - IPv6: IPv6
           PublicIP: PublicIP
           IPv4: IPv4
@@ -5300,6 +5301,7 @@ components:
           name: name
           pciaddr: pciaddr
           _id: _id
+          pathlabels: path labels list
         org: org
         isConnected: true
         upgradeSchedule:
@@ -5426,6 +5428,7 @@ components:
         name: name
         pciaddr: pciaddr
         _id: _id
+        pathlabels: path labels list
       properties:
         _id:
           maxLength: 24
@@ -5462,6 +5465,10 @@ components:
           type: string
         IPv6Mask:
           type: string
+        pathlabels:
+          items:
+            $ref: '#/components/schemas/PathLabel'
+          type: array
       type: object
     DeviceVersion:
       example:
@@ -5693,6 +5700,36 @@ components:
             type: string
         date:
           type: string
+    DevicePolicies:
+      type: object
+      properties:
+        multilink:
+          type: object
+          $ref: '#/components/schemas/DevicePolicy'
+      required:
+        - multilink
+    DevicePolicy:
+      type: object
+      properties:
+        policy:
+          type: object
+          properties:
+            _id:
+              maxLength: 24
+              minLength: 24
+              type: string
+            name:
+              type: string
+            description:
+              type: string
+        status:
+          enum:
+          - ''
+          - installing
+          - installed
+          - uninstalling
+          type: string
+
     Tunnel:
       example:
         tunnelStatusA: '{}'
