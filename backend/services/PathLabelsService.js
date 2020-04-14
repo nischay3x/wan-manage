@@ -172,6 +172,17 @@ class PathLabelsService {
     try {
       const { name, description, color, type } = pathLabelRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      // Allow up to 200 path labels per organization
+      const count = await PathLabels.countDocuments({
+        org: orgList[0].toString()
+      });
+
+      if (count >= 200) {
+        const message = 'Can\'t create more than 200 Path Labels';
+        return Service.rejectResponse(message, 400);
+      }
+
       const result = await PathLabels.create({
         org: orgList[0].toString(),
         name: name,
