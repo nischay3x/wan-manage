@@ -30,7 +30,7 @@ class ApplicationsService {
 
       const applications = result.map(item => {
         return {
-          _id: item.id,
+          id: item.id,
           org: item.org.toString(),
           app: item.app,
           category: item.category,
@@ -53,7 +53,7 @@ class ApplicationsService {
   /**
    * Add new application
    *
-   * organizationRequest OrganizationRequest  (optional)
+   * applicationRequest ApplicationRequest
    * returns Application
    **/
   static async applicationsPOST ({ org, applicationRequest }, { user }, response) {
@@ -72,6 +72,29 @@ class ApplicationsService {
         app: applicationItem.app,
         createdAt: applicationItem.createdAt.toISOString()
       }, 201);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Delete application
+   *
+   * id String Numeric ID of the Application to delete
+   * no response value expected for this operation
+   **/
+  static async applicationsIdDELETE ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      await Applications.applications.remove({
+        _id: id,
+        org: { $in: orgList }
+      });
+
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

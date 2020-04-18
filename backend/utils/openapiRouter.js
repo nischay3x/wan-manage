@@ -76,6 +76,11 @@ function openApiRouter () {
           return handleError(err, request, response, next);
         }
 
+        if (!apiController[controllerOperation]) {
+          throw new Error(
+            `Operation ${controllerOperation} not found in controller ${apiController.service.name}`);
+        }
+
         await apiController[controllerOperation](request, response, next);
       }
     } catch (error) {
