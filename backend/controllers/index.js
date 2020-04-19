@@ -24,6 +24,7 @@ const MembersController = require('./MembersController');
 const NotificationsController = require('./NotificationsController');
 const OrganizationsController = require('./OrganizationsController');
 const TokensController = require('./TokensController');
+const ApplicationsController = require('./ApplicationsController');
 const TunnelsController = require('./TunnelsController');
 const UsersController = require('./UsersController');
 const BillingController = require('./BillingController');
@@ -40,6 +41,7 @@ module.exports = {
   NotificationsController,
   OrganizationsController,
   TokensController,
+  ApplicationsController,
   TunnelsController,
   UsersController,
   BillingController,

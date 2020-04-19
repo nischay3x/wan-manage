@@ -12,10 +12,8 @@ info:
   title: FlexiWAN API
   version: 1.0.0
 servers:
-- description: Production server
-  url: https://manage.flexiwan.com/api
-- description: Local Development server
-  url: https://local.flexiwan.com:3443/api
+- description: Main server
+  url: https://manage.flexiwan.com:443/api
 paths:
   /tokens:
     get:
@@ -4844,6 +4842,211 @@ paths:
       x-swagger-router-controller: MLPolicies
       x-openapi-router-controller: MLPoliciesController
       x-openapi-router-service: MLPoliciesService
+  /applications/custom:
+    get:
+      operationId: applicationsGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Application'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+    post:
+      operationId: applicationsPOST
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Create new application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /applications/imported:
+    get:
+      operationId: importedapplicationsGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ImportedApplication'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Imported Applications
+      tags:
+      - Imported Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+
 components:
   responses:
     NotFoundError:
@@ -4961,6 +5164,64 @@ components:
         description:
           type: string
       type: object
+    Application:
+      example:
+        _id: id
+        org: org
+        name: name
+        token: token
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        org:
+          type: string
+        name:
+          type: string
+        token:
+          type: string
+        createdAt:
+          type: string
+      type: object
+    ApplicationRequest:
+      example:
+        name: name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      type: object    
+    ImportedApplication:
+      example:
+        _id: id
+        org: org
+        name: name
+        token: token
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        org:
+          type: string
+        name:
+          type: string
+        token:
+          type: string
+        createdAt:
+          type: string
+      type: object    
+    ImportedApplicationRequest:
+      example:
+        name: name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      type: object             
     Account:
       example:
         country: country

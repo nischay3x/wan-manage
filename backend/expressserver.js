@@ -25,6 +25,7 @@ const deviceQueues = require('./periodic/deviceQueue')();
 const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
 const notifyUsers = require('./periodic/notifyUsers')();
+const appRules = require('./periodic/appRules')();
 
 // rate limiter
 const rateLimit = require('express-rate-limit');
@@ -49,6 +50,13 @@ class ExpressServer {
     this.app = express();
     this.openApiPath = openApiYaml;
     this.schema = yamljs.load(openApiYaml);
+    const servers = this.schema.servers.filter(s => s.url.includes(configs.get('restServerUrl')));
+    if (servers.length === 0) {
+      this.schema.servers.unshift({
+        description: 'Local Server',
+        url: configs.get('restServerUrl') + '/api'
+      });
+    }
 
     this.setupMiddleware = this.setupMiddleware.bind(this);
     this.addErrorHandler = this.addErrorHandler.bind(this);
@@ -97,6 +105,7 @@ class ExpressServer {
     deviceSwVersion.start();
     deviceSwUpgrade.start();
     notifyUsers.start();
+    appRules.start();
 
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
