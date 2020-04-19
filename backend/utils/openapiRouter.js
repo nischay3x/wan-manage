@@ -77,8 +77,8 @@ function openApiRouter () {
         }
 
         if (!apiController[controllerOperation]) {
-          throw new Error(
-            `Operation ${controllerOperation} not found in controller ${apiController.service.name}`);
+          const err = `Operation ${controllerOperation} not found in controller ${apiController.service.name}`;
+          throw new Error(err);
         }
 
         await apiController[controllerOperation](request, response, next);
