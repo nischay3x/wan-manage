@@ -14,6 +14,8 @@
 
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+const mongoConns = require('../mongoConns.js')();
+const createError = require('http-errors');
 const Service = require('./Service');
 const PathLabels = require('../models/pathlabels');
 const MultiLinkPolicies = require('../models/mlpolicies');
@@ -130,37 +132,76 @@ class PathLabelsService {
    * returns PathLabel
    **/
   static async pathlabelsIdPUT ({ id, org, pathLabelRequest }, { user }) {
+    let session;
+    let newPathLabel;
     try {
       const { name, description, color, type } = pathLabelRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const pathLabel = await PathLabels.findOneAndUpdate(
-        {
-          org: { $in: orgList },
-          _id: id
-        },
-        {
-          org: user.defaultOrg._id.toString(),
-          name: name,
-          description: description,
-          color: color,
-          type: type
-        },
-        {
-          fields: { name: 1, description: 1, color: 1, type: 1 },
-          new: true
+
+      // A label's type field cannot be changed if it is being
+      // used by a tunnel. Therefore we perform the update as
+      // a transaction with 3 steps:
+      // 1. Update the path label in the database
+      // 2. Check if the label type has changed
+      // 3. Check if the label is used by a tunnel
+      //    and if so we abort the transaction
+      session = await mongoConns.getMainDB().startSession();
+      await session.withTransaction(async () => {
+        const origPathLabel = await PathLabels.findOneAndUpdate(
+          {
+            org: { $in: orgList },
+            _id: id
+          },
+          {
+            org: user.defaultOrg._id.toString(),
+            name: name,
+            description: description,
+            color: color,
+            type: type
+          },
+          {
+            fields: { name: 1, description: 1, color: 1, type: 1 }
+          }
+        ).session(session);
+
+        if (!origPathLabel) {
+          throw createError(404, 'Not found');
         }
-      );
 
-      if (!pathLabel) {
-        return Service.rejectResponse('Not found', 404);
-      }
+        // Type change is only allowed for labels
+        // that are not being used by any tunnel
+        if (origPathLabel.type !== type) {
+          const count = await tunnels.countDocuments({
+            isActive: true,
+            pathlabel: id
+          });
+          if (count !== 0) {
+            const message =
+              'cannot change type for path label that is used by a tunnel';
+            throw createError(400, message);
+          }
+        }
 
-      return Service.successResponse(pathLabel);
+        // Fetch the updated label from the database
+        newPathLabel = await PathLabels.findOne(
+          {
+            org: { $in: orgList },
+            _id: id
+          },
+          {
+            name: 1, description: 1, color: 1, type: 1
+          }
+        ).session(session);
+      });
+
+      return Service.successResponse(newPathLabel);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
       );
+    } finally {
+      session.endSession();
     }
   }
 
