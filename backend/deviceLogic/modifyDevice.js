@@ -44,7 +44,7 @@ const prepareIfcParams = (interfaces) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'PublicIP', 'isAssigned', 'pathlabels']);
     newIfc.multilink = {
-      labels: ifc.pathlabels
+      labels: ifc.pathlabels.map(label => label._id)
     };
     return newIfc;
   });

@@ -519,7 +519,9 @@ class DevicesService {
       const origDevice = await devices.findOne({
         _id: id,
         org: { $in: orgList }
-      }).session(session);
+      })
+        .session(session)
+        .populate('interfaces.pathlabels', '_id name description color type');
 
       // Don't allow any changes if the device is not approved
       if (!origDevice.isApproved && !deviceRequest.isApproved) {
@@ -565,7 +567,9 @@ class DevicesService {
         { _id: id, org: { $in: orgList } },
         deviceRequest,
         { new: true, upsert: false, runValidators: true }
-      ).session(session);
+      )
+        .session(session)
+        .populate('interfaces.pathlabels', '_id name description color type');
 
       await session.commitTransaction();
       session = null;
