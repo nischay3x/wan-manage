@@ -120,21 +120,21 @@ const apply = async (deviceList, user, data) => {
   const org = user.defaultOrg._id.toString();
   const { op, id } = data.meta;
 
-  let MLPolicy, session, deviceIds;
+  let mLPolicy, session, deviceIds;
   try {
     session = await mongoConns.getMainDB().startSession();
     await session.withTransaction(async () => {
       if (op === 'install') {
         // Retrieve policy from database
-        MLPolicy = await MultiLinkPolicies.findOne(
+        mLPolicy = await MultiLinkPolicies.findOne(
           {
             org: org,
-            _id: id,
-            'rules.enabled': true
+            _id: id
           },
           {
             rules: 1,
             name: 1,
+            'rules.enabled': 1,
             'rules.priority': 1,
             'rules._id': 1,
             'rules.classification': 1,
@@ -142,19 +142,25 @@ const apply = async (deviceList, user, data) => {
           }
         ).session(session);
 
-        if (!MLPolicy) {
+        if (!mLPolicy) {
           throw createError(404, `policy ${id} does not exist`);
+        }
+
+        // Disabled rules should not be sent to the device
+        mLPolicy.rules = mLPolicy.rules.filter(rule => rule.enabled === true);
+        if (mLPolicy.rules.length === 0) {
+          throw createError(400, 'cannot install policy with an empty rule base');
         }
       }
 
       // Extract the device IDs to operate on
       deviceIds = data.devices
-        ? await getOpDevices(data.devices, org, MLPolicy._id)
+        ? await getOpDevices(data.devices, org, mLPolicy._id)
         : [deviceList[0]._id];
 
       // Update devices policy in the database
       const update = op === 'install'
-        ? { $set: { 'policies.multilink': { policy: MLPolicy._id, status: 'installing' } } }
+        ? { $set: { 'policies.multilink': { policy: mLPolicy._id, status: 'installing' } } }
         : { $set: { 'policies.multilink.status': 'uninstalling' } };
 
       await devices.updateMany(
@@ -176,7 +182,7 @@ const apply = async (deviceList, user, data) => {
   const opDevices = deviceList.filter(device => {
     return deviceIdsSet.has(device._id.toString());
   });
-  const jobs = await queueMlPolicyJob(opDevices, op, MLPolicy, user, org);
+  const jobs = await queueMlPolicyJob(opDevices, op, mLPolicy, user, org);
   const failedToQueue = jobs.filter(job => job.status === 'rejected');
   if (failedToQueue.length !== 0) {
     const failedDevices = failedToQueue.map(ent => {
