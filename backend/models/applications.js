@@ -44,17 +44,7 @@ const rulesSchema = new Schema({
   }
 });
 
-/**
- * Application Database Schema (TBD)
- * TODO: This is draft, needs discussion about the right schema.
- */
-const applicationsSchema = new Schema({
-  // Organization
-  org: {
-    type: Schema.Types.ObjectId,
-    ref: 'organizations',
-    required: true
-  },
+const applicationSchema = new Schema({
   // Application id
   appId: {
     type: Number,
@@ -90,6 +80,20 @@ const applicationsSchema = new Schema({
   },
   // List of rules
   rules: [rulesSchema]
+});
+
+/**
+ * Application Database Schema (TBD)
+ * TODO: This is draft, needs discussion about the right schema.
+ */
+const applicationsSchema = new Schema({
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true
+  },
+  applications: [applicationSchema]
 }, {
   timestamps: true
 });

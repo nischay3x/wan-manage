@@ -30,6 +30,10 @@ class ApplicationsController {
     await Controller.handleRequest(request, response, this.service.applicationsPOST);
   }
 
+  async applicationsIdDELETE (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsIdDELETE);
+  }
+
   async importedapplicationsGET (request, response) {
     await Controller.handleRequest(request, response, this.service.importedapplicationsGET);
   }
