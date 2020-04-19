@@ -20,8 +20,10 @@ const mongoConns = require('../mongoConns.js')();
 const Schema = mongoose.Schema;
 const {
   validatePolicyName,
+  validateDescription,
   validateRuleName,
-  validateIPv4WithMask
+  validateIPv4WithMask,
+  validatePortRange
 } = require('./validators');
 
 // Define a getter on object ID that
@@ -63,7 +65,11 @@ const multiLinkRuleSchema = new Schema({
         }
       },
       ports: {
-        type: String
+        type: String,
+        validate: {
+          validator: validatePortRange,
+          message: 'ports should be a valid ports range'
+        }
       },
       protocol: {
         type: String,
@@ -77,11 +83,11 @@ const multiLinkRuleSchema = new Schema({
       },
       category: {
         type: String,
-        maxlength: [20, 'category must be at most 20']
+        maxlength: [128, 'category must be at most 128']
       },
       serviceClass: {
         type: String,
-        maxlength: [20, 'service class must be at most 20']
+        maxlength: [128, 'service class must be at most 128']
       },
       importance: {
         type: String,
@@ -136,10 +142,15 @@ const multiLinkPolicySchema = new Schema({
   },
   description: {
     type: String,
-    required: true
+    required: true,
+    validate: {
+      validator: validateDescription,
+      message: 'Multi Link policy description format is invalid'
+    }
   },
   version: {
     type: Number,
+    min: 0,
     default: 0
   },
   rules: [multiLinkRuleSchema]
