@@ -46,8 +46,8 @@ const rulesSchema = new Schema({
 
 const applicationSchema = new Schema({
   // Application id
-  appId: {
-    type: Number,
+  id: {
+    type: String,
     required: true,
     validate: {
       validator: Number.isInteger,
@@ -55,7 +55,7 @@ const applicationSchema = new Schema({
     }
   },
   // Application name
-  app: {
+  name: {
     type: String,
     required: true
   },
@@ -74,7 +74,7 @@ const applicationSchema = new Schema({
   // Importance
   importance: {
     type: String,
-    enum: ['1', '2', '3'],
+    enum: ['high', 'med', 'low'],
     required: true,
     maxlength: [1, 'Service Class name must be at most 1']
   },
@@ -99,7 +99,7 @@ const applicationsSchema = new Schema({
 });
 
 // indexing
-applicationsSchema.index({ app: 1, org: 1 }, { unique: true });
+applicationsSchema.index({ name: 1, org: 1 }, { unique: true });
 
 // Default exports
 module.exports =

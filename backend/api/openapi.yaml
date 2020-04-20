@@ -4441,7 +4441,7 @@ paths:
       x-swagger-router-controller: PathLabels
       x-openapi-router-controller: PathLabelsController
       x-openapi-router-service: PathLabelsService
-  /applications/custom:
+  /applications:
     get:
       operationId: applicationsGET
       parameters:

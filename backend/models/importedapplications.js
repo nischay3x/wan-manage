@@ -79,15 +79,15 @@ const applicationSchema = new Schema({
   // Importance
   importance: {
     type: String,
-    enum: ['1', '2', '3'],
+    enum: ['high', 'med', 'low'],
     required: true,
-    maxlength: [1, 'Service Class name must be at most 1']
+    maxlength: [4, 'Importance name must be at most 4']
   },
   // Description
   description: {
     type: String,
     required: true,
-    maxlength: [128, 'Service Class name must be at most 128']
+    maxlength: [128, 'Description name must be at most 128']
   },
   // List of rules
   rules: [rulesSchema1]
@@ -108,8 +108,8 @@ const importedapplicationsSchema = new Schema({
     type: metaSchema,
     required: true
   },
-  // List of top rules
-  rules: [applicationSchema]
+  // List of applications
+  applications: [applicationSchema]
 });
 
 // indexing
