@@ -41,6 +41,8 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
 
 // wrapper
 wrapper.assignRoutes(applicationsRouter, 'applications', '/', applications, formatErr, checkUpdReq);
+wrapper.assignRoutes(
+  applicationsRouter, 'applications', '/:applicationId', applications, formatErr, checkUpdReq);
 
 // Default exports
 module.exports = applicationsRouter;

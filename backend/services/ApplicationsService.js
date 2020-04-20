@@ -19,73 +19,31 @@ const Service = require('./Service');
 const Applications = require('../models/applications');
 const ImportedApplications = require('../models/importedapplications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-const mongoose = require('mongoose');
+const concat = require('lodash/concat');
+var mongoose = require('mongoose');
 
 class ApplicationsService {
-  static async applicationsGET ({ org, offset, limit }, { user }) {
+  static async applicationsGET ({ org }, { user }) {
     console.log('Inside applicationsGET');
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await Applications.applications.find({ org: { $in: orgList } });
+      const customApplicationsResult =
+        await Applications.applications.find({ org: { $in: orgList } });
 
-      const applications = result.map(item => {
+      const customApplications = customApplicationsResult[0].applications.map(item => {
         return {
-          _id: item.id,
-          org: item.org.toString(),
-          app: item.app,
+          id: item.id,
+          name: item.name,
           category: item.category,
           serviceClass: item.serviceClass,
           importance: item.importance,
-          rules: item.rules,
-          createdAt: item.createdAt.toISOString()
+          rules: item.rules
         };
       });
 
-      return Service.successResponse(applications);
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
+      const importantApplicationsResult = await ImportedApplications.importedapplications.find();
 
-  /**
-   * Add new application
-   *
-   * organizationRequest OrganizationRequest  (optional)
-   * returns Application
-   **/
-  static async applicationsPOST ({ org, applicationRequest }, { user }, response) {
-    try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
-      const applicationBody = { ...applicationRequest, account: user.defaultAccount };
-      // TODO: move next 3 rows to spread operator above
-      applicationBody.org = orgList[0].toString();
-      applicationBody.appId = 1;
-      applicationBody._id = mongoose.Types.ObjectId(32000); // TODO: needs discussion
-      const _applicationList = await Applications.applications.create([applicationBody]);
-      const applicationItem = _applicationList[0];
-      return Service.successResponse({
-        _id: applicationItem.id,
-        org: applicationItem.org.toString(),
-        app: applicationItem.app,
-        createdAt: applicationItem.createdAt.toISOString()
-      }, 201);
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
-
-  static async importedapplicationsGET ({ offset, limit }, { user }) {
-    console.log('Inside importedapplicationsGET');
-    try {
-      const result = await ImportedApplications.importedapplications.find();
-
-      const applications = result[0].rules.map(item => {
+      const importedApplications = importantApplicationsResult[0].applications.map(item => {
         return {
           id: item.id,
           name: item.name,
@@ -103,7 +61,129 @@ class ApplicationsService {
         };
       });
 
-      return Service.successResponse(applications);
+      const mergedList = concat(customApplications, importedApplications);
+
+      return Service.successResponse(mergedList);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Add new application
+   *
+   * applicationRequest ApplicationRequest
+   * returns Application
+   **/
+  static async applicationsPOST ({ org, applicationRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const result = await Applications.applications.find({ org: { $in: orgList } });
+      const objectId = mongoose.Types.ObjectId();
+      // TODO: The redundancy with the ids is in order to keep consistency with the imported
+      // TODO: list. Maybe we could get rid of the id in the imported list and use _id in both
+      // TODO: tables.
+      const newApplication = { ...applicationRequest, _id: objectId, id: objectId.toString() };
+
+      if (result.length > 0) {
+        result[0].applications.push(newApplication);
+        const updateResult = await Applications.applications.updateOne(result[0]);
+        if (updateResult.nModified === 1) {
+          return Service.successResponse({
+            name: applicationRequest.name
+          }, 201);
+        }
+        return Service.rejectResponse(
+          'Failed to add application', 500);
+      }
+
+      const applicationBody = {
+        org: orgList[0].toString(),
+        applications: []
+      };
+      applicationBody.applications.push(newApplication);
+
+      const _applicationList = await Applications.applications.create([applicationBody]);
+      const applicationItem = _applicationList[0];
+      return Service.successResponse({
+        _id: applicationItem.id,
+        org: applicationItem.org.toString(),
+        app: applicationItem.app
+      }, 201);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Delete application
+   *
+   * id String Numeric ID of the Application to delete
+   * no response value expected for this operation
+   **/
+  static async applicationsIdDELETE ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const result = await Applications.applications.find({ org: { $in: orgList } });
+      const appName = result[0].applications.find(item => item._id.toString() === id).name;
+      if (result.length > 0) {
+        result[0].applications = result[0].applications.filter(item => item._id.toString() !== id);
+        const updateResult = await Applications.applications.updateOne(result[0]);
+        if (updateResult.nModified === 1) {
+          return Service.successResponse({
+            app: appName
+          }, 204);
+        }
+        return Service.rejectResponse(
+          'Failed to delete application', 500);
+      }
+
+      await Applications.applications.deleteOne({
+        _id: id,
+        org: { $in: orgList }
+      });
+
+      return Service.successResponse(null, 204);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  // TODO: remove
+  static async importedapplicationsGET () {
+    console.log('Inside importedapplicationsGET');
+    try {
+      const importantApplicationsResult = await ImportedApplications.importedapplications.find();
+
+      const importedApplications = importantApplicationsResult[0].rules.map(item => {
+        return {
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          serviceClass: item.serviceClass,
+          importance: item.importance,
+          rules: item.rules.map(rulesItem => {
+            return {
+              id: rulesItem.id,
+              protocol: rulesItem.protocol,
+              ports: rulesItem.ports,
+              ip: rulesItem.ip
+            };
+          })
+        };
+      });
+
+      return Service.successResponse(importedApplications);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

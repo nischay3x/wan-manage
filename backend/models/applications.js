@@ -44,20 +44,10 @@ const rulesSchema = new Schema({
   }
 });
 
-/**
- * Application Database Schema (TBD)
- * TODO: This is draft, needs discussion about the right schema.
- */
-const applicationsSchema = new Schema({
-  // Organization
-  org: {
-    type: Schema.Types.ObjectId,
-    ref: 'organizations',
-    required: true
-  },
+const applicationSchema = new Schema({
   // Application id
-  appId: {
-    type: Number,
+  id: {
+    type: String,
     required: true,
     validate: {
       validator: Number.isInteger,
@@ -65,7 +55,7 @@ const applicationsSchema = new Schema({
     }
   },
   // Application name
-  app: {
+  name: {
     type: String,
     required: true
   },
@@ -84,18 +74,32 @@ const applicationsSchema = new Schema({
   // Importance
   importance: {
     type: String,
-    enum: ['1', '2', '3'],
+    enum: ['high', 'med', 'low'],
     required: true,
     maxlength: [1, 'Service Class name must be at most 1']
   },
   // List of rules
   rules: [rulesSchema]
+});
+
+/**
+ * Application Database Schema (TBD)
+ * TODO: This is draft, needs discussion about the right schema.
+ */
+const applicationsSchema = new Schema({
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations',
+    required: true
+  },
+  applications: [applicationSchema]
 }, {
   timestamps: true
 });
 
 // indexing
-applicationsSchema.index({ app: 1, org: 1 }, { unique: true });
+applicationsSchema.index({ name: 1, org: 1 }, { unique: true });
 
 // Default exports
 module.exports =

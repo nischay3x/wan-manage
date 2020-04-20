@@ -4842,7 +4842,7 @@ paths:
       x-swagger-router-controller: MLPolicies
       x-openapi-router-controller: MLPoliciesController
       x-openapi-router-service: MLPoliciesService
-  /applications/custom:
+  /applications:
     get:
       operationId: applicationsGET
       parameters:
@@ -5192,7 +5192,7 @@ components:
           type: string
         description:
           type: string
-      type: object    
+      type: object
     ImportedApplication:
       example:
         _id: id

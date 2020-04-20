@@ -83,7 +83,9 @@ class AppRulesUpdateManager {
       const res = await this.fetchWithRetry(this.appRulesUri, 3);
       const body = await res.json();
       const metaTime = new Date(body.meta.time);
-      logger.info(`pollAppRules: Got response meta time ${metaTime}, ${body.rules.length} rules`);
+      const logMessage =
+        `pollAppRules: Got response meta time ${metaTime}, ${body.applications.length} rules`;
+      logger.info(logMessage);
       // drop existing collection
       ImportedApplications.importedapplications.deleteMany({}, async function (err, result) {
         if (err) {
