@@ -96,10 +96,11 @@ const getOpDevices = async (devicesObj, org, policy) => {
   // installed or in the process of installation, to make
   // sure the policy is not reinstalled on devices that
   // are in the process of uninstalling the policy.
+  const { _id } = policy;
   const result = await devices.find(
     {
       org: org,
-      'policies.multilink.policy': policy,
+      'policies.multilink.policy': _id,
       'policies.multilink.status': { $in: ['installing', 'installed'] }
     },
     { _id: 1 }
@@ -155,7 +156,7 @@ const apply = async (deviceList, user, data) => {
 
       // Extract the device IDs to operate on
       deviceIds = data.devices
-        ? await getOpDevices(data.devices, org, mLPolicy._id)
+        ? await getOpDevices(data.devices, org, mLPolicy)
         : [deviceList[0]._id];
 
       // Update devices policy in the database
