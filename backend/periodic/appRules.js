@@ -21,7 +21,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'p
 
 /***
  * This class periodically checks if the latest application rules were changed
- * and if so, updates the database with the new latest version
+ * and if so, updates the database with the new version
  ***/
 class AppRules {
   /**
@@ -36,7 +36,7 @@ class AppRules {
       name: 'check_app_rules',
       func: this.periodicCheckAppRules,
       handle: null,
-      period: (1000 * 60 * 60 * 24) // Runs once an day
+      period: (1000 * 60 * 60 * 24) // Runs once in a day
     };
   }
 

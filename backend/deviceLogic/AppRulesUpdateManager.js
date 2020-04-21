@@ -21,9 +21,9 @@ const configs = require('../configs')();
 const ImportedApplications = require('../models/importedapplications');
 
 /***
- * This class serves as the software update manager, responsible for
- * polling our package repository for new software versions, and take
- * the necessary actions when a new version is released.
+ * This class serves as the application rules update manager, responsible for
+ * polling the repository for application rules file and replacement of the
+ * file in the database.
  ***/
 class AppRulesUpdateManager {
   /**
@@ -78,29 +78,32 @@ class AppRulesUpdateManager {
     * @return {void}
     */
   async pollAppRules () {
-    logger.debug('pollAppRules: begin fetching application rules');
+    logger.debug('Begin fetching application rules');
     try {
       const res = await this.fetchWithRetry(this.appRulesUri, 3);
       const body = await res.json();
       const metaTime = new Date(body.meta.time);
-      const logMessage =
-        `pollAppRules: Got response meta time ${metaTime}, ${body.applications.length} rules`;
-      logger.info(logMessage);
+      logger.info('Got response meta time', {
+        params: { metaTime: metaTime, rules: body.applications.length }
+      });
       // drop existing collection
       ImportedApplications.importedapplications.deleteMany({}, async function (err, result) {
         if (err) {
-          logger.warn(`pollAppRules: delete documents failed ${err}`);
+          logger.warn('Delete documents failed', {
+            params: { err: err.message }
+          });
           return;
         }
-        logger.debug(`pollAppRules: delete documents success, ${result.deletedCount} deleted`);
+        logger.debug('Delete documents success', {
+          params: { count: result.deletedCount }
+        });
         // add updated entry
-        logger.info('pollAppRules: updating importedapplications collection');
+        logger.info('Updating importedapplications collection');
         await ImportedApplications.importedapplications.create([body]);
       });
     } catch (err) {
       logger.error('Failed to query app rules', {
-        params: { err: err.message },
-        periodic: { task: this.taskInfo }
+        params: { err: err.message }
       });
     }
   }

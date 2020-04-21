@@ -24,7 +24,6 @@ var mongoose = require('mongoose');
 
 class ApplicationsService {
   static async applicationsGET ({ org }, { user }) {
-    console.log('Inside applicationsGET');
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const customApplicationsResult =
@@ -161,7 +160,6 @@ class ApplicationsService {
 
   // TODO: remove
   static async importedapplicationsGET () {
-    console.log('Inside importedapplicationsGET');
     try {
       const importantApplicationsResult = await ImportedApplications.importedapplications.find();
 

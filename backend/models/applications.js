@@ -74,9 +74,8 @@ const applicationSchema = new Schema({
   // Importance
   importance: {
     type: String,
-    enum: ['high', 'med', 'low'],
-    required: true,
-    maxlength: [1, 'Service Class name must be at most 1']
+    enum: ['high', 'medium', 'low'],
+    required: true
   },
   // List of rules
   rules: [rulesSchema]

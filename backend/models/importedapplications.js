@@ -79,9 +79,8 @@ const applicationSchema = new Schema({
   // Importance
   importance: {
     type: String,
-    enum: ['high', 'med', 'low'],
-    required: true,
-    maxlength: [4, 'Importance name must be at most 4']
+    enum: ['high', 'medium', 'low'],
+    required: true
   },
   // Description
   description: {
