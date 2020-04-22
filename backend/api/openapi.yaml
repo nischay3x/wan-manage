@@ -4581,72 +4581,7 @@ paths:
       - Applications
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-  /applications/imported:
-    get:
-      operationId: importedapplicationsGET
-      parameters:
-      - description: The number of items to skip before starting to collect the result
-          set
-        explode: true
-        in: query
-        name: offset
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: The numbers of items to return
-        explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-        style: form
-
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/ImportedApplication'
-                type: array
-                x-content-type: application/json
-          description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Get all Imported Applications
-      tags:
-      - Imported Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService     
+      x-openapi-router-service: ApplicationsService  
   /applications/{id}:
     delete:
       operationId: applicationsIdDELETE
@@ -4830,7 +4765,6 @@ components:
         _id: id
         org: org
         name: name
-        token: token
       properties:
         _id:
           maxLength: 24
@@ -4839,8 +4773,6 @@ components:
         org:
           type: string
         name:
-          type: string
-        token:
           type: string
         createdAt:
           type: string
@@ -4853,36 +4785,7 @@ components:
           type: string
         description:
           type: string
-      type: object    
-    ImportedApplication:
-      example:
-        _id: id
-        org: org
-        name: name
-        token: token
-      properties:
-        _id:
-          maxLength: 24
-          minLength: 24
-          type: string
-        org:
-          type: string
-        name:
-          type: string
-        token:
-          type: string
-        createdAt:
-          type: string
-      type: object    
-    ImportedApplicationRequest:
-      example:
-        name: name
-      properties:
-        name:
-          type: string
-        description:
-          type: string
-      type: object             
+      type: object               
     Account:
       example:
         country: country

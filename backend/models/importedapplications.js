@@ -68,13 +68,13 @@ const applicationSchema = new Schema({
   category: {
     type: String,
     required: true,
-    maxlength: [128, 'Category name must be at most 128']
+    maxlength: [20, 'Category name must be at most 20']
   },
   // Service Class name
   serviceClass: {
     type: String,
     required: true,
-    maxlength: [128, 'Service Class name must be at most 128']
+    maxlength: [20, 'Service Class name must be at most 20']
   },
   // Importance
   importance: {

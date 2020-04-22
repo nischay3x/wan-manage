@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -19,6 +19,8 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 
+// ! TODO: Unit tests
+
 /**
  * Rules Database Schema (TBD)
  * TODO: This is draft, needs discussion about the right schema.
@@ -28,19 +30,19 @@ const rulesSchema = new Schema({
   // TODO: add validator
   ip: {
     type: String,
-    required: true
+    required: false
   },
   // Ports
   // TODO: add validator
   ports: {
     type: String,
-    required: true
+    required: false
   },
   // Protocol
   protocol: {
     type: String,
-    enum: ['TCP', 'UDP'],
-    required: true
+    enum: ['tcp', 'udp', ''],
+    required: false
   }
 });
 
@@ -48,11 +50,7 @@ const applicationSchema = new Schema({
   // Application id
   id: {
     type: String,
-    required: true,
-    validate: {
-      validator: Number.isInteger,
-      message: '{VALUE} is not an integer value'
-    }
+    required: true
   },
   // Application name
   name: {
@@ -63,13 +61,13 @@ const applicationSchema = new Schema({
   category: {
     type: String,
     required: true,
-    maxlength: [128, 'Category name must be at most 128']
+    maxlength: [20, 'Category name must be at most 20']
   },
   // Service Class name
   serviceClass: {
     type: String,
     required: true,
-    maxlength: [128, 'Service Class name must be at most 128']
+    maxlength: [20, 'Service Class name must be at most 20']
   },
   // Importance
   importance: {

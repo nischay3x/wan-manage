@@ -26,39 +26,48 @@ class ApplicationsService {
   static async applicationsGET ({ org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
+
+      // it is expected that custom applications are stored as single document per
+      // organization in the collection
       const customApplicationsResult =
-        await Applications.applications.find({ org: { $in: orgList } });
-
-      const customApplications = customApplicationsResult[0].applications.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          serviceClass: item.serviceClass,
-          importance: item.importance,
-          rules: item.rules
-        };
-      });
-
-      const importantApplicationsResult = await ImportedApplications.importedapplications.find();
-
-      const importedApplications = importantApplicationsResult[0].applications.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          serviceClass: item.serviceClass,
-          importance: item.importance,
-          rules: item.rules.map(rulesItem => {
+        await Applications.applications.findOne({ org: { $in: orgList } });
+      const customApplications =
+        (customApplicationsResult === null || customApplicationsResult.applications === null)
+          ? []
+          : customApplicationsResult.applications.map(item => {
             return {
-              id: rulesItem.id,
-              protocol: rulesItem.protocol,
-              ports: rulesItem.ports,
-              ip: rulesItem.ip
+              id: item.id,
+              name: item.name,
+              category: item.category,
+              serviceClass: item.serviceClass,
+              importance: item.importance,
+              rules: item.rules
             };
-          })
-        };
-      });
+          });
+
+      // it is expected that imported applications are stored as single document
+      // in the collection
+      const importantApplicationsResult = await ImportedApplications.importedapplications.findOne();
+      const importedApplications =
+        (importantApplicationsResult === null || importantApplicationsResult.applications === null)
+          ? []
+          : importantApplicationsResult.applications.map(item => {
+            return {
+              id: item.id,
+              name: item.name,
+              category: item.category,
+              serviceClass: item.serviceClass,
+              importance: item.importance,
+              rules: item.rules.map(rulesItem => {
+                return {
+                  id: rulesItem.id,
+                  protocol: rulesItem.protocol,
+                  ports: rulesItem.ports,
+                  ip: rulesItem.ip
+                };
+              })
+            };
+          });
 
       const mergedList = concat(customApplications, importedApplications);
 
@@ -105,12 +114,9 @@ class ApplicationsService {
       };
       applicationBody.applications.push(newApplication);
 
-      const _applicationList = await Applications.applications.create([applicationBody]);
-      const applicationItem = _applicationList[0];
+      await Applications.applications.create([applicationBody]);
       return Service.successResponse({
-        _id: applicationItem.id,
-        org: applicationItem.org.toString(),
-        app: applicationItem.app
+        name: applicationRequest.name
       }, 201);
     } catch (e) {
       return Service.rejectResponse(
