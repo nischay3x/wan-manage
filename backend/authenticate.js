@@ -56,16 +56,20 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
       return done(new Error(error.message), false);
     }
   }
-
+  
   User
     .findOne({ _id: jwtPayload._id })
     .populate('defaultOrg')
     .populate('defaultAccount')
-    .exec((err, user) => {
+    .exec(async (err, user) => {
       if (err) {
         return done(err, false);
       } else if (user) {
-        const res = setUserPerms(user, jwtPayload);
+        
+        const res = await setUserPerms(user, jwtPayload);
+
+        console.log("rr", res);
+
         return res === true
           ? done(null, user)
           : done(null, false, { message: 'Invalid Token' });
@@ -75,12 +79,20 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
     });
 }));
 
-const setUserPerms = (user, jwtPayload) => {
+const setUserPerms = async (user, jwtPayload) => {
+      
   if (user.defaultAccount && user.defaultAccount._id.toString() === jwtPayload.account) {
     user.perms = jwtPayload.perms;
     user.accessToken = (jwtPayload.type === 'app_access_token');
     user.jwtAccount = jwtPayload.account;
     user.jwtOrg = jwtPayload.org;
+
+    // in app_access_key permissions not stored in token payload
+    if (jwtPayload.type === 'app_access_key') {
+      const token = await Accesstoken.findOne({ _id: jwtPayload.id });
+      user.perms = token.permissions;
+    }
+
     return true;
   }
   return false;
@@ -183,7 +195,7 @@ exports.verifyUserJWT = function (req, res, next) {
             // since passport's JWT strategy callback will not
             // be called.
             const jwtPayload = jwt.decode(token);
-            setUserPerms(userDetails, jwtPayload);
+            await setUserPerms(userDetails, jwtPayload);
             user = userDetails;
           } catch (err) {
             if (req.header('Origin') !== undefined) {
