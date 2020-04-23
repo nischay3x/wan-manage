@@ -89,15 +89,15 @@ class AccessTokensService {
         isValid: true
       });
 
-      const token = await getAccessKey({ user }, {              
+      const token = await getAccessKey({ user }, {
         id: accessToken._id.toString(),
         org: null
       }, false);
       accessToken.token = token;
 
-      const perms = await getUserPermissions(user);     
+      const perms = await getUserPermissions(user);
       accessToken.permissions = perms;
-      
+
       await accessToken.save();
 
       return Service.successResponse({

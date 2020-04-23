@@ -19,7 +19,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const validators = require('./validators');
-const { permissionsSchema } = require('./membership')
+const { permissionsSchema } = require('./membership');
 
 /**
  * Access Tokens Schema
@@ -55,7 +55,7 @@ const accessTokenSchema = new Schema({
   // permissions associate with this token
   permissions: {
     type: permissionsSchema,
-    required: false    
+    required: false
   },
   // is valid. Reserved for future use
   isValid: {

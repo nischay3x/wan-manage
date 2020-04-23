@@ -56,7 +56,7 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
       return done(new Error(error.message), false);
     }
   }
-  
+
   User
     .findOne({ _id: jwtPayload._id })
     .populate('defaultOrg')
@@ -65,9 +65,7 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
       if (err) {
         return done(err, false);
       } else if (user) {
-        
         const res = await setUserPerms(user, jwtPayload);
-        
         return res === true
           ? done(null, user)
           : done(null, false, { message: 'Invalid Token' });
@@ -78,17 +76,17 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
 }));
 
 const setUserPerms = async (user, jwtPayload) => {
-
   const userAccounts = await getUserAccounts(user);
-  
+
   if (userAccounts.find(u => u._id === jwtPayload.account) != null) {
     user.perms = jwtPayload.perms;
-    user.accessToken = (jwtPayload.type === 'app_access_token' || jwtPayload.type === 'app_access_key');
+    user.accessToken = (
+      jwtPayload.type === 'app_access_token' || jwtPayload.type === 'app_access_key');
     user.jwtAccount = jwtPayload.account;
     user.jwtOrg = jwtPayload.org;
 
     // in app_access_key the permissions are not stored in token payload
-    if (jwtPayload.type === 'app_access_key') {      
+    if (jwtPayload.type === 'app_access_key') {
       const token = await Accesstoken.findOne({ _id: jwtPayload.id });
       user.perms = token.permissions;
     }
