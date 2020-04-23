@@ -15,108 +15,14 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
+const applications = require('../models/applications');
 
-/**
- * Rules Database Schema (TBD)
- * TODO: This is draft, needs discussion about the right schema.
- */
-const rulesSchema1 = new Schema({
-  // IP
-  // TODO: add validator
-  ip: {
-    type: String,
-    required: false
-  },
-  // Ports
-  // TODO: add validator
-  ports: {
-    type: String,
-    required: false
-  },
-  // Protocol
-  protocol: {
-    type: String,
-    enum: ['tcp', 'udp'],
-    required: false
-  }
-});
-
-/**
- * Application Database Default Schema (TBD)
- * Main difference from the main schema - not tied to organisation
- * TODO: This is draft, needs discussion about the right schema.
- */
-const applicationSchema = new Schema({
-  // Application id
-  id: {
-    type: Number,
-    required: true,
-    validate: {
-      validator: Number.isInteger,
-      message: '{VALUE} is not an integer value'
-    }
-  },
-  // Application name
-  name: {
-    type: String,
-    required: true
-  },
-  // Category name
-  category: {
-    type: String,
-    required: true,
-    maxlength: [20, 'Category name must be at most 20']
-  },
-  // Service Class name
-  serviceClass: {
-    type: String,
-    required: true,
-    maxlength: [20, 'Service Class name must be at most 20']
-  },
-  // Importance
-  importance: {
-    type: String,
-    enum: ['high', 'medium', 'low'],
-    required: true
-  },
-  // Description
-  description: {
-    type: String,
-    required: true,
-    maxlength: [128, 'Description name must be at most 128']
-  },
-  // List of rules
-  rules: [rulesSchema1]
-}, {
-  timestamps: true
-});
-
-const metaSchema = new Schema({
-  time: {
-    type: Number,
-    required: true
-  }
-});
-
-const importedapplicationsSchema = new Schema({
-  // meta
-  meta: {
-    type: metaSchema,
-    required: true
-  },
-  // List of applications
-  applications: [applicationSchema]
-});
-
-// indexing
-applicationSchema.index({ app: 1 }, { unique: true });
+// TODO: check if can be removed
 
 // Default exports
 module.exports =
 {
   importedapplications: mongoConns.getMainDB().model(
-    'importedapplications', importedapplicationsSchema)
+    'importedapplications', applications.applicationsSchema)
 };

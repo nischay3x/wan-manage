@@ -30,7 +30,7 @@ class ApplicationsService {
       // it is expected that custom applications are stored as single document per
       // organization in the collection
       const customApplicationsResult =
-        await Applications.applications.findOne({ org: { $in: orgList } });
+        await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
       const customApplications =
         (customApplicationsResult === null || customApplicationsResult.applications === null)
           ? []
@@ -89,16 +89,17 @@ class ApplicationsService {
   static async applicationsPOST ({ org, applicationRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const result = await Applications.applications.find({ org: { $in: orgList } });
+      const result = await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
       const objectId = mongoose.Types.ObjectId();
       // TODO: The redundancy with the ids is in order to keep consistency with the imported
       // TODO: list. Maybe we could get rid of the id in the imported list and use _id in both
       // TODO: tables.
       const newApplication = { ...applicationRequest, _id: objectId, id: objectId.toString() };
 
-      if (result.length > 0) {
-        result[0].applications.push(newApplication);
-        const updateResult = await Applications.applications.updateOne(result[0]);
+      // if organization document already exists
+      if (result !== null) {
+        result.applications.push(newApplication);
+        const updateResult = await Applications.applications.updateOne(result);
         if (updateResult.nModified === 1) {
           return Service.successResponse({
             name: applicationRequest.name
@@ -108,8 +109,11 @@ class ApplicationsService {
           'Failed to add application', 500);
       }
 
+      // create new organization document and add to collection
       const applicationBody = {
-        org: orgList[0].toString(),
+        meta: {
+          org: orgList[0].toString()
+        },
         applications: []
       };
       applicationBody.applications.push(newApplication);
@@ -136,11 +140,11 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const result = await Applications.applications.find({ org: { $in: orgList } });
-      const appName = result[0].applications.find(item => item._id.toString() === id).name;
-      if (result.length > 0) {
-        result[0].applications = result[0].applications.filter(item => item._id.toString() !== id);
-        const updateResult = await Applications.applications.updateOne(result[0]);
+      const result = await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
+      if (result !== null) {
+        const appName = result.applications.find(item => item._id.toString() === id).name;
+        result.applications = result.applications.filter(item => item._id.toString() !== id);
+        const updateResult = await Applications.applications.updateOne(result);
         if (updateResult.nModified === 1) {
           return Service.successResponse({
             app: appName

@@ -46,6 +46,11 @@ const rulesSchema = new Schema({
   }
 });
 
+/**
+ * Application Database Default Schema (TBD)
+ * Main difference from the main schema - not tied to organisation
+ * TODO: This is draft, needs discussion about the right schema.
+ */
 const applicationSchema = new Schema({
   // Application id
   id: {
@@ -75,8 +80,27 @@ const applicationSchema = new Schema({
     enum: ['high', 'medium', 'low'],
     required: true
   },
+  // Description
+  description: {
+    type: String,
+    maxlength: [128, 'Description must be at most 128']
+  },
   // List of rules
   rules: [rulesSchema]
+}, {
+  timestamps: true
+});
+
+const metaSchema = new Schema({
+  // Update timw
+  time: {
+    type: Number
+  },
+  // Organization
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations'
+  }
 });
 
 /**
@@ -84,10 +108,9 @@ const applicationSchema = new Schema({
  * TODO: This is draft, needs discussion about the right schema.
  */
 const applicationsSchema = new Schema({
-  // Organization
-  org: {
-    type: Schema.Types.ObjectId,
-    ref: 'organizations',
+  // meta
+  meta: {
+    type: metaSchema,
     required: true
   },
   applications: [applicationSchema]
@@ -101,6 +124,7 @@ applicationsSchema.index({ name: 1, org: 1 }, { unique: true });
 // Default exports
 module.exports =
 {
+  applicationsSchema,
   applications: mongoConns.getMainDB().model('applications', applicationsSchema),
   rules: mongoConns.getMainDB().model('rules', rulesSchema)
 };
