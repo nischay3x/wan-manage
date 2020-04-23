@@ -23,7 +23,7 @@ var User = require('./models/users');
 const Accesstoken = require('./models/accesstokens');
 const { verifyToken, getToken } = require('./tokens');
 const { permissionMasks } = require('./models/membership');
-const { orgUpdateFromNull } = require('./utils/membershipUtils');
+const { orgUpdateFromNull, getUserAccounts } = require('./utils/membershipUtils');
 var configs = require('./configs')();
 const createError = require('http-errors');
 const reCaptcha = require('./utils/recaptcha')(configs.get('captchaKey'));
@@ -67,9 +67,7 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
       } else if (user) {
         
         const res = await setUserPerms(user, jwtPayload);
-
-        console.log("rr", res);
-
+        
         return res === true
           ? done(null, user)
           : done(null, false, { message: 'Invalid Token' });
@@ -80,15 +78,17 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
 }));
 
 const setUserPerms = async (user, jwtPayload) => {
-      
-  if (user.defaultAccount && user.defaultAccount._id.toString() === jwtPayload.account) {
+
+  const userAccounts = await getUserAccounts(user);
+  
+  if (userAccounts.find(u => u._id === jwtPayload.account) != null) {
     user.perms = jwtPayload.perms;
-    user.accessToken = (jwtPayload.type === 'app_access_token');
+    user.accessToken = (jwtPayload.type === 'app_access_token' || jwtPayload.type === 'app_access_key');
     user.jwtAccount = jwtPayload.account;
     user.jwtOrg = jwtPayload.org;
 
-    // in app_access_key permissions not stored in token payload
-    if (jwtPayload.type === 'app_access_key') {
+    // in app_access_key the permissions are not stored in token payload
+    if (jwtPayload.type === 'app_access_key') {      
       const token = await Accesstoken.findOne({ _id: jwtPayload.id });
       user.perms = token.permissions;
     }
