@@ -77,17 +77,17 @@ const multiLinkRuleSchema = new Schema({
       }
     },
     application: {
-      name: {
+      appId: {
         type: String,
-        maxlength: [20, 'name must be at most 20']
+        maxlength: [25, 'appId must be at most 25']
       },
       category: {
         type: String,
-        maxlength: [128, 'category must be at most 128']
+        maxlength: [20, 'category must be at most 20']
       },
       serviceClass: {
         type: String,
-        maxlength: [128, 'service class must be at most 128']
+        maxlength: [20, 'service class must be at most 20']
       },
       importance: {
         type: String,

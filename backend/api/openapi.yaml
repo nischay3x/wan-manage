@@ -6582,7 +6582,7 @@ components:
       properties:
         application:
           properties:
-            name:
+            appId:
               type: string
             category:
               type: string
@@ -6596,7 +6596,7 @@ components:
               - low
               type: string
           required:
-          - name
+          - appId
           - category
           - serviceClass
           - importance
