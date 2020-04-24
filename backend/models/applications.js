@@ -60,7 +60,8 @@ const applicationSchema = new Schema({
   // Application name
   name: {
     type: String,
-    required: true
+    required: true,
+    maxlength: [20, 'Category name must be at most 20']
   },
   // Category name
   category: {
