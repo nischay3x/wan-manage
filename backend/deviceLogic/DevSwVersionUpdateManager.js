@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const fetch = require('node-fetch');
+const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const notificationsMgr = require('../notifications/notifications')();
 const deviceSwVersion = require('../models/deviceSwVersions');
@@ -108,22 +108,6 @@ class SwVersionUpdateManager {
   }
 
   /**
-     * Fetches a uri. Tries up to numOfTrials before giving up.
-     * @async
-     * @param  {string}   uri         the uri to fetch
-     * @param  {number}   numOfTrials the max number of trials
-     * @return {Promise}              the response from the uri
-     */
-  async fetchWithRetry (uri, numOfTrials) {
-    let res;
-    for (let trial = 0; trial < numOfTrials; trial++) {
-      res = await fetch(uri);
-      if (res.ok) return res;
-      throw (new Error(res.statusText));
-    }
-  }
-
-  /**
      * Notify users be generating user notifications and sending emails
      * regarding the release of a new agent software version.
      * @async
@@ -173,7 +157,7 @@ class SwVersionUpdateManager {
     try {
       // eslint-disable-next-line no-template-curly-in-string
       const emailUrl = this.notificationEmailUri.replace('${version}', versions.device);
-      const res = await this.fetchWithRetry(emailUrl, 3);
+      const res = await fetchUtils.fetchWithRetry(emailUrl, 3);
       let { subject, body } = await res.json();
       body = unescape(body);
 
@@ -296,7 +280,7 @@ class SwVersionUpdateManager {
      */
   async pollDevSwRepo () {
     try {
-      const res = await this.fetchWithRetry(this.swRepoUri, 3);
+      const res = await fetchUtils.fetchWithRetry(this.swRepoUri, 3);
       const body = await res.json();
       const versions = this.createVersionsObject(body);
       const deadline = new Date(body.distributionDueDate);

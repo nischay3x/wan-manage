@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const fetch = require('node-fetch');
+const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
 const ImportedApplications = require('../models/importedapplications');
@@ -57,22 +57,6 @@ class AppRulesUpdateManager {
   }
 
   /**
-    * Fetches a uri. Tries up to numOfTrials before giving up.
-    * @async
-    * @param  {string}   uri         the uri to fetch
-    * @param  {number}   numOfTrials the max number of trials
-    * @return {Promise}              the response from the uri
-    */
-  async fetchWithRetry (uri, numOfTrials) {
-    let res;
-    for (let trial = 0; trial < numOfTrials; trial++) {
-      res = await fetch(uri);
-      if (res.ok) return res;
-      throw (new Error(res.statusText));
-    }
-  }
-
-  /**
     * Polls the app rules file.
     * @async
     * @return {void}
@@ -80,7 +64,7 @@ class AppRulesUpdateManager {
   async pollAppRules () {
     logger.debug('Begin fetching application rules');
     try {
-      const res = await this.fetchWithRetry(this.appRulesUri, 3);
+      const res = await fetchUtils.fetchWithRetry(this.appRulesUri, 3);
       const body = await res.json();
       const metaTime = new Date(body.meta.time);
       logger.info('Got response meta time', {

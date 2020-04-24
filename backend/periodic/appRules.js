@@ -58,7 +58,6 @@ class AppRules {
     // Get the version upon starting up
     this.periodicCheckAppRules();
 
-    // Runs once every hour
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
     periodic.startTask(name);
