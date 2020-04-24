@@ -64,27 +64,29 @@ class AppRulesUpdateManager {
   async pollAppRules () {
     logger.debug('Begin fetching application rules');
     try {
-      const res = await fetchUtils.fetchWithRetry(this.appRulesUri, 3);
-      const body = await res.json();
-      const metaTime = new Date(body.meta.time);
-      logger.info('Got response meta time', {
-        params: { metaTime: metaTime, rules: body.applications.length }
+      const result = await fetchUtils.fetchWithRetry(this.appRulesUri, 3);
+      const body = await result.json();
+      logger.info('Got response', {
+        params: { time: body.meta.time, rulesCount: body.applications.length }
       });
-      // drop existing collection
-      ImportedApplications.importedapplications.deleteMany({}, async function (err, result) {
-        if (err) {
-          logger.warn('Delete documents failed', {
-            params: { err: err.message }
-          });
-          return;
-        }
-        logger.debug('Delete documents success', {
-          params: { count: result.deletedCount }
-        });
-        // add updated entry
-        logger.info('Updating importedapplications collection');
-        await ImportedApplications.importedapplications.create([body]);
-      });
+
+      // check stored time against received one. If same, do not update
+      const importedApplicationsResult = await ImportedApplications.importedapplications.findOne();
+      if (importedApplicationsResult && importedApplicationsResult.meta.time === body.meta.time) {
+        logger.debug('application rules update time unchanged, returning...');
+        return;
+      }
+
+      logger.debug('Updating imported applications database...');
+      const query = {};
+      const set = { $set: { meta: body.meta, applications: body.applications } };
+      const options = {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+        useFindAndModify: false
+      };
+      await ImportedApplications.importedapplications.findOneAndUpdate(query, set, options);
     } catch (err) {
       logger.error('Failed to query app rules', {
         params: { err: err.message }

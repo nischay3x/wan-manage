@@ -47,11 +47,11 @@ class ApplicationsService {
 
       // it is expected that imported applications are stored as single document
       // in the collection
-      const importantApplicationsResult = await ImportedApplications.importedapplications.findOne();
+      const importedApplicationsResult = await ImportedApplications.importedapplications.findOne();
       const importedApplications =
-        (importantApplicationsResult === null || importantApplicationsResult.applications === null)
+        (importedApplicationsResult === null || importedApplicationsResult.applications === null)
           ? []
-          : importantApplicationsResult.applications.map(item => {
+          : importedApplicationsResult.applications.map(item => {
             return {
               id: item.id,
               name: item.name,
