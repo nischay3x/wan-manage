@@ -69,9 +69,15 @@ class ApplicationsService {
             };
           });
 
-      const mergedList = concat(customApplications, importedApplications);
+      const response = {
+        applications: concat(customApplications, importedApplications),
+        meta: {
+          customUpdatedAt: customApplicationsResult.updatedAt,
+          importedUpdatedAt: importedApplicationsResult.updatedAt
+        }
+      };
 
-      return Service.successResponse(mergedList);
+      return Service.successResponse(response);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

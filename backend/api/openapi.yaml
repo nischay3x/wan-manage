@@ -4477,7 +4477,7 @@ paths:
               schema:
                 items:
                   $ref: '#/components/schemas/Application'
-                type: array
+                type: object
                 x-content-type: application/json
           description: Successful operation
         "401":
