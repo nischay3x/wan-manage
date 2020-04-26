@@ -46,7 +46,7 @@ const validateIPv4Mask = mask => {
  * @param  {Object}  device                 the device to check
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = async (device) => {
+const validateDevice = async (device, checkOverlap, orgLanIfcs) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -106,9 +106,11 @@ const validateDevice = async (device) => {
     }
   }
 
-  if (device.org) {
+  if (checkOverlap) {
     // LAN subnet must not be overlap with other devices in this org
-    const otherDevices = await devices.find({ org: device.org, _id: { $ne: device._id } }).exec();
+    const otherDevices = await devices.find({ org: device.org, _id: { $ne: device._id } }, '');//.exec();
+
+    // get all LAN subnets from query
 
     for (const otherDevice of otherDevices) {
       const otherLanIfcs = otherDevice.interfaces
