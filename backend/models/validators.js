@@ -138,7 +138,7 @@ const validateEmail = (mail) => { return !isEmpty(mail) && email.validate(mail);
 const validateLabelName = (name) => { return /^[a-z0-9-_ .]{3,30}$/i.test(name || ''); };
 const validateLabelColor = (color) => { return /^#[0-9A-F]{6}$/i.test(color); };
 
-const validatePolicyName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name || ''); };
+const validatePolicyName = (name) => { return /^[a-z0-9-_ .]{3,50}$/i.test(name || ''); };
 const validateRuleName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name || ''); };
 
 module.exports = {
