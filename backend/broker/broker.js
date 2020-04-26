@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // Logic to start/stop a device
-var configs = require('../configs')();
+const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -24,7 +24,8 @@ const deviceQueues = require('../utils/deviceQueue')(
 const devUtils = require('./utils');
 const async = require('async');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-var dispatcher = require('../deviceLogic/dispatcher');
+const dispatcher = require('../deviceLogic/dispatcher');
+const omit = require('lodash/omit');
 
 /**
  * A callback that is called when a device connects to the MGMT
@@ -63,8 +64,14 @@ exports.deviceConnectionClosed = async (deviceId) => {
  * @return {Promise}     a promise for processing the job
  */
 const deviceProcessor = async (job) => {
+  // limit the print job tasks param size
+  const logJob = omit(job, ['data.message.tasks']);
+  logJob.data.message.tasks = job.data.message.tasks.map(
+    t => JSON.stringify(t).substring(0, 1024)
+  );
+
   // Job is passed twice - for event data and event header.
-  logger.info('Processing job', { params: { job: job }, job: job });
+  logger.info('Processing job', { params: { job: logJob }, job: logJob });
 
   // Get tasks
   const tasks = job.data.message.tasks;
@@ -85,7 +92,7 @@ const deviceProcessor = async (job) => {
     // 3. Update transaction job progress
     async.waterfall(operations, (error, results) => {
       if (error) {
-        logger.error('Job error', { params: { job: job, err: error.message }, job: job });
+        logger.error('Job error', { params: { job: logJob, err: error.message }, job: logJob });
         // Call error callback only if the job reached maximal retries
         // We check if the remaining attempts are less than 1 instead of 0
         // since this code runs before the number of attempts is decreased.
@@ -95,7 +102,7 @@ const deviceProcessor = async (job) => {
         }
         reject(error);
       } else {
-        logger.info('Job completed', { params: { job: job, results: results }, job: job });
+        logger.info('Job completed', { params: { job: logJob, results: results }, job: logJob });
         // Dispatch the response for Job completion
         // In the past this was called from job complete event but there were some missing events
         // So moved the dispatcher to here

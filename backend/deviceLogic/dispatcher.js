@@ -23,6 +23,7 @@ const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
 const dhcp = require('./dhcp');
+const appIdentification = require('./appIdentification');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -83,6 +84,12 @@ const methods = {
     complete: upgrade.complete,
     error: upgrade.error,
     remove: upgrade.remove
+  },
+  appIdentification: {
+    apply: appIdentification.apply,
+    complete: appIdentification.complete,
+    error: appIdentification.error,
+    remove: appIdentification.remove
   }
 };
 
