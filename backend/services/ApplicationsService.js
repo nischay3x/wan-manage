@@ -17,66 +17,14 @@
 
 const Service = require('./Service');
 const Applications = require('../models/applications');
-const ImportedApplications = require('../models/importedapplications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-const concat = require('lodash/concat');
 var mongoose = require('mongoose');
 
 class ApplicationsService {
   static async applicationsGET ({ org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-
-      // it is expected that custom applications are stored as single document per
-      // organization in the collection
-      const customApplicationsResult =
-        await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
-      const customApplications =
-        (customApplicationsResult === null || customApplicationsResult.applications === null)
-          ? []
-          : customApplicationsResult.applications.map(item => {
-            return {
-              id: item.id,
-              name: item.name,
-              category: item.category,
-              serviceClass: item.serviceClass,
-              importance: item.importance,
-              rules: item.rules
-            };
-          });
-
-      // it is expected that imported applications are stored as single document
-      // in the collection
-      const importedApplicationsResult = await ImportedApplications.importedapplications.findOne();
-      const importedApplications =
-        (importedApplicationsResult === null || importedApplicationsResult.applications === null)
-          ? []
-          : importedApplicationsResult.applications.map(item => {
-            return {
-              id: item.id,
-              name: item.name,
-              category: item.category,
-              serviceClass: item.serviceClass,
-              importance: item.importance,
-              rules: item.rules.map(rulesItem => {
-                return {
-                  id: rulesItem.id,
-                  protocol: rulesItem.protocol,
-                  ports: rulesItem.ports,
-                  ip: rulesItem.ip
-                };
-              })
-            };
-          });
-
-      const response = {
-        applications: concat(customApplications, importedApplications),
-        meta: {
-          customUpdatedAt: customApplicationsResult.updatedAt,
-          importedUpdatedAt: importedApplicationsResult.updatedAt
-        }
-      };
-
+      const response = await Applications.getAllApplications(orgList);
       return Service.successResponse(response);
     } catch (e) {
       return Service.rejectResponse(
@@ -166,38 +114,6 @@ class ApplicationsService {
       });
 
       return Service.successResponse(null, 204);
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
-
-  // TODO: remove
-  static async importedapplicationsGET () {
-    try {
-      const importantApplicationsResult = await ImportedApplications.importedapplications.find();
-
-      const importedApplications = importantApplicationsResult[0].rules.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          serviceClass: item.serviceClass,
-          importance: item.importance,
-          rules: item.rules.map(rulesItem => {
-            return {
-              id: rulesItem.id,
-              protocol: rulesItem.protocol,
-              ports: rulesItem.ports,
-              ip: rulesItem.ip
-            };
-          })
-        };
-      });
-
-      return Service.successResponse(importedApplications);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

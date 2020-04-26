@@ -18,12 +18,12 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
+const concat = require('lodash/concat');
 
 // ! TODO: Unit tests
 
 /**
  * Rules Database Schema (TBD)
- * TODO: This is draft, needs discussion about the right schema.
  */
 const rulesSchema = new Schema({
   // IP
@@ -49,7 +49,6 @@ const rulesSchema = new Schema({
 /**
  * Application Database Default Schema (TBD)
  * Main difference from the main schema - not tied to organisation
- * TODO: This is draft, needs discussion about the right schema.
  */
 const applicationSchema = new Schema({
   // Application id
@@ -106,7 +105,6 @@ const metaSchema = new Schema({
 
 /**
  * Application Database Schema (TBD)
- * TODO: This is draft, needs discussion about the right schema.
  */
 const applicationsSchema = new Schema({
   // meta
@@ -122,10 +120,75 @@ const applicationsSchema = new Schema({
 // indexing
 applicationsSchema.index({ name: 1, org: 1 }, { unique: true });
 
+const applications =
+  mongoConns.getMainDB().model('applications', applicationsSchema);
+const importedapplications =
+  mongoConns.getMainDB().model('importedapplications', applicationsSchema);
+
+/**
+ * Gets the combined list of custom and imported applications as well
+ * as the meta data containging times of last updates in both collections.
+ *
+ * @param {*} org Organization filter
+ * @returns applications + metadata
+ */
+const getAllApplications = async (org) => {
+  // it is expected that custom applications are stored as single document per
+  // organization in the collection
+  const customApplicationsResult =
+    await applications.findOne({ 'meta.org': { $in: org } });
+  const customApplications =
+    (customApplicationsResult === null || customApplicationsResult.applications === null)
+      ? []
+      : customApplicationsResult.applications.map(item => {
+        return {
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          serviceClass: item.serviceClass,
+          importance: item.importance,
+          rules: item.rules
+        };
+      });
+
+  // it is expected that imported applications are stored as single document
+  // in the collection
+  const importedApplicationsResult = await importedapplications.findOne();
+  const importedApplications =
+    (importedApplicationsResult === null || importedApplicationsResult.applications === null)
+      ? []
+      : importedApplicationsResult.applications.map(item => {
+        return {
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          serviceClass: item.serviceClass,
+          importance: item.importance,
+          rules: item.rules.map(rulesItem => {
+            return {
+              id: rulesItem.id,
+              protocol: rulesItem.protocol,
+              ports: rulesItem.ports,
+              ip: rulesItem.ip
+            };
+          })
+        };
+      });
+
+  return {
+    applications: concat(customApplications, importedApplications),
+    meta: {
+      customUpdatedAt: customApplicationsResult.updatedAt,
+      importedUpdatedAt: importedApplicationsResult.updatedAt
+    }
+  };
+};
+
 // Default exports
 module.exports =
 {
   applicationsSchema,
+  getAllApplications,
   applications: mongoConns.getMainDB().model('applications', applicationsSchema),
   rules: mongoConns.getMainDB().model('rules', rulesSchema)
 };
