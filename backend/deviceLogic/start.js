@@ -41,7 +41,7 @@ const apply = async (device, user, data) => {
     params: { machineId: device[0].machineId, user: user, data: data }
   });
 
-  const deviceValidator = validateDevice(device[0]);
+  const deviceValidator = await validateDevice(device[0]);
   if (!deviceValidator.valid) {
     logger.warn('Start command validation failed',
       {

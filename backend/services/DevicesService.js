@@ -526,7 +526,7 @@ class DevicesService {
       // Validate device changes only for approved devices,
       // and only if the request contains interfaces.
       if (origDevice.isApproved && deviceRequest.interfaces) {
-        const { valid, err } = validateDevice(deviceRequest);
+        const { valid, err } = await validateDevice(deviceRequest);
         if (!valid) {
           logger.warn('Device update failed',
             {

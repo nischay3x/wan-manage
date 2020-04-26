@@ -17,6 +17,7 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
+const { devices } = require('../models/devices');
 
 /**
  * Checks whether a value is empty
@@ -45,7 +46,7 @@ const validateIPv4Mask = mask => {
  * @param  {Object}  device                 the device to check
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device) => {
+const validateDevice = async (device) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -101,6 +102,32 @@ const validateDevice = (device) => {
           valid: false,
           err: 'WAN and LAN IP addresses have an overlap'
         };
+      }
+    }
+  }
+
+  if (device.org) {
+    // LAN subnet must not be overlap with other devices in this org
+    const otherDevices = await devices.find({ org: device.org, _id: { $ne: device._id } }).exec();
+
+    for (const otherDevice of otherDevices) {
+      const otherLanIfcs = otherDevice.interfaces
+        .filter(ifc => ifc.type === 'LAN' && ifc.isAssigned === true);
+
+      for (const otherLanIfc of otherLanIfcs) {
+        const otherDeviceLanSubnet = `${otherLanIfc.IPv4}/${otherLanIfc.IPv4Mask}`;
+
+        // compare each LAN subnet with current device LAN subnet
+        for (const currentLanIfc of lanIfcs) {
+          const deviceLanSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
+
+          if (cidr.overlap(deviceLanSubnet, otherDeviceLanSubnet)) {
+            return {
+              valid: false,
+              err: `The device ${device.name} has a LAN subnet overlap with ${otherDevice.name}`
+            };
+          }
+        }
       }
     }
   }
