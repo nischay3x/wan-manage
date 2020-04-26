@@ -144,6 +144,7 @@ const getAllApplications = async (org) => {
         return {
           id: item.id,
           name: item.name,
+          description: item.description,
           category: item.category,
           serviceClass: item.serviceClass,
           importance: item.importance,
@@ -161,6 +162,7 @@ const getAllApplications = async (org) => {
         return {
           id: item.id,
           name: item.name,
+          description: item.description,
           category: item.category,
           serviceClass: item.serviceClass,
           importance: item.importance,
