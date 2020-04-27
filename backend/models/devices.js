@@ -264,12 +264,13 @@ const DHCPSchema = new Schema({
 const AppIdentificationSchema = new Schema({
   /**
    * Represent the list of clients that asked for app identification
+   * A client is a policy/feature that require to install app identification
    * This is only updated by the server when a client asks to install/uninstall
    */
   clients: [String],
   /**
    * This indicates the last time requested to update.
-   * Its purpose is to prevent multiple same requests
+   * Its purpose is to prevent multiple identical requests
    * Updated when a new job request is sent or when the job removed/failed
    * Possible values:
    *  - null: last request indicated to remove app identification

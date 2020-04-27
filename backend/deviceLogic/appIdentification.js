@@ -17,7 +17,7 @@
 
 const configs = require('../configs')();
 const { devices } = require('../models/devices');
-const { importedapplications } = require('../models/importedapplications');
+const { getAllApplications } = require('../models/applications');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -40,22 +40,22 @@ const apply = async (devices, user, data) => {
 
   const { message, title, params, installIds, deviceJobResp } =
       await getDevicesAppIdentificationJobInfo(
-        data.org, null, Object.keys(data.devices), data.action === 'add'
+        org, null, Object.keys(data.devices), data.action === 'add'
       );
 
   const opDevices = (devices && installIds)
     ? devices.filter((device) => installIds.hasOwnProperty(device._id)) : [];
 
-  const jobs = [];
+  const jobPromises = [];
   opDevices.forEach(async device => {
     const machineId = device.machineId;
     const majorAgentVersion = getMajorVersion(device.versions.agent);
     if (majorAgentVersion === 0) { // version 0.X.X
-      throw new Error('Command is not supported for the current agent version');
+      // For now do nothing for version 0.X.X, just skip
     } else if (majorAgentVersion >= 1) { // version 1.X.X+
       const tasks = [];
       tasks.push({ entity: 'agent', message, params });
-      const job = await deviceQueues.addJob(machineId, userName, org,
+      const jobPromise = deviceQueues.addJob(machineId, userName, org,
         // Data
         { title: title, tasks: tasks },
         // Response data
@@ -70,11 +70,26 @@ const apply = async (devices, user, data) => {
         { priority: 'low', attempts: 1, removeOnComplete: false },
         // Complete callback
         null);
-
-      logger.info(title, { params: { job: job.data.response } });
-      jobs.push(job);
+      jobPromises.push(jobPromise);
     }
   });
+  const promiseStatus = await Promise.allSettled(jobPromises);
+  const jobs = promiseStatus.reduce((arr, elem) => {
+    if (elem.status === 'fulfilled') {
+      const job = elem.value;
+      arr.push(job);
+      logger.info('App Identification Job Queued', {
+        params: {
+          jobResponse: job.data.response, jobId: job.id
+        }
+      });
+    } else {
+      logger.error('App Identification Job Queue Error', {
+        params: { message: elem.reason.message }
+      });
+    }
+    return arr;
+  }, []);
   return jobs;
 };
 
@@ -95,18 +110,19 @@ const complete = async (jobId, res) => {
       { upsert: false }
     );
   } catch (error) {
-    logger.warn('Complete appIdentification job, failed', {
+    logger.error('Complete appIdentification job, failed', {
       params: { result: res, jobId: jobId, message: error.message }
     });
   }
 };
 
 /**
- * Revert failed or removed job operation
+ * Reset last request time for failed or removed jobs
+ * This will allow resending a new identical job
  * @param {String} jobId - Failed job ID
  * @param {Object} res   - response data for job ID
  */
-const revertJobOperation = async (jobId, res) => {
+const resetDeviceLastRequestTime = async (jobId, res) => {
   try {
     await devices.findOneAndUpdate(
       { _id: mongoose.Types.ObjectId(res.deviceId) },
@@ -114,7 +130,7 @@ const revertJobOperation = async (jobId, res) => {
       { upsert: false }
     );
   } catch (error) {
-    logger.warn('revert appIdentification job, failed', {
+    logger.error('revert appIdentification job, failed', {
       params: { result: res, jobId: jobId, message: error.message }
     });
   }
@@ -128,12 +144,12 @@ const revertJobOperation = async (jobId, res) => {
 const error = async (jobId, res) => {
   logger.info('appIdentification job failed', { params: { result: res, jobId: jobId } });
   if (!res || !res.deviceId || !res.message) {
-    logger.warn('appIdentification job error got an invalid job result', {
+    logger.error('appIdentification job error got an invalid job result', {
       params: { result: res, jobId: jobId }
     });
     return;
   }
-  await revertJobOperation(jobId, res);
+  await resetDeviceLastRequestTime(jobId, res);
 };
 
 /**
@@ -145,12 +161,12 @@ const remove = async (job) => {
   const res = job.data.response.data;
   logger.info('appIdentification job removed', { params: { result: res, jobId: job.id } });
   if (!res || !res.deviceId || !res.message) {
-    logger.warn('appIdentification job removal got an invalid job result', {
+    logger.error('appIdentification job removal got an invalid job result', {
       params: { result: res, jobId: job.id }
     });
     return;
   }
-  await revertJobOperation(job.id, res);
+  await resetDeviceLastRequestTime(job.id, res);
 };
 
 /**
@@ -158,23 +174,11 @@ const remove = async (job) => {
  * @param {MongoId} org - Organization Mongo ID
  */
 const getOrgApplications = async (org) => {
-  // TBD: This needs to be updated once a combined function will be introduced
-  const importedApplicationsResult = await importedapplications.findOne({}, {
-    'applications.name': 1,
-    'applications.id': 1,
-    'applications.category': 1,
-    'applications.serviceClass': 1,
-    'applications.importance': 1,
-    'applications.rules.protocol': 1,
-    'applications.rules.ip': 1,
-    'applications.rules.ports': 1,
-    updatedAt: 1
-  });
-  return importedApplicationsResult;
+  return await getAllApplications(org);
 };
 
 /**
- * This function get the device info needed for creating a job
+ * This function gets the device info needed for creating a job
  * @param   {mongoID} org - organization to apply (make sure it is not the user defaultOrg)
  * @param   {String} client - client name that asks for the application installation
  *                            null client only update jobs, not install/uninstall new
@@ -193,46 +197,59 @@ const getOrgApplications = async (org) => {
 const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isInstall) => {
   // get full application list for this organization
   const appRules = await getOrgApplications(org);
-
-  // find all devices that have an older version, require an update
-  // if isInstall, find devices older from appRules time which are not already in progress
-  // if not isInstall, find devices with (only client or (no client and time not null))
+  // Get latest update time
+  const updateAt = (appRules.meta.importedUpdatedAt >= appRules.meta.customUpdatedAt)
+    ? appRules.meta.importedUpdatedAt : appRules.meta.customUpdatedAt;
+  // find all devices that require a new update
+  //  (don't have a pending job)
+  // if isInstall==true, find devices older from latest the app update time
+  //  which are not already in progress
+  // if isInstall==false, we need to remove the apps from the device if
+  //  the called client is the last one or no clients defined but last updated time is not null
   // If there are other clients using applications it will be kept installed
-  let opDevices;
-  let requestTime;
-  if (isInstall) {
-    requestTime = appRules.updatedAt;
-    opDevices = await devices.find(
-      {
-        _id: { $in: deviceIdList },
-        'appIdentification.lastRequestTime': { $ne: requestTime },
-        $or: [
-          { 'appIdentification.lastUpdateTime': null },
-          { 'appIdentification.lastUpdateTime': { $lt: appRules.updatedAt } }
-        ]
-      }, { _id: 1 });
-  } else {
-    requestTime = null;
-    opDevices = await devices.find(
-      {
-        _id: { $in: deviceIdList },
-        'appIdentification.lastRequestTime': { $ne: requestTime },
-        $or: [
-          { 'appIdentification.clients': [client] },
-          {
-            $and: [
-              { 'appIdentification.clients': [] },
-              { 'appIdentification.lastUpdateTime': { $ne: null } }
-            ]
-          }
-        ]
-      }, { _id: 1 });
-  }
+  let opDevices, update;
+  let requestTime = null;
+  if (updateAt) {
+    if (isInstall) {
+      requestTime = updateAt;
+      opDevices = await devices.find(
+        {
+          _id: { $in: deviceIdList },
+          'appIdentification.lastRequestTime': { $ne: requestTime },
+          $or: [
+            { 'appIdentification.lastUpdateTime': null },
+            { 'appIdentification.lastUpdateTime': { $lt: updateAt } }
+          ]
+        }, { _id: 1 });
+    } else {
+      requestTime = null;
+      opDevices = await devices.find(
+        {
+          _id: { $in: deviceIdList },
+          'appIdentification.lastRequestTime': { $ne: requestTime },
+          $or: [
+            { 'appIdentification.clients': [client] },
+            {
+              $and: [
+                { 'appIdentification.clients': [] },
+                { 'appIdentification.lastUpdateTime': { $ne: null } }
+              ]
+            }
+          ]
+        }, { _id: 1 });
+    }
 
-  // update all devices with client info, it's assumed that a job will be sent
-  const update = (isInstall)
-    ? { $set: { 'appIdentification.lastRequestTime': appRules.updatedAt } }
-    : { $set: { 'appIdentification.lastRequestTime': null } };
+    // update all devices with client info, it's assumed that a job will be sent
+    update = (isInstall)
+      ? { $set: { 'appIdentification.lastRequestTime': updateAt } }
+      : { $set: { 'appIdentification.lastRequestTime': null } };
+  } else {
+    opDevices = [];
+    update = {};
+    logger.warn('getDevicesAppIdentificationJobInfo: No application data found ', {
+      params: { org: org, client: client }
+    });
+  }
 
   if (client) {
     if (isInstall) {
@@ -252,7 +269,8 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   const titlePrefix = (isInstall) ? 'Add' : 'Remove';
   ret.title = `${titlePrefix} appIdentifications to device`;
   ret.installIds = opDevices.reduce((obj, d) => { obj[d._id] = true; return obj; }, {});
-  ret.params = (isInstall) ? appRules.applications.toObject() : [];
+  ret.params = (appRules && appRules.applications && isInstall)
+    ? appRules.applications : [];
   ret.deviceJobResp = {
     requestTime: requestTime,
     message: ret.message,

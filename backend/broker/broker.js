@@ -67,7 +67,7 @@ const deviceProcessor = async (job) => {
   // limit the print job tasks param size
   const logJob = omit(job, ['data.message.tasks']);
   logJob.data.message.tasks = job.data.message.tasks.map(
-    t => JSON.stringify(t).substring(0, 1024)
+    t => JSON.stringify(t).substring(0, 2048)
   );
 
   // Job is passed twice - for event data and event header.
