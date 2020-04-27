@@ -145,7 +145,7 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
     useFlexiBilling: false,
-    logLevel: 'debug',
+    logLevel: 'info',
     mailerPort: 1025
   },
   testing: {
