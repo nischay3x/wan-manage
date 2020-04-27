@@ -48,7 +48,7 @@ const rulesSchema = new Schema({
 
 /**
  * Application Database Default Schema (TBD)
- * Main difference from the main schema - not tied to organisation
+ * Main difference from the main schema - not tied to organization
  */
 const applicationSchema = new Schema({
   // Application id
@@ -60,19 +60,19 @@ const applicationSchema = new Schema({
   name: {
     type: String,
     required: true,
-    maxlength: [20, 'Category name must be at most 20']
+    maxlength: [30, 'Application name must be at most 30']
   },
   // Category name
   category: {
     type: String,
     required: true,
-    maxlength: [20, 'Category name must be at most 20']
+    maxlength: [20, 'Category must be at most 20']
   },
   // Service Class name
   serviceClass: {
     type: String,
     required: true,
-    maxlength: [20, 'Service Class name must be at most 20']
+    maxlength: [20, 'Service Class must be at most 20']
   },
   // Importance
   importance: {
@@ -133,55 +133,46 @@ const importedapplications =
  * @returns applications + metadata
  */
 const getAllApplications = async (org) => {
+  const projection = {
+    updatedAt: 1,
+    'applications.id': 1,
+    'applications.name': 1,
+    'applications.description': 1,
+    'applications.category': 1,
+    'applications.serviceClass': 1,
+    'applications.importance': 1,
+    'applications.rules.id': 1,
+    'applications.rules.protocol': 1,
+    'applications.rules.ports': 1,
+    'applications.rules.ip': 1
+  };
   // it is expected that custom applications are stored as single document per
   // organization in the collection
   const customApplicationsResult =
-    await applications.findOne({ 'meta.org': { $in: org } });
+    await applications.findOne({ 'meta.org': { $in: org } }, projection);
   const customApplications =
     (customApplicationsResult === null || customApplicationsResult.applications === null)
       ? []
-      : customApplicationsResult.applications.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          category: item.category,
-          serviceClass: item.serviceClass,
-          importance: item.importance,
-          rules: item.rules
-        };
-      });
+      : customApplicationsResult.applications;
 
   // it is expected that imported applications are stored as single document
   // in the collection
-  const importedApplicationsResult = await importedapplications.findOne();
+  const importedApplicationsResult =
+    await importedapplications.findOne({}, projection);
   const importedApplications =
     (importedApplicationsResult === null || importedApplicationsResult.applications === null)
       ? []
-      : importedApplicationsResult.applications.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          description: item.description,
-          category: item.category,
-          serviceClass: item.serviceClass,
-          importance: item.importance,
-          rules: item.rules.map(rulesItem => {
-            return {
-              id: rulesItem.id,
-              protocol: rulesItem.protocol,
-              ports: rulesItem.ports,
-              ip: rulesItem.ip
-            };
-          })
-        };
-      });
+      : importedApplicationsResult.applications;
 
   return {
     applications: concat(customApplications, importedApplications),
     meta: {
-      customUpdatedAt: customApplicationsResult.updatedAt,
-      importedUpdatedAt: importedApplicationsResult.updatedAt
+      customUpdatedAt: customApplicationsResult === null
+        ? ''
+        : customApplicationsResult.updatedAt,
+      importedUpdatedAt: importedApplicationsResult === null
+        ? ''
+        : importedApplicationsResult.updatedAt
     }
   };
 };
