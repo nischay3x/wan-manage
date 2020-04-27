@@ -228,7 +228,7 @@ const error = async (jobId, res) => {
         );
         break;
       default:
-        throw new Error('Unable to find message type');
+        throw new Error('DHCP job error: Unable to find message type');
     }
   } catch (error) {
     logger.warn('DHCP job error, failed to update database', {

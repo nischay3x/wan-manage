@@ -15,15 +15,15 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const fetch = require('node-fetch');
+const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
 const ImportedApplications = require('../models/importedapplications');
 
 /***
- * This class serves as the software update manager, responsible for
- * polling our package repository for new software versions, and take
- * the necessary actions when a new version is released.
+ * This class serves as the application rules update manager, responsible for
+ * polling the repository for application rules file and replacement of the
+ * file in the database.
  ***/
 class AppRulesUpdateManager {
   /**
@@ -57,50 +57,39 @@ class AppRulesUpdateManager {
   }
 
   /**
-    * Fetches a uri. Tries up to numOfTrials before giving up.
-    * @async
-    * @param  {string}   uri         the uri to fetch
-    * @param  {number}   numOfTrials the max number of trials
-    * @return {Promise}              the response from the uri
-    */
-  async fetchWithRetry (uri, numOfTrials) {
-    let res;
-    for (let trial = 0; trial < numOfTrials; trial++) {
-      res = await fetch(uri);
-      if (res.ok) return res;
-      throw (new Error(res.statusText));
-    }
-  }
-
-  /**
     * Polls the app rules file.
     * @async
     * @return {void}
     */
   async pollAppRules () {
-    logger.debug('pollAppRules: begin fetching application rules');
+    logger.debug('Begin fetching application rules');
     try {
-      const res = await this.fetchWithRetry(this.appRulesUri, 3);
-      const body = await res.json();
-      const metaTime = new Date(body.meta.time);
-      const logMessage =
-        `pollAppRules: Got response meta time ${metaTime}, ${body.applications.length} rules`;
-      logger.info(logMessage);
-      // drop existing collection
-      ImportedApplications.importedapplications.deleteMany({}, async function (err, result) {
-        if (err) {
-          logger.warn(`pollAppRules: delete documents failed ${err}`);
-          return;
-        }
-        logger.debug(`pollAppRules: delete documents success, ${result.deletedCount} deleted`);
-        // add updated entry
-        logger.info('pollAppRules: updating importedapplications collection');
-        await ImportedApplications.importedapplications.create([body]);
+      const result = await fetchUtils.fetchWithRetry(this.appRulesUri, 3);
+      const body = await result.json();
+      logger.info('Got response', {
+        params: { time: body.meta.time, rulesCount: body.applications.length }
       });
+
+      // check stored time against received one. If same, do not update
+      const importedApplicationsResult = await ImportedApplications.importedapplications.findOne();
+      if (importedApplicationsResult && importedApplicationsResult.meta.time === body.meta.time) {
+        logger.debug('application rules update time unchanged, returning...');
+        return;
+      }
+
+      logger.debug('Updating imported applications database...');
+      const query = {};
+      const set = { $set: { meta: body.meta, applications: body.applications } };
+      const options = {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+        useFindAndModify: false
+      };
+      await ImportedApplications.importedapplications.findOneAndUpdate(query, set, options);
     } catch (err) {
       logger.error('Failed to query app rules', {
-        params: { err: err.message },
-        periodic: { task: this.taskInfo }
+        params: { err: err.message }
       });
     }
   }

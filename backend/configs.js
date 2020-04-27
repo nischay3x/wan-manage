@@ -145,9 +145,8 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
     useFlexiBilling: false,
-    logLevel: 'debug',
-    mailerPort: 1025,
-    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
+    logLevel: 'info',
+    mailerPort: 1025
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
@@ -195,8 +194,7 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80'],
-    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
+    corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80']
   },
 
   // Override for appqa01 environment
@@ -220,8 +218,7 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
-    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
+    corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
   }
 };
 

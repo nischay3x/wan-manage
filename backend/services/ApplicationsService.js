@@ -17,53 +17,15 @@
 
 const Service = require('./Service');
 const Applications = require('../models/applications');
-const ImportedApplications = require('../models/importedapplications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-const concat = require('lodash/concat');
 var mongoose = require('mongoose');
 
 class ApplicationsService {
   static async applicationsGET ({ org }, { user }) {
-    console.log('Inside applicationsGET');
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const customApplicationsResult =
-        await Applications.applications.find({ org: { $in: orgList } });
-
-      const customApplications = customApplicationsResult[0].applications.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          serviceClass: item.serviceClass,
-          importance: item.importance,
-          rules: item.rules
-        };
-      });
-
-      const importantApplicationsResult = await ImportedApplications.importedapplications.find();
-
-      const importedApplications = importantApplicationsResult[0].applications.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          serviceClass: item.serviceClass,
-          importance: item.importance,
-          rules: item.rules.map(rulesItem => {
-            return {
-              id: rulesItem.id,
-              protocol: rulesItem.protocol,
-              ports: rulesItem.ports,
-              ip: rulesItem.ip
-            };
-          })
-        };
-      });
-
-      const mergedList = concat(customApplications, importedApplications);
-
-      return Service.successResponse(mergedList);
+      const response = await Applications.getAllApplications(orgList);
+      return Service.successResponse(response);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -81,16 +43,17 @@ class ApplicationsService {
   static async applicationsPOST ({ org, applicationRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const result = await Applications.applications.find({ org: { $in: orgList } });
+      const result = await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
       const objectId = mongoose.Types.ObjectId();
       // TODO: The redundancy with the ids is in order to keep consistency with the imported
       // TODO: list. Maybe we could get rid of the id in the imported list and use _id in both
       // TODO: tables.
       const newApplication = { ...applicationRequest, _id: objectId, id: objectId.toString() };
 
-      if (result.length > 0) {
-        result[0].applications.push(newApplication);
-        const updateResult = await Applications.applications.updateOne(result[0]);
+      // if organization document already exists
+      if (result !== null) {
+        result.applications.push(newApplication);
+        const updateResult = await Applications.applications.updateOne(result);
         if (updateResult.nModified === 1) {
           return Service.successResponse({
             name: applicationRequest.name
@@ -100,18 +63,18 @@ class ApplicationsService {
           'Failed to add application', 500);
       }
 
+      // create new organization document and add to collection
       const applicationBody = {
-        org: orgList[0].toString(),
+        meta: {
+          org: orgList[0].toString()
+        },
         applications: []
       };
       applicationBody.applications.push(newApplication);
 
-      const _applicationList = await Applications.applications.create([applicationBody]);
-      const applicationItem = _applicationList[0];
+      await Applications.applications.create([applicationBody]);
       return Service.successResponse({
-        _id: applicationItem.id,
-        org: applicationItem.org.toString(),
-        app: applicationItem.app
+        name: applicationRequest.name
       }, 201);
     } catch (e) {
       return Service.rejectResponse(
@@ -131,11 +94,11 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const result = await Applications.applications.find({ org: { $in: orgList } });
-      const appName = result[0].applications.find(item => item._id.toString() === id).name;
-      if (result.length > 0) {
-        result[0].applications = result[0].applications.filter(item => item._id.toString() !== id);
-        const updateResult = await Applications.applications.updateOne(result[0]);
+      const result = await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
+      if (result !== null) {
+        const appName = result.applications.find(item => item._id.toString() === id).name;
+        result.applications = result.applications.filter(item => item._id.toString() !== id);
+        const updateResult = await Applications.applications.updateOne(result);
         if (updateResult.nModified === 1) {
           return Service.successResponse({
             app: appName
@@ -151,39 +114,6 @@ class ApplicationsService {
       });
 
       return Service.successResponse(null, 204);
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
-
-  // TODO: remove
-  static async importedapplicationsGET () {
-    console.log('Inside importedapplicationsGET');
-    try {
-      const importantApplicationsResult = await ImportedApplications.importedapplications.find();
-
-      const importedApplications = importantApplicationsResult[0].rules.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          category: item.category,
-          serviceClass: item.serviceClass,
-          importance: item.importance,
-          rules: item.rules.map(rulesItem => {
-            return {
-              id: rulesItem.id,
-              protocol: rulesItem.protocol,
-              ports: rulesItem.ports,
-              ip: rulesItem.ip
-            };
-          })
-        };
-      });
-
-      return Service.successResponse(importedApplications);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

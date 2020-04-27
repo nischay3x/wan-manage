@@ -259,6 +259,43 @@ const DHCPSchema = new Schema({
 });
 
 /**
+ * Device application install schema
+ */
+const AppIdentificationSchema = new Schema({
+  /**
+   * Represent the list of clients that asked for app identification
+   * A client is a policy/feature that require to install app identification
+   * This is only updated by the server when a client asks to install/uninstall
+   */
+  clients: [String],
+  /**
+   * This indicates the last time requested to update.
+   * Its purpose is to prevent multiple identical requests
+   * Updated when a new job request is sent or when the job removed/failed
+   * Possible values:
+   *  - null: last request indicated to remove app identification
+   *  - <Latest Date>: last request indicated to install app identification
+   *  - Date(0): indicates an unknown request value, will cause another update
+   */
+  lastRequestTime: {
+    type: Date,
+    default: null
+  },
+  /**
+   * This indicates what is installed on the device, only updated by job complete callback
+   * Possible values:
+   *  - null: last request indicated to remove app identification
+   *  - <Latest Date>: last request indicated to install app identification
+   */
+  lastUpdateTime: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: false
+});
+
+/**
  * Device Version Database Schema
  */
 const deviceVersionsSchema = new Schema({
@@ -444,6 +481,8 @@ const deviceSchema = new Schema({
   staticroutes: [staticroutesSchema],
   // LAN side DHCP
   dhcp: [DHCPSchema],
+  // App Identification Schema
+  appIdentification: [AppIdentificationSchema],
   // schedule for upgrade process
   upgradeSchedule: {
     type: versionUpgradeSchema,
