@@ -17,6 +17,7 @@
 
 const connections = require('../websocket/Connections')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const omit = require('lodash/omit');
 
 /**
  * Handler function for sending a message to the the device
@@ -43,11 +44,19 @@ const sendMsg = (org, machineID, msg, job, curTask, tasksLength) => (inp, done) 
         done(err, false);
       }
     }, (err) => {
-      logger.error('Task failed', { params: { message: msg, err: err.message }, job: job });
+      const logJob = omit(job, ['data.message.tasks']);
+      logger.error('Task failed', {
+        params: { err: err.message, job: job.id },
+        job: logJob
+      });
       done(err, false);
     })
     .catch((err) => {
-      logger.error('Task failed', { params: { message: msg, err: err.message }, job: job });
+      const logJob = omit(job, ['data.message.tasks']);
+      logger.error('Task failed', {
+        params: { err: err.message, job: job.id },
+        job: logJob
+      });
       done(err, false);
     });
 };

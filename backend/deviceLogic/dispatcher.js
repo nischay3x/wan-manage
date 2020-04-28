@@ -24,6 +24,7 @@ const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
 const mlpolicy = require('./mlpolicy');
 const dhcp = require('./dhcp');
+const appIdentification = require('./appIdentification');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -90,6 +91,12 @@ const methods = {
     complete: mlpolicy.complete,
     error: mlpolicy.error,
     remove: mlpolicy.remove
+  },
+  appIdentification: {
+    apply: appIdentification.apply,
+    complete: appIdentification.complete,
+    error: appIdentification.error,
+    remove: appIdentification.remove
   }
 };
 

@@ -5169,7 +5169,6 @@ components:
         _id: id
         org: org
         name: name
-        token: token
       properties:
         _id:
           maxLength: 24
@@ -5178,8 +5177,6 @@ components:
         org:
           type: string
         name:
-          type: string
-        token:
           type: string
         createdAt:
           type: string
