@@ -195,11 +195,6 @@ const getOrgApplications = async (org) => {
  * @throw exception on error
  */
 const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isInstall) => {
-  // get full application list for this organization
-  const appRules = await getOrgApplications(org);
-  // Get latest update time
-  const updateAt = (appRules.meta.importedUpdatedAt >= appRules.meta.customUpdatedAt)
-    ? appRules.meta.importedUpdatedAt : appRules.meta.customUpdatedAt;
   // find all devices that require a new update
   //  (don't have a pending job)
   // if isInstall==true, find devices older from latest the app update time
@@ -209,46 +204,70 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   // If there are other clients using applications it will be kept installed
   let opDevices, update;
   let requestTime = null;
-  if (updateAt) {
-    if (isInstall) {
+  let appRules = null;
+  let updateAt = null;
+  if (isInstall) {
+    // get full application list for this organization
+    appRules = await getOrgApplications(org);
+    // Get latest update time
+    updateAt = (appRules.meta.importedUpdatedAt >= appRules.meta.customUpdatedAt)
+      ? appRules.meta.importedUpdatedAt : appRules.meta.customUpdatedAt;
+    if (updateAt) {
       requestTime = updateAt;
       opDevices = await devices.find(
         {
           _id: { $in: deviceIdList },
           'appIdentification.lastRequestTime': { $ne: requestTime },
           $or: [
+            // last update is not null or lower than latest
             { 'appIdentification.lastUpdateTime': null },
-            { 'appIdentification.lastUpdateTime': { $lt: updateAt } }
-          ]
-        }, { _id: 1 });
-    } else {
-      requestTime = null;
-      opDevices = await devices.find(
-        {
-          _id: { $in: deviceIdList },
-          'appIdentification.lastRequestTime': { $ne: requestTime },
-          $or: [
-            { 'appIdentification.clients': [client] },
+            { 'appIdentification.lastUpdateTime': { $lt: updateAt } },
+            // request time and update time are not equal - job failed or removed
             {
-              $and: [
-                { 'appIdentification.clients': [] },
-                { 'appIdentification.lastUpdateTime': { $ne: null } }
-              ]
+              $expr: {
+                $ne: [
+                  '$appIdentification.lastRequestTime',
+                  '$appIdentification.lastUpdateTime'
+                ]
+              }
             }
           ]
         }, { _id: 1 });
+      update = { $set: { 'appIdentification.lastRequestTime': updateAt } };
+    } else {
+      opDevices = [];
+      update = {};
+      logger.warn('getDevicesAppIdentificationJobInfo: No application data found ', {
+        params: { org: org, client: client }
+      });
     }
-
-    // update all devices with client info, it's assumed that a job will be sent
-    update = (isInstall)
-      ? { $set: { 'appIdentification.lastRequestTime': updateAt } }
-      : { $set: { 'appIdentification.lastRequestTime': null } };
   } else {
-    opDevices = [];
-    update = {};
-    logger.warn('getDevicesAppIdentificationJobInfo: No application data found ', {
-      params: { org: org, client: client }
-    });
+    opDevices = await devices.find(
+      {
+        _id: { $in: deviceIdList },
+        'appIdentification.lastRequestTime': { $ne: requestTime },
+        $or: [
+          // This client is the only one left, we can remove
+          { 'appIdentification.clients': [client] },
+          // request time and update time are not equal - job failed or removed
+          {
+            $expr: {
+              $ne: [
+                '$appIdentification.lastRequestTime',
+                '$appIdentification.lastUpdateTime'
+              ]
+            }
+          },
+          // No client exist but last update is not null - apps still installed
+          {
+            $and: [
+              { 'appIdentification.clients': [] },
+              { 'appIdentification.lastUpdateTime': { $ne: null } }
+            ]
+          }
+        ]
+      }, { _id: 1 });
+    update = { $set: { 'appIdentification.lastRequestTime': null } };
   }
 
   if (client) {
@@ -270,7 +289,7 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   ret.title = `${titlePrefix} appIdentifications to device`;
   ret.installIds = opDevices.reduce((obj, d) => { obj[d._id] = true; return obj; }, {});
   ret.params = (appRules && appRules.applications && isInstall)
-    ? appRules.applications : [];
+    ? { applications: appRules.applications } : {};
   ret.deviceJobResp = {
     requestTime: requestTime,
     message: ret.message,
