@@ -25,37 +25,69 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const getAppJobInfo = require('./appIdentification').getDevicesAppIdentificationJobInfo;
+const appComplete = require('./appIdentification').complete;
+const appError = require('./appIdentification').error;
+const appRemove = require('./appIdentification').remove;
 
-const queueMlPolicyJob = (deviceList, op, policy, user, org) => {
-  // Create policy message
-  const tasks = [
-    {
-      entity: 'agent',
-      message: `${op === 'install' ? 'add' : 'remove'}-multilink-policy`,
-      params: {}
-    }
-  ];
-
-  if (op === 'install') {
-    tasks[0].params.id = policy._id;
-    tasks[0].params.rules = policy.rules.map(rule => {
-      const { _id, priority, action, classification } = rule;
-      return {
-        id: _id,
-        priority: priority,
-        classification: classification,
-        action: action
-      };
-    });
-  }
-
+const queueMlPolicyJob = async (deviceList, op, policy, user, org) => {
   const jobs = [];
-  const title = op === 'install'
+  const jobTitle = op === 'install'
     ? `Install policy ${policy.name}`
     : 'Uninstall policy';
 
+  // Extract applications information
+  const { message, params, installIds, deviceJobResp } = await getAppJobInfo(
+    org,
+    'multilink',
+    deviceList,
+    op === 'install'
+  );
+
   deviceList.forEach(dev => {
     const { _id, machineId, policies } = dev;
+    const tasks = [[
+      {
+        entity: 'agent',
+        message: `${op === 'install' ? 'add' : 'remove'}-multilink-policy`,
+        params: {}
+      }
+    ]];
+
+    if (op === 'install') {
+      tasks[0][0].params.id = policy._id;
+      tasks[0][0].params.rules = policy.rules.map(rule => {
+        const { _id, priority, action, classification } = rule;
+        return {
+          id: _id,
+          priority: priority,
+          classification: classification,
+          action: action
+        };
+      });
+    }
+    const data = {
+      policy: {
+        device: { _id: _id, mlpolicy: policies.multilink },
+        op: op,
+        org: org
+      }
+    };
+
+    // If the device's application database is outdated
+    // we add an "add-application" message as well.
+    if (installIds[_id] === true) {
+      tasks[0].unshift({
+        entity: 'agent',
+        message: message,
+        params: params
+      });
+      data.application = {
+        deviceId: _id,
+        ...deviceJobResp
+      };
+    }
+
     jobs.push(
       deviceQueues.addJob(
         machineId,
@@ -63,17 +95,13 @@ const queueMlPolicyJob = (deviceList, op, policy, user, org) => {
         org,
         // Data
         {
-          title: title,
+          title: jobTitle,
           tasks: tasks
         },
         // Response data
         {
           method: 'mlpolicy',
-          data: {
-            device: { _id: _id, mlpolicy: policies.multilink },
-            op: op,
-            org: org
-          }
+          data: data
         },
         // Metadata
         { priority: 'high', attempts: 1, removeOnComplete: false },
@@ -220,8 +248,8 @@ const complete = async (jobId, res) => {
     params: { result: res, jobId: jobId }
   });
 
-  const { op, org } = res;
-  const { _id } = res.device;
+  const { op, org } = res.policy;
+  const { _id } = res.policy.device;
   try {
     const update = op === 'install'
       ? { $set: { 'policies.multilink.status': 'installed' } }
@@ -232,6 +260,12 @@ const complete = async (jobId, res) => {
       update,
       { upsert: false }
     );
+
+    // Call application complete callback if needed
+    if (res.application) {
+      res = res.application;
+      appComplete(jobId, res);
+    }
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -252,9 +286,10 @@ const error = async (jobId, res) => {
     params: { result: res, jobId: jobId }
   });
 
-  const { op, org } = res;
-  const { _id } = res.device;
-  const formerStatus = res.device.mlpolicy.status;
+  const { policy } = res;
+  const { op, org } = policy;
+  const { _id } = policy.device;
+  const formerStatus = policy.device.mlpolicy.status;
   try {
     const status = op === 'install' ? 'installation failed' : formerStatus;
     await devices.updateOne(
@@ -262,6 +297,12 @@ const error = async (jobId, res) => {
       { $set: { 'policies.multilink.status': status } },
       { upsert: false }
     );
+
+    // Call application error callback if needed
+    if (res.application) {
+      res = res.application;
+      appError(jobId, res);
+    }
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -278,7 +319,7 @@ const error = async (jobId, res) => {
  * @return {void}
  */
 const remove = async (job) => {
-  const { device, org } = job.data.response.data;
+  const { device, org } = job.data.response.data.policy;
   const { _id, mlpolicy } = device;
 
   if (['inactive', 'delayed'].includes(job._state)) {
@@ -292,6 +333,13 @@ const remove = async (job) => {
         { $set: { 'policies.multilink': mlpolicy } },
         { upsert: false }
       );
+
+      // Call applications remove callback if needed
+      const { application } = job.data.response.data;
+      if (application) {
+        job.data.response.data = application;
+        appRemove(job);
+      }
     } catch (err) {
       logger.error('Device policy rollback failed', {
         params: { job: job, err: err.message }
