@@ -34,6 +34,19 @@ class ApplicationsService {
     }
   }
 
+  static async applicationsIdGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const response = await Applications.getApplicationById(orgList, id);
+      return Service.successResponse(response);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  };
+
   /**
    * Add new application
    *

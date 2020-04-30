@@ -177,11 +177,54 @@ const getAllApplications = async (org) => {
   };
 };
 
+/**
+ * Gets the combined list of custom and imported applications as well
+ * as the meta data containging times of last updates in both collections.
+ *
+ * @param {*} org Organization filter
+ * @returns applications + metadata
+ */
+const getApplicationById = async (org, id) => {
+  const projection = {
+    updatedAt: 1,
+    'applications.id': 1,
+    'applications.name': 1,
+    'applications.description': 1,
+    'applications.category': 1,
+    'applications.serviceClass': 1,
+    'applications.importance': 1,
+    'applications.rules.id': 1,
+    'applications.rules.protocol': 1,
+    'applications.rules.ports': 1,
+    'applications.rules.ip': 1
+  };
+  // it is expected that custom applications are stored as single document per
+  // organization in the collection
+  // const customApplicationsResult =
+  //   await applications.findOne({ 'meta.org': { $in: org } }, projection);
+  // const customApplications =
+  //   (customApplicationsResult === null || customApplicationsResult.applications === null)
+  //     ? []
+  //     : customApplicationsResult.applications;
+
+  // it is expected that imported applications are stored as single document
+  // in the collection
+  const importedApplicationsResult =
+    await importedapplications.findOne({}, projection);
+  const importedApplications =
+    (importedApplicationsResult === null || importedApplicationsResult.applications === null)
+      ? []
+      : importedApplicationsResult.applications;
+
+  return importedApplications.find(item => item.id === id);
+};
+
 // Default exports
 module.exports =
 {
   applicationsSchema,
   getAllApplications,
+  getApplicationById,
   applications: mongoConns.getMainDB().model('applications', applicationsSchema),
   rules: mongoConns.getMainDB().model('rules', rulesSchema)
 };
