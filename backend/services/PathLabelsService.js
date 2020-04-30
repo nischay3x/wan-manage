@@ -24,6 +24,19 @@ const tunnels = require('../models/tunnels');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class PathLabelsService {
+  static createDeleteErrResp (counters) {
+    const { devCount, tunCount, polCount } = counters;
+    return (
+      `Path label is used by ${
+        devCount ? `${devCount} devices${tunCount || polCount ? ', ' : ''}` : ''
+      }${
+        tunCount ? `${tunCount} tunnels${polCount ? ', ' : ''}` : ''
+      }${
+        polCount ? `${polCount} policies` : ''
+      }`
+    );
+  }
+
   /**
    * Get all Path labels
    *
@@ -59,14 +72,18 @@ class PathLabelsService {
     try {
       // Don't allow to delete a label which is being used
       const orgList = await getAccessTokenOrgList(user, org, true);
-      let count = await devices.countDocuments({ 'interfaces.pathlabels': id });
-      count += await tunnels.countDocuments({ isActive: true, pathlabel: id });
-      count += await MultiLinkPolicies.countDocuments({
+      const devCount = await devices.countDocuments({ 'interfaces.pathlabels': id });
+      const tunCount = await tunnels.countDocuments({ isActive: true, pathlabel: id });
+      const polCount = await MultiLinkPolicies.countDocuments({
         'rules.action.links.pathlabels': id
       });
 
-      if (count > 0) {
-        const message = 'Cannot delete a path label that is being used';
+      if (devCount !== 0 || tunCount !== 0 || polCount !== 0) {
+        const message = PathLabelsService.createDeleteErrResp({
+          devCount,
+          tunCount,
+          polCount
+        });
         return Service.rejectResponse(message, 400);
       }
 
