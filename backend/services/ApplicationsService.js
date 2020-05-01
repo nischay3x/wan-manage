@@ -98,6 +98,30 @@ class ApplicationsService {
   }
 
   /**
+   * Modify an application
+   *
+   * id String Numeric ID of the Application to modify
+   * applicationRequest applicationRequest  (optional)
+   * returns
+   **/
+  static async applicationsIdPUT ({ id, org, applicationRequest }, { user }) {
+    // TODO: this is stub, need to add logic to update the application in the
+    // TODO: custom collection
+    try {
+      const application = {
+        name: applicationRequest.name
+      };
+
+      return Service.successResponse(application, 201);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Delete application
    *
    * id String Numeric ID of the Application to delete

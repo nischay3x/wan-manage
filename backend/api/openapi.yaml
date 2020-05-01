@@ -4706,6 +4706,77 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
+    put:
+      operationId: applicationsIdPUT
+      parameters:
+      - description: Numeric ID of the application to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+          description: Created
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify an application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService  
                   
 components:
   responses:
