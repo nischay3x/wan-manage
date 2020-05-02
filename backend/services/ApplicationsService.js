@@ -19,6 +19,7 @@ const Service = require('./Service');
 const Applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 var mongoose = require('mongoose');
+const { find } = require('lodash');
 
 class ApplicationsService {
   static async applicationsGET ({ org }, { user }) {
@@ -105,14 +106,49 @@ class ApplicationsService {
    * returns
    **/
   static async applicationsIdPUT ({ id, org, applicationRequest }, { user }) {
-    // TODO: this is stub, need to add logic to update the application in the
-    // TODO: custom collection
     try {
-      const application = {
-        name: applicationRequest.name
-      };
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const result = await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
+      const objectId = mongoose.Types.ObjectId();
+      const newApplication = { ...applicationRequest, _id: objectId, id: id };
 
-      return Service.successResponse(application, 201);
+      // if organization document already exists
+      if (result !== null) {
+        if (!result.imported) {
+          result.imported = [];
+        }
+
+        const ob = find(result.imported, { id: id });
+        if (ob) {
+          ob.category = newApplication.category;
+          ob.serviceClass = newApplication.serviceClass;
+          ob.importance = newApplication.importance;
+        } else {
+          result.imported.push(newApplication);
+        }
+        const updateResult = await Applications.applications.updateOne(result);
+        if (updateResult.nModified === 1) {
+          return Service.successResponse({
+            name: applicationRequest.name
+          }, 201);
+        }
+        return Service.rejectResponse(
+          'Failed to add application', 500);
+      }
+
+      // create new organization document and add to collection
+      const applicationBody = {
+        meta: {
+          org: orgList[0].toString()
+        },
+        applications: [],
+        imported: []
+      };
+      applicationBody.imported.push(newApplication);
+      await Applications.applications.create([applicationBody]);
+      return Service.successResponse({
+        name: applicationRequest.name
+      }, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

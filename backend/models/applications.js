@@ -18,7 +18,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
-const concat = require('lodash/concat');
+const { concat, find } = require('lodash');
 
 // ! TODO: Unit tests
 
@@ -112,7 +112,8 @@ const applicationsSchema = new Schema({
     type: metaSchema,
     required: true
   },
-  applications: [applicationSchema]
+  applications: [applicationSchema],
+  imported: [applicationSchema]
 }, {
   timestamps: true
 });
@@ -144,7 +145,11 @@ const getAllApplications = async (org) => {
     'applications.rules.id': 1,
     'applications.rules.protocol': 1,
     'applications.rules.ports': 1,
-    'applications.rules.ip': 1
+    'applications.rules.ip': 1,
+    'imported.id': 1,
+    'imported.category': 1,
+    'imported.serviceClass': 1,
+    'imported.importance': 1
   };
   // it is expected that custom applications are stored as single document per
   // organization in the collection
@@ -163,6 +168,16 @@ const getAllApplications = async (org) => {
     (importedApplicationsResult === null || importedApplicationsResult.applications === null)
       ? []
       : importedApplicationsResult.applications;
+
+  if (customApplicationsResult.imported) {
+    customApplicationsResult.imported.forEach(element => {
+      const ob = find(importedApplications, { id: element.id });
+      ob.name = `*${ob.name}`;
+      ob.category = element.category;
+      ob.serviceClass = element.serviceClass;
+      ob.importance = element.importance;
+    });
+  }
 
   return {
     applications: concat(customApplications, importedApplications),
