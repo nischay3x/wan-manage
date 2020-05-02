@@ -86,7 +86,11 @@ const applicationSchema = new Schema({
     maxlength: [128, 'Description must be at most 128']
   },
   // List of rules
-  rules: [rulesSchema]
+  rules: [rulesSchema],
+  // Is application modifed
+  modified: {
+    type: Boolean
+  }
 }, {
   timestamps: true
 });
@@ -146,6 +150,7 @@ const getAllApplications = async (org) => {
     'applications.rules.protocol': 1,
     'applications.rules.ports': 1,
     'applications.rules.ip': 1,
+    // not part of the imported, so maybe split projections?
     'imported.id': 1,
     'imported.category': 1,
     'imported.serviceClass': 1,
@@ -167,15 +172,16 @@ const getAllApplications = async (org) => {
   const importedApplications =
     (importedApplicationsResult === null || importedApplicationsResult.applications === null)
       ? []
-      : importedApplicationsResult.applications;
+      : importedApplicationsResult.applications
+        .map(item => { item.modified = false; return item; });
 
   if (customApplicationsResult.imported) {
-    customApplicationsResult.imported.forEach(element => {
-      const ob = find(importedApplications, { id: element.id });
-      ob.name = `*${ob.name}`;
-      ob.category = element.category;
-      ob.serviceClass = element.serviceClass;
-      ob.importance = element.importance;
+    customApplicationsResult.imported.forEach(item => {
+      const oldApplication = find(importedApplications, { id: item.id });
+      oldApplication.modified = true;
+      oldApplication.category = item.category;
+      oldApplication.serviceClass = item.serviceClass;
+      oldApplication.importance = item.importance;
     });
   }
 

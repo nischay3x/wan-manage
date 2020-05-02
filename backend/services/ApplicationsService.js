@@ -118,11 +118,11 @@ class ApplicationsService {
           result.imported = [];
         }
 
-        const ob = find(result.imported, { id: id });
-        if (ob) {
-          ob.category = newApplication.category;
-          ob.serviceClass = newApplication.serviceClass;
-          ob.importance = newApplication.importance;
+        const oldApplication = find(result.imported, { id: id });
+        if (oldApplication) {
+          oldApplication.category = newApplication.category;
+          oldApplication.serviceClass = newApplication.serviceClass;
+          oldApplication.importance = newApplication.importance;
         } else {
           result.imported.push(newApplication);
         }
