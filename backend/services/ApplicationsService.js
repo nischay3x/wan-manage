@@ -183,7 +183,8 @@ class ApplicationsService {
             originalApplication.serviceClass === newApplication.serviceClass &&
             originalApplication.importance === newApplication.importance
           ) {
-            await ApplicationsService.applicationsIdResetPUT({ id, org, applicationRequest }, { user });
+            await ApplicationsService
+              .applicationsIdResetPUT({ id, org, applicationRequest }, { user });
             return Service.successResponse({
               name: applicationRequest.name
             }, 201);
