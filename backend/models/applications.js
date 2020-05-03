@@ -219,14 +219,13 @@ const getApplicationById = async (org, id) => {
     'applications.rules.ports': 1,
     'applications.rules.ip': 1
   };
-  // it is expected that custom applications are stored as single document per
-  // organization in the collection
-  // const customApplicationsResult =
-  //   await applications.findOne({ 'meta.org': { $in: org } }, projection);
-  // const customApplications =
-  //   (customApplicationsResult === null || customApplicationsResult.applications === null)
-  //     ? []
-  //     : customApplicationsResult.applications;
+
+  const modifiedImportedProjection = {
+    'imported.id': 1,
+    'imported.category': 1,
+    'imported.serviceClass': 1,
+    'imported.importance': 1
+  };
 
   // it is expected that imported applications are stored as single document
   // in the collection
@@ -237,7 +236,24 @@ const getApplicationById = async (org, id) => {
       ? []
       : importedApplicationsResult.applications;
 
-  return importedApplications.find(item => item.id === id);
+  const importedApplicationResult = importedApplications.find(item => item.id === id);
+  if (importedApplicationResult) {
+    const modifiedImportedApplicationsResult =
+      await applications.findOne({ 'meta.org': { $in: org } }, modifiedImportedProjection);
+    if (modifiedImportedApplicationsResult) {
+      const modifiedImportedApplicationResult =
+        modifiedImportedApplicationsResult.imported.find(item => item.id === id);
+      if (modifiedImportedApplicationResult) {
+        importedApplicationResult.category = modifiedImportedApplicationResult.category;
+        importedApplicationResult.serviceClass = modifiedImportedApplicationResult.serviceClass;
+        importedApplicationResult.importance = modifiedImportedApplicationResult.importance;
+      }
+
+      return importedApplicationResult;
+    }
+  }
+
+  return null;
 };
 
 // Default exports
@@ -246,6 +262,7 @@ module.exports =
   applicationsSchema,
   getAllApplications,
   getApplicationById,
-  applications: mongoConns.getMainDB().model('applications', applicationsSchema),
+  applications,
+  importedapplications,
   rules: mongoConns.getMainDB().model('rules', rulesSchema)
 };
