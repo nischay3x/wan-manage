@@ -134,10 +134,10 @@ const importedapplications =
  * Gets the combined list of custom and imported applications as well
  * as the meta data containging times of last updates in both collections.
  *
- * @param {*} org Organization filter
+ * @param {*} orgList Organization filter
  * @returns applications + metadata
  */
-const getAllApplications = async (org) => {
+const getAllApplications = async (orgList) => {
   const projection = {
     updatedAt: 1,
     'applications.id': 1,
@@ -159,7 +159,7 @@ const getAllApplications = async (org) => {
   // it is expected that custom applications are stored as single document per
   // organization in the collection
   const customApplicationsResult =
-    await applications.findOne({ 'meta.org': { $in: org } }, projection);
+    await applications.findOne({ 'meta.org': { $in: orgList } }, projection);
   const customApplications =
     (customApplicationsResult === null || customApplicationsResult.applications === null)
       ? []
@@ -256,11 +256,38 @@ const getApplicationById = async (org, id) => {
   return null;
 };
 
+/**
+ * Get last update time for application list for an organization
+ * @param {Array} orgList - org ID to get
+ */
+const getApplicationUpdateAt = async (orgList) => {
+  // Get updated at value
+  const projection = {
+    updatedAt: 1
+  };
+  const customApplicationsResult =
+    await applications.findOne({ 'meta.org': { $in: orgList } }, projection);
+  const importedApplicationsResult =
+    await importedapplications.findOne({}, projection);
+
+  return (
+    {
+      customUpdatedAt: customApplicationsResult === null
+        ? ''
+        : customApplicationsResult.updatedAt,
+      importedUpdatedAt: importedApplicationsResult === null
+        ? ''
+        : importedApplicationsResult.updatedAt
+    }
+  );
+};
+
 // Default exports
 module.exports =
 {
   applicationsSchema,
   getAllApplications,
+  getApplicationUpdateAt,
   getApplicationById,
   applications,
   importedapplications,

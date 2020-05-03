@@ -49,6 +49,10 @@ class ApplicationsController {
   async importedapplicationsGET (request, response) {
     await Controller.handleRequest(request, response, this.service.importedapplicationsGET);
   }
+
+  async applicationsInstalledGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsInstalledGET);
+  }
 }
 
 module.exports = ApplicationsController;
