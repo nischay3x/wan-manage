@@ -153,8 +153,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
-      const pathlabels = modifiedIfcsMap[ifc._id] ? modifiedIfcsMap[ifc._id].pathlabels : null;
-      const pathLabelRemoved = pathlabel && !(pathlabels || []).includes(pathlabel);
+      const pathlabels = modifiedIfcsMap[ifc._id]
+        ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
+        : [];
+      const pathLabelRemoved = pathlabel && !pathlabels.includes(pathlabel.toString());
 
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
         await oneTunnelDel(_id, user, org);
