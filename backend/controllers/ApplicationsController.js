@@ -26,6 +26,18 @@ class ApplicationsController {
     await Controller.handleRequest(request, response, this.service.applicationsGET);
   }
 
+  async applicationsIdGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsIdGET);
+  }
+
+  async applicationsIdPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsIdPUT);
+  }
+
+  async applicationsIdResetPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsIdResetPUT);
+  }
+
   async applicationsPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.applicationsPOST);
   }

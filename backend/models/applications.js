@@ -18,7 +18,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
-const concat = require('lodash/concat');
+const { concat, find } = require('lodash');
 
 // ! TODO: Unit tests
 
@@ -86,7 +86,11 @@ const applicationSchema = new Schema({
     maxlength: [128, 'Description must be at most 128']
   },
   // List of rules
-  rules: [rulesSchema]
+  rules: [rulesSchema],
+  // Is application modifed
+  modified: {
+    type: Boolean
+  }
 }, {
   timestamps: true
 });
@@ -112,7 +116,8 @@ const applicationsSchema = new Schema({
     type: metaSchema,
     required: true
   },
-  applications: [applicationSchema]
+  applications: [applicationSchema],
+  imported: [applicationSchema]
 }, {
   timestamps: true
 });
@@ -144,7 +149,12 @@ const getAllApplications = async (orgList) => {
     'applications.rules.id': 1,
     'applications.rules.protocol': 1,
     'applications.rules.ports': 1,
-    'applications.rules.ip': 1
+    'applications.rules.ip': 1,
+    // not part of the imported, so maybe split projections?
+    'imported.id': 1,
+    'imported.category': 1,
+    'imported.serviceClass': 1,
+    'imported.importance': 1
   };
   // it is expected that custom applications are stored as single document per
   // organization in the collection
@@ -162,7 +172,18 @@ const getAllApplications = async (orgList) => {
   const importedApplications =
     (importedApplicationsResult === null || importedApplicationsResult.applications === null)
       ? []
-      : importedApplicationsResult.applications;
+      : importedApplicationsResult.applications
+        .map(item => { item.modified = false; return item; });
+
+  if (customApplicationsResult.imported) {
+    customApplicationsResult.imported.forEach(item => {
+      const oldApplication = find(importedApplications, { id: item.id });
+      oldApplication.modified = true;
+      oldApplication.category = item.category;
+      oldApplication.serviceClass = item.serviceClass;
+      oldApplication.importance = item.importance;
+    });
+  }
 
   return {
     applications: concat(customApplications, importedApplications),
@@ -175,6 +196,64 @@ const getAllApplications = async (orgList) => {
         : importedApplicationsResult.updatedAt
     }
   };
+};
+
+/**
+ * Gets the combined list of custom and imported applications as well
+ * as the meta data containging times of last updates in both collections.
+ *
+ * @param {*} org Organization filter
+ * @returns applications + metadata
+ */
+const getApplicationById = async (org, id) => {
+  const projection = {
+    updatedAt: 1,
+    'applications.id': 1,
+    'applications.name': 1,
+    'applications.description': 1,
+    'applications.category': 1,
+    'applications.serviceClass': 1,
+    'applications.importance': 1,
+    'applications.rules.id': 1,
+    'applications.rules.protocol': 1,
+    'applications.rules.ports': 1,
+    'applications.rules.ip': 1
+  };
+
+  const modifiedImportedProjection = {
+    'imported.id': 1,
+    'imported.category': 1,
+    'imported.serviceClass': 1,
+    'imported.importance': 1
+  };
+
+  // it is expected that imported applications are stored as single document
+  // in the collection
+  const importedApplicationsResult =
+    await importedapplications.findOne({}, projection);
+  const importedApplications =
+    (importedApplicationsResult === null || importedApplicationsResult.applications === null)
+      ? []
+      : importedApplicationsResult.applications;
+
+  const importedApplicationResult = importedApplications.find(item => item.id === id);
+  if (importedApplicationResult) {
+    const modifiedImportedApplicationsResult =
+      await applications.findOne({ 'meta.org': { $in: org } }, modifiedImportedProjection);
+    if (modifiedImportedApplicationsResult) {
+      const modifiedImportedApplicationResult =
+        modifiedImportedApplicationsResult.imported.find(item => item.id === id);
+      if (modifiedImportedApplicationResult) {
+        importedApplicationResult.category = modifiedImportedApplicationResult.category;
+        importedApplicationResult.serviceClass = modifiedImportedApplicationResult.serviceClass;
+        importedApplicationResult.importance = modifiedImportedApplicationResult.importance;
+      }
+
+      return importedApplicationResult;
+    }
+  }
+
+  return null;
 };
 
 /**
@@ -209,6 +288,8 @@ module.exports =
   applicationsSchema,
   getAllApplications,
   getApplicationUpdateAt,
-  applications: mongoConns.getMainDB().model('applications', applicationsSchema),
+  getApplicationById,
+  applications,
+  importedapplications,
   rules: mongoConns.getMainDB().model('rules', rulesSchema)
 };
