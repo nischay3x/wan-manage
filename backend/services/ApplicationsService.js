@@ -17,13 +17,14 @@
 
 const Service = require('./Service');
 const Applications = require('../models/applications');
+const { devices } = require('../models/devices');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 var mongoose = require('mongoose');
 
 class ApplicationsService {
   static async applicationsGET ({ org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
+      const orgList = await getAccessTokenOrgList(user, org, true);
       const response = await Applications.getAllApplications(orgList);
       return Service.successResponse(response);
     } catch (e) {
@@ -114,6 +115,118 @@ class ApplicationsService {
       });
 
       return Service.successResponse(null, 204);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async applicationsInstalledGET ({ org, offset, limit }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const response = await Applications.getApplicationUpdateAt(orgList);
+      const updateAt = (response.importedUpdatedAt >= response.customUpdatedAt)
+        ? response.importedUpdatedAt : response.customUpdatedAt;
+
+      const devicesPipeline = [
+        {
+          $project: {
+            _id: { $toString: '$_id' },
+            updatedAt: { $toString: { $ifNull: ['$appIdentification.lastUpdateTime', ''] } },
+            clients: { $ifNull: ['$appIdentification.clients', []] },
+            status: {
+              $cond: {
+                if: {
+                  $and: [{
+                    $and: [
+                      { $ne: ['$appIdentification.clients', undefined] },
+                      { $ne: ['$appIdentification.clients', []] }]
+                  },
+                  {
+                    $or: [
+                      { $eq: ['$appIdentification.lastUpdateTime', undefined] },
+                      { $eq: ['$appIdentification.lastUpdateTime', null] },
+                      { $lt: ['$appIdentification.lastUpdateTime', updateAt] }]
+                  }]
+                },
+                then: 'install',
+                else: {
+                  $cond: {
+                    if: {
+                      $and: [{
+                        $or: [
+                          { $eq: ['$appIdentification.clients', undefined] },
+                          { $eq: ['$appIdentification.clients', []] }]
+                      },
+                      { $ne: ['$appIdentification.lastUpdateTime', null] }]
+                    },
+                    then: 'uninstall',
+                    else: 'ok'
+                  }
+                }
+              }
+            }
+          }
+        }
+      ];
+      if (offset) devicesPipeline.push({ $skip: offset });
+      if (limit) devicesPipeline.push({ $limit: limit });
+
+      const pipeline = [
+        {
+          $match: {
+            org: mongoose.Types.ObjectId(orgList[0]),
+            $or: [
+              { 'appIdentification.clients': { $exists: true, $ne: [] } },
+              { 'appIdentification.lastUpdateTime': { $ne: null } }
+            ]
+          }
+        },
+        {
+          $facet: {
+            count: [{
+              $match: {
+                $or: [
+                  // have clients but not updated to latest
+                  {
+                    $and: [
+                      { 'appIdentification.clients': { $exists: true, $ne: [] } },
+                      {
+                        $or: [
+                          { 'appIdentification.lastUpdateTime': { $exists: false } },
+                          { 'appIdentification.lastUpdateTime': null },
+                          { 'appIdentification.lastUpdateTime': { $lt: updateAt } }]
+                      }]
+                  },
+                  // have no clients and updated is not null
+                  {
+                    $and: [
+                      {
+                        $or: [
+                          { 'appIdentification.clients': { $exists: false } },
+                          { 'appIdentification.clients': [] }]
+                      },
+                      { 'appIdentification.lastUpdateTime': { $ne: null } }]
+                  }]
+              }
+            }, { $count: 'numDevices' }],
+            devices: devicesPipeline
+          }
+        }
+      ];
+
+      const result = await devices.aggregate(pipeline).allowDiskUse(true);
+
+      return Service.successResponse({
+        totalNotUpdated: (
+          result && result.length > 0 && result[0].count &&
+          result[0].count.length > 0)
+          ? result[0].count[0].numDevices
+          : 0,
+        devices: (result && result[0].devices) ? result[0].devices : 0
+      });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
