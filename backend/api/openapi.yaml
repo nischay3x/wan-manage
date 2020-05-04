@@ -4870,7 +4870,6 @@ paths:
         required: false
         schema:
           type: string
-
       responses:
         "200":
           content:
@@ -5044,6 +5043,414 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
+  /applications/imported/{id}:
+    get:
+      operationId: applicationsIdGET
+      parameters:
+      - description: Application id to retrieve
+          set
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Application'
+                type: object
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get Application by id
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+    put:
+      operationId: applicationsIdPUT
+      parameters:
+      - description: Numeric ID of the application to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+          description: Created
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify an application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService  
+  /applications/custom/{id}:
+    get:
+      operationId: applicationsCustomIdGET
+      parameters:
+      - description: Application id to retrieve
+          set
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Application'
+                type: object
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get Application by id
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+    put:
+      operationId: applicationsCustomIdPUT
+      parameters:
+      - description: Numeric ID of the application to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+          description: Created
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify an application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService        
+  /applications/imported/{id}/reset:
+    put:
+      operationId: applicationsIdResetPUT
+      parameters:
+      - description: Numeric ID of the application to reset
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+          description: Created
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify an application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /applications/installed:
+    get:
+      operationId: applicationsInstalledGET
+      parameters:
+      - description: Devices appIdentification installed on
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstalledApplications'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
 components:
   responses:
     NotFoundError:
@@ -5185,6 +5592,46 @@ components:
         name:
           type: string
         description:
+          type: string
+      type: object
+    InstalledApplications:
+      example:
+        totalNotUpdated: 3
+        devices:
+          _id: _id
+          updatedAt: Date
+          clients: Client List
+          status: ok
+      properties:
+        totalNotUpdated:
+          type: integer
+        devices:
+          items:
+            $ref: '#/components/schemas/InstalledApplication'
+          type: array
+      type: object
+    InstalledApplication:
+      example:
+        _id: _id
+        updatedAt: Date
+        clients: Client List
+        status: ok
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        updatedAt:
+          type: string
+        clients:
+          items:
+            type: string
+          type: array
+        status:
+          enum:
+          - ok
+          - install
+          - uninstall
           type: string
       type: object
     Account:
