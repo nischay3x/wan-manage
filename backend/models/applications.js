@@ -180,7 +180,7 @@ const getAllApplications = async (orgList) => {
       : importedApplicationsResult.applications
         .map(item => { item.modified = false; return item; });
 
-  if (customApplicationsResult.imported) {
+  if (customApplicationsResult && customApplicationsResult.imported) {
     customApplicationsResult.imported.forEach(item => {
       const oldApplication = find(importedApplications, { id: item.id });
       oldApplication.modified = true;
