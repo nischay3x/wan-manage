@@ -34,6 +34,14 @@ class ApplicationsController {
     await Controller.handleRequest(request, response, this.service.applicationsIdPUT);
   }
 
+  async applicationsCustomIdGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsCustomIdGET);
+  }
+
+  async applicationsCustomIdPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsCustomIdPUT);
+  }
+
   async applicationsIdResetPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.applicationsIdResetPUT);
   }

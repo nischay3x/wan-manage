@@ -26,6 +26,11 @@ const { concat, find } = require('lodash');
  * Rules Database Schema (TBD)
  */
 const rulesSchema = new Schema({
+  // Rule id
+  _id: {
+    type: Schema.Types.ObjectId,
+    required: true
+  },
   // IP
   // TODO: add validator
   ip: {
@@ -146,7 +151,7 @@ const getAllApplications = async (orgList) => {
     'applications.category': 1,
     'applications.serviceClass': 1,
     'applications.importance': 1,
-    'applications.rules.id': 1,
+    'applications.rules._id': 1,
     'applications.rules.protocol': 1,
     'applications.rules.ports': 1,
     'applications.rules.ip': 1,

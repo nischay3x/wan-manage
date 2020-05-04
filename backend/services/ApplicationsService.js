@@ -49,6 +49,53 @@ class ApplicationsService {
     }
   };
 
+  static async applicationsCustomIdGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const applicationsResult =
+        await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
+      const applicationResult = find(applicationsResult.applications, { id: id });
+      return Service.successResponse(applicationResult);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  };
+
+  static async applicationsCustomIdPUT ({ id, org, applicationRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const applicationsResult =
+        await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
+
+      // if organization document already exists
+      if (applicationsResult) {
+        applicationsResult.applications = applicationsResult.applications
+          .filter(item => item.id !== id);
+        applicationsResult.applications.push(applicationRequest);
+        const updateResult = await Applications.applications.updateOne(applicationsResult);
+        if (updateResult.nModified === 1) {
+          return Service.successResponse({
+            name: applicationRequest.name
+          }, 201);
+        }
+        return Service.rejectResponse(
+          'Failed to add application', 500);
+      }
+
+      return Service.successResponse({
+        name: applicationRequest.name
+      }, 201);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
   /**
    * Add new application
    *
@@ -59,6 +106,8 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const result = await Applications.applications.findOne({ 'meta.org': { $in: orgList } });
+      applicationRequest.rules = applicationRequest.rules
+        .map(rule => { return { ...rule, _id: mongoose.Types.ObjectId() }; });
       const objectId = mongoose.Types.ObjectId();
       // TODO: The redundancy with the ids is in order to keep consistency with the imported
       // TODO: list. Maybe we could get rid of the id in the imported list and use _id in both
