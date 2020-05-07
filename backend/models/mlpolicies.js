@@ -56,9 +56,9 @@ const multiLinkRuleSchema = new Schema({
   },
   classification: {
     prefix: {
-      ipv4: {
+      ip: {
         type: String,
-        maxlength: [20, 'ipv4 length must be at most 20'],
+        maxlength: [20, 'ip length must be at most 20'],
         validate: {
           validator: validateIPv4WithMask,
           message: 'IPv4 should be a valid ip address'

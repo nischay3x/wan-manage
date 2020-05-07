@@ -32,7 +32,7 @@ beforeEach(() => {
       enabled: true,
       classification: {
         prefix: {
-          ipv4: '192.168.10.1/24'
+          ip: '192.168.10.1/24'
         }
       },
       action: {
