@@ -25,24 +25,25 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const getAppJobInfo = require('./appIdentification').getDevicesAppIdentificationJobInfo;
+const { getDevicesAppIdentificationJobInfo } = require('./appIdentification');
 const appComplete = require('./appIdentification').complete;
 const appError = require('./appIdentification').error;
 const appRemove = require('./appIdentification').remove;
 
-const queueMlPolicyJob = async (deviceList, op, policy, user, org) => {
+const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
   const jobTitle = op === 'install'
     ? `Install policy ${policy.name}`
     : 'Uninstall policy';
 
   // Extract applications information
-  const { message, params, installIds, deviceJobResp } = await getAppJobInfo(
-    org,
-    'multilink',
-    deviceList,
-    op === 'install'
-  );
+  const { message, params, installIds, deviceJobResp } =
+    await getDevicesAppIdentificationJobInfo(
+      org,
+      'multilink',
+      deviceList,
+      op === 'install'
+    );
 
   deviceList.forEach(dev => {
     const { _id, machineId, policies } = dev;
@@ -69,12 +70,13 @@ const queueMlPolicyJob = async (deviceList, op, policy, user, org) => {
     const data = {
       policy: {
         device: { _id: _id, mlpolicy: policies.multilink },
+        requestTime: requestTime,
         op: op,
         org: org
       }
     };
 
-    // If the device's application database is outdated
+    // If the device's appIdentification database is outdated
     // we add an "add-application" message as well.
     if (installIds[_id] === true) {
       tasks[0].unshift({
@@ -82,7 +84,7 @@ const queueMlPolicyJob = async (deviceList, op, policy, user, org) => {
         message: message,
         params: params
       });
-      data.application = {
+      data.appIdentification = {
         deviceId: _id,
         ...deviceJobResp
       };
@@ -146,10 +148,12 @@ const getOpDevices = async (devicesObj, org, policy) => {
  * @return {None}
  */
 const apply = async (deviceList, user, data) => {
-  const org = user.defaultOrg._id.toString();
+  const { org } = data;
   const { op, id } = data.meta;
 
   let mLPolicy, session, deviceIds;
+  const requestTime = Date.now();
+
   try {
     session = await mongoConns.getMainDB().startSession();
     await session.withTransaction(async () => {
@@ -189,8 +193,21 @@ const apply = async (deviceList, user, data) => {
 
       // Update devices policy in the database
       const update = op === 'install'
-        ? { $set: { 'policies.multilink': { policy: mLPolicy._id, status: 'installing' } } }
-        : { $set: { 'policies.multilink.status': 'uninstalling' } };
+        ? {
+          $set: {
+            'policies.multilink': {
+              policy: mLPolicy._id,
+              status: 'installing',
+              requestTime: requestTime
+            }
+          }
+        }
+        : {
+          $set: {
+            'policies.multilink.status': 'uninstalling',
+            'policies.multilink.requestTime': requestTime
+          }
+        };
 
       await devices.updateMany(
         { _id: { $in: deviceIds }, org: org },
@@ -211,12 +228,12 @@ const apply = async (deviceList, user, data) => {
   const opDevices = deviceList.filter(device => {
     return deviceIdsSet.has(device._id.toString());
   });
-  const jobs = await queueMlPolicyJob(opDevices, op, mLPolicy, user, org);
+  const jobs = await queueMlPolicyJob(opDevices, op, requestTime, mLPolicy, user, org);
   const failedToQueue = jobs.filter(job => job.status === 'rejected');
   if (failedToQueue.length !== 0) {
     const failedDevices = failedToQueue.map(ent => {
       const { job } = ent.reason;
-      const { _id } = job.data.response.data.device;
+      const { _id } = job.data.response.data.policy.device;
       return _id;
     });
 
@@ -261,9 +278,9 @@ const complete = async (jobId, res) => {
       { upsert: false }
     );
 
-    // Call application complete callback if needed
-    if (res.application) {
-      res = res.application;
+    // Call appIdentification complete callback if needed
+    if (res.appIdentification) {
+      res = res.appIdentification;
       appComplete(jobId, res);
     }
   } catch (err) {
@@ -289,18 +306,17 @@ const error = async (jobId, res) => {
   const { policy } = res;
   const { op, org } = policy;
   const { _id } = policy.device;
-  const formerStatus = policy.device.mlpolicy.status;
   try {
-    const status = op === 'install' ? 'installation failed' : formerStatus;
+    const status = `${op === 'install' ? '' : 'un'}installation failed`;
     await devices.updateOne(
       { _id: _id, org: org },
       { $set: { 'policies.multilink.status': status } },
       { upsert: false }
     );
 
-    // Call application error callback if needed
-    if (res.application) {
-      res = res.application;
+    // Call appIdentification error callback if needed
+    if (res.appIdentification) {
+      res = res.appIdentification;
       appError(jobId, res);
     }
   } catch (err) {
@@ -319,30 +335,37 @@ const error = async (jobId, res) => {
  * @return {void}
  */
 const remove = async (job) => {
-  const { device, org } = job.data.response.data.policy;
-  const { _id, mlpolicy } = device;
+  const { device, org, requestTime } = job.data.response.data.policy;
+  const { _id } = device;
 
   if (['inactive', 'delayed'].includes(job._state)) {
-    logger.info('Rolling back policy changes for removed task', {
+    logger.info('Policy job removed', {
       params: { job: job }
     });
 
+    // Set the status to "job deleted" only
+    // for the last policy related job.
+    const status = 'job deleted';
     try {
       await devices.updateOne(
-        { _id: _id, org: org },
-        { $set: { 'policies.multilink': mlpolicy } },
+        {
+          _id: _id,
+          org: org,
+          'policies.multilink.requestTime': { $eq: requestTime }
+        },
+        { $set: { 'policies.multilink.status': status } },
         { upsert: false }
       );
 
       // Call applications remove callback if needed
-      const { application } = job.data.response.data;
-      if (application) {
-        job.data.response.data = application;
+      const { appIdentification } = job.data.response.data;
+      if (appIdentification) {
+        job.data.response.data = appIdentification;
         appRemove(job);
       }
     } catch (err) {
-      logger.error('Device policy rollback failed', {
-        params: { job: job, err: err.message }
+      logger.error('Device policy status update failed', {
+        params: { job: job, status: status, err: err.message }
       });
     }
   }

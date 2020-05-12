@@ -73,7 +73,7 @@ const multiLinkRuleSchema = new Schema({
       },
       protocol: {
         type: String,
-        enum: ['', 'udp', 'tcp', 'icmp']
+        enum: ['', 'udp', 'tcp']
       }
     },
     application: {

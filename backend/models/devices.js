@@ -355,8 +355,21 @@ const devicePolicySchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['', 'installing', 'installed', 'uninstalling'],
+    enum: [
+      '',
+      'installing',
+      'installed',
+      'uninstalling',
+      'job queue failed',
+      'job deleted',
+      'installation failed',
+      'uninstallation failed'
+    ],
     default: ''
+  },
+  requestTime: {
+    type: Date,
+    default: null
   }
 });
 

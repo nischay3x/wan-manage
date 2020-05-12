@@ -27,7 +27,6 @@ const interfaceTypes = ['WAN', 'LAN', 'NONE'];
 
 // Helper functions
 const isEmpty = (val) => { return val === null || val === undefined; };
-const isNumber = (val) => !isNaN(Number(val));
 const isValidURL = (url) => { return urlValidator.isUri(url) !== undefined; };
 const isValidFileName = (name) => {
   return !isEmpty(name) && name !== '' && filenamify(name) === name;
@@ -112,7 +111,9 @@ const validateIpList = (list) => {
 
   return true;
 };
-const isPort = (val) => !isEmpty(val) && !(val === '') && isNumber(val) && val >= 0 && val <= 65535;
+const isPort = (val) => {
+  return !isEmpty(val) && !(val === '') && validateIsNumber(val) && val >= 0 && val <= 65535;
+};
 const validatePortRange = (range) => {
   if (range === '') return true;
   if (!(range || '').includes('-')) return isPort(range);
