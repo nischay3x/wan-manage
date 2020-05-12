@@ -43,9 +43,13 @@ const isEqual = require('lodash/isEqual');
 const prepareIfcParams = (interfaces) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'PublicIP', 'isAssigned', 'pathlabels']);
-    newIfc.multilink = {
-      labels: ifc.pathlabels.map(label => label._id)
-    };
+
+    // Device should only be aware of DIA labels.
+    const labels = [];
+    ifc.pathlabels.forEach(label => {
+      if (label.type === 'DIA') labels.push(label._id);
+    });
+    newIfc.multilink = { labels };
     return newIfc;
   });
 };

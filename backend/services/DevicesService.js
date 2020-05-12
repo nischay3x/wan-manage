@@ -77,7 +77,8 @@ class DevicesService {
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      });
+      })
+        .populate('interfaces.pathlabels', '_id name description color type'); ;
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
 

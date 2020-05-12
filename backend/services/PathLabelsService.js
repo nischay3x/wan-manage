@@ -155,12 +155,12 @@ class PathLabelsService {
       const { name, description, color, type } = pathLabelRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      // A label's type field cannot be changed if it is being
-      // used by a tunnel. Therefore we perform the update as
-      // a transaction with 3 steps:
+      // A label's type field cannot be changed if the
+      // labels being used. Therefore we perform the
+      // update as a transaction with 3 steps:
       // 1. Update the path label in the database
       // 2. Check if the label type has changed
-      // 3. Check if the label is used by a tunnel
+      // 3. Check if the label is being used
       //    and if so we abort the transaction
       session = await mongoConns.getMainDB().startSession();
       await session.withTransaction(async () => {
@@ -186,15 +186,20 @@ class PathLabelsService {
         }
 
         // Type change is only allowed for labels
-        // that are not being used by any tunnel
+        // that are not being used by any other entity
         if (origPathLabel.type !== type) {
-          const count = await tunnels.countDocuments({
-            isActive: true,
-            pathlabel: id
+          const devCount = await devices.countDocuments({ 'interfaces.pathlabels': id });
+          const tunCount = await tunnels.countDocuments({ isActive: true, pathlabel: id });
+          const polCount = await MultiLinkPolicies.countDocuments({
+            'rules.action.links.pathlabels': id
           });
-          if (count !== 0) {
-            const message =
-              'cannot change type for path label that is used by a tunnel';
+
+          if (devCount !== 0 || tunCount !== 0 || polCount !== 0) {
+            const message = PathLabelsService.createDeleteErrResp({
+              devCount,
+              tunCount,
+              polCount
+            });
             throw createError(400, message);
           }
         }
