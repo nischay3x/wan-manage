@@ -512,7 +512,7 @@ const deviceSchema = new Schema({
   // LAN side DHCP
   dhcp: [DHCPSchema],
   // App Identification Schema
-  appIdentification: [AppIdentificationSchema],
+  appIdentification: AppIdentificationSchema,
   // schedule for upgrade process
   upgradeSchedule: {
     type: versionUpgradeSchema,
