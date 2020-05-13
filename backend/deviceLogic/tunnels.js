@@ -783,21 +783,37 @@ const applyTunnelDel = async (devices, user, data) => {
   const tunnelIds = Object.keys(selectedTunnels);
   logger.info('Delete tunnels ', { params: { tunnels: selectedTunnels } });
 
-  // For now assume one tunnel deletion at a time
-  // Check that only one tunnel selected
-  if (devices && tunnelIds.length === 1) {
-    // Get tunnel data
-    const tunnelID = tunnelIds[0];
+  if (devices && tunnelIds.length > 0) {
     const org = user.defaultOrg._id.toString();
     const userName = user.username;
 
-    try {
-      const jobs = await oneTunnelDel(tunnelID, userName, org);
-      return jobs;
-    } catch (err) {
-      logger.error('Attempt to delete more than one tunnel or no devices found', { params: {} });
-      throw new Error('Attempt to delete more than one tunnel or no devices found');
-    }
+    const delPromises = [];
+    tunnelIds.forEach(async tunnelID => {
+      const delPromise = new Promise((resolve, reject) => {
+        try {
+          const jobs = oneTunnelDel(tunnelID, userName, org);
+          resolve(jobs);
+        } catch (err) {
+          logger.error('Delete tunnel error', { params: {tunnelID, err} });
+          reject(err);
+        }
+      })
+      delPromises.push(delPromise);
+    })
+
+    const promiseStatus = await Promise.allSettled(delPromises);
+
+    return promiseStatus.reduce((arr, elem) => {
+      if (elem.status === 'fulfilled') {
+        const job = elem.value;
+        arr.push(job);
+      }
+      return arr;
+    }, []);
+
+  } else {
+    logger.error('Wrong parameters or no devices found', { params: {err} });
+    throw new Error('Wrong parameters or no devices found');
   }
 };
 
@@ -809,11 +825,12 @@ const applyTunnelDel = async (devices, user, data) => {
  * @return {array}    jobs created
  */
 const oneTunnelDel = async (tunnelID, user, org) => {
+  console.log(tunnelID, user, org);
   const tunnelResp = await tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
     .populate('deviceA')
     .populate('deviceB');
 
-  logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
+  logger.info('Delete tunnels db response', { params: { response: tunnelResp } });
 
   // Define devices
   const deviceA = tunnelResp.deviceA;
