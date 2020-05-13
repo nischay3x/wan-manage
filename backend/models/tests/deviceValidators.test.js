@@ -234,6 +234,25 @@ describe('validateIPv6Mask', () => {
   });
 });
 
+describe('validatePortRange', () => {
+  it.each`
+        range                   | result
+        ${'0'}                  | ${true}
+        ${'80'}                 | ${true}
+        ${'80-8080'}            | ${true}
+        ${'65535'}              | ${true}
+        ${''}                   | ${true}
+        ${'-1-23'}              | ${false}
+        ${'-1'}                 | ${false}
+        ${'65536'}              | ${false}
+        ${'not-a-number'}       | ${false}
+        ${null}                 | ${false}
+        ${undefined}            | ${false}
+  `('Should return $result if port range is $range', ({ range, result }) => {
+    expect(validators.validatePortRange(range)).toEqual(result);
+  });
+});
+
 // Basic BDF format: xx:yy.zz, all values are hexadecimal
 describe('validatePCI basic BDF format', () => {
   it.each`

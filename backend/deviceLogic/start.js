@@ -81,9 +81,12 @@ const apply = async (device, user, data) => {
         ifParams.pci = intf.pciaddr;
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         ifParams.type = intf.type;
-        ifParams.multilink = {
-          labels: intf.pathlabels
-        };
+        // Device should only be aware of DIA labels.
+        const labels = [];
+        intf.pathlabels.forEach(label => {
+          if (label.type === 'DIA') labels.push(label._id);
+        });
+        ifParams.multilink = { labels };
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
         // Only if WAN defined and no other routing defined
         if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {

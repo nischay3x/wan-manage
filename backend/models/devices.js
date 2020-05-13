@@ -344,6 +344,36 @@ const deviceVersionsSchema = new Schema({
 });
 
 /**
+ * Device policy schema
+ */
+const devicePolicySchema = new Schema({
+  _id: false,
+  policy: {
+    type: Schema.Types.ObjectId,
+    ref: 'MultiLinkPolicies',
+    default: null
+  },
+  status: {
+    type: String,
+    enum: [
+      '',
+      'installing',
+      'installed',
+      'uninstalling',
+      'job queue failed',
+      'job deleted',
+      'installation failed',
+      'uninstallation failed'
+    ],
+    default: ''
+  },
+  requestTime: {
+    type: Date,
+    default: null
+  }
+});
+
+/**
  * Version Upgrade Database Schema
  */
 const versionUpgradeSchema = new Schema({
@@ -482,7 +512,7 @@ const deviceSchema = new Schema({
   // LAN side DHCP
   dhcp: [DHCPSchema],
   // App Identification Schema
-  appIdentification: [AppIdentificationSchema],
+  appIdentification: AppIdentificationSchema,
   // schedule for upgrade process
   upgradeSchedule: {
     type: versionUpgradeSchema,
@@ -496,6 +526,12 @@ const deviceSchema = new Schema({
   pendingDevModification: {
     type: Boolean,
     default: false
+  },
+  policies: {
+    multilink: {
+      type: devicePolicySchema,
+      default: devicePolicySchema
+    }
   }
 },
 {
