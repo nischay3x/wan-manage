@@ -794,12 +794,12 @@ const applyTunnelDel = async (devices, user, data) => {
           const jobs = oneTunnelDel(tunnelID, userName, org);
           resolve(jobs);
         } catch (err) {
-          logger.error('Delete tunnel error', { params: {tunnelID, err} });
+          logger.error('Delete tunnel error', { params: { tunnelID, err } });
           reject(err);
         }
-      })
+      });
       delPromises.push(delPromise);
-    })
+    });
 
     const promiseStatus = await Promise.allSettled(delPromises);
 
@@ -810,9 +810,8 @@ const applyTunnelDel = async (devices, user, data) => {
       }
       return arr;
     }, []);
-
   } else {
-    logger.error('Wrong parameters or no devices found', { params: {err} });
+    logger.error('Wrong parameters or no devices found', { params: { } });
     throw new Error('Wrong parameters or no devices found');
   }
 };
