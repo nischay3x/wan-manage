@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const { ObjectId } = require('mongoose').Types;
 const { validateDevice, validateModifyDeviceMsg } = require('../validators');
 
 describe('validateDevice', () => {
@@ -42,7 +43,8 @@ describe('validateDevice', () => {
         PublicIP: '72.168.10.30',
         isAssigned: true,
         routing: 'OSPF',
-        type: 'LAN'
+        type: 'LAN',
+        pathlabels: []
       },
       {
         name: 'eth1',
@@ -56,7 +58,8 @@ describe('validateDevice', () => {
         PublicIP: '172.23.100.1',
         isAssigned: true,
         routing: 'None',
-        type: 'WAN'
+        type: 'WAN',
+        pathlabels: [ObjectId('5e65290fbe66a2335718e081')]
       }],
       defaultRoute: '172.23.100.10'
     };
@@ -177,6 +180,13 @@ describe('validateDevice', () => {
   it('Should be an invalid device if OSPF is configured on the WAN interface', () => {
     device.interfaces[1].routing = 'OSPF';
     failureObject.err = 'OSPF should not be configured on WAN interface';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if LAN interface has path labels', () => {
+    device.interfaces[0].pathlabels = [ObjectId('5e65290fbe66a2335718e081')];
+    failureObject.err = 'Path Labels are not allowed on LAN interfaces';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });

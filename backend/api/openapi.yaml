@@ -861,7 +861,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all registered devices
+      summary: Get device by ID
       tags:
       - Devices
       x-swagger-router-controller: Devices
@@ -4441,6 +4441,408 @@ paths:
       x-swagger-router-controller: PathLabels
       x-openapi-router-controller: PathLabelsController
       x-openapi-router-service: PathLabelsService
+
+  /mlpolicies:
+    get:
+      operationId: mlpoliciesGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MLPolicy'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Multi Link policies
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+    post:
+      operationId: mlpoliciesPOST
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MLPolicyRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MLPolicy'
+          description: Multi Link policy created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Add a new Multi Link policy
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+  /mlpolicies/{id}:
+    get:
+      operationId: mlpoliciesIdGET
+      parameters:
+      - description: Numeric ID of the Multi Link policy to retrieve
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MLPolicy'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get a Multi Link policy by id
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+    put:
+      operationId: mlpoliciesIdPUT
+      parameters:
+      - description: Numeric ID of the Multi Link policy to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MLPolicyRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MLPolicy'
+          description: A new Multi Link created
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MLPolicy'
+          description: Multi Link was modified
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify a Multi Link policy
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+    delete:
+      operationId: mlpoliciesIdDELETE
+      parameters:
+      - description: Numeric ID of the Multi Link policy to delete
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete a Multi Link policy
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+  /mlpolicies/list:
+    get:
+      operationId: mlpoliciesListGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MLPolicyList'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Multi Link policies names and IDs only
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
   /appidentifications:
     get:
       operationId: appIdentificationsGET
@@ -5248,7 +5650,7 @@ components:
       example:
         totalNotUpdated: 3
         devices:
-        - _id: _id
+          _id: _id
           updatedAt: Date
           clients: Client List
           status: ok
@@ -5610,6 +6012,7 @@ components:
           name: name
           pciaddr: pciaddr
           _id: _id
+          pathlabels: path labels list
         - IPv6: IPv6
           PublicIP: PublicIP
           IPv4: IPv4
@@ -5623,6 +6026,7 @@ components:
           name: name
           pciaddr: pciaddr
           _id: _id
+          pathlabels: path labels list
         org: org
         isConnected: true
         upgradeSchedule:
@@ -5749,6 +6153,7 @@ components:
         name: name
         pciaddr: pciaddr
         _id: _id
+        pathlabels: path labels list
       properties:
         _id:
           maxLength: 24
@@ -5785,6 +6190,10 @@ components:
           type: string
         IPv6Mask:
           type: string
+        pathlabels:
+          items:
+            $ref: '#/components/schemas/PathLabel'
+          type: array
       type: object
     DeviceVersion:
       example:
@@ -6016,6 +6425,36 @@ components:
             type: string
         date:
           type: string
+    DevicePolicies:
+      type: object
+      properties:
+        multilink:
+          type: object
+          $ref: '#/components/schemas/DevicePolicy'
+      required:
+        - multilink
+    DevicePolicy:
+      type: object
+      properties:
+        policy:
+          type: object
+          properties:
+            _id:
+              maxLength: 24
+              minLength: 24
+              type: string
+            name:
+              type: string
+            description:
+              type: string
+        status:
+          enum:
+          - ''
+          - installing
+          - installed
+          - uninstalling
+          type: string
+
     Tunnel:
       example:
         tunnelStatusA: '{}'
@@ -6362,7 +6801,8 @@ components:
         type: type
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
@@ -6399,6 +6839,232 @@ components:
         - color
         - type
       type: object
+    MLPolicy:
+      example:
+        _id: id
+        name: name
+        description: description
+        rules: [rule 1, rule 2, ...]
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        rules:
+          items:
+            $ref: '#/components/schemas/MLRule'
+          type: array
+      required:
+      - _id
+      - name
+      - description
+      - rules
+      type: object
+    MLPolicyList:
+      example:
+        id: id
+        name: name
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+      required:
+      - _id
+      - name
+    MLPolicyRequest:
+      example:
+        name: name
+        description: description
+        rules: [rule 1, rule 2, ...]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rules:
+          items:
+            $ref: '#/components/schemas/MLRuleRequest'
+          type: array
+      required:
+      - name
+      - description
+      - rules
+      type: object
+    MLRule:
+      example:
+        _id: id
+        name: name
+        priority: priority
+        enabled: true
+        classification: classification
+        action: action
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        enabled:
+          type: boolean
+        classification:
+          schema:
+          $ref: '#/components/schemas/MLClassification'
+        action:
+          schema:
+          $ref: '#/components/schemas/MLAction'
+      required:
+      - _id
+      - name
+      - priority
+      - enabled
+      - classification
+      - action
+      type: object
+    MLRuleRequest:
+      example:
+        name: name
+        priority: priority
+        enabled: true
+        classification: classification
+        action: action
+      properties:
+        name:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        enabled:
+            type: boolean
+        classification:
+          $ref: '#/components/schemas/MLClassification'
+        action:
+          $ref: '#/components/schemas/MLAction'
+      required:
+      - name
+      - priority
+      - enabled
+      - classification
+      - action
+      type: object
+    MLClassification:
+      example:
+        prefix: prefix
+        application: application
+      anyOf:
+      - $ref: '#/components/schemas/MLClassPrefix'
+      - $ref: '#/components/schemas/MLClassApp'
+      type: object
+    MLAction:
+      example:
+        links: [link1, link2, ...]
+        fallback: fallback
+      properties:
+        links:
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/LinksRequest'
+            - $ref: '#/components/schemas/LinksResponse'
+          type: array
+        order:
+          enum:
+          - priority
+          - load-balancing
+        fallback:
+          enum:
+          - drop
+          - by-destination
+          type: string
+      required:
+        - links
+        - order
+        - fallback
+    LinksResponse:
+      properties:
+        pathlabels:
+          items:
+            $ref: '#/components/schemas/PathLabel'
+          type: array
+        order:
+          enum:
+          - priority
+          - load-balancing
+          type: string
+      type: object
+      required:
+        - pathlabels
+        - order
+    LinksRequest:
+      properties:
+        pathlabels:
+          items:
+            type: string
+          type: array
+        order:
+          enum:
+          - priority
+          - load-balancing
+          type: string
+      type: object
+      required:
+        - pathlabels
+        - order
+    MLClassPrefix:
+      properties:
+        prefix:
+          properties:
+            ip:
+              type: string
+            ports:
+              type: string
+              pattern: "^$|^()([0-9]|[1-5]?[0-9]{2,4}|6[1-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5])(-([0-9]|[1-5]?[0-9]{2,4}|6[1-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5]))?$"
+            protocol:
+              enum:
+              - ""
+              - tcp
+              - udp
+              - icmp
+              type: string
+          required:
+          - ip
+          - ports
+          - protocol
+          type: object
+    MLClassApp:
+      properties:
+        application:
+          properties:
+            appId:
+              type: string
+            category:
+              type: string
+            serviceClass:
+              type: string
+            importance:
+              enum:
+              - ''
+              - high
+              - medium
+              - low
+              type: string
+          required:
+          - appId
+          - category
+          - serviceClass
+          - importance
+          type: object
     Error:
       properties:
         code:
