@@ -809,12 +809,13 @@ const applyTunnelDel = async (devices, user, data) => {
       }
       return arr;
     }, []);
-    const userWarning = fulfilled.length < tunnelIds.length ?
-      `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added` : '';
-    return { jobs: fulfilled.flat(), userWarning }
+    const userWarning = fulfilled.length < tunnelIds.length
+      ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added` : '';
+    return { jobs: fulfilled.flat(), userWarning };
   } else {
-    logger.error('Delete tunnels failed. Wrong parameters : no tunnels\' ids provided or no devices found', { params: { tunnelIds, devices } });
-    throw new Error('Delete tunnels failed. Wrong parameters : no tunnels\' ids provided or no devices found');
+    logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found', 
+      { params: { tunnelIds, devices } });
+    throw new Error('Delete tunnels failed. No tunnels\' ids provided or no devices found');
   }
 };
 
