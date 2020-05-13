@@ -18,12 +18,12 @@
 const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
-const ImportedApplications = require('../models/importedapplications');
+const { importedAppIdentifications } = require('../models/appIdentifications');
 
 /***
- * This class serves as the application rules update manager, responsible for
- * polling the repository for application rules file and replacement of the
- * file in the database.
+ * This class serves as the app identification rules update manager, responsible for
+ * polling the repository for app identification rules file and replacement of the
+ * file in the database when remote update time has changed.
  ***/
 class AppRulesUpdateManager {
   /**
@@ -34,25 +34,14 @@ class AppRulesUpdateManager {
   }
 
   /**
-    * A static factory method that creates and initializes the
-    * AppRulesUpdateManager instance.
-    * @static
-    * @async
-    * @return {Promise} an instance of AppRulesUpdateManager class
-    */
-  static async createAppRulesUpdateManager () {
-    return new AppRulesUpdateManager();
-  }
-
-  /**
-    * A static singleton that creates a AppRulesUpdateManager.
+    * A static singleton that creates an AppRulesUpdateManager.
     *
     * @static
-    * @return {Promise} an instance of AppRulesUpdateManager class
+    * @return an instance of an AppRulesUpdateManager class
     */
   static getAppRulesManagerInstance () {
     if (appRulesUpdater) return appRulesUpdater;
-    appRulesUpdater = AppRulesUpdateManager.createAppRulesUpdateManager();
+    appRulesUpdater = new AppRulesUpdateManager();
     return appRulesUpdater;
   }
 
@@ -62,31 +51,36 @@ class AppRulesUpdateManager {
     * @return {void}
     */
   async pollAppRules () {
-    logger.debug('Begin fetching application rules');
+    logger.info('Begin fetching global app identification rules', {
+      params: { appRulesUri: this.appRulesUri }
+    });
     try {
       const result = await fetchUtils.fetchWithRetry(this.appRulesUri, 3);
       const body = await result.json();
-      logger.info('Got response', {
+      logger.debug('Imported app identifications response received', {
         params: { time: body.meta.time, rulesCount: body.applications.length }
       });
 
       // check stored time against received one. If same, do not update
-      const importedApplicationsResult = await ImportedApplications.importedapplications.findOne();
-      if (importedApplicationsResult && importedApplicationsResult.meta.time === body.meta.time) {
-        logger.debug('application rules update time unchanged, returning...');
-        return;
+      const importedAppIdentificationsResult =
+        await importedAppIdentifications.findOne();
+      if (importedAppIdentificationsResult) {
+        const { meta } = importedAppIdentificationsResult;
+        if (meta.time === body.meta.time) {
+          return;
+        }
       }
 
-      logger.debug('Updating imported applications database...');
-      const query = {};
-      const set = { $set: { meta: body.meta, applications: body.applications } };
+      const set = { $set: { meta: body.meta, appIdentifications: body.applications } };
       const options = {
         upsert: true,
-        new: true,
         setDefaultsOnInsert: true,
         useFindAndModify: false
       };
-      await ImportedApplications.importedapplications.findOneAndUpdate(query, set, options);
+      await importedAppIdentifications.findOneAndUpdate({}, set, options);
+      logger.info('Imported app identifications database updated', {
+        params: { time: body.meta.time, rulesCount: body.applications.length }
+      });
     } catch (err) {
       logger.error('Failed to query app rules', {
         params: { err: err.message }
