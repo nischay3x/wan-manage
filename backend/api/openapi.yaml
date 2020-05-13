@@ -4441,9 +4441,9 @@ paths:
       x-swagger-router-controller: PathLabels
       x-openapi-router-controller: PathLabelsController
       x-openapi-router-service: PathLabelsService
-  /applications:
+  /appidentifications:
     get:
-      operationId: applicationsGET
+      operationId: appIdentificationsGET
       parameters:
       - description: The number of items to skip before starting to collect the result
           set
@@ -4475,7 +4475,7 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/Application'
+                  $ref: '#/components/schemas/AppIdentification'
                 type: object
                 x-content-type: application/json
           description: Successful operation
@@ -4506,14 +4506,14 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all Applications
+      summary: Get all app identifications
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
     post:
-      operationId: applicationsPOST
+      operationId: appIdentificationsPOST
       parameters:
       - description: Organization to be filtered by
         explode: true
@@ -4526,13 +4526,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApplicationRequest'
+              $ref: '#/components/schemas/AppIdentification'
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Application'
+                $ref: '#/components/schemas/AppIdentification'
           description: Created
           headers:
             Location:
@@ -4575,17 +4575,17 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Create new application
+      summary: Create new app identification
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService  
-  /applications/{id}:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/{id}:
     delete:
-      operationId: applicationsIdDELETE
+      operationId: appIdentificationsIdDELETE
       parameters:
-      - description: Numeric ID of the Application to delete
+      - description: Numeric ID of the app identification to delete
         explode: false
         in: path
         name: id
@@ -4636,18 +4636,17 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Delete application
+      summary: Delete app identification
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-  /applications/imported/{id}:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/imported/{id}:
     get:
-      operationId: applicationsIdGET
+      operationId: appIdentificationsIdGET
       parameters:
-      - description: Application id to retrieve
-          set
+      - description: App identification id to retrieve
         explode: true
         in: path
         name: id
@@ -4667,10 +4666,7 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/Application'
-                type: object
-                x-content-type: application/json
+                $ref: '#/components/schemas/AppIdentification'
           description: Successful operation
         "401":
           content:
@@ -4699,16 +4695,16 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get Application by id
+      summary: Get app identification by id
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
     put:
-      operationId: applicationsIdPUT
+      operationId: appIdentificationsIdPUT
       parameters:
-      - description: Numeric ID of the application to modify
+      - description: Numeric ID of the app identification to modify
         explode: false
         in: path
         name: id
@@ -4727,13 +4723,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApplicationRequest'
+              $ref: '#/components/schemas/AppIdentImpCustReq'
       responses:
-        "201":
+        "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Application'
+                $ref: '#/components/schemas/AppIdentification'
           description: Created
         "400":
           description: Bad Request
@@ -4770,18 +4766,17 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Modify an application
+      summary: Modify app identification
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService  
-  /applications/custom/{id}:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/custom/{id}:
     get:
-      operationId: applicationsCustomIdGET
+      operationId: appIdentificationsCustomIdGET
       parameters:
-      - description: Application id to retrieve
-          set
+      - description: App identification id to retrieve
         explode: true
         in: path
         name: id
@@ -4801,10 +4796,7 @@ paths:
           content:
             application/json:
               schema:
-                items:
-                  $ref: '#/components/schemas/Application'
-                type: object
-                x-content-type: application/json
+                $ref: '#/components/schemas/AppIdentification'
           description: Successful operation
         "401":
           content:
@@ -4833,16 +4825,16 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get Application by id
+      summary: Get app identification by id
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
     put:
-      operationId: applicationsCustomIdPUT
+      operationId: appIdentificationsCustomIdPUT
       parameters:
-      - description: Numeric ID of the application to modify
+      - description: Numeric ID of the app identification to modify
         explode: false
         in: path
         name: id
@@ -4861,13 +4853,85 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApplicationRequest'
+              $ref: '#/components/schemas/AppIdentification'
       responses:
-        "201":
+        "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Application'
+                $ref: '#/components/schemas/AppIdentification'
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify app identification
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/imported/{id}/reset:
+    put:
+      operationId: appIdentificationsIdResetPUT
+      parameters:
+      - description: Numeric ID of the app identification to reset
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppIdentification'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppIdentification'
           description: Created
         "400":
           description: Bad Request
@@ -4904,89 +4968,17 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Modify an application
+      summary: Reset imported app identification to its default values
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService        
-  /applications/imported/{id}/reset:
-    put:
-      operationId: applicationsIdResetPUT
-      parameters:
-      - description: Numeric ID of the application to reset
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApplicationRequest'
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-          description: Created
-        "400":
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Modify an application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-  /applications/installed:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/installed:
     get:
-      operationId: applicationsInstalledGET
+      operationId: appIdentificationsInstalledGET
       parameters:
-      - description: Devices appIdentification installed on
+      - description: Devices app identification installed on
         explode: true
         in: query
         name: offset
@@ -5014,7 +5006,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstalledApplications'
+                $ref: '#/components/schemas/InstalledAppIdentifications'
                 x-content-type: application/json
           description: Successful operation
         "401":
@@ -5044,12 +5036,12 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all Applications
+      summary: Get all installed app identifications
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
 components:
   responses:
     NotFoundError:
@@ -5167,33 +5159,92 @@ components:
         description:
           type: string
       type: object
-    Application:
+    AppIdentificationRules:
       example:
-        _id: id
-        org: org
-        name: name
+        ip: 127.0.0.1
+        ports: 42
+        protocol: tcp
+      properties:
+        ip:
+          type: string
+        ports:
+          type: string
+        protocol:
+          enum:
+          - tcp
+          - udp
+          type: string
+      type: object
+    AppIdentification:
+      example:
+        _id: _id
+        id: _id
+        name: custom:app-name
+        description: app identification description
+        category: internet
+        serviceClass: oam
+        importance: high
+        rules: [
+          {ip: "127.0.0.1"},
+          {ports: "42"},
+          {ports: "128-129"},
+          {ip: "127.0.0.1", ports: "42", protocol: "tcp"}
+        ]
       properties:
         _id:
           maxLength: 24
           minLength: 24
-          type: string
-        org:
-          type: string
+        id:
+          maxLength: 24
+          minLength: 1
         name:
-          type: string
-        createdAt:
-          type: string
-      type: object
-    ApplicationRequest:
-      example:
-        name: name
-      properties:
-        name:
+          maxLength: 30
+          minLength: 2
           type: string
         description:
+          maxLength: 128
+          type: string
+        category:
+          maxLength: 30
+          minLength: 2
+          type: string
+        serviceClass:
+          maxLength: 30
+          minLength: 2
+          type: string
+        importance:
+          enum:
+          - high
+          - medium
+          - low
+          type: string
+        rules:
+          items:
+            $ref: '#/components/schemas/AppIdentificationRules'
+          type: array
+      type: object
+    AppIdentImpCustReq:
+      example:
+        category: internet
+        serviceClass: oam
+        importance: high
+      properties:
+        category:
+          maxLength: 30
+          minLength: 2
+          type: string
+        serviceClass:
+          maxLength: 30
+          minLength: 2
+          type: string
+        importance:
+          enum:
+          - high
+          - medium
+          - low
           type: string
       type: object
-    InstalledApplications:
+    InstalledAppIdentifications:
       example:
         totalNotUpdated: 3
         devices:

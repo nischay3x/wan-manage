@@ -17,10 +17,9 @@
 
 const periodic = require('./periodic')();
 const AppRulesUpdater = require('../deviceLogic/AppRulesUpdateManager');
-const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 
 /***
- * This class periodically checks if the latest application rules were changed
+ * This class periodically checks if the latest AppIdentification rules were changed
  * and if so, updates the database with the new version
  ***/
 class AppRules {
@@ -44,18 +43,10 @@ class AppRules {
     * Starts the check_app_rules periodic task.
     * @return {void}
     */
-  async start () {
-    try {
-      this.appRulesUpdater = await AppRulesUpdater.getAppRulesUpdaterInstance();
-    } catch (err) {
-      logger.error('Application rules periodic task failed to start', {
-        params: { err: err.message },
-        periodic: { task: this.taskInfo }
-      });
-      return;
-    }
+  start () {
+    this.appRulesUpdater = AppRulesUpdater.getAppRulesUpdaterInstance();
 
-    // Get the version upon starting up
+    // Get the app rules upon starting up
     this.periodicCheckAppRules();
 
     const { name, func, period } = this.taskInfo;

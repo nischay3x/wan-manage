@@ -17,7 +17,7 @@
 
 const configs = require('../configs')();
 const { devices } = require('../models/devices');
-const { getAllApplications } = require('../models/applications');
+const { getAllAppIdentifications } = require('../models/appIdentifications');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -173,8 +173,8 @@ const remove = async (job) => {
  * Get final list of applications for organization
  * @param {MongoId} org - Organization Mongo ID
  */
-const getOrgApplications = async (org) => {
-  return await getAllApplications([org]);
+const getOrgAppIdentifications = async (org) => {
+  return await getAllAppIdentifications([org]);
 };
 
 /**
@@ -208,7 +208,7 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   let updateAt = null;
   if (isInstall) {
     // get full application list for this organization
-    appRules = await getOrgApplications(org);
+    appRules = await getOrgAppIdentifications(org);
     // Get latest update time
     updateAt = (appRules.meta.importedUpdatedAt >= appRules.meta.customUpdatedAt)
       ? appRules.meta.importedUpdatedAt : appRules.meta.customUpdatedAt;
@@ -288,8 +288,8 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   const titlePrefix = (isInstall) ? 'Add' : 'Remove';
   ret.title = `${titlePrefix} appIdentifications to device`;
   ret.installIds = opDevices.reduce((obj, d) => { obj[d._id] = true; return obj; }, {});
-  ret.params = (appRules && appRules.applications && isInstall)
-    ? { applications: appRules.applications } : {};
+  ret.params = (appRules && appRules.appIdentifications && isInstall)
+    ? { applications: appRules.appIdentifications } : {};
   ret.deviceJobResp = {
     requestTime: requestTime,
     message: ret.message,

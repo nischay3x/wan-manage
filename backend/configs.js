@@ -131,7 +131,7 @@ const configEnv = {
     webHookRegisterDeviceUrl: '',
     // Web hooks register device secret, send in addition to the message for filtering
     webHookRegisterDeviceSecret: 'ABC',
-    // Global application rules file location
+    // Global app identification rules file location
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
   },
 
