@@ -794,7 +794,7 @@ const applyTunnelDel = async (devices, user, data) => {
           const jobs = oneTunnelDel(tunnelID, userName, org);
           resolve(jobs);
         } catch (err) {
-          logger.error('Delete tunnel error', { params: { tunnelID, err } });
+          logger.error('Delete tunnel error', { params: { tunnelID, error: err.message } });
           reject(err);
         }
       });
@@ -802,17 +802,19 @@ const applyTunnelDel = async (devices, user, data) => {
     });
 
     const promiseStatus = await Promise.allSettled(delPromises);
-
-    return promiseStatus.reduce((arr, elem) => {
+    const fulfilled = promiseStatus.reduce((arr, elem) => {
       if (elem.status === 'fulfilled') {
         const job = elem.value;
         arr.push(job);
       }
       return arr;
     }, []);
+    const userWarning = fulfilled.length < tunnelIds.length ?
+      `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added` : '';
+    return { jobs: fulfilled.flat(), userWarning }
   } else {
-    logger.error('Wrong parameters or no devices found', { params: { } });
-    throw new Error('Wrong parameters or no devices found');
+    logger.error('Delete tunnels failed. Wrong parameters : no tunnels\' ids provided or no devices found', { params: { tunnelIds, devices } });
+    throw new Error('Delete tunnels failed. Wrong parameters : no tunnels\' ids provided or no devices found');
   }
 };
 
@@ -824,12 +826,11 @@ const applyTunnelDel = async (devices, user, data) => {
  * @return {array}    jobs created
  */
 const oneTunnelDel = async (tunnelID, user, org) => {
-  console.log(tunnelID, user, org);
   const tunnelResp = await tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
     .populate('deviceA')
     .populate('deviceB');
 
-  logger.info('Delete tunnels db response', { params: { response: tunnelResp } });
+  logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
 
   // Define devices
   const deviceA = tunnelResp.deviceA;

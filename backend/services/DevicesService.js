@@ -49,13 +49,15 @@ class DevicesService {
       const opDevices = await devices.find({ org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type');
       // Apply the device command
-      const retJobs = await dispatcher.apply(opDevices, deviceCommand.method,
+      const appliedResults = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
+      const retJobs = Array.isArray(appliedResults) ? appliedResults : appliedResults.jobs;
       const jobIds = retJobs.flat().map(job => job.id);
+      const userWarning = Array.isArray(appliedResults) ? null : appliedResults.userWarning;
       const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
-      return Service.successResponse({ ids: jobIds }, 202);
+      return Service.successResponse({ ids: jobIds, userWarning }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
