@@ -174,7 +174,7 @@ const remove = async (job) => {
  * @param {MongoId} org - Organization Mongo ID
  */
 const getOrgAppIdentifications = async (org) => {
-  return await getAllAppIdentifications([org]);
+  return await getAllAppIdentifications(null, null, [org]);
 };
 
 /**
