@@ -91,10 +91,10 @@ const apply = async (devices, user, data) => {
     }
     return arr;
   }, []);
-  const status = fulfilled.length < tunnelIds.length
+  const status = fulfilled.length < opDevices.length
     ? 'partially completed' : 'completed';
-  const warningMessage = fulfilled.length < tunnelIds.length
-    ? `${fulfilled.length} of ${tunnelIds.length} App Identification jobs added` : '';
+  const warningMessage = fulfilled.length < opDevices.length
+    ? `${fulfilled.length} of ${opDevices.length} App Identification jobs added` : '';
   return { ids: fulfilled.flat().map(job => job.id), status, message: warningMessage };
 };
 
