@@ -6003,6 +6003,7 @@ components:
           PublicIP: PublicIP
           IPv4: IPv4
           type: WAN
+          gateway: gateway
           MAC: MAC
           routing: OSPF
           IPv6Mask: "64"
@@ -6017,6 +6018,7 @@ components:
           PublicIP: PublicIP
           IPv4: IPv4
           type: WAN
+          gateway: gateway
           MAC: MAC
           routing: OSPF
           IPv6Mask: "64"
@@ -6145,6 +6147,7 @@ components:
         IPv4: IPv4
         type: WAN
         MAC: MAC
+        gateway: gateway
         routing: OSPF
         IPv6Mask: "64"
         isAssigned: true
@@ -6168,6 +6171,8 @@ components:
         IPv6:
           type: string
         PublicIP:
+          type: string
+        gateway:
           type: string
         isAssigned:
           type: boolean

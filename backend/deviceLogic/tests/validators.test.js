@@ -41,6 +41,7 @@ describe('validateDevice', () => {
         IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7348',
         IPv6Mask: '64',
         PublicIP: '72.168.10.30',
+        gateway: '',
         isAssigned: true,
         routing: 'OSPF',
         type: 'LAN',
@@ -56,6 +57,7 @@ describe('validateDevice', () => {
         IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7346',
         IPv6Mask: '64',
         PublicIP: '172.23.100.1',
+        gateway: '172.23.100.10',
         isAssigned: true,
         routing: 'None',
         type: 'WAN',
@@ -180,6 +182,27 @@ describe('validateDevice', () => {
   it('Should be an invalid device if OSPF is configured on the WAN interface', () => {
     device.interfaces[1].routing = 'OSPF';
     failureObject.err = 'OSPF should not be configured on WAN interface';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if WAN interface is not assigned a GW', () => {
+    delete device.interfaces[1].gateway;
+    failureObject.err = 'All WAN interfaces should be assigned a default GW';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if WAN interface\'s GW is invalid', () => {
+    device.interfaces[1].gateway = 'invalid-ip-address';
+    failureObject.err = 'All WAN interfaces should be assigned a default GW';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if LAN interface is assigned a GW', () => {
+    device.interfaces[0].gateway = '10.0.0.100';
+    failureObject.err = 'LAN interfaces should not be assigned a default GW';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
