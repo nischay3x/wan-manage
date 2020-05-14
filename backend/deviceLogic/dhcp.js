@@ -101,27 +101,32 @@ const apply = async (device, user, data) => {
     }
 
     tasks.push({ entity: 'agent', message, params });
+    try {
+      const job = await deviceQueues.addJob(machineId, userName, org,
+        // Data
+        { title: `${titlePrefix} DHCP in device ${device.hostname}`, tasks: tasks },
+        // Response data
+        {
+          method: 'dhcp',
+          data: {
+            deviceId: device.id,
+            dhcpId: dhcpId,
+            ...(data.origDhcp) && { origDhcp: data.origDhcp },
+            message
+          }
+        },
+        // Metadata
+        { priority: 'low', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null);
 
-    const job = await deviceQueues.addJob(machineId, userName, org,
-      // Data
-      { title: `${titlePrefix} DHCP in device ${device.hostname}`, tasks: tasks },
-      // Response data
-      {
-        method: 'dhcp',
-        data: {
-          deviceId: device.id,
-          dhcpId: dhcpId,
-          ...(data.origDhcp) && { origDhcp: data.origDhcp },
-          message
-        }
-      },
-      // Metadata
-      { priority: 'low', attempts: 1, removeOnComplete: false },
-      // Complete callback
-      null);
+      logger.info('Add DHCP job queued', { params: { job } });
+      return { ids: [job.id], status: 'completed', message: '' };
+    } catch (err) {
+      logger.error('Add DHCP job failed', { params: { machineId, error: err.message } });
+      return {};
+    }
 
-    logger.info('Add DHCP job queued', { params: { job: job } });
-    return [job];
   }
 };
 

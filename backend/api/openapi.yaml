@@ -5317,6 +5317,13 @@ components:
           items:
             type: integer
           type: array
+        status:
+          enum:
+          - completed
+          - partially completed
+          type: string
+        message:
+          type: string
     JobsDeleteRequest:
       properties:
         ids:

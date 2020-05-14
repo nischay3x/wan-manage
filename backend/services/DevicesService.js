@@ -49,15 +49,12 @@ class DevicesService {
       const opDevices = await devices.find({ org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type');
       // Apply the device command
-      const appliedResults = await dispatcher.apply(opDevices, deviceCommand.method,
+      const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      const retJobs = Array.isArray(appliedResults) ? appliedResults : appliedResults.jobs;
-      const jobIds = retJobs.flat().map(job => job.id);
-      const userWarning = Array.isArray(appliedResults) ? null : appliedResults.userWarning;
       const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        jobIds.join('%2C')}&org=${orgList[0]}`;
+        ids.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
-      return Service.successResponse({ ids: jobIds, userWarning }, 202);
+      return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -83,13 +80,12 @@ class DevicesService {
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
 
-      const retJobs = await dispatcher.apply(opDevice, deviceCommand.method,
+      const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      const jobIds = retJobs.flat().map(job => job.id);
       const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        jobIds.join('%2C')}&org=${orgList[0]}`;
+        ids.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
-      return Service.successResponse({ ids: jobIds }, 202);
+      return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -968,10 +964,9 @@ class DevicesService {
         copy.method = 'dhcp';
         copy._id = dhcpId;
         copy.action = 'del';
-        const retJobs = await dispatcher.apply(device, copy.method, user, copy);
-        const jobIds = retJobs.flat().map(job => job.id);
+        const { ids } = await dispatcher.apply(device, copy.method, user, copy);
         const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-          jobIds.join('%2C')}&org=${orgList[0]}`;
+          ids.join('%2C')}&org=${orgList[0]}`;
         response.setHeader('Location', location);
       }
 
@@ -1099,10 +1094,9 @@ class DevicesService {
         copy.method = 'dhcp';
         copy.action = 'modify';
         copy.origDhcp = origCmpDhcp;
-        const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
-        const jobIds = retJobs.flat().map(job => job.id);
+        const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
         const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
-          jobIds.join('%2C')}&org=${orgList[0]}`;
+          ids.join('%2C')}&org=${orgList[0]}`;
         response.setHeader('Location', location);
 
         await devices.findOneAndUpdate(
@@ -1161,10 +1155,9 @@ class DevicesService {
       const copy = Object.assign({}, dhcpObject);
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
-      const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      const jobIds = retJobs.flat().map(job => job.id);
+      const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        jobIds.join('%2C')}&org=${orgList[0]}`;
+        ids.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
 
       const dhcpData = {
@@ -1311,11 +1304,10 @@ class DevicesService {
       copy.method = 'dhcp';
       copy._id = dhcp.id;
       copy.action = 'add';
-      const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      const jobIds = retJobs.flat().map(job => job.id);
+      const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
       const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        jobIds.join('%2C')}&org=${orgList[0]}`;
+        ids.join('%2C')}&org=${orgList[0]}`;
       response.setHeader('Location', location);
 
       await session.commitTransaction();
