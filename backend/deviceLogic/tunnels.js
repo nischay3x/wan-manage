@@ -30,11 +30,9 @@ const { routerVersionsCompatible } = require('../versioning');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
-  const intersection = ifcLabelsA.filter(ifcLabel => {
-    const idx = ifcLabelsB.findIndex(label => {
-      return label._id.toString() === ifcLabel._id.toString();
-    });
-    return idx !== -1;
+  const intersection = [];
+  ifcLabelsA.forEach(label => {
+    if (label && ifcLabelsB.has(label)) intersection.push(label);
   });
 
   return intersection;
@@ -87,19 +85,39 @@ const applyTunnelAdd = async (devices, user, data) => {
           throw new Error('Cannot create tunnels between devices with mismatching router versions');
         }
 
-        // Find device A WAN interfaces
-        const deviceAIntfs = deviceA.interfaces.filter(intf => {
-          return intf.isAssigned === true && intf.type === 'WAN';
+        // Create the list of interfaces for both devices.
+        // Add a set of the interface's path labels
+        const deviceAIntfs = [];
+        deviceA.interfaces.forEach(intf => {
+          if (intf.isAssigned === true && intf.type === 'WAN') {
+            const labelsSet = new Set(intf.pathlabels.map(label => {
+              // DIA interfaces cannot be used in tunnels
+              return label.type !== 'DIA' ? label._id : null;
+            }));
+            deviceAIntfs.push({
+              labelsSet: labelsSet,
+              ...intf.toObject()
+            });
+          }
         });
 
-        // Find device B WAN interfaces
-        const deviceBIntfs = deviceB.interfaces.filter(intf => {
-          return intf.isAssigned === true && intf.type === 'WAN';
+        const deviceBIntfs = [];
+        deviceB.interfaces.forEach(intf => {
+          if (intf.isAssigned === true && intf.type === 'WAN') {
+            const labelsSet = new Set(intf.pathlabels.map(label => {
+              // DIA interfaces cannot be used in tunnels
+              return label.type !== 'DIA' ? label._id : null;
+            }));
+            deviceBIntfs.push({
+              labelsSet: labelsSet,
+              ...intf.toObject()
+            });
+          }
         });
 
         const devicesInfo = {
-          deviceA: { hostname: deviceA.hostname, interface: deviceAIntfs.name },
-          deviceB: { hostname: deviceB.hostname, interface: deviceBIntfs.name }
+          deviceA: { hostname: deviceA.hostname, interfaces: deviceAIntfs },
+          deviceB: { hostname: deviceB.hostname, interfaces: deviceBIntfs }
         };
         logger.debug('Connecting tunnel between devices', { params: { devicesInfo } });
 
@@ -109,40 +127,37 @@ const applyTunnelAdd = async (devices, user, data) => {
         // IDs contains the ID 'FFFFFF', create tunnels between all common
         // path labels across all WAN interfaces.
         // TBD: key exchange should be dynamic
-        const specifiedLabels = data.meta.pathLabels;
-        const createForAllLabels = specifiedLabels.includes('FFFFFF');
+        const specifiedLabels = new Set(data.meta.pathLabels);
+        const createForAllLabels = specifiedLabels.has('FFFFFF');
         if (deviceAIntfs.length && deviceBIntfs.length) {
           deviceAIntfs.forEach(wanIfcA => {
             deviceBIntfs.forEach(wanIfcB => {
-              const ifcALabels = wanIfcA.pathlabels;
-              const ifcBLabels = wanIfcB.pathlabels;
+              const ifcALabels = wanIfcA.labelsSet;
+              const ifcBLabels = wanIfcB.labelsSet;
 
               // If no path labels were selected, create a tunnel
               // only if both interfaces aren't assigned with labels
-              if (specifiedLabels.length === 0) {
-                if (ifcALabels.length === 0 && ifcBLabels.length === 0) {
+              if (specifiedLabels.size === 0) {
+                if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
                   dbTasks.push(getTunnelPromise(userName, org, null,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
+                    { ...wanIfcA }, { ...wanIfcB }));
                 }
               } else {
                 // Create a list of path labels that are common to both interfaces.
                 const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
                 for (const label of labelsIntersection) {
-                  // Skip tunnel creation for labels of type "DIA"
-                  // (Direct Internet Access) or if the label is not
-                  // included in the list of labels specified by the user
+                  // Skip tunnel if the label is not included in
+                  // the list of labels specified by the user
                   const shouldSkipTunnel =
-                    label.type === 'DIA'
-                      ? true
-                      : !createForAllLabels &&
-                        !specifiedLabels.includes(label._id);
+                    !createForAllLabels &&
+                    !specifiedLabels.has(label);
                   if (shouldSkipTunnel) continue;
                   // If a tunnel already exists, skip the configuration
                   // Use a copy of devices objects as promise runs later
-                  dbTasks.push(getTunnelPromise(userName, org, label._id,
+                  dbTasks.push(getTunnelPromise(userName, org, label,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA.toObject() }, { ...wanIfcB.toObject() }));
+                    { ...wanIfcA }, { ...wanIfcB }));
                 }
               }
             });

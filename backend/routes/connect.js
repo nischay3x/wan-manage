@@ -81,9 +81,11 @@ connectRouter.route('/register')
                   intf.isAssigned = true;
                   intf.PublicIP = sourceIP;
                   intf.type = 'WAN';
+                  intf.gateway = req.body.default_route;
                 } else {
                   intf.type = 'LAN';
                   intf.routing = 'OSPF';
+                  intf.gateway = '';
                   if (ifs.length === 2) {
                     intf.isAssigned = true;
                   }

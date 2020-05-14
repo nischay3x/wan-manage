@@ -113,6 +113,16 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // WAN interface default GW
+  gateway: {
+    type: String,
+    maxlength: [50, 'gateway length must be at most 50'],
+    validate: {
+      validator: validators.validateIPaddr,
+      message: 'gateway should be a valid IPv4 or IPv6 address'
+    },
+    default: ''
+  },
   // assigned
   isAssigned: {
     type: Boolean,
@@ -344,6 +354,36 @@ const deviceVersionsSchema = new Schema({
 });
 
 /**
+ * Device policy schema
+ */
+const devicePolicySchema = new Schema({
+  _id: false,
+  policy: {
+    type: Schema.Types.ObjectId,
+    ref: 'MultiLinkPolicies',
+    default: null
+  },
+  status: {
+    type: String,
+    enum: [
+      '',
+      'installing',
+      'installed',
+      'uninstalling',
+      'job queue failed',
+      'job deleted',
+      'installation failed',
+      'uninstallation failed'
+    ],
+    default: ''
+  },
+  requestTime: {
+    type: Date,
+    default: null
+  }
+});
+
+/**
  * Version Upgrade Database Schema
  */
 const versionUpgradeSchema = new Schema({
@@ -482,7 +522,7 @@ const deviceSchema = new Schema({
   // LAN side DHCP
   dhcp: [DHCPSchema],
   // App Identification Schema
-  appIdentification: [AppIdentificationSchema],
+  appIdentification: AppIdentificationSchema,
   // schedule for upgrade process
   upgradeSchedule: {
     type: versionUpgradeSchema,
@@ -496,6 +536,12 @@ const deviceSchema = new Schema({
   pendingDevModification: {
     type: Boolean,
     default: false
+  },
+  policies: {
+    multilink: {
+      type: devicePolicySchema,
+      default: devicePolicySchema
+    }
   }
 },
 {
