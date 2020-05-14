@@ -113,6 +113,16 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // WAN interface default GW
+  gateway: {
+    type: String,
+    maxlength: [50, 'gateway length must be at most 50'],
+    validate: {
+      validator: validators.validateIPaddr,
+      message: 'gateway should be a valid IPv4 or IPv6 address'
+    },
+    default: ''
+  },
   // assigned
   isAssigned: {
     type: Boolean,
