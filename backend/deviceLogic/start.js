@@ -106,14 +106,14 @@ const apply = async (device, user, data) => {
   const tasks = [];
   const userName = user.username;
   const org = user.defaultOrg._id.toString();
-  const mId = device[0].machineId;
+  const machineId = device[0].machineId;
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
 
   try {
     const job = await deviceQueues
       .addJob(
-        mId,
+        machineId,
         userName,
         org,
         // Data

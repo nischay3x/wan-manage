@@ -76,7 +76,7 @@ const apply = async (device, user, data) => {
     logger.info('Stop device job queued', { params: { job } });
     return { ids: [job.id], status: 'completed', message: '' };
   } catch (err) {
-    logger.error('Stop device job failed', { params: { machineId, error: err.message } });
+    logger.error('Stop device job failed', { params: { machineID, error: err.message } });
     throw (new Error(err.message || 'Internal server error'));
   }
 };

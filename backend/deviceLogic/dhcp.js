@@ -126,7 +126,6 @@ const apply = async (device, user, data) => {
       logger.error('Add DHCP job failed', { params: { machineId, error: err.message } });
       return {};
     }
-
   }
 };
 

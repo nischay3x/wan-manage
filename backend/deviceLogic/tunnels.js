@@ -172,11 +172,10 @@ const applyTunnelAdd = async (devices, user, data) => {
     }, []);
 
     const status = fulfilled.length < dbTasks.length
-      ? 'completed' : 'partially completed';
+      ? 'partially completed' : 'completed';
     const message = fulfilled.length < dbTasks.length
-      ? `${fulfilled.length} of ${tunnelIds.length} tunnels creation jobs added` : '';
+      ? `${fulfilled.length} of ${dbTasks.length} tunnels creation jobs added` : '';
     return { ids: fulfilled.flat().map(job => job.id), status, message };
-
   } else {
     logger.error('At least 2 devices must be selected to create tunnels', { params: {} });
     throw new Error('At least 2 devices must be selected to create tunnels');
@@ -819,7 +818,7 @@ const applyTunnelDel = async (devices, user, data) => {
       return arr;
     }, []);
     const status = fulfilled.length < tunnelIds.length
-      ? 'completed' : 'partially completed';
+      ? 'partially completed' : 'completed';
     const message = fulfilled.length < tunnelIds.length
       ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added` : '';
     return { ids: fulfilled.flat().map(job => job.id), status, message };

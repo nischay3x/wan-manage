@@ -92,10 +92,10 @@ const apply = async (devices, user, data) => {
     return arr;
   }, []);
   const status = fulfilled.length < tunnelIds.length
-    ? 'completed' : 'partially completed';
-  const message = fulfilled.length < tunnelIds.length
+    ? 'partially completed' : 'completed';
+  const warningMessage = fulfilled.length < tunnelIds.length
     ? `${fulfilled.length} of ${tunnelIds.length} App Identification jobs added` : '';
-  return { ids: fulfilled.flat().map(job => job.id), status, message };
+  return { ids: fulfilled.flat().map(job => job.id), status, message: warningMessage };
 };
 
 /**
