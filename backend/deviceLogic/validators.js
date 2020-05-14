@@ -79,20 +79,39 @@ const validateDevice = (device) => {
       };
     }
 
-    // Path labels are not allowed on LAN interfaces
-    if (ifc.type === 'LAN' && ifc.pathlabels.length !== 0) {
-      return {
-        valid: false,
-        err: 'Path Labels are not allowed on LAN interfaces'
-      };
+    if (ifc.type === 'LAN') {
+      // Path labels are not allowed on LAN interfaces
+      if (ifc.pathlabels.length !== 0) {
+        return {
+          valid: false,
+          err: 'Path Labels are not allowed on LAN interfaces'
+        };
+      }
+
+      // LAN interfaces are not allowed to have a default GW
+      if (ifc.gateway !== '') {
+        return {
+          valid: false,
+          err: 'LAN interfaces should not be assigned a default GW'
+        };
+      }
     }
 
-    // OSPF is not allowed on WAN interfaces
-    if (ifc.type === 'WAN' && ifc.routing === 'OSPF') {
-      return {
-        valid: false,
-        err: 'OSPF should not be configured on WAN interface'
-      };
+    if (ifc.type === 'WAN') {
+      // OSPF is not allowed on WAN interfaces
+      if (ifc.routing === 'OSPF') {
+        return {
+          valid: false,
+          err: 'OSPF should not be configured on WAN interface'
+        };
+      }
+      // WAN interfaces must have default GW assigned to them
+      if (!net.isIPv4(ifc.gateway)) {
+        return {
+          valid: false,
+          err: 'All WAN interfaces should be assigned a default GW'
+        };
+      }
     }
   }
 
