@@ -157,12 +157,11 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
 };
 
 /**
- * Get other LAN subnets in same organization
+ * Get all LAN subnets in the same organization
  * @param  {string} orgId         the id of the organization
  * @return {[name: string, subnet: string]} array of LAN subnets with router name
  */
 const getAllOrganiztionLanSubnets = async orgId => {
-  // _id: { $ne: device._id } }
   const subnets = await devices.aggregate([
     { $match: { org: orgId } },
     {
@@ -194,8 +193,9 @@ const getAllOrganiztionLanSubnets = async orgId => {
     }
   ]);
 
-  const allOrgSubnets = subnets.reduce((acc, val) => acc.concat(val.interfaces), []);
-  return allOrgSubnets;
+  const combinedSubnets = subnets.reduce((acc, val) => acc.concat(val.interfaces), []);
+
+  return combinedSubnets;
 };
 
 module.exports = {
