@@ -113,6 +113,16 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // WAN interface default GW
+  gateway: {
+    type: String,
+    maxlength: [50, 'gateway length must be at most 50'],
+    validate: {
+      validator: validators.validateIPaddr,
+      message: 'gateway should be a valid IPv4 or IPv6 address'
+    },
+    default: ''
+  },
   // assigned
   isAssigned: {
     type: Boolean,
@@ -259,6 +269,43 @@ const DHCPSchema = new Schema({
 });
 
 /**
+ * Device application install schema
+ */
+const AppIdentificationSchema = new Schema({
+  /**
+   * Represent the list of clients that asked for app identification
+   * A client is a policy/feature that require to install app identification
+   * This is only updated by the server when a client asks to install/uninstall
+   */
+  clients: [String],
+  /**
+   * This indicates the last time requested to update.
+   * Its purpose is to prevent multiple identical requests
+   * Updated when a new job request is sent or when the job removed/failed
+   * Possible values:
+   *  - null: last request indicated to remove app identification
+   *  - <Latest Date>: last request indicated to install app identification
+   *  - Date(0): indicates an unknown request value, will cause another update
+   */
+  lastRequestTime: {
+    type: Date,
+    default: null
+  },
+  /**
+   * This indicates what is installed on the device, only updated by job complete callback
+   * Possible values:
+   *  - null: last request indicated to remove app identification
+   *  - <Latest Date>: last request indicated to install app identification
+   */
+  lastUpdateTime: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: false
+});
+
+/**
  * Device Version Database Schema
  */
 const deviceVersionsSchema = new Schema({
@@ -303,6 +350,36 @@ const deviceVersionsSchema = new Schema({
       /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/,
       'Version must be a valid FRR version'
     ]
+  }
+});
+
+/**
+ * Device policy schema
+ */
+const devicePolicySchema = new Schema({
+  _id: false,
+  policy: {
+    type: Schema.Types.ObjectId,
+    ref: 'MultiLinkPolicies',
+    default: null
+  },
+  status: {
+    type: String,
+    enum: [
+      '',
+      'installing',
+      'installed',
+      'uninstalling',
+      'job queue failed',
+      'job deleted',
+      'installation failed',
+      'uninstallation failed'
+    ],
+    default: ''
+  },
+  requestTime: {
+    type: Date,
+    default: null
   }
 });
 
@@ -444,6 +521,8 @@ const deviceSchema = new Schema({
   staticroutes: [staticroutesSchema],
   // LAN side DHCP
   dhcp: [DHCPSchema],
+  // App Identification Schema
+  appIdentification: AppIdentificationSchema,
   // schedule for upgrade process
   upgradeSchedule: {
     type: versionUpgradeSchema,
@@ -457,6 +536,12 @@ const deviceSchema = new Schema({
   pendingDevModification: {
     type: Boolean,
     default: false
+  },
+  policies: {
+    multilink: {
+      type: devicePolicySchema,
+      default: devicePolicySchema
+    }
   }
 },
 {

@@ -111,6 +111,16 @@ const validateIpList = (list) => {
 
   return true;
 };
+const isPort = (val) => {
+  return !isEmpty(val) && !(val === '') && validateIsNumber(val) && val >= 0 && val <= 65535;
+};
+const validatePortRange = (range) => {
+  if (range === '') return true;
+  if (!(range || '').includes('-')) return isPort(range);
+
+  const [portLow, portHigh] = (range || '').split('-');
+  return isPort(portLow) && isPort(portHigh);
+};
 const validateMachineID = (id) => { return /^[a-f0-9-]{1,50}$/i.test(id || ''); };
 const validateTokenName = (name) => { return /^[a-z0-9-_ .!#%():@[\]]{3,15}$/i.test(name || ''); };
 
@@ -129,6 +139,9 @@ const validateEmail = (mail) => { return !isEmpty(mail) && email.validate(mail);
 const validateLabelName = (name) => { return /^[a-z0-9-_ .]{3,30}$/i.test(name || ''); };
 const validateLabelColor = (color) => { return /^#[0-9A-F]{6}$/i.test(color); };
 
+const validatePolicyName = (name) => { return /^[a-z0-9-_ .]{3,50}$/i.test(name || ''); };
+const validateRuleName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name || ''); };
+
 module.exports = {
   validateIPv4,
   validateIPv4WithMask,
@@ -138,6 +151,7 @@ module.exports = {
   validateIfcName,
   validateIPv4Mask,
   validateIPv6Mask,
+  validatePortRange,
   validateDriverName,
   validateMacAddress,
   validateRoutingProto,
@@ -157,5 +171,7 @@ module.exports = {
   validateIsPhoneNumber,
   validateLabelName,
   validateLabelColor,
+  validatePolicyName,
+  validateRuleName,
   validateIsNumber
 };

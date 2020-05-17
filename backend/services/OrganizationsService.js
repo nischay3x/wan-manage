@@ -25,6 +25,8 @@ const Tunnels = require('../models/tunnels');
 const TunnelIds = require('../models/tunnelids');
 const Tokens = require('../models/tokens');
 const AccessTokens = require('../models/accesstokens');
+const MultiLinkPolicies = require('../models/mlpolicies');
+const PathLabels = require('../models/pathlabels');
 const { membership } = require('../models/membership');
 const Connections = require('../websocket/Connections')();
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -195,11 +197,13 @@ class OrganizationsService {
       // Remove all memberships that belong to the organization, but keep group even if empty
       await membership.deleteMany({ organization: id }, { session: session });
 
-      // Remove organization inventory (devices, tokens, tunnelIds, tunnels)
+      // Remove organization inventory (devices, tokens, tunnelIds, tunnels, etc.)
       await Tunnels.deleteMany({ org: id }, { session: session });
       await TunnelIds.deleteMany({ org: id }, { session: session });
       await Tokens.deleteMany({ org: id }, { session: session });
       await AccessTokens.deleteMany({ organization: id }, { session: session });
+      await MultiLinkPolicies.deleteMany({ org: id }, { session: session });
+      await PathLabels.deleteMany({ org: id }, { session: session });
 
       // Find all devices for organization
       const orgDevices = await Devices.devices.find({ org: id },
