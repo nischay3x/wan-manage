@@ -50,6 +50,10 @@ const prepareIfcParams = (interfaces) => {
       if (label.type === 'DIA') labels.push(label._id);
     });
     newIfc.multilink = { labels };
+
+    // Don't send interface default GW for LAN interfaces
+    if (newIfc.type !== 'WAN') delete newIfc.gateway;
+
     return newIfc;
   });
 };
@@ -353,6 +357,7 @@ const apply = async (device, user, data) => {
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
+        gateway: ifc.gateway,
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,
@@ -376,6 +381,7 @@ const apply = async (device, user, data) => {
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
+        gateway: ifc.gateway,
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,

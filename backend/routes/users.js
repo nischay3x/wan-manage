@@ -164,8 +164,8 @@ router.route('/register')
           'Verify Your flexiWAN Account',
           `<h2>Thank you for joining flexiWAN</h2>
             <b>Click below to verify your account:</b>
-            <p><a href="${configs.get('uiServerUrl')}/verify-account?email=${
-            req.body.email
+            <p><a href="${configs.get('uiServerUrl')}/verify-account?id=${
+              registerUser._id
           }&t=${
             registerUser.emailTokens.verify
           }"><button style="color:#fff;background-color:#F99E5B;
@@ -261,8 +261,8 @@ router.route('/reverify-account')
                    ignore this message.</b>
                 <p><a href="${configs.get(
                   'uiServerUrl'
-                )}/verify-account?email=${
-              req.body.email
+                )}/verify-account?id=${
+              resp._id
             }&t=${validateKey}"><button style="color:#fff;background-color:#F99E5B;
                  border-color:#F99E5B;font-weight:400;text-align:center;
                  vertical-align:middle;border:1px solid transparent;
@@ -288,14 +288,14 @@ router.route('/reverify-account')
 router.route('/verify-account')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.cors, async (req, res, next) => {
-    if (!req.body.email || !req.body.token || req.body.email === '' || req.body.token === '') {
+    if (!req.body.id || !req.body.token || req.body.id === '' || req.body.token === '') {
       return next(createError(500, 'Verification Error'));
     }
 
     User.findOneAndUpdate(
       // Query, use the email and verification token
       {
-        email: req.body.email,
+        _id: req.body.id,
         'emailTokens.verify': req.body.token
       },
       // Update
@@ -347,8 +347,8 @@ const resetPassword = (req, res, next) => {
                    ignore this message.</b>
                 <p><a href="${configs.get(
                   'uiServerUrl'
-                )}/reset-password?email=${
-            req.body.email
+                )}/reset-password?id=${
+            resp._id
           }&t=${validateKey}"><button style="color:#fff;
           background-color:#F99E5B;border-color:#F99E5B;
           font-weight:400;text-align:center;
@@ -378,8 +378,8 @@ const resetPassword = (req, res, next) => {
  * @param {Function} next = next middleware
  */
 const updatePassword = (req, res, next) => {
-  if (!req.body.email || !req.body.token || !req.body.password ||
-    req.body.email === '' || req.body.token === '') {
+  if (!req.body.id || !req.body.token || !req.body.password ||
+    req.body.id === '' || req.body.token === '') {
     return next(createError(500, 'Password Reset Error'));
   }
 
@@ -390,7 +390,7 @@ const updatePassword = (req, res, next) => {
   User.findOneAndUpdate(
     // Query, use the email and password reset token
     {
-      email: req.body.email,
+      _id: req.body.id,
       'emailTokens.resetPassword': req.body.token
     },
     // Update
