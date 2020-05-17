@@ -26,6 +26,14 @@ const kue = require('kue');
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
+class JobError extends Error {
+  constructor (...args) {
+    const [message, job] = args;
+    super(message);
+    this.job = job;
+  }
+}
+
 class DeviceQueues {
   /**
      * Creates a DeviceQueues. Multiple DeviceQueues per system
@@ -212,7 +220,7 @@ class DeviceQueues {
           });
       }
       job.save((err) => {
-        if (err) return reject(new Error(err));
+        if (err) return reject(new JobError(err, job));
         else if (!init) return resolve(job);
       });
     });

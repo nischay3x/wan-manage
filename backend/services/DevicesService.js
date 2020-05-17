@@ -49,7 +49,8 @@ class DevicesService {
       const opDevices = await devices.find({ org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type');
       // Apply the device command
-      const retJobs = await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
+      const retJobs = await dispatcher.apply(opDevices, deviceCommand.method,
+        user, { org: orgList[0], ...deviceCommand });
       const jobIds = retJobs.flat().map(job => job.id);
       const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
@@ -76,11 +77,13 @@ class DevicesService {
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      });
+      })
+        .populate('interfaces.pathlabels', '_id name description color type'); ;
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
 
-      const retJobs = await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
+      const retJobs = await dispatcher.apply(opDevice, deviceCommand.method,
+        user, { org: orgList[0], ...deviceCommand });
       const jobIds = retJobs.flat().map(job => job.id);
       const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
         jobIds.join('%2C')}&org=${orgList[0]}`;
@@ -116,6 +119,7 @@ class DevicesService {
       'fromToken',
       'account',
       'ipList',
+      'policies',
       // Internal array, objects
       'labels',
       'upgradeSchedule']);
@@ -126,6 +130,7 @@ class DevicesService {
       const retIf = pick(i, [
         'IPv6',
         'PublicIP',
+        'gateway',
         'IPv4',
         'type',
         'MAC',
@@ -206,7 +211,8 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.find({ org: { $in: orgList } })
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.multilink.policy', '_id name description');
 
       const devicesMap = result.map(item => {
         return DevicesService.selectDeviceParams(item);
@@ -312,7 +318,8 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.multilink.policy', '_id name description');
       const device = DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
@@ -516,7 +523,9 @@ class DevicesService {
       const origDevice = await devices.findOne({
         _id: id,
         org: { $in: orgList }
-      }).session(session);
+      })
+        .session(session)
+        .populate('interfaces.pathlabels', '_id name description color type');
 
       // Don't allow any changes if the device is not approved
       if (!origDevice.isApproved && !deviceRequest.isApproved) {
@@ -562,7 +571,9 @@ class DevicesService {
         { _id: id, org: { $in: orgList } },
         deviceRequest,
         { new: true, upsert: false, runValidators: true }
-      ).session(session);
+      )
+        .session(session)
+        .populate('interfaces.pathlabels', '_id name description color type');
 
       await session.commitTransaction();
       session = null;
