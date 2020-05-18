@@ -104,12 +104,6 @@ exports.verifyUserLocal = async function (req, res, next) {
     return next(createError(401, 'Wrong Captcha'));
   }
 
-  const userHasPassword = await User.findOne({ username: req.body.username, hash: { $ne: null } });
-
-  if (!userHasPassword) {
-    return next(createError(500, 'Could not get user info'));
-  }
-
   // Continue with verifying password
   passport.authenticate('local', { session: false }, async (err, user, info) => {
     if (err || !user) {
