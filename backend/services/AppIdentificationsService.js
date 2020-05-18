@@ -76,7 +76,7 @@ class AppIdentificationsService {
   };
 
   /**
-   * Updates existing app identification.
+   * Updates existing custom app identification.
    *
    * @static
    * @param {*} { id, org, appIdentification }
@@ -105,7 +105,7 @@ class AppIdentificationsService {
         appIdentsRes.appIdentifications.push(appIdentification);
       }
       const updateResult =
-        await appIdentifications.updateOne(appIdentsRes);
+        await appIdentifications.updateOne({ 'meta.org': { $in: orgList } }, appIdentsRes);
       if (updateResult.nModified !== 1) {
         return Service.rejectResponse(
           'Failed to modify app identification', 500);
@@ -131,10 +131,19 @@ class AppIdentificationsService {
   static async appIdentificationsPOST ({ org, appIdentification }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const appIdentsRes =
+      let appIdentsRes =
         await appIdentifications.findOne({ 'meta.org': { $in: orgList } });
-      appIdentification.rules = appIdentification.rules
-        .map(rule => { return { ...rule, _id: mongoose.Types.ObjectId() }; });
+
+      if (!appIdentsRes) {
+        // create new organization document and add to collection
+        appIdentsRes = {
+          meta: {
+            org: orgList[0].toString()
+          },
+          appIdentifications: []
+        };
+      }
+
       // Object id will be assigned to both _id and id fields in order to maintain schema
       // consistency across collections of imported  and custom app identifications.
       // Whenever imported collection is being updated from remote uri, it has the
@@ -145,31 +154,16 @@ class AppIdentificationsService {
       const newAppIdent =
         { ...appIdentification, _id: objectId, id: objectId.toString() };
 
-      // if organization document already exists
-      if (appIdentsRes !== null) {
-        appIdentsRes.appIdentifications.push(newAppIdent);
-        const updateResult = await appIdentifications.updateOne(appIdentsRes);
-        if (updateResult.nModified !== 1) {
-          return Service.rejectResponse(
-            'Failed to add app identification', 500);
-        }
-        const location = `${configs.get('restServerUrl')}/api/appidentifications/custom/${
-          objectId.toString()}`;
-        response.setHeader('Location', location);
-        return Service.successResponse(newAppIdent, 201);
-      }
-
-      // create new organization document and add to collection
-      const appIdentificationBody = {
-        meta: {
-          org: orgList[0].toString()
-        },
-        appIdentifications: []
+      appIdentsRes.appIdentifications.push(newAppIdent);
+      const options = {
+        upsert: true,
+        setDefaultsOnInsert: true,
+        useFindAndModify: false
       };
-      appIdentificationBody.appIdentifications.push(newAppIdent);
-      await appIdentifications.create([appIdentificationBody]);
+      await appIdentifications.findOneAndUpdate(
+        { 'meta.org': { $in: orgList } }, appIdentsRes, options);
       const location = `${configs.get('restServerUrl')}/api/appidentifications/custom/${
-        objectId.toString()}`;
+          objectId.toString()}`;
       response.setHeader('Location', location);
       return Service.successResponse(newAppIdent, 201);
     } catch (e) {
@@ -202,7 +196,8 @@ class AppIdentificationsService {
       const imported = appIdentsRes.imported ? appIdentsRes.imported : [];
       remove(imported, (item) => item.id === id);
 
-      const updateResult = await appIdentifications.updateOne(appIdentsRes);
+      const updateResult =
+        await appIdentifications.updateOne({ 'meta.org': { $in: orgList } }, appIdentsRes);
       if (updateResult.nModified !== 1) {
         return Service.rejectResponse(
           'Failed to modify app identification', 500);
@@ -279,7 +274,8 @@ class AppIdentificationsService {
         } else {
           result.imported.push(newAppIdent);
         }
-        const updateResult = await appIdentifications.updateOne(result);
+        const updateResult =
+          await appIdentifications.updateOne({ 'meta.org': { $in: orgList } }, result);
         if (updateResult.nModified === 1) {
           return Service.successResponse(newAppIdent, 200);
         }
@@ -330,7 +326,8 @@ class AppIdentificationsService {
 
       appIdentsRes.appIdentifications =
         appIdentsRes.appIdentifications.filter(item => item.id !== id);
-      const updateResult = await appIdentifications.updateOne(appIdentsRes);
+      const updateResult =
+        await appIdentifications.updateOne({ 'meta.org': { $in: orgList } }, appIdentsRes);
       if (updateResult.nModified !== 1) {
         return Service.rejectResponse(
           'Failed to delete app identification', 500);
