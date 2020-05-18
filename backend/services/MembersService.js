@@ -456,7 +456,7 @@ class MembersService {
 
         // Set random password for that user
         if (registerUser) {
-          registerUser.setPassword(randomKey(10));
+          await registerUser.setPassword(randomKey(10));
         }
       }
 
