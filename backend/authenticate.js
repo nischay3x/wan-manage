@@ -45,6 +45,9 @@ var opts = {};
 opts.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
 opts.secretOrKey = configs.get('userTokenSecretKey');
 exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done) => {
+  // check if account exists on payload
+  if (!jwtPayload.account) return done(null, false, { message: 'Invalid token' });
+
   // check if token exists
   let token = null;
   if (jwtPayload.type === 'app_access_token' || jwtPayload.type === 'app_access_key') {
@@ -62,7 +65,7 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
     .findOne({ _id: jwtPayload._id })
     .populate('defaultOrg')
     .populate('defaultAccount')
-    .exec(async (err, user) => {
+    .exec((err, user) => {
       if (err) {
         return done(err, false);
       } else if (user) {
@@ -77,24 +80,27 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
 }));
 
 const setUserPerms = (user, jwtPayload, token = null) => {
-  if (jwtPayload.type === 'app_access_key' && token != null) {
-    user.defaultAccount = {
-      _id: jwtPayload.account
-    };
-    user.perms = token.permissions;
-    user.accessToken = true;
-    user.jwtAccount = jwtPayload.account;
-    user.jwtOrg = jwtPayload.org;
-    return true;
-  } else if (user.defaultAccount && user.defaultAccount._id.toString() === jwtPayload.account) {
-    user.perms = jwtPayload.perms;
-    user.accessToken = (jwtPayload.type === 'app_access_token');
-    user.jwtAccount = jwtPayload.account;
-    user.jwtOrg = jwtPayload.org;
-    return true;
+  const isAccessToken = ['app_access_key', 'app_access_token'].includes(jwtPayload.type);
+  const isValidAccount = user.defaultAccount &&
+    user.defaultAccount._id.toString() === jwtPayload.account;
+
+  if (!isAccessToken && !isValidAccount) return false;
+
+  user.accessToken = isAccessToken;
+  user.jwtAccount = jwtPayload.account;
+  user.perms = jwtPayload.perms;
+
+  // override user default account with account stored on jwtPayload
+  if (isAccessToken) {
+    user.defaultAccount = { _id: jwtPayload.account };
+
+    // retrive permissions from token
+    if (jwtPayload.type === 'app_access_key') {
+      user.perms = token.permissions;
+    }
   }
 
-  return false;
+  return true;
 };
 
 // const extractUserFromToken = (req) => {
