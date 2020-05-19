@@ -44,11 +44,11 @@ const validateIPv4Mask = mask => {
  * Checks whether the device configuration is valid,
  * therefore the device can be started.
  * @param {Object}  device                 the device to check
- * @param {Boolean} checkOverlap           if need to check LAN subnets overlap
+ * @param {Boolean} checkLanOverlaps           if need to check LAN subnets overlap
  * @param {[name: string, subnet: string]} organizationLanSubnets subnets to check if checkOverlap
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, checkOverlap = false, organizationLanSubnets = []) => {
+const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -135,16 +135,17 @@ const validateDevice = (device, checkOverlap = false, organizationLanSubnets = [
     }
   }
 
-  if (checkOverlap && organizationLanSubnets.length > 0) {
+  if (checkLanOverlaps && organizationLanSubnets.length > 0) {
     // LAN subnet must not be overlap with other devices in this org
     for (const orgDevice of organizationLanSubnets) {
       for (const currentLanIfc of lanIfcs) {
         const orgSubnet = orgDevice.subnet;
+        const orgName = orgDevice.name;
         const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
         if (currentSubnet !== orgSubnet && cidr.overlap(currentSubnet, orgSubnet)) {
           return {
             valid: false,
-            err: `The device ${device.name} has a LAN subnet overlap with ${orgDevice.name}`
+            err: `The LAN subnet ${currentSubnet} overlaps with a LAN subnet of device ${orgName}`
           };
         }
       }
@@ -193,36 +194,27 @@ const getAllOrganiztionLanSubnets = async orgId => {
     { $match: { org: orgId } },
     {
       $project: {
-        interfaces: {
-          $map: {
-            input: {
-              $filter: {
-                input: '$interfaces',
-                as: 'interface',
-                cond: {
-                  $and: [
-                    { $eq: ['$$interface.isAssigned', true] },
-                    { $eq: ['$$interface.type', 'LAN'] }
-                  ]
-                }
-              }
-            },
-            as: 'lanSubnet',
-            in: {
-              $mergeObjects: [
-                { subnet: { $concat: ['$$lanSubnet.IPv4', '/', '$$lanSubnet.IPv4Mask'] } },
-                { name: '$name' }
-              ]
-            }
-          }
+        'interfaces.IPv4': 1,
+        'interfaces.IPv4Mask': 1,
+        'interfaces.type': 1,
+        'interfaces.isAssigned': 1,
+        name: 1,
+        _id: 0
+      }
+    },
+    { $unwind: '$interfaces' },
+    { $match: { 'interfaces.type': 'LAN', 'interfaces.isAssigned': true } },
+    {
+      $project: {
+        name: 1,
+        subnet: {
+          $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
         }
       }
     }
   ]);
 
-  const combinedSubnets = subnets.reduce((acc, val) => acc.concat(val.interfaces), []);
-
-  return combinedSubnets;
+  return subnets;
 };
 
 module.exports = {

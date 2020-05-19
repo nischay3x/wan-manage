@@ -537,15 +537,15 @@ class DevicesService {
       if (origDevice.isApproved && deviceRequest.interfaces) {
         // check LAN subnet overlap if updated device is running
         const status = deviceStatus.getDeviceStatus(origDevice.machineId);
-        const needCheckOverlap = status !== undefined && status.state === 'running';
+        const needCheckLanOverlaps = (status && status.state && status.state === 'running');
 
         let orgLanSubnets = [];
 
-        if (needCheckOverlap) {
+        if (needCheckLanOverlaps) {
           orgLanSubnets = await getAllOrganiztionLanSubnets(origDevice.org);
         }
 
-        const { valid, err } = validateDevice(deviceRequest, needCheckOverlap, orgLanSubnets);
+        const { valid, err } = validateDevice(deviceRequest, needCheckLanOverlaps, orgLanSubnets);
         if (!valid) {
           logger.warn('Device update failed',
             {
