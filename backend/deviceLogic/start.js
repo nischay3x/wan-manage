@@ -111,34 +111,39 @@ const apply = async (device, user, data) => {
   const tasks = [];
   const userName = user.username;
   const org = user.defaultOrg._id.toString();
-  const mId = device[0].machineId;
+  const { machineId } = device[0];
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
 
-  const job = await deviceQueues
-    .addJob(
-      mId,
-      userName,
-      org,
-      // Data
-      { title: 'Start device ' + device[0].hostname, tasks: tasks },
-      // Response data
-      {
-        method: 'start',
-        data: {
-          device: device[0]._id,
-          org: org,
-          shouldUpdateTunnel: majorAgentVersion === 0
-        }
-      },
-      // Metadata
-      { priority: 'medium', attempts: 1, removeOnComplete: false },
-      // Complete callback
-      null
-    );
+  try {
+    const job = await deviceQueues
+      .addJob(
+        machineId,
+        userName,
+        org,
+        // Data
+        { title: 'Start device ' + device[0].hostname, tasks: tasks },
+        // Response data
+        {
+          method: 'start',
+          data: {
+            device: device[0]._id,
+            org: org,
+            shouldUpdateTunnel: majorAgentVersion === 0
+          }
+        },
+        // Metadata
+        { priority: 'medium', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null
+      );
 
-  logger.info('Start device job queued', { job: job });
-  return [job];
+    logger.info('Start device job queued', { job: job });
+    return { ids: [job.id], status: 'completed', message: '' };
+  } catch (err) {
+    logger.error('Start device job failed', { params: { machineId, error: err.message } });
+    throw (new Error(err.message || 'Internal server error'));
+  }
 };
 
 /**

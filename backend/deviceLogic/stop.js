@@ -51,29 +51,34 @@ const apply = async (device, user, data) => {
   const stopParams = { reconnect: true };
   const tasks = [{ entity: 'agent', message: 'stop-router', params: stopParams }];
 
-  const job = await deviceQueues.addJob(
-    machineID,
-    userName,
-    org,
-    // Data
-    { title: 'Stop device ' + device[0].hostname, tasks: tasks },
-    // Response data
-    {
-      method: 'stop',
-      data: {
-        device: device[0]._id,
-        org: org,
-        shouldUpdateTunnel: majorAgentVersion === 0
-      }
-    },
-    // Metadata
-    { priority: 'medium', attempts: 1, removeOnComplete: false },
-    // Complete callback
-    null
-  );
+  try {
+    const job = await deviceQueues.addJob(
+      machineID,
+      userName,
+      org,
+      // Data
+      { title: 'Stop device ' + device[0].hostname, tasks: tasks },
+      // Response data
+      {
+        method: 'stop',
+        data: {
+          device: device[0]._id,
+          org: org,
+          shouldUpdateTunnel: majorAgentVersion === 0
+        }
+      },
+      // Metadata
+      { priority: 'medium', attempts: 1, removeOnComplete: false },
+      // Complete callback
+      null
+    );
 
-  logger.info('Stop device job queued', { params: { job: job } });
-  return [job];
+    logger.info('Stop device job queued', { params: { job } });
+    return { ids: [job.id], status: 'completed', message: '' };
+  } catch (err) {
+    logger.error('Stop device job failed', { params: { machineID, error: err.message } });
+    throw (new Error(err.message || 'Internal server error'));
+  }
 };
 
 /**

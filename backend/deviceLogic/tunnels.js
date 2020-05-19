@@ -176,9 +176,21 @@ const applyTunnelAdd = async (devices, user, data) => {
 
     // Execute all promises
     logger.debug('Running tunnel promises', { params: { tunnels: dbTasks.length } });
-    const values = await Promise.all(dbTasks);
-    logger.debug('Operation completed', { params: { values: values } });
-    return values;
+
+    const promiseStatus = await Promise.allSettled(dbTasks);
+    const fulfilled = promiseStatus.reduce((arr, elem) => {
+      if (elem.status === 'fulfilled') {
+        const job = elem.value;
+        arr.push(job);
+      }
+      return arr;
+    }, []);
+
+    const status = fulfilled.length < dbTasks.length
+      ? 'partially completed' : 'completed';
+    const message = fulfilled.length < dbTasks.length
+      ? `${fulfilled.length} of ${dbTasks.length} tunnels creation jobs added` : '';
+    return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('At least 2 devices must be selected to create tunnels', { params: {} });
     throw new Error('At least 2 devices must be selected to create tunnels');
@@ -798,21 +810,37 @@ const applyTunnelDel = async (devices, user, data) => {
   const tunnelIds = Object.keys(selectedTunnels);
   logger.info('Delete tunnels ', { params: { tunnels: selectedTunnels } });
 
-  // For now assume one tunnel deletion at a time
-  // Check that only one tunnel selected
-  if (devices && tunnelIds.length === 1) {
-    // Get tunnel data
-    const tunnelID = tunnelIds[0];
+  if (devices && tunnelIds.length > 0) {
     const org = user.defaultOrg._id.toString();
     const userName = user.username;
 
-    try {
-      const jobs = await oneTunnelDel(tunnelID, userName, org);
-      return jobs;
-    } catch (err) {
-      logger.error('Attempt to delete more than one tunnel or no devices found', { params: {} });
-      throw new Error('Attempt to delete more than one tunnel or no devices found');
-    }
+    const delPromises = [];
+    tunnelIds.forEach(tunnelID => {
+      try {
+        const delPromise = oneTunnelDel(tunnelID, userName, org);
+        delPromises.push(delPromise);
+      } catch (err) {
+        logger.error('Delete tunnel error', { params: { tunnelID, error: err.message } });
+      }
+    });
+
+    const promiseStatus = await Promise.allSettled(delPromises);
+    const fulfilled = promiseStatus.reduce((arr, elem) => {
+      if (elem.status === 'fulfilled') {
+        const job = elem.value;
+        arr.push(job);
+      }
+      return arr;
+    }, []);
+    const status = fulfilled.length < tunnelIds.length
+      ? 'partially completed' : 'completed';
+    const message = fulfilled.length < tunnelIds.length
+      ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added` : '';
+    return { ids: fulfilled.flat().map(job => job.id), status, message };
+  } else {
+    logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found',
+      { params: { tunnelIds, devices } });
+    throw new Error('Delete tunnels failed. No tunnels\' ids provided or no devices found');
   }
 };
 
