@@ -970,7 +970,7 @@ class DevicesService {
         copy._id = dhcpId;
         copy.action = 'del';
         const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-        response.setHeader('Location', jobsListUrl(ids, orgList[0]);
+        response.setHeader('Location', jobsListUrl(ids, orgList[0]));
       }
 
       // If force delete specified, delete the entry regardless of the job status
