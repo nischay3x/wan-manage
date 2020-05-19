@@ -111,7 +111,7 @@ const apply = async (device, user, data) => {
   const tasks = [];
   const userName = user.username;
   const org = user.defaultOrg._id.toString();
-  const machineId = device[0].machineId;
+  const { machineId } = device[0];
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
 

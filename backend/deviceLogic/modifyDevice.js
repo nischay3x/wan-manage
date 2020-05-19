@@ -482,7 +482,11 @@ const apply = async (device, user, data) => {
       }
       await setJobPendingInDB(device[0]._id, org, true);
       const jobs = await queueModifyDeviceJob(device[0], modifyParams, userName, org);
-      return { ids: jobs.flat().map(job => job.id), status: 'completed', message: '' };
+      return {
+        ids: jobs.flat().map(job => job.id),
+        status: 'completed',
+        message: ''
+      };
     }
   } catch (err) {
     logger.error('Failed to queue modify device job', {

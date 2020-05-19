@@ -51,9 +51,7 @@ class DevicesService {
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        ids.join('%2C')}&org=${orgList[0]}`;
-      response.setHeader('Location', location);
+      response.setHeader('Location', jobsListUrl(ids, orgList[0]));
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -83,9 +81,7 @@ class DevicesService {
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        ids.join('%2C')}&org=${orgList[0]}`;
-      response.setHeader('Location', location);
+      response.setHeader('Location', jobsListUrl(ids, orgList[0]));
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -974,9 +970,7 @@ class DevicesService {
         copy._id = dhcpId;
         copy.action = 'del';
         const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-        const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-          ids.join('%2C')}&org=${orgList[0]}`;
-        response.setHeader('Location', location);
+        response.setHeader('Location', jobsListUrl(ids, orgList[0]);
       }
 
       // If force delete specified, delete the entry regardless of the job status
@@ -1104,9 +1098,7 @@ class DevicesService {
         copy.action = 'modify';
         copy.origDhcp = origCmpDhcp;
         const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-        const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
-          ids.join('%2C')}&org=${orgList[0]}`;
-        response.setHeader('Location', location);
+        response.setHeader('Location', jobsListUrl(ids, orgList[0]));
 
         await devices.findOneAndUpdate(
           { _id: deviceObject._id },
@@ -1165,9 +1157,7 @@ class DevicesService {
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        ids.join('%2C')}&org=${orgList[0]}`;
-      response.setHeader('Location', location);
+      response.setHeader('Location', jobsListUrl(ids, orgList[0]));
 
       const dhcpData = {
         _id: dhcpObject.id,
@@ -1315,9 +1305,7 @@ class DevicesService {
       copy.action = 'add';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        ids.join('%2C')}&org=${orgList[0]}`;
-      response.setHeader('Location', location);
+      response.setHeader('Location', jobsListUrl(ids, orgList[0]));
 
       await session.commitTransaction();
       session = null;
@@ -1330,6 +1318,16 @@ class DevicesService {
         e.status || 500
       );
     }
+  }
+
+  /**
+   * Returns an URL of jobs list request
+   * @param {Array} jobsIds - array of jobs ids
+   * @param {string} orgId - ID of the organzation
+   */
+  static jobsListUrl (jobsIds, orgId) {
+    return `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
+      jobsIds.join('%2C')}&org=${orgId}`;
   }
 }
 
