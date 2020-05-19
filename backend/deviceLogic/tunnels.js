@@ -176,9 +176,21 @@ const applyTunnelAdd = async (devices, user, data) => {
 
     // Execute all promises
     logger.debug('Running tunnel promises', { params: { tunnels: dbTasks.length } });
-    const values = await Promise.all(dbTasks);
-    logger.debug('Operation completed', { params: { values: values } });
-    return values;
+
+    const promiseStatus = await Promise.allSettled(dbTasks);
+    const fulfilled = promiseStatus.reduce((arr, elem) => {
+      if (elem.status === 'fulfilled') {
+        const job = elem.value;
+        arr.push(job);
+      }
+      return arr;
+    }, []);
+
+    const status = fulfilled.length < dbTasks.length
+      ? 'partially completed' : 'completed';
+    const message = fulfilled.length < dbTasks.length
+      ? `${fulfilled.length} of ${dbTasks.length} tunnels creation jobs added` : '';
+    return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('At least 2 devices must be selected to create tunnels', { params: {} });
     throw new Error('At least 2 devices must be selected to create tunnels');
@@ -803,17 +815,13 @@ const applyTunnelDel = async (devices, user, data) => {
     const userName = user.username;
 
     const delPromises = [];
-    tunnelIds.forEach(async tunnelID => {
-      const delPromise = new Promise((resolve, reject) => {
-        try {
-          const jobs = oneTunnelDel(tunnelID, userName, org);
-          resolve(jobs);
-        } catch (err) {
-          logger.error('Delete tunnel error', { params: { tunnelID, error: err.message } });
-          reject(err);
-        }
-      });
-      delPromises.push(delPromise);
+    tunnelIds.forEach(tunnelID => {
+      try {
+        const delPromise = oneTunnelDel(tunnelID, userName, org);
+        delPromises.push(delPromise);
+      } catch (err) {
+        logger.error('Delete tunnel error', { params: { tunnelID, error: err.message } });
+      }
     });
 
     const promiseStatus = await Promise.allSettled(delPromises);
@@ -824,9 +832,11 @@ const applyTunnelDel = async (devices, user, data) => {
       }
       return arr;
     }, []);
-    const userWarning = fulfilled.length < tunnelIds.length
+    const status = fulfilled.length < tunnelIds.length
+      ? 'partially completed' : 'completed';
+    const message = fulfilled.length < tunnelIds.length
       ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added` : '';
-    return { jobs: fulfilled.flat(), userWarning };
+    return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found',
       { params: { tunnelIds, devices } });
