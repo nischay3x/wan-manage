@@ -43,9 +43,17 @@ const isEqual = require('lodash/isEqual');
 const prepareIfcParams = (interfaces) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'PublicIP', 'isAssigned', 'pathlabels']);
-    newIfc.multilink = {
-      labels: ifc.pathlabels
-    };
+
+    // Device should only be aware of DIA labels.
+    const labels = [];
+    ifc.pathlabels.forEach(label => {
+      if (label.type === 'DIA') labels.push(label._id);
+    });
+    newIfc.multilink = { labels };
+
+    // Don't send interface default GW for LAN interfaces
+    if (newIfc.type !== 'WAN') delete newIfc.gateway;
+
     return newIfc;
   });
 };
@@ -153,8 +161,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
-      const pathlabels = modifiedIfcsMap[ifc._id] ? modifiedIfcsMap[ifc._id].pathlabels : null;
-      const pathLabelRemoved = pathlabel && !(pathlabels || []).includes(pathlabel);
+      const pathlabels = modifiedIfcsMap[ifc._id]
+        ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
+        : [];
+      const pathLabelRemoved = pathlabel && !pathlabels.includes(pathlabel.toString());
 
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
         await oneTunnelDel(_id, user, org);
@@ -347,6 +357,7 @@ const apply = async (device, user, data) => {
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
+        gateway: ifc.gateway,
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,
@@ -370,6 +381,7 @@ const apply = async (device, user, data) => {
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
+        gateway: ifc.gateway,
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,

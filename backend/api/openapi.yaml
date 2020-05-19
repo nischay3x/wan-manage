@@ -861,7 +861,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all registered devices
+      summary: Get device by ID
       tags:
       - Devices
       x-swagger-router-controller: Devices
@@ -4441,9 +4441,10 @@ paths:
       x-swagger-router-controller: PathLabels
       x-openapi-router-controller: PathLabelsController
       x-openapi-router-service: PathLabelsService
-  /applications:
+
+  /mlpolicies:
     get:
-      operationId: applicationsGET
+      operationId: mlpoliciesGET
       parameters:
       - description: The number of items to skip before starting to collect the result
           set
@@ -4475,8 +4476,8 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/Application'
-                type: object
+                  $ref: '#/components/schemas/MLPolicy'
+                type: array
                 x-content-type: application/json
           description: Successful operation
         "401":
@@ -4506,14 +4507,14 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all Applications
+      summary: Get all Multi Link policies
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
     post:
-      operationId: applicationsPOST
+      operationId: mlpoliciesPOST
       parameters:
       - description: Organization to be filtered by
         explode: true
@@ -4523,25 +4524,18 @@ paths:
         schema:
           type: string
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ApplicationRequest'
+              $ref: '#/components/schemas/MLPolicyRequest'
       responses:
         "201":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Application'
-          description: Created
-          headers:
-            Location:
-              description: Location of a new resource created
-              explode: false
-              required: true
-              schema:
-                type: string
-              style: simple
+                $ref: '#/components/schemas/MLPolicy'
+          description: Multi Link policy created
         "400":
           content:
             application/json:
@@ -4575,17 +4569,153 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Create new application
+      summary: Add a new Multi Link policy
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService  
-  /applications/{id}:
-    delete:
-      operationId: applicationsIdDELETE
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+  /mlpolicies/{id}:
+    get:
+      operationId: mlpoliciesIdGET
       parameters:
-      - description: Numeric ID of the Application to delete
+      - description: Numeric ID of the Multi Link policy to retrieve
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MLPolicy'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get a Multi Link policy by id
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+    put:
+      operationId: mlpoliciesIdPUT
+      parameters:
+      - description: Numeric ID of the Multi Link policy to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MLPolicyRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MLPolicy'
+          description: A new Multi Link created
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MLPolicy'
+          description: Multi Link was modified
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify a Multi Link policy
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+    delete:
+      operationId: mlpoliciesIdDELETE
+      parameters:
+      - description: Numeric ID of the Multi Link policy to delete
         explode: false
         in: path
         name: id
@@ -4636,357 +4766,18 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Delete application
+      summary: Delete a Multi Link policy
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-  /applications/imported/{id}:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+  /mlpolicies/list:
     get:
-      operationId: applicationsIdGET
+      operationId: mlpoliciesListGET
       parameters:
-      - description: Application id to retrieve
+      - description: The number of items to skip before starting to collect the result
           set
-        explode: true
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/Application'
-                type: object
-                x-content-type: application/json
-          description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Get Application by id
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-    put:
-      operationId: applicationsIdPUT
-      parameters:
-      - description: Numeric ID of the application to modify
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApplicationRequest'
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-          description: Created
-        "400":
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Modify an application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService  
-  /applications/custom/{id}:
-    get:
-      operationId: applicationsCustomIdGET
-      parameters:
-      - description: Application id to retrieve
-          set
-        explode: true
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: '#/components/schemas/Application'
-                type: object
-                x-content-type: application/json
-          description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Get Application by id
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-    put:
-      operationId: applicationsCustomIdPUT
-      parameters:
-      - description: Numeric ID of the application to modify
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApplicationRequest'
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-          description: Created
-        "400":
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Modify an application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService        
-  /applications/imported/{id}/reset:
-    put:
-      operationId: applicationsIdResetPUT
-      parameters:
-      - description: Numeric ID of the application to reset
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ApplicationRequest'
-      responses:
-        "201":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-          description: Created
-        "400":
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Modify an application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-  /applications/installed:
-    get:
-      operationId: applicationsInstalledGET
-      parameters:
-      - description: Devices appIdentification installed on
         explode: true
         in: query
         name: offset
@@ -5014,7 +4805,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstalledApplications'
+                items:
+                  $ref: '#/components/schemas/MLPolicyList'
+                type: array
                 x-content-type: application/json
           description: Successful operation
         "401":
@@ -5044,12 +4837,613 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all Applications
+      summary: Get all Multi Link policies names and IDs only
       tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
+  /appidentifications:
+    get:
+      operationId: appIdentificationsGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/AppIdentification'
+                type: object
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all app identifications
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+    post:
+      operationId: appIdentificationsPOST
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppIdentification'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppIdentification'
+          description: Created
+          headers:
+            Location:
+              description: Location of a new resource created
+              explode: false
+              required: true
+              schema:
+                type: string
+              style: simple
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Create new app identification
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/{id}:
+    delete:
+      operationId: appIdentificationsIdDELETE
+      parameters:
+      - description: Numeric ID of the app identification to delete
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete app identification
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/imported/{id}:
+    get:
+      operationId: appIdentificationsIdGET
+      parameters:
+      - description: App identification id to retrieve
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppIdentification'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get app identification by id
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+    put:
+      operationId: appIdentificationsIdPUT
+      parameters:
+      - description: Numeric ID of the app identification to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppIdentImpCustReq'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppIdentification'
+          description: Created
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify app identification
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/custom/{id}:
+    get:
+      operationId: appIdentificationsCustomIdGET
+      parameters:
+      - description: App identification id to retrieve
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppIdentification'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get app identification by id
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+    put:
+      operationId: appIdentificationsCustomIdPUT
+      parameters:
+      - description: Numeric ID of the app identification to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppIdentification'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppIdentification'
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify app identification
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/imported/{id}/reset:
+    put:
+      operationId: appIdentificationsIdResetPUT
+      parameters:
+      - description: Numeric ID of the app identification to reset
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppIdentification'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppIdentification'
+          description: Created
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Reset imported app identification to its default values
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
+  /appidentifications/installed:
+    get:
+      operationId: appIdentificationsInstalledGET
+      parameters:
+      - description: Devices app identification installed on
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstalledAppIdentifications'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all installed app identifications
+      tags:
+      - App Identifications
+      x-swagger-router-controller: AppIdentifications
+      x-openapi-router-controller: AppIdentificationsController
+      x-openapi-router-service: AppIdentificationsService
 components:
   responses:
     NotFoundError:
@@ -5167,37 +5561,96 @@ components:
         description:
           type: string
       type: object
-    Application:
+    AppIdentificationRules:
       example:
-        _id: id
-        org: org
-        name: name
+        ip: 127.0.0.1
+        ports: 42
+        protocol: tcp
+      properties:
+        ip:
+          type: string
+        ports:
+          type: string
+        protocol:
+          enum:
+          - tcp
+          - udp
+          type: string
+      type: object
+    AppIdentification:
+      example:
+        _id: _id
+        id: _id
+        name: custom:app-name
+        description: app identification description
+        category: internet
+        serviceClass: oam
+        importance: high
+        rules: [
+          {ip: "127.0.0.1"},
+          {ports: "42"},
+          {ports: "128-129"},
+          {ip: "127.0.0.1", ports: "42", protocol: "tcp"}
+        ]
       properties:
         _id:
           maxLength: 24
           minLength: 24
-          type: string
-        org:
-          type: string
+        id:
+          maxLength: 24
+          minLength: 1
         name:
-          type: string
-        createdAt:
-          type: string
-      type: object
-    ApplicationRequest:
-      example:
-        name: name
-      properties:
-        name:
+          maxLength: 30
+          minLength: 2
           type: string
         description:
+          maxLength: 128
+          type: string
+        category:
+          maxLength: 30
+          minLength: 2
+          type: string
+        serviceClass:
+          maxLength: 30
+          minLength: 2
+          type: string
+        importance:
+          enum:
+          - high
+          - medium
+          - low
+          type: string
+        rules:
+          items:
+            $ref: '#/components/schemas/AppIdentificationRules'
+          type: array
+      type: object
+    AppIdentImpCustReq:
+      example:
+        category: internet
+        serviceClass: oam
+        importance: high
+      properties:
+        category:
+          maxLength: 30
+          minLength: 2
+          type: string
+        serviceClass:
+          maxLength: 30
+          minLength: 2
+          type: string
+        importance:
+          enum:
+          - high
+          - medium
+          - low
           type: string
       type: object
-    InstalledApplications:
+    InstalledAppIdentifications:
       example:
         totalNotUpdated: 3
         devices:
-        - _id: _id
+          _id: _id
           updatedAt: Date
           clients: Client List
           status: ok
@@ -5550,6 +6003,7 @@ components:
           PublicIP: PublicIP
           IPv4: IPv4
           type: WAN
+          gateway: gateway
           MAC: MAC
           routing: OSPF
           IPv6Mask: "64"
@@ -5559,10 +6013,12 @@ components:
           name: name
           pciaddr: pciaddr
           _id: _id
+          pathlabels: path labels list
         - IPv6: IPv6
           PublicIP: PublicIP
           IPv4: IPv4
           type: WAN
+          gateway: gateway
           MAC: MAC
           routing: OSPF
           IPv6Mask: "64"
@@ -5572,6 +6028,7 @@ components:
           name: name
           pciaddr: pciaddr
           _id: _id
+          pathlabels: path labels list
         org: org
         isConnected: true
         upgradeSchedule:
@@ -5690,6 +6147,7 @@ components:
         IPv4: IPv4
         type: WAN
         MAC: MAC
+        gateway: gateway
         routing: OSPF
         IPv6Mask: "64"
         isAssigned: true
@@ -5698,6 +6156,7 @@ components:
         name: name
         pciaddr: pciaddr
         _id: _id
+        pathlabels: path labels list
       properties:
         _id:
           maxLength: 24
@@ -5712,6 +6171,8 @@ components:
         IPv6:
           type: string
         PublicIP:
+          type: string
+        gateway:
           type: string
         isAssigned:
           type: boolean
@@ -5734,6 +6195,10 @@ components:
           type: string
         IPv6Mask:
           type: string
+        pathlabels:
+          items:
+            $ref: '#/components/schemas/PathLabel'
+          type: array
       type: object
     DeviceVersion:
       example:
@@ -5965,6 +6430,36 @@ components:
             type: string
         date:
           type: string
+    DevicePolicies:
+      type: object
+      properties:
+        multilink:
+          type: object
+          $ref: '#/components/schemas/DevicePolicy'
+      required:
+        - multilink
+    DevicePolicy:
+      type: object
+      properties:
+        policy:
+          type: object
+          properties:
+            _id:
+              maxLength: 24
+              minLength: 24
+              type: string
+            name:
+              type: string
+            description:
+              type: string
+        status:
+          enum:
+          - ''
+          - installing
+          - installed
+          - uninstalling
+          type: string
+
     Tunnel:
       example:
         tunnelStatusA: '{}'
@@ -6311,7 +6806,8 @@ components:
         type: type
       properties:
         _id:
-          readOnly: true
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
@@ -6348,6 +6844,232 @@ components:
         - color
         - type
       type: object
+    MLPolicy:
+      example:
+        _id: id
+        name: name
+        description: description
+        rules: [rule 1, rule 2, ...]
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        rules:
+          items:
+            $ref: '#/components/schemas/MLRule'
+          type: array
+      required:
+      - _id
+      - name
+      - description
+      - rules
+      type: object
+    MLPolicyList:
+      example:
+        id: id
+        name: name
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+      required:
+      - _id
+      - name
+    MLPolicyRequest:
+      example:
+        name: name
+        description: description
+        rules: [rule 1, rule 2, ...]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rules:
+          items:
+            $ref: '#/components/schemas/MLRuleRequest'
+          type: array
+      required:
+      - name
+      - description
+      - rules
+      type: object
+    MLRule:
+      example:
+        _id: id
+        name: name
+        priority: priority
+        enabled: true
+        classification: classification
+        action: action
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        enabled:
+          type: boolean
+        classification:
+          schema:
+          $ref: '#/components/schemas/MLClassification'
+        action:
+          schema:
+          $ref: '#/components/schemas/MLAction'
+      required:
+      - _id
+      - name
+      - priority
+      - enabled
+      - classification
+      - action
+      type: object
+    MLRuleRequest:
+      example:
+        name: name
+        priority: priority
+        enabled: true
+        classification: classification
+        action: action
+      properties:
+        name:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        enabled:
+            type: boolean
+        classification:
+          $ref: '#/components/schemas/MLClassification'
+        action:
+          $ref: '#/components/schemas/MLAction'
+      required:
+      - name
+      - priority
+      - enabled
+      - classification
+      - action
+      type: object
+    MLClassification:
+      example:
+        prefix: prefix
+        application: application
+      anyOf:
+      - $ref: '#/components/schemas/MLClassPrefix'
+      - $ref: '#/components/schemas/MLClassApp'
+      type: object
+    MLAction:
+      example:
+        links: [link1, link2, ...]
+        fallback: fallback
+      properties:
+        links:
+          items:
+            anyOf:
+            - $ref: '#/components/schemas/LinksRequest'
+            - $ref: '#/components/schemas/LinksResponse'
+          type: array
+        order:
+          enum:
+          - priority
+          - load-balancing
+        fallback:
+          enum:
+          - drop
+          - by-destination
+          type: string
+      required:
+        - links
+        - order
+        - fallback
+    LinksResponse:
+      properties:
+        pathlabels:
+          items:
+            $ref: '#/components/schemas/PathLabel'
+          type: array
+        order:
+          enum:
+          - priority
+          - load-balancing
+          type: string
+      type: object
+      required:
+        - pathlabels
+        - order
+    LinksRequest:
+      properties:
+        pathlabels:
+          items:
+            type: string
+          type: array
+        order:
+          enum:
+          - priority
+          - load-balancing
+          type: string
+      type: object
+      required:
+        - pathlabels
+        - order
+    MLClassPrefix:
+      properties:
+        prefix:
+          properties:
+            ip:
+              type: string
+            ports:
+              type: string
+              pattern: "^$|^()([0-9]|[1-5]?[0-9]{2,4}|6[1-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5])(-([0-9]|[1-5]?[0-9]{2,4}|6[1-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5]))?$"
+            protocol:
+              enum:
+              - ""
+              - tcp
+              - udp
+              - icmp
+              type: string
+          required:
+          - ip
+          - ports
+          - protocol
+          type: object
+    MLClassApp:
+      properties:
+        application:
+          properties:
+            appId:
+              type: string
+            category:
+              type: string
+            serviceClass:
+              type: string
+            importance:
+              enum:
+              - ''
+              - high
+              - medium
+              - low
+              type: string
+          required:
+          - appId
+          - category
+          - serviceClass
+          - importance
+          type: object
     Error:
       properties:
         code:

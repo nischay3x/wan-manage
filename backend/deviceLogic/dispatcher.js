@@ -22,6 +22,7 @@ const modify = require('./modifyDevice');
 const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
+const mlpolicy = require('./mlpolicy');
 const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
 const configs = require('../configs')();
@@ -84,6 +85,12 @@ const methods = {
     complete: upgrade.complete,
     error: upgrade.error,
     remove: upgrade.remove
+  },
+  mlpolicy: {
+    apply: mlpolicy.apply,
+    complete: mlpolicy.complete,
+    error: mlpolicy.error,
+    remove: mlpolicy.remove
   },
   appIdentification: {
     apply: appIdentification.apply,
