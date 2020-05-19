@@ -17,6 +17,7 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
+const { devices } = require('../models/devices');
 
 /**
  * Checks whether a value is empty
@@ -42,10 +43,12 @@ const validateIPv4Mask = mask => {
 /**
  * Checks whether the device configuration is valid,
  * therefore the device can be started.
- * @param  {Object}  device                 the device to check
+ * @param {Object}  device                 the device to check
+ * @param {Boolean} checkLanOverlaps           if need to check LAN subnets overlap
+ * @param {[name: string, subnet: string]} organizationLanSubnets subnets to check if checkOverlap
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device) => {
+const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -132,6 +135,25 @@ const validateDevice = (device) => {
     }
   }
 
+  if (checkLanOverlaps && organizationLanSubnets.length > 0) {
+    // LAN subnet must not be overlap with other devices in this org
+    for (const orgDevice of organizationLanSubnets) {
+      for (const currentLanIfc of lanIfcs) {
+        const orgSubnet = orgDevice.subnet;
+        const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
+        if (currentSubnet !== orgSubnet && cidr.overlap(currentSubnet, orgSubnet)) {
+          const msg =
+          `The LAN subnet ${currentSubnet} overlaps with a LAN subnet of device ${orgDevice.name}`;
+
+          return {
+            valid: false,
+            err: msg
+          };
+        }
+      }
+    }
+  }
+
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -164,7 +186,41 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   return { valid: true, err: '' };
 };
 
+/**
+ * Get all LAN subnets in the same organization
+ * @param  {string} orgId         the id of the organization
+ * @return {[name: string, subnet: string]} array of LAN subnets with router name
+ */
+const getAllOrganiztionLanSubnets = async orgId => {
+  const subnets = await devices.aggregate([
+    { $match: { org: orgId } },
+    {
+      $project: {
+        'interfaces.IPv4': 1,
+        'interfaces.IPv4Mask': 1,
+        'interfaces.type': 1,
+        'interfaces.isAssigned': 1,
+        name: 1,
+        _id: 0
+      }
+    },
+    { $unwind: '$interfaces' },
+    { $match: { 'interfaces.type': 'LAN', 'interfaces.isAssigned': true } },
+    {
+      $project: {
+        name: 1,
+        subnet: {
+          $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
+        }
+      }
+    }
+  ]);
+
+  return subnets;
+};
+
 module.exports = {
   validateDevice: validateDevice,
-  validateModifyDeviceMsg: validateModifyDeviceMsg
+  validateModifyDeviceMsg: validateModifyDeviceMsg,
+  getAllOrganiztionLanSubnets: getAllOrganiztionLanSubnets
 };

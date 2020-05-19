@@ -31,7 +31,7 @@ const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { validateDevice } = require('../deviceLogic/validators');
+const { validateDevice, getAllOrganiztionLanSubnets } = require('../deviceLogic/validators');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class DevicesService {
@@ -529,7 +529,17 @@ class DevicesService {
       // Validate device changes only for approved devices,
       // and only if the request contains interfaces.
       if (origDevice.isApproved && deviceRequest.interfaces) {
-        const { valid, err } = validateDevice(deviceRequest);
+        // check LAN subnet overlap if updated device is running
+        const status = deviceStatus.getDeviceStatus(origDevice.machineId);
+        const needCheckLanOverlaps = (status && status.state && status.state === 'running');
+
+        let orgLanSubnets = [];
+
+        if (needCheckLanOverlaps) {
+          orgLanSubnets = await getAllOrganiztionLanSubnets(origDevice.org);
+        }
+
+        const { valid, err } = validateDevice(deviceRequest, needCheckLanOverlaps, orgLanSubnets);
         if (!valid) {
           logger.warn('Device update failed',
             {
