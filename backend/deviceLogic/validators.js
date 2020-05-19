@@ -140,12 +140,12 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     for (const orgDevice of organizationLanSubnets) {
       for (const currentLanIfc of lanIfcs) {
         const orgSubnet = orgDevice.subnet;
-        const orgName = orgDevice.name;
         const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
         if (currentSubnet !== orgSubnet && cidr.overlap(currentSubnet, orgSubnet)) {
           return {
             valid: false,
-            err: `The LAN subnet ${currentSubnet} overlaps with a LAN subnet of device ${orgName}`
+            err: `The LAN subnet ${currentSubnet} 
+              overlaps with a LAN subnet of device ${orgDevice.name}`
           };
         }
       }
