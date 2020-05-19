@@ -191,8 +191,12 @@ describe('validateDevice', () => {
     const organiztionLanSubnets = [
       { name: 'Device 2', subnet: '192.168.100.3' }
     ];
+
+    const deviceSubnet = `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
+    const overlapsDeviceName = organiztionLanSubnets[0].name;
     failureObject.err =
-    `The device ${device.name} has a LAN subnet overlap with ${organiztionLanSubnets[0].name}`;
+    `The LAN subnet ${deviceSubnet} overlaps with a LAN subnet of device ${overlapsDeviceName}`;
+
     const result = validateDevice(device, true, organiztionLanSubnets);
     expect(result).toMatchObject(failureObject);
   });
