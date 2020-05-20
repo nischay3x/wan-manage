@@ -31,7 +31,7 @@ const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { validateDevice, getAllOrganiztionLanSubnets } = require('../deviceLogic/validators');
+const { validateDevice, getAllOrganizationLanSubnets } = require('../deviceLogic/validators');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class DevicesService {
@@ -536,7 +536,7 @@ class DevicesService {
         let orgLanSubnets = [];
 
         if (needCheckLanOverlaps) {
-          orgLanSubnets = await getAllOrganiztionLanSubnets(origDevice.org);
+          orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
         }
 
         const { valid, err } = validateDevice(deviceRequest, needCheckLanOverlaps, orgLanSubnets);
