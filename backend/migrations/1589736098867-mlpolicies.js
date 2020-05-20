@@ -47,7 +47,7 @@ async function up () {
 
 async function down () {
   try {
-    // Remove the "policies" document to all devices
+    // Remove the "policies" document from all devices
     await devices.updateMany(
       {},
       { $unset: { policies: '' } },
