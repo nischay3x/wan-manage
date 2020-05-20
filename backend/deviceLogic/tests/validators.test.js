@@ -186,6 +186,30 @@ describe('validateDevice', () => {
     expect(result).toMatchObject(failureObject);
   });
 
+  it('Should be an invalid device if it has a LAN subnets overlap with other devices', () => {
+    device.name = 'Device 1';
+    const organiztionLanSubnets = [
+      { name: 'Device 2', subnet: '192.168.100.3' }
+    ];
+
+    const deviceSubnet = `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
+    const overlapsDeviceName = organiztionLanSubnets[0].name;
+    failureObject.err =
+    `The LAN subnet ${deviceSubnet} overlaps with a LAN subnet of device ${overlapsDeviceName}`;
+
+    const result = validateDevice(device, true, organiztionLanSubnets);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid device if it doesnt have a LAN subnets overlap', () => {
+    device.name = 'Device 1';
+    const organiztionLanSubnets = [
+      { name: 'Device 2', subnet: '192.168.88.3' }
+    ];
+    const result = validateDevice(device, true, organiztionLanSubnets);
+    expect(result).toMatchObject(successObject);
+  });
+
   it('Should be an invalid device if WAN interface is not assigned a GW', () => {
     delete device.interfaces[1].gateway;
     failureObject.err = 'All WAN interfaces should be assigned a default GW';

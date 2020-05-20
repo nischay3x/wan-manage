@@ -5,7 +5,8 @@
   "license": "GNU Affero General Public License",
   "scripts": {
     "start": "node ./bin/www",
-    "test": "jest"
+    "test": "jest",
+    "migrate": "migrate --autosync --config migrate_config.js"
   },
   "dependencies": {
     "@hapi/joi": "^15.1.0",
@@ -64,6 +65,7 @@
     "eslint-plugin-standard": "^4.0.1",
     "jest": "^25.1.0",
     "jest-each": "^24.8.0",
+    "migrate-mongoose": "^4.0.0",
     "node-mocks-http": "^1.7.6"
   }
 }

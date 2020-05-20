@@ -50,11 +50,11 @@ const configEnv = {
     // Default value is not set, which only validate the client side captcha
     captchaKey: '',
     // Mongo main database
-    mongoUrl: 'mongodb://localhost:27017/flexiwan',
+    mongoUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwan?replicaSet=rs`,
     // Mongo analytics database
-    mongoAnalyticsUrl: 'mongodb://localhost:27017/flexiwanAnalytics',
+    mongoAnalyticsUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwanAnalytics?replicaSet=rs`,
     // Mongo Billing database
-    mongoBillingUrl: 'mongodb://localhost:27017/flexibilling',
+    mongoBillingUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexibilling?replicaSet=rs`,
     // Billing Redirect OK page url
     billingRedirectOkUrl: 'https://local.flexiwan.com/ok.html',
     // Biling config site - this is used as the billing site name in ChargeBee
@@ -138,9 +138,6 @@ const configEnv = {
   // Override for development environment, default environment if not specified
   development: {
     clientStaticDir: 'client/build',
-    mongoUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwan?replicaSet=rs`,
-    mongoBillingUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexibilling?replicaSet=rs`,
-    mongoAnalyticsUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwanAnalytics?replicaSet=rs`,
     mailerBypassCert: true,
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
@@ -148,6 +145,7 @@ const configEnv = {
     logLevel: 'info',
     mailerPort: 1025
   },
+
   testing: {
     // Mgmt-Agent protocol version for testing purposes
     agentApiVersion: '2.0.0',
@@ -223,8 +221,8 @@ const configEnv = {
 };
 
 class Configs {
-  constructor () {
-    const environment = this.getEnv();
+  constructor (env) {
+    const environment = env || this.getEnv();
     console.log('environment=' + environment);
     const combinedConfig = { ...configEnv.default, ...configEnv[environment], environment: environment };
 
@@ -270,10 +268,10 @@ class Configs {
 }
 
 var configs = null;
-module.exports = function () {
+module.exports = function (env = null) {
   if (configs) return configs;
   else {
-    configs = new Configs();
+    configs = new Configs(env);
     return configs;
   }
 };

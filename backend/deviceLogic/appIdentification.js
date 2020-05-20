@@ -74,7 +74,8 @@ const apply = async (devices, user, data) => {
     }
   });
   const promiseStatus = await Promise.allSettled(jobPromises);
-  const jobs = promiseStatus.reduce((arr, elem) => {
+
+  const fulfilled = promiseStatus.reduce((arr, elem) => {
     if (elem.status === 'fulfilled') {
       const job = elem.value;
       arr.push(job);
@@ -90,7 +91,11 @@ const apply = async (devices, user, data) => {
     }
     return arr;
   }, []);
-  return jobs;
+  const status = fulfilled.length < opDevices.length
+    ? 'partially completed' : 'completed';
+  const warningMessage = fulfilled.length < opDevices.length
+    ? `${fulfilled.length} of ${opDevices.length} App Identification jobs added` : '';
+  return { ids: fulfilled.flat().map(job => job.id), status, message: warningMessage };
 };
 
 /**

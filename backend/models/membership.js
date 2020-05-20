@@ -280,6 +280,7 @@ module.exports = {
   membership: membership,
   permissionMasks: permissionMasks,
   permissionShifts: permissionShifts,
+  permissionsSchema: Permissions,
   setPermission: setPermission,
   preDefinedPermissions: preDefinedPermissions,
   getUserPermissions: getUserPermissions
