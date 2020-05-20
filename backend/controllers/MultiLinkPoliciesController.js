@@ -28,6 +28,10 @@ class MultiLinkPoliciesController {
   async mlpoliciesPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.mlpoliciesPOST);
   }
+
+  async mlpoliciesMetaGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.mlpoliciesMetaGET);
+  }
 }
 
 module.exports = MultiLinkPoliciesController;
