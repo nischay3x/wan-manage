@@ -15,8 +15,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const periodic = require('./periodic')();
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
+const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 
 /***
@@ -70,7 +72,9 @@ class DeviceSwVersion {
      * @return {void}
      */
   periodicCheckSwVersion () {
-    this.devSwUpd.pollDevSwRepo();
+    ha.runIfActive(() => {
+      this.devSwUpd.pollDevSwRepo();
+    });
   }
 }
 

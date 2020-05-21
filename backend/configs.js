@@ -141,7 +141,6 @@ const configEnv = {
     mailerBypassCert: true,
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
-    useFlexiBilling: false,
     logLevel: 'info',
     mailerPort: 1025
   },

@@ -15,8 +15,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const periodic = require('./periodic')();
 const AppRulesUpdater = require('../deviceLogic/AppRulesUpdateManager');
+const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 
 /***
  * This class periodically checks if the latest AppIdentification rules were changed
@@ -60,7 +62,9 @@ class AppRules {
     * @return {void}
     */
   periodicCheckAppRules () {
-    this.appRulesUpdater.pollAppRules();
+    ha.runIfActive(() => {
+      this.appRulesUpdater.pollAppRules();
+    });
   }
 }
 

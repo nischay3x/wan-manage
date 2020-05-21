@@ -18,6 +18,7 @@
 const configs = require('../configs')();
 const periodic = require('./periodic')();
 const notificationsMgr = require('../notifications/notifications')();
+const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 
 /***
  * This class runs once a day and notifies users about pending notifications
@@ -56,9 +57,11 @@ class NotifyUsers {
      * @return {void}
      */
   periodicNotifyUsers () {
-    // Send a reminder email for users with
-    // pending unread notifications
-    notificationsMgr.notifyUsersByEmail();
+    ha.runIfActive(() => {
+      // Send a reminder email for users with
+      // pending unread notifications
+      notificationsMgr.notifyUsersByEmail();
+    });
   }
 }
 
