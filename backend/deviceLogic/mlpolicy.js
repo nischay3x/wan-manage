@@ -229,12 +229,36 @@ const apply = async (deviceList, user, data) => {
     return deviceIdsSet.has(device._id.toString());
   });
   const jobs = await queueMlPolicyJob(opDevices, op, requestTime, mLPolicy, user, org);
-  const failedToQueue = jobs.filter(job => job.status === 'rejected');
+  const failedToQueue = [];
+  const succeededToQueue = [];
+  jobs.forEach(job => {
+    switch (job.status) {
+      case 'rejected': {
+        failedToQueue.push(job);
+        break;
+      }
+      case 'fulfilled': {
+        const { id } = job.value;
+        succeededToQueue.push(id);
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  });
+
+  let status = 'completed';
+  let message = '';
   if (failedToQueue.length !== 0) {
     const failedDevices = failedToQueue.map(ent => {
       const { job } = ent.reason;
       const { _id } = job.data.response.data.policy.device;
       return _id;
+    });
+
+    logger.error('Policy jobs queue failed', {
+      params: { jobId: failedToQueue[0].reason.job.id, devices: failedDevices }
     });
 
     // Update devices' policy status in the database
@@ -243,13 +267,15 @@ const apply = async (deviceList, user, data) => {
       { $set: { 'policies.multilink.status': 'job queue failed' } },
       { upsert: false }
     );
-    throw createError(
-      500,
-      'Operation failed for some devices, please try again'
-    );
+    status = 'partially completed';
+    message = `${succeededToQueue.length} of ${jobs.length} policy jobs added`;
   }
 
-  return jobs.map(job => job.value);
+  return {
+    ids: succeededToQueue,
+    status,
+    message
+  };
 };
 
 /**

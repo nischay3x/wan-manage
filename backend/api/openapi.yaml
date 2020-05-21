@@ -4843,6 +4843,77 @@ paths:
       x-swagger-router-controller: MLPolicies
       x-openapi-router-controller: MLPoliciesController
       x-openapi-router-service: MLPoliciesService
+  /mlpolicies/meta:
+    get:
+      operationId: mlpoliciesMetaGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MLPolicyMetaData'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all multi link policies metadata
+      tags:
+      - MultiLink Policies
+      x-swagger-router-controller: MLPolicies
+      x-openapi-router-controller: MLPoliciesController
+      x-openapi-router-service: MLPoliciesService
   /appidentifications:
     get:
       operationId: appIdentificationsGET
@@ -6890,6 +6961,50 @@ components:
       required:
       - _id
       - name
+    MLPolicyMetaData:
+      example:
+        _id: id
+        name: name
+        description: description
+        installCount: installCount
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        installCount:
+          $ref: '#/components/schemas/PolicyInstallCount'
+          type: object
+      required:
+      - _id
+      - name
+      - description
+      - installCount
+      type: object
+    PolicyInstallCount:
+      example:
+        installed: installed
+        pending: pending
+        failed: failed
+        deleted: deleted
+      properties:
+        installed:
+          type: integer
+        pending:
+          type: integer
+        failed:
+          type: integer
+        deleted:
+          type: integer
+      required:
+      - installed
+      - pending
+      - failed
+      - deleted
     MLPolicyRequest:
       example:
         name: name

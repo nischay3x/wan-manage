@@ -19,6 +19,7 @@ const Service = require('./Service');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const MultiLinkPolicies = require('../models/mlpolicies');
 const { devices } = require('../models/devices');
+const { ObjectId } = require('mongoose').Types;
 
 class MultiLinkPoliciesService {
   /**
@@ -271,6 +272,86 @@ class MultiLinkPoliciesService {
       });
 
       return Service.successResponse(MLPolicy, 201);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get all multi link policies metadata
+   *
+   * offset Integer The number of items to skip before
+   * starting to collect the result set (optional)
+   * limit Integer The numbers of items to return (optional)
+   * org String Organization to be filtered by (optional)
+   * returns List
+   **/
+  static async mlpoliciesMetaGET ({ offset, limit, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      // Fetch al multi link policies of the organization.
+      // To each policy, attach the installation status of
+      // each of the devices the policy is installed on.
+      const mlPoliciesMeta = await MultiLinkPolicies.aggregate([
+        { $match: { org: { $in: orgList.map(org => ObjectId(org)) } } },
+        {
+          $project: {
+            _id: 1,
+            name: 1,
+            description: 1
+          }
+        },
+        {
+          $lookup: {
+            from: 'devices',
+            let: { id: '$_id' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$policies.multilink.policy', '$$id'] } } },
+              { $project: { 'policies.multilink': 1 } }
+            ],
+            as: 'mlpolicy'
+          }
+        },
+        { $addFields: { statuses: '$mlpolicy.policies.multilink.status' } },
+        {
+          $project: {
+            _id: { $toString: '$_id' },
+            name: 1,
+            description: 1,
+            statuses: 1
+          }
+        }
+      ]).allowDiskUse(true);
+
+      const response = mlPoliciesMeta.map(policy => {
+        const installCount = {
+          installed: 0,
+          pending: 0,
+          failed: 0,
+          deleted: 0
+        };
+        policy.statuses.forEach(policyStatus => {
+          if (policyStatus === 'installed') {
+            installCount.installed++;
+          } else if (['installing', 'uninstalling'].includes(policyStatus)) {
+            installCount.pending++;
+          } else if (policyStatus.includes('fail')) {
+            installCount.failed++;
+          } else if (policyStatus.includes('deleted')) {
+            installCount.deleted++;
+          }
+        });
+        const { statuses, ...rest } = policy;
+        return {
+          ...rest,
+          installCount
+        };
+      });
+      return Service.successResponse(response);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

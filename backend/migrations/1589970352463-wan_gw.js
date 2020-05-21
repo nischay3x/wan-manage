@@ -14,52 +14,45 @@
 
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-const { membership } = require('../models/membership');
 const { devices } = require('../models/devices');
-const { addPerms, removePerms } = require('./utils/updatePerms');
-const logger = require('../logging/logging')({
-  module: module.filename,
-  type: 'migration'
-});
+const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
 
 async function up () {
   try {
-    // Add the "policies" document to all devices
-    await devices.updateMany(
-      { 'policies.multilink': { $exists: false } },
-      { $set: { 'policies.multilink': {} } },
-      { upsert: false }
-    );
-
-    // Add multilink to user permission
-    await addPerms(membership, 'mlpolicies');
+    // Add the gateway field to all devices
+    // LAN interfaces: add the an empty field
+    // WAN interfaces: set to the device's default gateway
+    const devDocuments = await devices.find({});
+    for (const deviceDoc of devDocuments) {
+      const { _id, interfaces } = deviceDoc;
+      interfaces.forEach(ifc => {
+        ifc.gateway = ifc.type === 'WAN' ? deviceDoc.defaultRoute : '';
+      });
+      await devices.update(
+        { _id: _id },
+        { $set: { interfaces: interfaces } },
+        { upsert: false }
+      );
+    }
   } catch (err) {
     logger.error('Database migration failed', {
-      params: {
-        collections: ['membership', 'devices'],
-        operation: 'up',
-        err: err.message
-      }
+      params: { collections: ['devices'], operation: 'up', err: err.message }
     });
   }
 }
 
 async function down () {
   try {
-    // Remove the "policies" document from all devices
+    // Remove the WAN gateway from all devices
     await devices.updateMany(
       {},
-      { $unset: { 'policies.multilink': '' } },
+      { $unset: { 'interfaces.$[].gateway': '' } },
       { upsert: false }
     );
-
-    // Remove multi link policies permissions
-    await removePerms(membership, 'mlpolicies');
   } catch (err) {
     logger.error('Database migration failed', {
       params: {
-        collections: ['membership', 'devices'],
+        collections: ['devices'],
         operation: 'down',
         err: err.message
       }
