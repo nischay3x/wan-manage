@@ -14,8 +14,10 @@
 
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+const accessTokens = require('../../models/accesstokens');
 
 const addPerms = async (db, field) => {
+  // Update memberships collection
   const cond = [{ role: 'owner' }, { role: 'manager' }];
   await db.updateMany(
     { $or: cond },
@@ -27,12 +29,27 @@ const addPerms = async (db, field) => {
     { $set: { [`perms.${field}`]: 1 } },
     { upsert: false }
   );
+
+  // Update access tokens
+  await accessTokens.updateMany(
+    { permissions: { $exists: true } },
+    { $set: { [`permissions.${field}`]: 15 } },
+    { upsert: false }
+  );
 };
 
-const removePerms = (db, field) => {
-  return db.updateMany(
+const removePerms = async (db, field) => {
+  // Revert memberships collections
+  await db.updateMany(
     {},
     { $unset: { [`perms.${field}`]: '' } },
+    { upsert: false }
+  );
+
+  // Revert access token change
+  await accessTokens.updateMany(
+    { permissions: { $exists: true } },
+    { $unset: { [`permissions.${field}`]: true } },
     { upsert: false }
   );
 };

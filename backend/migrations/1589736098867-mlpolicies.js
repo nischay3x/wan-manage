@@ -27,7 +27,7 @@ async function up () {
   try {
     // Add the "policies" document to all devices
     await devices.updateMany(
-      {},
+      { 'policies.multilink': { $exists: false } },
       { $set: { 'policies.multilink': {} } },
       { upsert: false }
     );
@@ -50,7 +50,7 @@ async function down () {
     // Remove the "policies" document from all devices
     await devices.updateMany(
       {},
-      { $unset: { policies: '' } },
+      { $unset: { 'policies.multilink': '' } },
       { upsert: false }
     );
 

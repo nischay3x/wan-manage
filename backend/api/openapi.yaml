@@ -6990,6 +6990,7 @@ components:
         installed: installed
         pending: pending
         failed: failed
+        deleted: deleted
       properties:
         installed:
           type: integer
@@ -6997,10 +6998,13 @@ components:
           type: integer
         failed:
           type: integer
+        deleted:
+          type: integer
       required:
       - installed
       - pending
       - failed
+      - deleted
     MLPolicyRequest:
       example:
         name: name
