@@ -5515,6 +5515,51 @@ paths:
       x-swagger-router-controller: AppIdentifications
       x-openapi-router-controller: AppIdentificationsController
       x-openapi-router-service: AppIdentificationsService
+  /applications:
+    get:
+      operationId: applicationsGET
+      responses:        
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstalledAppIdentifications'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all repository applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+          
 components:
   responses:
     NotFoundError:

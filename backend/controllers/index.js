@@ -30,6 +30,7 @@ const UsersController = require('./UsersController');
 const BillingController = require('./BillingController');
 const PathLabelsController = require('./PathLabelsController');
 const MLPoliciesController = require('./MultiLinkPoliciesController');
+const ApplicationsController = require('./ApplicationsController');
 
 module.exports = {
   AccessTokensController,
@@ -46,5 +47,6 @@ module.exports = {
   UsersController,
   BillingController,
   PathLabelsController,
-  MLPoliciesController
+  MLPoliciesController,
+  ApplicationsController
 };

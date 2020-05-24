@@ -29,6 +29,7 @@ const UsersService = require('./UsersService');
 const BillingService = require('./BillingService');
 const PathLabelsService = require('./PathLabelsService');
 const MLPoliciesService = require('./MultiLinkPoliciesService');
+const ApplicationsService = require('./ApplicationsService');
 
 module.exports = {
   AccessTokensService,
@@ -44,5 +45,6 @@ module.exports = {
   UsersService,
   BillingService,
   PathLabelsService,
-  MLPoliciesService
+  MLPoliciesService,
+  ApplicationsService
 };
