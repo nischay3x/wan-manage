@@ -66,25 +66,49 @@ class ApplicationsUpdateManager {
       });
 
       // check stored time against received one. If same, do not update
-      const applicationsResult =
-        await applications.findOne();
-      if (applicationsResult) {
-        const { meta } = applicationsResult;
-        if (meta.time === body.meta.time) {
-          return;
-        }
-      }
+      // const applicationsResult =
+      //   await applications.findOne();
+      // if (applicationsResult) {
+      //   const { meta } = applicationsResult;
+      //   if (meta.time === body.meta.time) {
+      //     return;
+      //   }
+      // }
 
-      const set = { $set: { meta: body.meta, applications: body.applications } };
+      const appList = body.applications || [];
+      
       const options = {
         upsert: true,
         setDefaultsOnInsert: true,
         useFindAndModify: false
       };
-      await applications.findOneAndUpdate({}, set, options);
+
+      for (let i = 0; i < appList.length; i++) {
+        // skip if app not changed on repository
+        const app = await applications.findOne({name: appList[i].name});
+        if (app && app.repositoryTime === body.meta.time) {          
+          continue;
+        }
+  
+        const set = { $set: { repositoryTime: body.meta.time, ...appList[i] } };
+        await applications.findOneAndUpdate({name: appList[i].name}, set, options);
+      }
+
       logger.info('Applications database updated', {
-        params: { time: body.meta.time, rulesCount: body.applications.length }
+        params: { time: body.meta.time, rulesCount: appList.length }
       });
+
+      // // TODO: check if is change the ref id for purchased applications
+      // const set = { $set: { meta: body.meta, applications: body.applications } };
+      // const options = {
+      //   upsert: true,
+      //   setDefaultsOnInsert: true,
+      //   useFindAndModify: false
+      // };
+      // await applications.findOneAndUpdate({}, set, options);
+      // logger.info('Applications database updated', {
+      //   params: { time: body.meta.time, rulesCount: body.applications.length }
+      // });
     } catch (err) {
       logger.error('Failed to query applications file', {
         params: { err: err.message }

@@ -5515,15 +5515,15 @@ paths:
       x-swagger-router-controller: AppIdentifications
       x-openapi-router-controller: AppIdentificationsController
       x-openapi-router-service: AppIdentificationsService
-  /applications:
+  /library:
     get:
-      operationId: applicationsGET
+      operationId: applicationsLibraryGET
       responses:        
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstalledAppIdentifications'
+                $ref: '#/components/schemas/Application'
                 x-content-type: application/json
           description: Successful operation
         "401":
@@ -5559,6 +5559,147 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
+  /applications:
+    get:
+      operationId: applicationsGET
+      parameters:
+      - description: Devices application installed on
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasedApplication'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all installed applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+    post: 
+      operationId: applicationsPOST
+      parameters:
+      - description: Devices application installed on
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Application'
+      responses:        
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all installed applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+
           
 components:
   responses:
@@ -5677,6 +5818,23 @@ components:
         description:
           type: string
       type: object
+    Application: 
+      example:
+        name: open-vpn
+      properties: 
+        name:
+          type: string
+        description:
+          type: string 
+    PurchasedApplication:
+      example:
+      properties:
+        installedVersion:
+          type: string
+        purchasedDate:
+          type: string
+        configuration:
+          type: object
     AppIdentificationRules:
       example:
         ip: 127.0.0.1

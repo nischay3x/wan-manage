@@ -22,8 +22,16 @@ class ApplicationsController {
     this.service = Service;
   }
 
+  async applicationsLibraryGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsLibraryGET);
+  }
+
   async applicationsGET (request, response) {
     await Controller.handleRequest(request, response, this.service.applicationsGET);
+  }
+  
+  async applicationsPOST (request, response) {    
+    await Controller.handleRequest(request, response, this.service.applicationsPOST);
   }
 }
 
