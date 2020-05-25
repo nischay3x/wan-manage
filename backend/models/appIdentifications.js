@@ -20,22 +20,27 @@ const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const find = require('lodash/find');
 const concat = require('lodash/concat');
+const { validateIPv4WithMask, validatePortRange } = require('./validators');
 
 /**
  * Rules Database Schema
  */
 const rulesSchema = new Schema({
-  _id: {
-    type: Schema.Types.ObjectId,
-    required: true
-  },
   ip: {
     type: String,
-    required: false
+    required: false,
+    validate: {
+      validator: validateIPv4WithMask,
+      message: 'ip should be a valid ipv4 with mask type'
+    }
   },
   ports: {
     type: String,
-    required: false
+    required: false,
+    validate: {
+      validator: validatePortRange,
+      message: 'ports should be a valid ports range'
+    }
   },
   protocol: {
     type: String,
@@ -44,85 +49,103 @@ const rulesSchema = new Schema({
   }
 });
 
-/**
- * Modified Imported App Identifications Database Schema
- */
-const modifiedImportedSchema = new Schema({
-  id: {
-    type: String,
-    required: true
-  },
-  name: {
-    type: String,
-    required: true,
-    minlength: 2,
-    maxlength: [30, 'App identification name must be at most 30']
-  },
-  category: {
-    type: String,
-    required: true,
-    maxlength: [20, 'Category must be at most 20']
-  },
-  serviceClass: {
-    type: String,
-    required: true,
-    maxlength: [20, 'Service Class must be at most 20']
-  },
-  importance: {
-    type: String,
-    enum: ['high', 'medium', 'low'],
-    required: true
+// This pre validation hook makes sure that at least ip or port are
+// present in the rule.
+rulesSchema.pre('validate', function (next) {
+  if (!this.ip && !this.ports) {
+    this.invalidate('ip|ports', 'Either ip or ports field must not be empty');
   }
-}, {
-  timestamps: true
+
+  next();
 });
 
 /**
- * AppIdentification Database Schema
+ * Modified Imported App Identifications Database Schema
  */
-const AppIdentificationSchema = new Schema({
-  // Specific id here is neded in order to keep consistency with the imported
-  // app identifications list.
-  id: {
-    type: String,
-    required: true,
-    minlength: [1, 'Id must be at least 1'],
-    maxlength: [24, 'Id must be at most 24']
+const modifiedImportedSchema = new Schema(
+  {
+    id: {
+      type: String,
+      required: true
+    },
+    name: {
+      type: String,
+      required: true,
+      minlength: [2, 'App identification name must be at least 2'],
+      maxlength: [30, 'App identification name must be at most 30']
+    },
+    category: {
+      type: String,
+      required: true,
+      minlength: [2, 'Category must be at least 2'],
+      maxlength: [30, 'Category must be at most 30']
+    },
+    serviceClass: {
+      type: String,
+      required: true,
+      minlength: [2, 'Service Class must be at least 2'],
+      maxlength: [30, 'Service Class must be at most 30']
+    },
+    importance: {
+      type: String,
+      enum: ['high', 'medium', 'low'],
+      required: true
+    }
   },
-  name: {
-    type: String,
-    required: true,
-    minlength: [2, 'App identification name must be at least 2'],
-    maxlength: [30, 'App identification name must be at most 30']
-  },
-  category: {
-    type: String,
-    required: true,
-    minlength: [2, 'Category must be at least 2'],
-    maxlength: [30, 'Category must be at most 30']
-  },
-  serviceClass: {
-    type: String,
-    required: true,
-    minlength: [2, 'Service Class must be at least 2'],
-    maxlength: [30, 'Service Class must be at most 30']
-  },
-  importance: {
-    type: String,
-    enum: ['high', 'medium', 'low'],
-    required: true
-  },
-  description: {
-    type: String,
-    maxlength: [128, 'Description must be at most 128']
-  },
-  rules: [rulesSchema],
-  modified: {
-    type: Boolean
+  {
+    timestamps: true
   }
-}, {
-  timestamps: true
-});
+);
+
+/**
+ * App Identification Database Schema
+ */
+const appIdentificationSchema = new Schema(
+  {
+    // Specific id here is neded in order to keep consistency with the imported
+    // app identifications list.
+    id: {
+      type: String,
+      required: true,
+      minlength: [1, 'Id must be at least 1'],
+      maxlength: [24, 'Id must be at most 24']
+    },
+    name: {
+      type: String,
+      required: true,
+      minlength: [2, 'App identification name must be at least 2'],
+      maxlength: [30, 'App identification name must be at most 30']
+    },
+    category: {
+      type: String,
+      required: true,
+      minlength: [2, 'Category must be at least 2'],
+      maxlength: [30, 'Category must be at most 30']
+    },
+    serviceClass: {
+      type: String,
+      required: true,
+      minlength: [2, 'Service Class must be at least 2'],
+      maxlength: [30, 'Service Class must be at most 30']
+    },
+    importance: {
+      type: String,
+      enum: ['high', 'medium', 'low'],
+      required: true
+    },
+    description: {
+      type: String,
+      maxlength: [128, 'Description must be at most 128']
+    },
+    rules: [rulesSchema],
+    modified: {
+      type: Boolean
+    }
+  },
+  {
+    timestamps: true
+  }
+);
 
 /**
  * Metadata Database Schema
@@ -138,23 +161,28 @@ const metaSchema = new Schema({
 });
 
 /**
- * AppIdentifications Database Schema
+ * App Identifications Database Schema
  */
-const AppIdentificationsSchema = new Schema({
-  meta: {
-    type: metaSchema,
-    required: true
+const appIdentificationsSchema = new Schema(
+  {
+    meta: {
+      type: metaSchema,
+      required: true
+    },
+    appIdentifications: [appIdentificationSchema],
+    imported: [modifiedImportedSchema]
   },
-  appIdentifications: [AppIdentificationSchema],
-  imported: [modifiedImportedSchema]
-}, {
-  timestamps: true
-});
+  {
+    timestamps: true
+  }
+);
 
-const appIdentifications =
-  mongoConns.getMainDB().model('appidentifications', AppIdentificationsSchema);
-const importedAppIdentifications =
-  mongoConns.getMainDB().model('importedappidentifications', AppIdentificationsSchema);
+const appIdentifications = mongoConns
+  .getMainDB()
+  .model('appidentifications', appIdentificationsSchema);
+const importedAppIdentifications = mongoConns
+  .getMainDB()
+  .model('importedappidentifications', appIdentificationsSchema);
 
 /**
  * Gets the combined list of custom and imported AppIdentifications as well
@@ -186,22 +214,29 @@ const getAllAppIdentifications = async (offset, limit, orgList) => {
   };
   // it is expected that custom app identifications are stored as single document per
   // organization in the collection
-  const customAppIdentsRes =
-    await appIdentifications.findOne({ 'meta.org': { $in: orgList } }, projection);
+  const customAppIdentsRes = await appIdentifications.findOne(
+    { 'meta.org': { $in: orgList } },
+    projection
+  );
   const customAppIdents = (customAppIdentsRes || {}).appIdentifications || [];
 
   // it is expected that imported app identifications are stored as single document
   // in the collection
-  const importedAppIdentsRes =
-    await importedAppIdentifications.findOne({}, projection);
+  const importedAppIdentsRes = await importedAppIdentifications.findOne(
+    {},
+    projection
+  );
   // Before merge with modified values taken from custom document,
   // assign each imported app identification with modified = false.
-  const importedAppIdents1 = (importedAppIdentsRes || {})
-    .appIdentifications.map(item => { item.modified = false; return item; }) || [];
+  const importedAppIdents1 =
+    (importedAppIdentsRes || {}).appIdentifications.map((item) => {
+      item.modified = false;
+      return item;
+    }) || [];
 
-  const { imported } = (customAppIdentsRes || {});
+  const { imported } = customAppIdentsRes || {};
   if (imported) {
-    imported.forEach(item => {
+    imported.forEach((item) => {
       const oldAppIdent = find(importedAppIdents1, { id: item.id });
       // There could be a situation where there is an imported app identification registered
       // in the custom app identifications database as modified, but there is no longer
@@ -220,21 +255,21 @@ const getAllAppIdentifications = async (offset, limit, orgList) => {
   // limit() cannot be used here, but instead be implemented with with slice().
   offset = !offset || offset < 0 ? 0 : offset;
 
-  const mergedAppIdens = (limit && limit >= 0)
-    ? concat(customAppIdents, importedAppIdents1)
-      .slice(offset, offset + limit)
-    : concat(customAppIdents, importedAppIdents1)
-      .slice(offset);
+  const mergedAppIdens =
+    limit && limit >= 0
+      ? concat(customAppIdents, importedAppIdents1).slice(
+        offset,
+        offset + limit
+      )
+      : concat(customAppIdents, importedAppIdents1).slice(offset);
 
   return {
     appIdentifications: mergedAppIdens,
     meta: {
-      customUpdatedAt: customAppIdentsRes === null
-        ? ''
-        : customAppIdentsRes.updatedAt,
-      importedUpdatedAt: importedAppIdentsRes === null
-        ? ''
-        : importedAppIdentsRes.updatedAt
+      customUpdatedAt:
+        customAppIdentsRes === null ? '' : customAppIdentsRes.updatedAt,
+      importedUpdatedAt:
+        importedAppIdentsRes === null ? '' : importedAppIdentsRes.updatedAt
     }
   };
 };
@@ -270,20 +305,25 @@ const getAppIdentificationById = async (org, id) => {
 
   // it is expected that imported AppIdentifications are stored as single document
   // in the collection
-  const importedAppIdentsRes =
-    await importedAppIdentifications.findOne({}, projection);
-  const importedAppIdents1 = (importedAppIdentsRes || {}).appIdentifications || [];
-  const importedAppIdentRes = importedAppIdents1.find(item => item.id === id);
+  const importedAppIdentsRes = await importedAppIdentifications.findOne(
+    {},
+    projection
+  );
+  const importedAppIdents1 =
+    (importedAppIdentsRes || {}).appIdentifications || [];
+  const importedAppIdentRes = importedAppIdents1.find((item) => item.id === id);
   if (importedAppIdentRes) {
     // Check whether there is a modified version of the imported app identification stored
     // in the custom app identifications document. If there is such, merge the two, so user
     // will see the modified version.
-    const modifiedImportedAppIdentsRes =
-      await appIdentifications.findOne({ 'meta.org': { $in: org } }, modifiedImportedProjection);
-    if (modifiedImportedAppIdentsRes &&
-      modifiedImportedAppIdentsRes.imported) {
-      const modifiedAppIdentRes =
-        modifiedImportedAppIdentsRes.imported.find(item => item.id === id);
+    const modifiedImportedAppIdentsRes = await appIdentifications.findOne(
+      { 'meta.org': { $in: org } },
+      modifiedImportedProjection
+    );
+    if (modifiedImportedAppIdentsRes && modifiedImportedAppIdentsRes.imported) {
+      const modifiedAppIdentRes = modifiedImportedAppIdentsRes.imported.find(
+        (item) => item.id === id
+      );
       if (modifiedAppIdentRes) {
         const { category, serviceClass, importance } = modifiedAppIdentRes;
         importedAppIdentRes.category = category;
@@ -306,31 +346,29 @@ const getAppIdentificationUpdateAt = async (orgList) => {
   const projection = {
     updatedAt: 1
   };
-  const customAppIdentsRes =
-    await appIdentifications.findOne({ 'meta.org': { $in: orgList } }, projection);
-  const importedAppIdentsRes =
-    await importedAppIdentifications.findOne({}, projection);
-
-  return (
-    {
-      customUpdatedAt: customAppIdentsRes === null
-        ? ''
-        : customAppIdentsRes.updatedAt,
-      importedUpdatedAt: importedAppIdentsRes === null
-        ? ''
-        : importedAppIdentsRes.updatedAt
-    }
+  const customAppIdentsRes = await appIdentifications.findOne(
+    { 'meta.org': { $in: orgList } },
+    projection
   );
+  const importedAppIdentsRes = await importedAppIdentifications.findOne(
+    {},
+    projection
+  );
+
+  return {
+    customUpdatedAt:
+      customAppIdentsRes === null ? '' : customAppIdentsRes.updatedAt,
+    importedUpdatedAt:
+      importedAppIdentsRes === null ? '' : importedAppIdentsRes.updatedAt
+  };
 };
 
 // Default exports
-module.exports =
-{
-  AppIdentificationsSchema,
+module.exports = {
   getAllAppIdentifications,
   getAppIdentificationUpdateAt,
   getAppIdentificationById,
   appIdentifications,
   importedAppIdentifications,
-  rules: mongoConns.getMainDB().model('rules', rulesSchema)
+  Rules: mongoConns.getMainDB().model('Rules', rulesSchema)
 };

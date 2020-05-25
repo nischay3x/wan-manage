@@ -94,7 +94,7 @@ const setUserPerms = (user, jwtPayload, token = null) => {
   if (isAccessToken) {
     user.defaultAccount = { _id: jwtPayload.account };
 
-    // retrive permissions from token
+    // retrieve permissions from token
     if (jwtPayload.type === 'app_access_key') {
       user.perms = token.permissions;
     }

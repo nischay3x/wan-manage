@@ -17,6 +17,7 @@
 
 const configs = require('../configs')();
 const periodic = require('./periodic')();
+const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -50,10 +51,12 @@ class DeviceQueues {
      * @return {void}
      */
   periodicCheckJobs () {
-    // Delete 7 days old jobs
-    deviceQueues.removeJobs('complete', 604800000);
-    deviceQueues.removeJobs('failed', 604800000);
-    deviceQueues.removeJobs('inactive', 604800000);
+    ha.runIfActive(() => {
+      // Delete 7 days old jobs
+      deviceQueues.removeJobs('complete', 604800000);
+      deviceQueues.removeJobs('failed', 604800000);
+      deviceQueues.removeJobs('inactive', 604800000);
+    });
   }
 }
 

@@ -18,7 +18,7 @@
 // Logic to start/stop a device
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
-const { validateDevice, getAllOrganiztionLanSubnets } = require('./validators');
+const { validateDevice, getAllOrganizationLanSubnets } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -41,9 +41,9 @@ const apply = async (device, user, data) => {
     params: { machineId: device[0].machineId, user: user, data: data }
   });
 
-  const organiztionLanSubnets = await getAllOrganiztionLanSubnets(device[0].org);
+  const organizationLanSubnets = await getAllOrganizationLanSubnets(device[0].org);
 
-  const deviceValidator = validateDevice(device[0], true, organiztionLanSubnets);
+  const deviceValidator = validateDevice(device[0], true, organizationLanSubnets);
 
   if (!deviceValidator.valid) {
     logger.warn('Start command validation failed',

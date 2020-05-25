@@ -191,7 +191,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
  * @param  {string} orgId         the id of the organization
  * @return {[name: string, subnet: string]} array of LAN subnets with router name
  */
-const getAllOrganiztionLanSubnets = async orgId => {
+const getAllOrganizationLanSubnets = async orgId => {
   const subnets = await devices.aggregate([
     { $match: { org: orgId } },
     {
@@ -222,5 +222,5 @@ const getAllOrganiztionLanSubnets = async orgId => {
 module.exports = {
   validateDevice: validateDevice,
   validateModifyDeviceMsg: validateModifyDeviceMsg,
-  getAllOrganiztionLanSubnets: getAllOrganiztionLanSubnets
+  getAllOrganizationLanSubnets: getAllOrganizationLanSubnets
 };
