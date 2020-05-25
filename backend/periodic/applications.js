@@ -17,39 +17,39 @@
 
 const configs = require('../configs')();
 const periodic = require('./periodic')();
-const AppRulesUpdater = require('../deviceLogic/AppRulesUpdateManager');
+const ApplicationsUpdater = require('../deviceLogic/ApplicationsUpdateManager');
 const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 
 /***
- * This class periodically checks if the latest AppIdentification rules were changed
+ * This class periodically checks if the latest Applications were changed
  * and if so, updates the database with the new version
  ***/
 class Applications {
   /**
-    * Creates an instance of the AppRules class
+    * Creates an instance of the Applications class
     */
   constructor () {
-    this.appRulesUpdater = null;
+    this.applicationsUpdater = null;
     this.start = this.start.bind(this);
-    this.periodicCheckAppRules = this.periodicCheckAppRules.bind(this);
+    this.periodicCheckApplications = this.periodicCheckApplications.bind(this);
 
     this.taskInfo = {
-      name: 'check_app_rules',
-      func: this.periodicCheckAppRules,
+      name: 'check_applications',
+      func: this.periodicCheckApplications,
       handle: null,
       period: (1000 * 60 * 60 * 24) // Runs once in a day
     };
   }
 
   /**
-    * Starts the check_app_rules periodic task.
+    * Starts the check_applications periodic task.
     * @return {void}
     */
   start () {
-    this.appRulesUpdater = AppRulesUpdater.getAppRulesUpdaterInstance();
+    this.applicationsUpdater = ApplicationsUpdater.getApplicationsManagerInstance();
 
-    // Get the app rules upon starting up
-    this.periodicCheckAppRules();
+    // Get the applications upon starting up
+    this.periodicCheckApplications();
 
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
@@ -57,13 +57,13 @@ class Applications {
   }
 
   /**
-    * Polls app rules repository to check if
-    * a rules file has been released.
+    * Polls applications repository to check if
+    * a applications file has been released.
     * @return {void}
     */
-  periodicCheckAppRules () {
+  periodicCheckApplications () {
     ha.runIfActive(() => {
-      this.appRulesUpdater.pollAppRules();
+      this.applicationsUpdater.pollApplications();
     });
   }
 }

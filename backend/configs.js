@@ -132,7 +132,9 @@ const configEnv = {
     // Web hooks register device secret, send in addition to the message for filtering
     webHookRegisterDeviceSecret: 'ABC',
     // Global app identification rules file location
-    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
+    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
+    // Global applications file locations
+    applicationsUrl: './applications.json'
   },
 
   // Override for development environment, default environment if not specified
