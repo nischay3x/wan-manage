@@ -15,80 +15,101 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-const mongoConns = require('../mongoConns.js')();
+const mongoConns = require("../mongoConns.js")();
 
+/**
+ * Metadata Database Schema
+ */
+const metaSchema = new Schema({
+  time: {
+    type: Number,
+  },
+});
 /**
  * Applications Database Schema
  *
  * A schema for the documents that stores all available applications
  */
-const applicationSchema = new Schema({
-  // application name
-  name: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true,
-    minlength: [2, 'App name must be at least 2'],
-    maxlength: [30, 'App name must be at most 30']
+const applicationSchema = new Schema(
+  {
+    meta: {
+      type: metaSchema,
+      required: true,
+    },
+    applications: [
+      {
+        // application name
+        name: {
+          type: String,
+          required: true,
+          unique: true,
+          index: true,
+          minlength: [2, "App name must be at least 2"],
+          maxlength: [30, "App name must be at most 30"],
+        },
+        // application description
+        description: {
+          type: String,
+          required: true,
+          minlength: [2, "Description must be at least 2"],
+          maxlength: [100, "Description must be at most 100"],
+        },
+        // latest version
+        latestVersion: {
+          type: String,
+          required: true,
+          minlength: [2, "Latest Version must be at least 2"],
+          maxlength: [30, "Latest Version must be at most 30"],
+        },
+        // created date on repository
+        createdDate: {
+          type: Date,
+          required: true,
+          default: Date.now,
+        },
+        // who is the creator of this application
+        creator: {
+          type: String,
+          minlength: [2, "Creator must be at least 2"],
+          maxlength: [30, "Creator must be at most 30"],
+        },
+        // cpu requirements
+        cpuRequirements: {
+          type: Number,
+        },
+        // ram requirements
+        ramRequirements: {
+          type: Number,
+        },
+        // the FlexiWAN components used by application
+        components: {
+          type: [String],
+          enum: ["Manage", "Edge", "Client"],
+        },
+        // the FlexiWAN components used by application
+        operatingSystem: {
+          type: [String],
+          enum: ["Windows", "Linux"],
+        },
+        // application dependencies
+        dependencies: {
+          type: [String],
+        },
+        // application permissions
+        permissions: {
+          // TODO: complete here
+        },
+      },
+    ],
   },
-  // application description
-  description: {
-    type: String,
-    required: true,
-    minlength: [2, 'Description must be at least 2'],
-    maxlength: [100, 'Description must be at most 100']
-  },
-  // latest version
-  latestVersion: {
-    type: String,
-    required: true,
-    minlength: [2, 'Latest Version must be at least 2'],
-    maxlength: [30, 'Latest Version must be at most 30']
-  },
-  // created date on repository
-  createdDate: {
-    type: Date,
-    required: true,
-    default: Date.now
-  },
-  // who is the creator of this application
-  creator: {
-    type: String,
-    minlength: [2, 'Creator must be at least 2'],
-    maxlength: [30, 'Creator must be at most 30']
-  },
-  // cpu requirements
-  cpuRequirements: {
-    type: Number
-  },
-  // ram requirements
-  ramRequirements: {
-    type: Number
-  },
-  // the FlexiWAN components used by application
-  components: {
-    type: [String],
-    enum: ['Manage', 'Edge', 'Client']
-  },
-  // the FlexiWAN components used by application
-  operatingSystem: {
-    type: [String],
-    enum: ['Windows', 'Linux']
-  },
-  // application dependencies
-  dependencies: {
-    type: [String]
-  },
-  // application permissions
-  permissions: {
-    // TODO: complete here
+  {
+    timestamps: true,
   }
-}, {
-  timestamps: true
-});
+);
 
 // Default exports
-module.exports = mongoConns.getMainDB().model('applications', applicationSchema);
+module.exports = mongoConns
+  .getMainDB()
+  .model("applications", applicationSchema);
