@@ -142,7 +142,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         const orgSubnet = orgDevice.subnet;
         const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
 
-        // not check with same device
+        // Don't check overlapping with same device
         if (orgDevice._id.toString() === device._id.toString()) {
           continue;
         };
