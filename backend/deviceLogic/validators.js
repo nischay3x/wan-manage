@@ -45,7 +45,7 @@ const validateIPv4Mask = mask => {
  * therefore the device can be started.
  * @param {Object}  device                 the device to check
  * @param {Boolean} checkLanOverlaps           if need to check LAN subnets overlap
- * @param {[name: string, subnet: string]} organizationLanSubnets subnets to check if checkOverlap
+ * @param {[_id: objectId, name: string, subnet: string]} organizationLanSubnets to check overlaps
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets = []) => {
