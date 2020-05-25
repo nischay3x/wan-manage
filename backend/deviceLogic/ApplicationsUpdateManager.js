@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const fetchUtils = require('../utils/fetchUtils');
+// const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
 const applications = require('../models/applications');
@@ -76,7 +76,7 @@ class ApplicationsUpdateManager {
       // }
 
       const appList = body.applications || [];
-      
+
       const options = {
         upsert: true,
         setDefaultsOnInsert: true,
@@ -85,13 +85,13 @@ class ApplicationsUpdateManager {
 
       for (let i = 0; i < appList.length; i++) {
         // skip if app not changed on repository
-        const app = await applications.findOne({name: appList[i].name});
-        if (app && app.repositoryTime === body.meta.time) {          
+        const app = await applications.findOne({ name: appList[i].name });
+        if (app && app.repositoryTime === body.meta.time) {
           continue;
         }
-  
+
         const set = { $set: { repositoryTime: body.meta.time, ...appList[i] } };
-        await applications.findOneAndUpdate({name: appList[i].name}, set, options);
+        await applications.findOneAndUpdate({ name: appList[i].name }, set, options);
       }
 
       logger.info('Applications database updated', {

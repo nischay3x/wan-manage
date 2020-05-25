@@ -20,14 +20,6 @@ const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 
 /**
- * Metadata Database Schema
- */
-const metaSchema = new Schema({
-  time: {
-    type: Number
-  }
-});
-/**
  * Applications Database Schema
  *
  * A schema for the documents that stores all available applications
@@ -64,7 +56,7 @@ const applicationSchema = new Schema(
       default: Date.now
     },
     repositoryTime: {
-      type: Number,
+      type: Number
     },
     // who is the creator of this application
     creator: {

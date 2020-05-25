@@ -44,6 +44,10 @@ const purchasedApplicationSchema = new Schema({
     type: Date,
     required: true
   },
+  removed: {
+    type: Boolean,
+    default: false
+  },
   configuration: {
     type: Object
   }

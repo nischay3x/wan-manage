@@ -29,9 +29,17 @@ class ApplicationsController {
   async applicationsGET (request, response) {
     await Controller.handleRequest(request, response, this.service.applicationsGET);
   }
-  
-  async applicationsPOST (request, response) {    
+
+  async applicationsPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.applicationsPOST);
+  }
+
+  async applicationsDELETE (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsDELETE);
+  }
+
+  async applicationsConfigurationPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsConfigurationPUT);
   }
 }
 
