@@ -141,7 +141,13 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
       for (const currentLanIfc of lanIfcs) {
         const orgSubnet = orgDevice.subnet;
         const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
-        if (currentSubnet !== orgSubnet && cidr.overlap(currentSubnet, orgSubnet)) {
+
+        // not check with same device
+        if (orgDevice._id.toString() === device._id.toString()) {
+          continue;
+        };
+
+        if (cidr.overlap(currentSubnet, orgSubnet)) {
           const msg =
           `The LAN subnet ${currentSubnet} overlaps with a LAN subnet of device ${orgDevice.name}`;
 
@@ -189,7 +195,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
 /**
  * Get all LAN subnets in the same organization
  * @param  {string} orgId         the id of the organization
- * @return {[name: string, subnet: string]} array of LAN subnets with router name
+ * @return {[_id: objectId, name: string, subnet: string]} array of LAN subnets with router name
  */
 const getAllOrganizationLanSubnets = async orgId => {
   const subnets = await devices.aggregate([
@@ -201,13 +207,14 @@ const getAllOrganizationLanSubnets = async orgId => {
         'interfaces.type': 1,
         'interfaces.isAssigned': 1,
         name: 1,
-        _id: 0
+        _id: 1
       }
     },
     { $unwind: '$interfaces' },
     { $match: { 'interfaces.type': 'LAN', 'interfaces.isAssigned': true } },
     {
       $project: {
+        _id: 1,
         name: 1,
         subnet: {
           $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
