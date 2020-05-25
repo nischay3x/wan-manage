@@ -16,12 +16,24 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 /* eslint-disable no-unused-vars */
 const Service = require('./Service');
+const createError = require('http-errors');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const MultiLinkPolicies = require('../models/mlpolicies');
 const { devices } = require('../models/devices');
 const { ObjectId } = require('mongoose').Types;
 
 class MultiLinkPoliciesService {
+  static verifyRequestSchema (rules) {
+    for (const rule of rules) {
+      const { application, prefix } = rule.classification;
+      if (
+        (!application && !prefix) ||
+        (application && prefix)
+      ) return false;
+    }
+    return true;
+  }
+
   /**
    * Get all Multi Link policies
    *
@@ -159,6 +171,12 @@ class MultiLinkPoliciesService {
     try {
       const { name, description, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      // Verify request schema
+      if (!MultiLinkPoliciesService.verifyRequestSchema(rules)) {
+        throw createError(400, 'Invalid policy schema');
+      }
+
       const MLPolicy = await MultiLinkPolicies.findOneAndUpdate(
         {
           org: { $in: orgList },
@@ -241,6 +259,12 @@ class MultiLinkPoliciesService {
     try {
       const { name, description, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      // Verify request schema
+      if (!MultiLinkPoliciesService.verifyRequestSchema(rules)) {
+        throw createError(400, 'Invalid policy schema');
+      }
+
       let result = await MultiLinkPolicies.create({
         org: orgList[0].toString(),
         name: name,

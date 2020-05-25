@@ -7365,7 +7365,6 @@ components:
               - ""
               - tcp
               - udp
-              - icmp
               type: string
           required:
           - ip
