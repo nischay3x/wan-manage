@@ -95,7 +95,13 @@ const setUserPerms = async (user, jwtPayload, token = null) => {
   if (isAccessToken) {
     const userAccount = await Accounts.findOne({ _id: jwtPayload.account });
 
-    if (!userAccount) return false;
+    if (!userAccount) {
+      logger.warn('Could not find account by jwt payload', {
+        params: { jwtPayload: jwtPayload }
+      });
+
+      return false;
+    }
 
     user.defaultAccount = userAccount;
 
