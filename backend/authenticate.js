@@ -20,6 +20,7 @@ var LocalStrategy = require('passport-local').Strategy;
 var JwtStrategy = require('passport-jwt').Strategy;
 var ExtractJwt = require('passport-jwt').ExtractJwt;
 var User = require('./models/users');
+const Accounts = require('./models/accounts');
 const Accesstoken = require('./models/accesstokens');
 const { verifyToken, getToken } = require('./tokens');
 const { permissionMasks } = require('./models/membership');
@@ -65,11 +66,11 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
     .findOne({ _id: jwtPayload._id })
     .populate('defaultOrg')
     .populate('defaultAccount')
-    .exec((err, user) => {
+    .exec(async (err, user) => {
       if (err) {
         return done(err, false);
       } else if (user) {
-        const res = setUserPerms(user, jwtPayload, token);
+        const res = await setUserPerms(user, jwtPayload, token);
         return res === true
           ? done(null, user)
           : done(null, false, { message: 'Invalid Token' });
@@ -79,7 +80,7 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
     });
 }));
 
-const setUserPerms = (user, jwtPayload, token = null) => {
+const setUserPerms = async (user, jwtPayload, token = null) => {
   const isAccessToken = ['app_access_key', 'app_access_token'].includes(jwtPayload.type);
   const isValidAccount = user.defaultAccount &&
     user.defaultAccount._id.toString() === jwtPayload.account;
@@ -92,7 +93,17 @@ const setUserPerms = (user, jwtPayload, token = null) => {
 
   // override user default account with account stored on jwtPayload
   if (isAccessToken) {
-    user.defaultAccount = { _id: jwtPayload.account };
+    const userAccount = await Accounts.findOne({ _id: jwtPayload.account });
+
+    if (!userAccount) {
+      logger.warn('Could not find account by jwt payload', {
+        params: { jwtPayload: jwtPayload }
+      });
+
+      return false;
+    }
+
+    user.defaultAccount = userAccount;
 
     // retrieve permissions from token
     if (jwtPayload.type === 'app_access_key') {
@@ -200,7 +211,7 @@ exports.verifyUserJWT = function (req, res, next) {
             // since passport's JWT strategy callback will not
             // be called.
             const jwtPayload = jwt.decode(token);
-            setUserPerms(userDetails, jwtPayload);
+            await setUserPerms(userDetails, jwtPayload);
             user = userDetails;
           } catch (err) {
             if (req.header('Origin') !== undefined) {
