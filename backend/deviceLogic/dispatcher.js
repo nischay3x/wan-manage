@@ -23,6 +23,7 @@ const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
 const mlpolicy = require('./mlpolicy');
+const application = require('./application');
 const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
 const configs = require('../configs')();
@@ -91,6 +92,12 @@ const methods = {
     complete: mlpolicy.complete,
     error: mlpolicy.error,
     remove: mlpolicy.remove
+  },
+  application: {
+    apply: application.apply,
+    complete: application.complete,
+    error: application.error,
+    remove: application.remove
   },
   appIdentification: {
     apply: appIdentification.apply,

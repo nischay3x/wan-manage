@@ -354,6 +354,36 @@ const deviceVersionsSchema = new Schema({
 });
 
 /**
+ * Device application Schema
+ */
+const deviceApplicationSchema = new Schema({
+  _id: false,
+  app: {
+    type: Schema.Types.ObjectId,
+    ref: 'purchasedApplications',
+    default: null
+  },
+  status: {
+    type: String,
+    enum: [
+      '',
+      'installing',
+      'installed',
+      'uninstalling',
+      'job queue failed',
+      'job deleted',
+      'installation failed',
+      'uninstallation failed'
+    ],
+    default: ''
+  },
+  requestTime: {
+    type: Date,
+    default: null
+  }
+});
+
+/**
  * Device policy schema
  */
 const devicePolicySchema = new Schema({
@@ -542,7 +572,8 @@ const deviceSchema = new Schema({
       type: devicePolicySchema,
       default: devicePolicySchema
     }
-  }
+  },
+  applications: [deviceApplicationSchema]
 },
 {
   timestamps: true

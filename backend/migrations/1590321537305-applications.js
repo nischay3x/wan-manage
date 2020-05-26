@@ -15,11 +15,26 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const { membership } = require('../models/membership');
+const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
 const { addPerms, removePerms } = require('./utils/updatePerms');
 
 async function up () {
   try {
+
+    const results = await devices.updateMany(
+      { 'applications': { $exists: false } },
+      { $set: { 'applications': [] } },
+      { upsert: false }
+    );
+
+    logger.info('Database migration info', {
+      params: {
+        collections: ['membership'],
+        operation: 'up',
+        result: results
+      }});
+
     await addPerms(membership, 'applications');
   } catch (err) {
     logger.error('Database migration failed', {
@@ -34,6 +49,13 @@ async function up () {
 
 async function down () {
   try {
+
+    await devices.updateMany(
+      {},
+      { $unset: { 'applications': '' } },
+      { upsert: false }
+    );
+
     await removePerms(membership, 'applications');
   } catch (err) {
     logger.error('Database migration failed', {
