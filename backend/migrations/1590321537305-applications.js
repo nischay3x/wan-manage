@@ -21,10 +21,9 @@ const { addPerms, removePerms } = require('./utils/updatePerms');
 
 async function up () {
   try {
-
     const results = await devices.updateMany(
-      { 'applications': { $exists: false } },
-      { $set: { 'applications': [] } },
+      { applications: { $exists: false } },
+      { $set: { applications: [] } },
       { upsert: false }
     );
 
@@ -33,7 +32,8 @@ async function up () {
         collections: ['membership'],
         operation: 'up',
         result: results
-      }});
+      }
+    });
 
     await addPerms(membership, 'applications');
   } catch (err) {
@@ -49,10 +49,9 @@ async function up () {
 
 async function down () {
   try {
-
     await devices.updateMany(
       {},
-      { $unset: { 'applications': '' } },
+      { $unset: { applications: '' } },
       { upsert: false }
     );
 

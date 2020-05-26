@@ -18,6 +18,7 @@
 const Service = require('./Service');
 // const configs = require('../configs')();
 const applications = require('../models/applications');
+const { devices } = require('../models/devices');
 const purchasedApplications = require('../models/purchasedApplications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 // const { devices } = require('../models/devices');
@@ -159,7 +160,13 @@ class ApplicationsService {
         { upsert: false }
       );
 
-      // TODO: send job to remove from devices
+      // TODO: send jobs to remove from devices
+
+      // remove this app from all devices
+      await devices.updateMany(
+        { org: { $in: orgList } },
+        { $pull: { applications: { app: id } } }
+      );
 
       return Service.successResponse(null, 204);
     } catch (e) {

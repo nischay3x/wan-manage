@@ -114,6 +114,7 @@ class DevicesService {
       'account',
       'ipList',
       'policies',
+      'applications',
       // Internal array, objects
       'labels',
       'upgradeSchedule']);
@@ -311,9 +312,14 @@ class DevicesService {
   static async devicesIdGET ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await devices.findOne({ _id: id, org: { $in: orgList } })
+      let result = await devices.findOne({ _id: id, org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type')
-        .populate('policies.multilink.policy', '_id name description');
+        .populate('policies.multilink.policy', '_id name description')
+        .populate('applications.app');
+
+      // populate nested app
+      result = await result.populate('applications.app.app').execPopulate();
+
       const device = DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);

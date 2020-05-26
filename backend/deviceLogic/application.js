@@ -15,120 +15,122 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const createError = require("http-errors");
-const PurchasedApplications = require("../models/purchasedApplications");
-const mongoConns = require("../mongoConns.js")();
-const configs = require("../configs")();
-const logger = require("../logging/logging")({
+const createError = require('http-errors');
+const PurchasedApplications = require('../models/purchasedApplications');
+const mongoConns = require('../mongoConns.js')();
+// const configs = require('../configs')();
+const logger = require('../logging/logging')({
   module: module.filename,
-  type: "req",
+  type: 'req'
 });
-const { devices } = require("../models/devices");
-const deviceQueues = require("../utils/deviceQueue")(
-  configs.get("kuePrefix"),
-  configs.get("redisUrl")
-);
-const { getDevicesAppIdentificationJobInfo } = require("./appIdentification");
-const appComplete = require("./appIdentification").complete;
-const appError = require("./appIdentification").error;
-const appRemove = require("./appIdentification").remove;
+const { devices } = require('../models/devices');
+// const deviceQueues = require('../utils/deviceQueue')(
+//   configs.get('kuePrefix'),
+//   configs.get('redisUrl')
+// );
+// const { getDevicesAppIdentificationJobInfo } = require('./appIdentification');
+// const appComplete = require('./appIdentification').complete;
+// const appError = require('./appIdentification').error;
+// const appRemove = require('./appIdentification').remove;
 
-const queueApplicationJob = async (
-  deviceList,
-  op,
-  requestTime,
-  application,
-  user,
-  org
-) => {
-  const jobs = [];
-  const jobTitle =
-    op === "install" ? `Install application ${policy.name}` : "Uninstall application";
+// const queueApplicationJob = async (
+//   deviceList,
+//   op,
+//   requestTime,
+//   application,
+//   user,
+//   org
+// ) => {
+//   const jobs = [];
+//   const jobTitle =
+//     op === 'install'
+//       ? `Install application ${application.name}`
+//       : 'Uninstall application';
 
-  // Extract applications information
-  const {
-    message,
-    params,
-    installIds,
-    deviceJobResp,
-  } = await getDevicesAppIdentificationJobInfo(
-    org,
-    "multilink",
-    deviceList,
-    op === "install"
-  );
+//   // Extract applications information
+//   const {
+//     message,
+//     params,
+//     installIds,
+//     deviceJobResp
+//   } = await getDevicesAppIdentificationJobInfo(
+//     org,
+//     'multilink',
+//     deviceList,
+//     op === 'install'
+//   );
 
-  deviceList.forEach((dev) => {
-    const { _id, machineId, policies } = dev;
-    const tasks = [
-      [
-        {
-          entity: "agent",
-          message: `${op === "install" ? "add" : "remove"}-multilink-policy`,
-          params: {},
-        },
-      ],
-    ];
+//   deviceList.forEach((dev) => {
+//     const { _id, machineId, policies } = dev;
+//     const tasks = [
+//       [
+//         {
+//           entity: 'agent',
+//           message: `${op === 'install' ? 'add' : 'remove'}-multilink-policy`,
+//           params: {}
+//         }
+//       ]
+//     ];
 
-    if (op === "install") {
-      tasks[0][0].params.id = policy._id;
-      tasks[0][0].params.rules = policy.rules.map((rule) => {
-        const { _id, priority, action, classification } = rule;
-        return {
-          id: _id,
-          priority: priority,
-          classification: classification,
-          action: action,
-        };
-      });
-    }
-    const data = {
-      policy: {
-        device: { _id: _id, mlpolicy: policies.multilink },
-        requestTime: requestTime,
-        op: op,
-        org: org,
-      },
-    };
+//     if (op === 'install') {
+//       tasks[0][0].params.id = policy._id;
+//       tasks[0][0].params.rules = policy.rules.map((rule) => {
+//         const { _id, priority, action, classification } = rule;
+//         return {
+//           id: _id,
+//           priority: priority,
+//           classification: classification,
+//           action: action,
+//         };
+//       });
+//     }
+//     const data = {
+//       policy: {
+//         device: { _id: _id, mlpolicy: policies.multilink },
+//         requestTime: requestTime,
+//         op: op,
+//         org: org,
+//       },
+//     };
 
-    // If the device's appIdentification database is outdated
-    // we add an "add-application" message as well.
-    if (installIds[_id] === true) {
-      tasks[0].unshift({
-        entity: "agent",
-        message: message,
-        params: params,
-      });
-      data.appIdentification = {
-        deviceId: _id,
-        ...deviceJobResp,
-      };
-    }
+//     // If the device's appIdentification database is outdated
+//     // we add an "add-application" message as well.
+//     if (installIds[_id] === true) {
+//       tasks[0].unshift({
+//         entity: 'agent',
+//         message: message,
+//         params: params,
+//       });
+//       data.appIdentification = {
+//         deviceId: _id,
+//         ...deviceJobResp,
+//       };
+//     }
 
-    jobs.push(
-      deviceQueues.addJob(
-        machineId,
-        user.username,
-        org,
-        // Data
-        {
-          title: jobTitle,
-          tasks: tasks,
-        },
-        // Response data
-        {
-          method: "mlpolicy",
-          data: data,
-        },
-        // Metadata
-        { priority: "high", attempts: 1, removeOnComplete: false },
-        // Complete callback
-        null
-      )
-    );
-  });
-  return Promise.allSettled(jobs);
-};
+//     jobs.push(
+//       deviceQueues.addJob(
+//         machineId,
+//         user.username,
+//         org,
+//         // Data
+//         {
+//           title: jobTitle,
+//           tasks: tasks,
+//         },
+//         // Response data
+//         {
+//           method: 'mlpolicy',
+//           data: data,
+//         },
+//         // Metadata
+//         { priority: 'high', attempts: 1, removeOnComplete: false },
+//         // Complete callback
+//         null
+//       )
+//     );
+//   });
+//   return Promise.allSettled(jobs);
+// };
 
 const getOpDevices = async (devicesObj, org, purchasedApp) => {
   console.log(1);
@@ -137,9 +139,9 @@ const getOpDevices = async (devicesObj, org, purchasedApp) => {
   // of all devices that are currently running the policy
   const devicesList = Object.keys(devicesObj);
   if (devicesList.length > 0) return devicesList;
-  
+
   // TODO: understand this flow
-  
+
   console.log(2);
   // Select only devices on which the application is already
   // installed or in the process of installation, to make
@@ -149,8 +151,8 @@ const getOpDevices = async (devicesObj, org, purchasedApp) => {
   const result = await devices.find(
     {
       org: org,
-      "applications.app": _id,
-      "applications.status": { $in: ["installing", "installed"] },
+      'applications.app': _id,
+      'applications.status': { $in: ['installing', 'installed'] }
     },
     { _id: 1 }
   );
@@ -171,23 +173,17 @@ const apply = async (deviceList, user, data) => {
   const { org } = data;
   const { op, id } = data.meta;
 
-  let application, session, deviceIds;
+  let app, session, deviceIds;
   const requestTime = Date.now();
-
-  console.log("***********************");
-  console.log("org", org);
-  console.log("op", op);
-  console.log("id", id);
-  console.log("***********************");
 
   try {
     session = await mongoConns.getMainDB().startSession();
 
     await session.withTransaction(async () => {
-      if (op === "deploy") {
+      if (op === 'deploy') {
         app = await PurchasedApplications.findOne({
           org: org,
-          _id: id,
+          _id: id
         }).session(session);
 
         if (!app) {
@@ -203,64 +199,71 @@ const apply = async (deviceList, user, data) => {
       deviceIds = data.devices
         ? await getOpDevices(data.devices, org, app)
         : [deviceList[0]._id];
-    
-      const update =
-        op === "deploy"
-          ? {
-              $push: {
-                "applications": {
-                  app: app._id,
-                  status: "installing",
-                  requestTime: requestTime,
-                },
-              },
-            }
-          : {
-            // TODO: update uninstall 
-              $set: {
-                "policies.multilink.status": "uninstalling",
-                "policies.multilink.requestTime": requestTime,
-              },
-            };
 
-        await devices.updateMany(
-          { 
-            _id: { $in: deviceIds },
-            org: org,
-            // prevent install this app twice
-            "applications.app": {$ne: app._id}
-          },
-          update,
-          { 
-            upsert: false
+      const update =
+        op === 'deploy'
+          ? {
+            $push: {
+              applications: {
+                app: app._id,
+                status: 'installing',
+                requestTime: requestTime
+              }
+            }
           }
-        ).session(session);
+          : {
+            // TODO: update uninstall
+            $pull: { applications: { app: id } }
+            // $pull: {
+            //   "applications.status": "uninstalling",
+            // },
+          };
+
+      const query = {
+        _id: { $in: deviceIds },
+        org: org
+      };
+
+      if (op === 'deploy') {
+        query['applications.app'] = { $ne: app._id };
+      }
+
+      await devices.updateMany(query, update,
+        { upsert: false }
+      ).session(session);
     });
   } catch (error) {
-    console.log(error.message)
-    throw error.name === "MongoError" ? new Error() : error;
+    console.log(error.message);
+    throw error.name === 'MongoError' ? new Error() : error;
   } finally {
     session.endSession();
   }
 
   // Queue applications jobs. Fail the request if
   // there are jobs that failed to be queued
+  // const deviceIdsSet = new Set(deviceIds.map((id) => id.toString()));
+  // const opDevices = deviceList.filter((device) => {
+  //  return deviceIdsSet.has(device._id.toString());
+  // });
 
-  const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
-  const opDevices = deviceList.filter(device => {
-    return deviceIdsSet.has(device._id.toString());
-  });
+  // const jobs = await queueApplicationJob(
+  //   opDevices,
+  //   op,
+  //   requestTime,
+  //   app,
+  //   user,
+  //   org
+  // );
 
-  // const jobs = await queueApplicationJob(opDevices, op, requestTime, app, user, org);
   // const failedToQueue = [];
   // const succeededToQueue = [];
-  // jobs.forEach(job => {
+  // jobs.forEach((job) => {
   //   switch (job.status) {
-  //     case 'rejected': {
+  //     case "rejected": {
   //       failedToQueue.push(job);
   //       break;
   //     }
-  //     case 'fulfilled': {
+  //     case "fulfilled": {
   //       const { id } = job.value;
   //       succeededToQueue.push(id);
   //       break;
@@ -276,22 +279,23 @@ const apply = async (deviceList, user, data) => {
   // if (failedToQueue.length !== 0) {
   //   const failedDevices = failedToQueue.map(ent => {
   //     const { job } = ent.reason;
-  //     const { _id } = job.data.response.data.policy.device;
+  //     const { _id } = job.data.response.data.application.device;
   //     return _id;
   //   });
 
-  //   logger.error('Policy jobs queue failed', {
+  //   logger.error('Application jobs queue failed', {
   //     params: { jobId: failedToQueue[0].reason.job.id, devices: failedDevices }
   //   });
 
-  //   // Update devices' policy status in the database
+  //   // Update devices application status in the database
   //   await devices.updateMany(
   //     { _id: { $in: failedDevices }, org: org },
-  //     { $set: { 'policies.multilink.status': 'job queue failed' } },
+  //     { $set: { 'applications.status': 'job queue failed' } }, // TODO: update just nested app
   //     { upsert: false }
   //   );
+
   //   status = 'partially completed';
-  //   message = `${succeededToQueue.length} of ${jobs.length} policy jobs added`;
+  //   message = `${succeededToQueue.length} of ${jobs.length} application jobs added`;
   // }
 
   // return {
@@ -302,49 +306,47 @@ const apply = async (deviceList, user, data) => {
 
   return {
     ids: [1, 2, 3],
-    status: "completed",
-    message: `${[1, 2, 3].length} of ${
-      [1, 2, 3].length
-    } applications jobs added`,
+    status: 'completed',
+    message: ''
   };
 };
 
 /**
- * Called when add/remove policy is job completed.
- * Updates the status of the policy in the database.
+ * Called when add/remove application is job completed.
+ * Updates the status of the application in the database.
  * @async
  * @param  {number} jobId Kue job ID number
  * @param  {Object} res   job result
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info("Application job completed", {
-    params: { result: res, jobId: jobId },
+  logger.info('Application job completed', {
+    params: { result: res, jobId: jobId }
   });
 
-  // const { op, org } = res.policy;
-  // const { _id } = res.policy.device;
-  // try {
-  //   const update = op === 'install'
-  //     ? { $set: { 'policies.multilink.status': 'installed' } }
-  //     : { $set: { 'policies.multilink': {} } };
+  const { op, org } = res.application;
+  const { _id } = res.application.device;
+  try {
+    const update = op === 'install'
+      ? { $set: { 'applications.status': 'installed' } }
+      : { $set: { applications: [] } }; // TODO: fix uninstall
 
-  //   await devices.updateOne(
-  //     { _id: _id, org: org },
-  //     update,
-  //     { upsert: false }
-  //   );
+    await devices.updateOne(
+      { _id: _id, org: org },
+      update,
+      { upsert: false }
+    );
 
   //   // Call appIdentification complete callback if needed
   //   if (res.appIdentification) {
   //     res = res.appIdentification;
   //     appComplete(jobId, res);
   //   }
-  // } catch (err) {
-  //   logger.error('Device policy status update failed', {
-  //     params: { jobId: jobId, res: res, err: err.message }
-  //   });
-  // }
+  } catch (err) {
+    logger.error('Device policy status update failed', {
+      params: { jobId: jobId, res: res, err: err.message }
+    });
+  }
 };
 
 /**
@@ -356,8 +358,8 @@ const complete = async (jobId, res) => {
  * @return {void}
  */
 const error = async (jobId, res) => {
-  logger.error("Policy job failed", {
-    params: { result: res, jobId: jobId },
+  logger.error('Policy job failed', {
+    params: { result: res, jobId: jobId }
   });
 
   // const { policy } = res;
@@ -392,8 +394,8 @@ const error = async (jobId, res) => {
  * @return {void}
  */
 const remove = async (job) => {
-  const { device, org, requestTime } = job.data.response.data.policy;
-  const { _id } = device;
+  // const { device, org, requestTime } = job.data.response.data.policy;
+  // const { _id } = device;
 
   // if (['inactive', 'delayed'].includes(job._state)) {
   //   logger.info('Policy job removed', {
@@ -432,5 +434,5 @@ module.exports = {
   apply: apply,
   complete: complete,
   error: error,
-  remove: remove,
+  remove: remove
 };
