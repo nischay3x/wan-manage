@@ -45,6 +45,28 @@ class ApplicationsService {
     }
   }
 
+  static async applicationGET ({ org, id }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const installedApp = await purchasedApplications
+        .findOne({
+          org: { $in: orgList },
+          removed: false,
+          _id: id
+        })
+        .populate('app')
+        .populate('org');
+
+      return Service.successResponse({ application: installedApp });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
   /**
    * purchase new application
    *
@@ -188,12 +210,21 @@ class ApplicationsService {
    */
   static async applicationsConfigurationPUT ({ id, application, org }, { user }) {
     try {
-      await purchasedApplications.updateOne(
+      const updated = await purchasedApplications.findOneAndUpdate(
         { _id: id },
-        { $set: { configuration: application.configuration } }
+        { $set: { configuration: application.configuration } },
+        {
+          new: true
+        }
       );
 
-      return Service.successResponse(null, 204);
+      await updated.populate('app')
+        .populate('org')
+        .execPopulate();
+
+      // TODO: update application on devices if needed
+
+      return Service.successResponse({ application: updated });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

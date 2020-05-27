@@ -41,6 +41,10 @@ class ApplicationsController {
   async applicationsConfigurationPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.applicationsConfigurationPUT);
   }
+
+  async applicationGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationGET);
+  }
 }
 
 module.exports = ApplicationsController;
