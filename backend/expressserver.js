@@ -201,6 +201,8 @@ class ExpressServer {
     this.app.use('/spec', express.static(path.join(__dirname, 'api', 'openapi.yaml')));
     this.app.get('/hello', (req, res) => res.send('Hello World'));
 
+    this.app.use('/api/vpn', require('./routes/vpn'))
+
     this.app.use(cors.corsWithOptions);
     this.app.use(auth.verifyUserJWT);
     // this.app.use(auth.verifyPermission);
