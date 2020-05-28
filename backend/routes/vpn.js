@@ -31,15 +31,34 @@ const {
 const cors = require("./cors");
 var passport = require("passport");
 
-var SamlStrategy = require("passport-saml").Strategy;
+const MultiSamlStrategy = require("passport-saml/multiSamlStrategy");
+
+const ProvidersSettings = {
+  'G-Suite': {
+    path: '/login/callback',
+    entryPoint: 'https://samltest.id/saml/idp',
+    issuer: 'passport-saml'
+  },
+};
 
 passport.use(
-  new SamlStrategy(
+  new MultiSamlStrategy(
     {
-      path: "/login/callback",
-      entryPoint:
-        "https://openidp.feide.no/simplesaml/saml2/idp/SSOService.php",
-      issuer: "passport-saml",
+      passReqToCallback: true,
+      // get saml options based on org auth method
+      getSamlOptions: function (request, done) {
+        if (!request.provider) {
+          return done(err);
+        } else {
+          const type = request.provider.type;
+ 
+          console.log(
+            "ProvidersSettings[type]",
+            ProvidersSettings[type]
+          );
+          return done(null, ProvidersSettings[type]);
+        }
+      },
     },
     function (profile, done) {
       return done(null, profile);
@@ -64,7 +83,9 @@ router
       }
 
       // try to get user
-      const user = await User.findOne({ email: req.body.username });
+      const user = await User.findOne({ email: req.body.username }).populate(
+        "defaultAccount"
+      );
 
       if (user) {
         const accounts = await getUserAccounts(user);
@@ -74,27 +95,27 @@ router
           // TODO: return to select account
         }
 
-        await user.populate("defaultAccount").execPopulate();
-
+        // get user organization
         const userOrgs = await getUserOrganizations(user);
-
         if (Array.isArray(userOrgs) && userOrgs.length === 0) {
           console.log("no org found");
           return next(createError(401, "Could not get user info"));
         }
 
+        // if user exists on multi orgs - need to choose one
         const orgIds = Object.keys(userOrgs);
-
         if (orgIds.length > 1) {
           console.log("choose org");
           // TODO: return to select org
         }
 
+        // get open vpn app
         const openVpn = await Applications.findOne({ name: "Open VPN" });
-        if (!openVpn)
+        if (!openVpn) {
           return next(createError(500, "No Open VPN app installed"));
+        }
 
-        // check if open vpn install on this org
+        // check if open vpn install on selected org
         const vpnInstalled = await PurchasedApplications.findOne({
           org: orgIds[0],
           app: openVpn._id,
@@ -105,13 +126,22 @@ router
           return next(createError(500, "No Open VPN app installed"));
         }
 
-        // get authentication methods
-        const authMethods = vpnInstalled.configuration.authentications;
+        // get enabled authentication methods
+        const authMethods = vpnInstalled.configuration.authentications || [];
+        const enabledAuthMethods = authMethods.filter((a) => a.enabled);
+
+        if (enabledAuthMethods.length === 0) {
+          const msg =
+            "No Authentication method enabled. please contact your system administrator";
+          
+            return next(createError(500, msg));
+        }
 
         console.log("user", user);
         console.log("accounts", accounts);
         console.log("userOrgs", userOrgs);
-        console.log("authMethods", authMethods);
+        console.log("enabledAuthMethods", enabledAuthMethods);
+        req.provider = enabledAuthMethods[0];
         return next();
       } else {
         return next(createError(401, "Could not get user info"));
