@@ -59,6 +59,7 @@ class MultiLinkPoliciesService {
           'rules.action': 1
         }
       )
+        .lean()
         .skip(offset)
         .limit(limit)
         .populate(
@@ -66,7 +67,8 @@ class MultiLinkPoliciesService {
           '_id name description color type'
         );
 
-      return Service.successResponse(mlPolicies);
+      const converted = JSON.parse(JSON.stringify(mlPolicies));
+      return Service.successResponse(converted);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -142,6 +144,7 @@ class MultiLinkPoliciesService {
           'rules.action': 1
         }
       )
+        .lean()
         .populate(
           'rules.action.links.pathlabels',
           '_id name description color type'
@@ -151,7 +154,8 @@ class MultiLinkPoliciesService {
         return Service.rejectResponse('Not found', 404);
       }
 
-      return Service.successResponse(MLPolicy);
+      const converted = JSON.parse(JSON.stringify(MLPolicy));
+      return Service.successResponse(converted);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -203,6 +207,7 @@ class MultiLinkPoliciesService {
           new: true
         }
       )
+        .lean()
         .populate(
           'rules.action.links.pathlabels',
           '_id name description color type'
@@ -212,7 +217,8 @@ class MultiLinkPoliciesService {
         return Service.rejectResponse('Not found', 404);
       }
 
-      return Service.successResponse(MLPolicy);
+      const converted = JSON.parse(JSON.stringify(MLPolicy));
+      return Service.successResponse(converted);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -295,7 +301,8 @@ class MultiLinkPoliciesService {
         });
       });
 
-      return Service.successResponse(MLPolicy, 201);
+      const converted = JSON.parse(JSON.stringify(MLPolicy));
+      return Service.successResponse(converted, 201);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
