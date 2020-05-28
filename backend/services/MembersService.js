@@ -493,8 +493,8 @@ class MembersService {
         <b>You have been invited to a flexiWAN
         ${memberRequest.userPermissionTo}. </b>`) + ((registerUser)
           ? `<b>Click below to set your password</b>
-        <p><a href="${configs.get('uiServerUrl')}/reset-password?email=${
-          memberRequest.email
+        <p><a href="${configs.get('uiServerUrl')}/reset-password?id=${
+          registerUser._id
         }&t=${resetPWKey}">
           <button style="color:#fff;background-color:#F99E5B;
           border-color:#F99E5B;font-weight:400;text-align:center;

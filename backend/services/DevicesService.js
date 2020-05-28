@@ -539,7 +539,12 @@ class DevicesService {
           orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
         }
 
-        const { valid, err } = validateDevice(deviceRequest, needCheckLanOverlaps, orgLanSubnets);
+        // add device id to device request
+        const { valid, err } = validateDevice({
+          ...deviceRequest,
+          _id: origDevice._id
+        }, needCheckLanOverlaps, orgLanSubnets);
+
         if (!valid) {
           logger.warn('Device update failed',
             {
