@@ -49,10 +49,12 @@ const purchasedApplicationSchema = new Schema({
     default: false
   },
   configuration: {
-    type: Object
+    type: Object,
+    default: {}
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  minimize: false
 });
 
 // Default exports

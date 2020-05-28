@@ -15,125 +15,103 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const createError = require('http-errors');
-const PurchasedApplications = require('../models/purchasedApplications');
-const mongoConns = require('../mongoConns.js')();
-// const configs = require('../configs')();
-const logger = require('../logging/logging')({
+const createError = require("http-errors");
+const PurchasedApplications = require("../models/purchasedApplications");
+const mongoConns = require("../mongoConns.js")();
+const configs = require("../configs")();
+const logger = require("../logging/logging")({
   module: module.filename,
-  type: 'req'
+  type: "req",
 });
-const { devices } = require('../models/devices');
-// const deviceQueues = require('../utils/deviceQueue')(
-//   configs.get('kuePrefix'),
-//   configs.get('redisUrl')
-// );
-// const { getDevicesAppIdentificationJobInfo } = require('./appIdentification');
+const { devices } = require("../models/devices");
+const deviceQueues = require("../utils/deviceQueue")(
+  configs.get("kuePrefix"),
+  configs.get("redisUrl")
+);
 // const appComplete = require('./appIdentification').complete;
 // const appError = require('./appIdentification').error;
 // const appRemove = require('./appIdentification').remove;
 
-// const queueApplicationJob = async (
-//   deviceList,
-//   op,
-//   requestTime,
-//   application,
-//   user,
-//   org
-// ) => {
-//   const jobs = [];
-//   const jobTitle =
-//     op === 'install'
-//       ? `Install application ${application.name}`
-//       : 'Uninstall application';
+const queueApplicationJob = async (
+  deviceList,
+  op,
+  requestTime,
+  application,
+  user,
+  org
+) => {
+  const jobs = [];
+  const jobTitle =
+    op === "deploy"
+      ? `Install application ${application.app.name}`
+      : `Uninstall application ${application.app.name}`;
 
-//   // Extract applications information
-//   const {
-//     message,
-//     params,
-//     installIds,
-//     deviceJobResp
-//   } = await getDevicesAppIdentificationJobInfo(
-//     org,
-//     'multilink',
-//     deviceList,
-//     op === 'install'
-//   );
+  deviceList.forEach((dev) => {
+    const { _id, machineId } = dev;
+    const tasks = [
+      [
+        {
+          entity: "agent",
+          message: `${op === "deploy" ? "add" : "remove"}-application`,
+          params: {},
+        },
+      ],
+    ];
 
-//   deviceList.forEach((dev) => {
-//     const { _id, machineId, policies } = dev;
-//     const tasks = [
-//       [
-//         {
-//           entity: 'agent',
-//           message: `${op === 'install' ? 'add' : 'remove'}-multilink-policy`,
-//           params: {}
-//         }
-//       ]
-//     ];
+    const {
+      routeAllOverVpn,
+      remoteClientIp,
+      connectionsPerDevice,
+    } = application.configuration;
 
-//     if (op === 'install') {
-//       tasks[0][0].params.id = policy._id;
-//       tasks[0][0].params.rules = policy.rules.map((rule) => {
-//         const { _id, priority, action, classification } = rule;
-//         return {
-//           id: _id,
-//           priority: priority,
-//           classification: classification,
-//           action: action,
-//         };
-//       });
-//     }
-//     const data = {
-//       policy: {
-//         device: { _id: _id, mlpolicy: policies.multilink },
-//         requestTime: requestTime,
-//         op: op,
-//         org: org,
-//       },
-//     };
+    if (op === "deploy") {
+      tasks[0][0].params.id = application._id;
+      tasks[0][0].params.name = application.app.name;
+      tasks[0][0].params.version = application.installedVersion;
+      tasks[0][0].params.routeAllOverVpn = routeAllOverVpn;
+      tasks[0][0].params.remoteClientIp = remoteClientIp;
+      tasks[0][0].params.connectionsPerDevice = connectionsPerDevice;
+    } else {
+      tasks[0][0].params.id = application._id;
+      tasks[0][0].params.name = application.app.name;
+    }
 
-//     // If the device's appIdentification database is outdated
-//     // we add an "add-application" message as well.
-//     if (installIds[_id] === true) {
-//       tasks[0].unshift({
-//         entity: 'agent',
-//         message: message,
-//         params: params,
-//       });
-//       data.appIdentification = {
-//         deviceId: _id,
-//         ...deviceJobResp,
-//       };
-//     }
+    // response data
+    const data = {
+      application: {
+        device: { _id: _id, application: application },
+        requestTime: requestTime,
+        op: op,
+        org: org,
+      },
+    };
 
-//     jobs.push(
-//       deviceQueues.addJob(
-//         machineId,
-//         user.username,
-//         org,
-//         // Data
-//         {
-//           title: jobTitle,
-//           tasks: tasks,
-//         },
-//         // Response data
-//         {
-//           method: 'mlpolicy',
-//           data: data,
-//         },
-//         // Metadata
-//         { priority: 'high', attempts: 1, removeOnComplete: false },
-//         // Complete callback
-//         null
-//       )
-//     );
-//   });
-//   return Promise.allSettled(jobs);
-// };
+    jobs.push(
+      deviceQueues.addJob(
+        machineId,
+        user.username,
+        org,
+        // Data
+        {
+          title: jobTitle,
+          tasks: tasks,
+        },
+        // Response data
+        {
+          method: "application",
+          data: data,
+        },
+        // Metadata
+        { priority: "high", attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null
+      )
+    );
+  });
+  return Promise.allSettled(jobs);
+};
 
 const getOpDevices = async (devicesObj, org, purchasedApp) => {
-  console.log(1);
   // If the list of devices is provided in the request
   // return their IDs, otherwise, extract device IDs
   // of all devices that are currently running the policy
@@ -141,8 +119,6 @@ const getOpDevices = async (devicesObj, org, purchasedApp) => {
   if (devicesList.length > 0) return devicesList;
 
   // TODO: understand this flow
-
-  console.log(2);
   // Select only devices on which the application is already
   // installed or in the process of installation, to make
   // sure the application is not reinstalled on devices that
@@ -151,12 +127,11 @@ const getOpDevices = async (devicesObj, org, purchasedApp) => {
   const result = await devices.find(
     {
       org: org,
-      'applications.app': _id,
-      'applications.status': { $in: ['installing', 'installed'] }
+      "applications.app": _id,
+      "applications.status": { $nin: ["installing", "installed"] },
     },
     { _id: 1 }
   );
-  console.log(3);
 
   return result.map((device) => device._id);
 };
@@ -180,12 +155,15 @@ const apply = async (deviceList, user, data) => {
     session = await mongoConns.getMainDB().startSession();
 
     await session.withTransaction(async () => {
-      if (op === 'deploy') {
-        app = await PurchasedApplications.findOne({
-          org: org,
-          _id: id
-        }).session(session);
+      app = await PurchasedApplications.findOne({
+        org: org,
+        _id: id,
+      })
+        .populate("app")
+        .lean()
+        .session(session);
 
+      if (op === "deploy") {
         if (!app) {
           throw createError(404, `application ${id} does not purchased`);
         }
@@ -200,114 +178,112 @@ const apply = async (deviceList, user, data) => {
         ? await getOpDevices(data.devices, org, app)
         : [deviceList[0]._id];
 
-      const update =
-        op === 'deploy'
-          ? {
-            $push: {
-              applications: {
-                app: app._id,
-                status: 'installing',
-                requestTime: requestTime
-              }
-            }
-          }
-          : {
-            // TODO: update uninstall
-            $pull: { applications: { app: id } }
-            // $pull: {
-            //   "applications.status": "uninstalling",
-            // },
-          };
-
+      // update db
       const query = {
         _id: { $in: deviceIds },
-        org: org
+        org: org,
       };
 
-      if (op === 'deploy') {
-        query['applications.app'] = { $ne: app._id };
+      let update;
+
+      if (op === "deploy") {
+        // filter if app already installed
+        query["applications.app"] = { $ne: app._id };
+
+        update = {
+          $push: {
+            applications: {
+              app: app._id,
+              status: "installing",
+              requestTime: requestTime,
+            },
+          },
+        };
+      } else {
+        query["applications.app"] = id;
+
+        update = {
+          $pull: { applications: { app: id } },
+        };
       }
 
-      await devices.updateMany(query, update,
-        { upsert: false }
-      ).session(session);
+      await devices
+        .updateMany(query, update, { upsert: false })
+        .session(session);
     });
   } catch (error) {
     console.log(error.message);
-    throw error.name === 'MongoError' ? new Error() : error;
+    throw error.name === "MongoError" ? new Error() : error;
   } finally {
     session.endSession();
   }
 
   // Queue applications jobs. Fail the request if
   // there are jobs that failed to be queued
-  // const deviceIdsSet = new Set(deviceIds.map((id) => id.toString()));
-  // const opDevices = deviceList.filter((device) => {
-  //  return deviceIdsSet.has(device._id.toString());
-  // });
+  const jobs = await queueApplicationJob(
+    deviceList,
+    op,
+    requestTime,
+    app,
+    user,
+    org
+  );
 
-  // const jobs = await queueApplicationJob(
-  //   opDevices,
-  //   op,
-  //   requestTime,
-  //   app,
-  //   user,
-  //   org
-  // );
+  const failedToQueue = [];
+  const succeededToQueue = [];
+  jobs.forEach((job) => {
+    switch (job.status) {
+      case "rejected": {
+        failedToQueue.push(job);
+        break;
+      }
+      case "fulfilled": {
+        const { id } = job.value;
+        succeededToQueue.push(id);
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+  });
 
-  // const failedToQueue = [];
-  // const succeededToQueue = [];
-  // jobs.forEach((job) => {
-  //   switch (job.status) {
-  //     case "rejected": {
-  //       failedToQueue.push(job);
-  //       break;
-  //     }
-  //     case "fulfilled": {
-  //       const { id } = job.value;
-  //       succeededToQueue.push(id);
-  //       break;
-  //     }
-  //     default: {
-  //       break;
-  //     }
-  //   }
-  // });
+  console.log("jobs", jobs);
+  console.log("succeededToQueue", succeededToQueue);
+  console.log("failedToQueue", failedToQueue);
 
-  // let status = 'completed';
-  // let message = '';
-  // if (failedToQueue.length !== 0) {
-  //   const failedDevices = failedToQueue.map(ent => {
-  //     const { job } = ent.reason;
-  //     const { _id } = job.data.response.data.application.device;
-  //     return _id;
-  //   });
+  let status = "completed";
+  let message = "";
+  if (failedToQueue.length !== 0) {
+    const failedDevices = failedToQueue.map((ent) => {
+      const { job } = ent.reason;
+      const { _id } = job.data.response.data.application.device;
+      return _id;
+    });
 
-  //   logger.error('Application jobs queue failed', {
-  //     params: { jobId: failedToQueue[0].reason.job.id, devices: failedDevices }
-  //   });
+    logger.error("Application jobs queue failed", {
+      params: { jobId: failedToQueue[0].reason.job.id, devices: failedDevices },
+    });
 
-  //   // Update devices application status in the database
-  //   await devices.updateMany(
-  //     { _id: { $in: failedDevices }, org: org },
-  //     { $set: { 'applications.status': 'job queue failed' } }, // TODO: update just nested app
-  //     { upsert: false }
-  //   );
+    // Update devices application status in the database
+    await devices.updateMany(
+      {
+        _id: { $in: failedDevices },
+        org: org,
+        "applications._id": applications._id,
+      },
+      { $set: { "applications.$.status": "job queue failed" } }, // TODO: update just nested app
+      { upsert: false }
+    );
 
-  //   status = 'partially completed';
-  //   message = `${succeededToQueue.length} of ${jobs.length} application jobs added`;
-  // }
-
-  // return {
-  //   ids: succeededToQueue,
-  //   status,
-  //   message
-  // };
+    status = "partially completed";
+    message = `${succeededToQueue.length} of ${jobs.length} application jobs added`;
+  }
 
   return {
-    ids: [1, 2, 3],
-    status: 'completed',
-    message: ''
+    ids: succeededToQueue,
+    status,
+    message,
   };
 };
 
@@ -320,28 +296,56 @@ const apply = async (deviceList, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('Application job completed', {
-    params: { result: res, jobId: jobId }
+  logger.info("Application job completed", {
+    params: { result: res, jobId: jobId },
   });
 
   const { op, org } = res.application;
-  const { _id } = res.application.device;
+  const { _id, application } = res.application.device;
   try {
-    const update = op === 'install'
-      ? { $set: { 'applications.status': 'installed' } }
-      : { $set: { applications: [] } }; // TODO: fix uninstall
+    const update =
+      op === "deploy"
+        ? { $set: { "applications.$.status": "installed" } }
+        : { $set: { "applications.$.status": "uninstalled" } };
 
     await devices.updateOne(
-      { _id: _id, org: org },
+      {
+        _id: _id,
+        org: org,
+        "applications._id": application._id,
+      },
       update,
       { upsert: false }
     );
+  } catch (err) {
+    logger.error("Device application status update failed", {
+      params: { jobId: jobId, res: res, err: err.message },
+    });
+  }
+};
 
-  //   // Call appIdentification complete callback if needed
-  //   if (res.appIdentification) {
-  //     res = res.appIdentification;
-  //     appComplete(jobId, res);
-  //   }
+/**
+ * Called when add/remove application job fails and
+ * Updates the status of the policy in the database.
+ * @async
+ * @param  {number} jobId Kue job ID number
+ * @param  {Object} res   job result
+ * @return {void}
+ */
+const error = async (jobId, res) => {
+  logger.error("Application job failed", {
+    params: { result: res, jobId: jobId },
+  });
+
+  const { op, org, device } = res.application;  
+  const { _id, application } = device;
+  try {
+    const status = `${op === 'deploy' ? '' : 'un'}installation failed`;
+    await devices.updateOne(
+      { _id: _id, org: org, 'applications._id': application._id },
+      { $set: { 'applications.$.status': status } },
+      { upsert: false }
+    );
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -350,43 +354,7 @@ const complete = async (jobId, res) => {
 };
 
 /**
- * Called when add/remove policy job fails and
- * Updates the status of the policy in the database.
- * @async
- * @param  {number} jobId Kue job ID number
- * @param  {Object} res   job result
- * @return {void}
- */
-const error = async (jobId, res) => {
-  logger.error('Policy job failed', {
-    params: { result: res, jobId: jobId }
-  });
-
-  // const { policy } = res;
-  // const { op, org } = policy;
-  // const { _id } = policy.device;
-  // try {
-  //   const status = `${op === 'install' ? '' : 'un'}installation failed`;
-  //   await devices.updateOne(
-  //     { _id: _id, org: org },
-  //     { $set: { 'policies.multilink.status': status } },
-  //     { upsert: false }
-  //   );
-
-  //   // Call appIdentification error callback if needed
-  //   if (res.appIdentification) {
-  //     res = res.appIdentification;
-  //     appError(jobId, res);
-  //   }
-  // } catch (err) {
-  //   logger.error('Device policy status update failed', {
-  //     params: { jobId: jobId, res: res, err: err.message }
-  //   });
-  // }
-};
-
-/**
- * Called when add/remove policy job is removed either
+ * Called when add/remove application job is removed either
  * by user or due to expiration. This method should run
  * only for tasks that were deleted before completion/failure
  * @async
@@ -394,45 +362,37 @@ const error = async (jobId, res) => {
  * @return {void}
  */
 const remove = async (job) => {
-  // const { device, org, requestTime } = job.data.response.data.policy;
-  // const { _id } = device;
-
-  // if (['inactive', 'delayed'].includes(job._state)) {
-  //   logger.info('Policy job removed', {
-  //     params: { job: job }
-  //   });
-
-  //   // Set the status to "job deleted" only
-  //   // for the last policy related job.
-  //   const status = 'job deleted';
-  //   try {
-  //     await devices.updateOne(
-  //       {
-  //         _id: _id,
-  //         org: org,
-  //         'policies.multilink.requestTime': { $eq: requestTime }
-  //       },
-  //       { $set: { 'policies.multilink.status': status } },
-  //       { upsert: false }
-  //     );
-
-  //     // Call applications remove callback if needed
-  //     const { appIdentification } = job.data.response.data;
-  //     if (appIdentification) {
-  //       job.data.response.data = appIdentification;
-  //       appRemove(job);
-  //     }
-  //   } catch (err) {
-  //     logger.error('Device policy status update failed', {
-  //       params: { job: job, status: status, err: err.message }
-  //     });
-  //   }
-  // }
+  const { device, org, requestTime } = job.data.response.data.application;
+  const { _id, application } = device;
+  if (['inactive', 'delayed'].includes(job._state)) {
+    logger.info('Application job removed', {
+      params: { job: job }
+    });
+    // Set the status to "job deleted" only
+    // for the last policy related job.
+    const status = 'job deleted';
+    try {
+      await devices.updateOne(
+        {
+          _id: _id,
+          org: org,
+          'application._id': application._id,
+          'application.requestTime': { $eq: requestTime }
+        },
+        { $set: { 'applications.$.status': status } },
+        { upsert: false }
+      );
+    } catch (err) {
+      logger.error('Device application status update failed', {
+        params: { job: job, status: status, err: err.message }
+      });
+    }
+  }
 };
 
 module.exports = {
   apply: apply,
   complete: complete,
   error: error,
-  remove: remove
+  remove: remove,
 };

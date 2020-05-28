@@ -380,6 +380,10 @@ const deviceApplicationSchema = new Schema({
   requestTime: {
     type: Date,
     default: null
+  },
+  lastUpdateTime: {
+    type: Date,
+    default: null
   }
 });
 
