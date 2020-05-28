@@ -15,18 +15,18 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const createError = require("http-errors");
-const PurchasedApplications = require("../models/purchasedApplications");
-const mongoConns = require("../mongoConns.js")();
-const configs = require("../configs")();
-const logger = require("../logging/logging")({
+const createError = require('http-errors');
+const PurchasedApplications = require('../models/purchasedApplications');
+const mongoConns = require('../mongoConns.js')();
+const configs = require('../configs')();
+const logger = require('../logging/logging')({
   module: module.filename,
-  type: "req",
+  type: 'req'
 });
-const { devices } = require("../models/devices");
-const deviceQueues = require("../utils/deviceQueue")(
-  configs.get("kuePrefix"),
-  configs.get("redisUrl")
+const { devices } = require('../models/devices');
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
 );
 // const appComplete = require('./appIdentification').complete;
 // const appError = require('./appIdentification').error;
@@ -42,7 +42,7 @@ const queueApplicationJob = async (
 ) => {
   const jobs = [];
   const jobTitle =
-    op === "deploy"
+    op === 'deploy'
       ? `Install application ${application.app.name}`
       : `Uninstall application ${application.app.name}`;
 
@@ -51,20 +51,20 @@ const queueApplicationJob = async (
     const tasks = [
       [
         {
-          entity: "agent",
-          message: `${op === "deploy" ? "add" : "remove"}-application`,
-          params: {},
-        },
-      ],
+          entity: 'agent',
+          message: `${op === 'deploy' ? 'add' : 'remove'}-application`,
+          params: {}
+        }
+      ]
     ];
 
     const {
       routeAllOverVpn,
       remoteClientIp,
-      connectionsPerDevice,
+      connectionsPerDevice
     } = application.configuration;
 
-    if (op === "deploy") {
+    if (op === 'deploy') {
       tasks[0][0].params.id = application._id;
       tasks[0][0].params.name = application.app.name;
       tasks[0][0].params.version = application.installedVersion;
@@ -79,11 +79,12 @@ const queueApplicationJob = async (
     // response data
     const data = {
       application: {
-        device: { _id: _id, application: application },
+        device: { _id: _id },
+        app: application,
         requestTime: requestTime,
         op: op,
-        org: org,
-      },
+        org: org
+      }
     };
 
     jobs.push(
@@ -94,15 +95,15 @@ const queueApplicationJob = async (
         // Data
         {
           title: jobTitle,
-          tasks: tasks,
+          tasks: tasks
         },
         // Response data
         {
-          method: "application",
-          data: data,
+          method: 'application',
+          data: data
         },
         // Metadata
-        { priority: "high", attempts: 1, removeOnComplete: false },
+        { priority: 'high', attempts: 1, removeOnComplete: false },
         // Complete callback
         null
       )
@@ -127,8 +128,8 @@ const getOpDevices = async (devicesObj, org, purchasedApp) => {
   const result = await devices.find(
     {
       org: org,
-      "applications.app": _id,
-      "applications.status": { $nin: ["installing", "installed"] },
+      'applications.app': _id,
+      'applications.status': { $nin: ['installing', 'installed'] }
     },
     { _id: 1 }
   );
@@ -157,13 +158,13 @@ const apply = async (deviceList, user, data) => {
     await session.withTransaction(async () => {
       app = await PurchasedApplications.findOne({
         org: org,
-        _id: id,
+        _id: id
       })
-        .populate("app")
+        .populate('app')
         .lean()
         .session(session);
 
-      if (op === "deploy") {
+      if (op === 'deploy') {
         if (!app) {
           throw createError(404, `application ${id} does not purchased`);
         }
@@ -181,29 +182,29 @@ const apply = async (deviceList, user, data) => {
       // update db
       const query = {
         _id: { $in: deviceIds },
-        org: org,
+        org: org
       };
 
       let update;
 
-      if (op === "deploy") {
+      if (op === 'deploy') {
         // filter if app already installed
-        query["applications.app"] = { $ne: app._id };
+        query['applications.app'] = { $ne: app._id };
 
         update = {
           $push: {
             applications: {
               app: app._id,
-              status: "installing",
-              requestTime: requestTime,
-            },
-          },
+              status: 'installing',
+              requestTime: requestTime
+            }
+          }
         };
       } else {
-        query["applications.app"] = id;
+        query['applications.app'] = id;
 
         update = {
-          $pull: { applications: { app: id } },
+          $pull: { applications: { app: id } }
         };
       }
 
@@ -213,7 +214,7 @@ const apply = async (deviceList, user, data) => {
     });
   } catch (error) {
     console.log(error.message);
-    throw error.name === "MongoError" ? new Error() : error;
+    throw error.name === 'MongoError' ? new Error() : error;
   } finally {
     session.endSession();
   }
@@ -233,11 +234,11 @@ const apply = async (deviceList, user, data) => {
   const succeededToQueue = [];
   jobs.forEach((job) => {
     switch (job.status) {
-      case "rejected": {
+      case 'rejected': {
         failedToQueue.push(job);
         break;
       }
-      case "fulfilled": {
+      case 'fulfilled': {
         const { id } = job.value;
         succeededToQueue.push(id);
         break;
@@ -248,12 +249,12 @@ const apply = async (deviceList, user, data) => {
     }
   });
 
-  console.log("jobs", jobs);
-  console.log("succeededToQueue", succeededToQueue);
-  console.log("failedToQueue", failedToQueue);
+  console.log('jobs', jobs);
+  console.log('succeededToQueue', succeededToQueue);
+  console.log('failedToQueue', failedToQueue);
 
-  let status = "completed";
-  let message = "";
+  let status = 'completed';
+  let message = '';
   if (failedToQueue.length !== 0) {
     const failedDevices = failedToQueue.map((ent) => {
       const { job } = ent.reason;
@@ -261,8 +262,8 @@ const apply = async (deviceList, user, data) => {
       return _id;
     });
 
-    logger.error("Application jobs queue failed", {
-      params: { jobId: failedToQueue[0].reason.job.id, devices: failedDevices },
+    logger.error('Application jobs queue failed', {
+      params: { jobId: failedToQueue[0].reason.job.id, devices: failedDevices }
     });
 
     // Update devices application status in the database
@@ -270,20 +271,20 @@ const apply = async (deviceList, user, data) => {
       {
         _id: { $in: failedDevices },
         org: org,
-        "applications._id": applications._id,
+        'applications.app': app._id
       },
-      { $set: { "applications.$.status": "job queue failed" } }, // TODO: update just nested app
+      { $set: { 'applications.$.status': 'job queue failed' } }, // TODO: update just nested app
       { upsert: false }
     );
 
-    status = "partially completed";
+    status = 'partially completed';
     message = `${succeededToQueue.length} of ${jobs.length} application jobs added`;
   }
 
   return {
     ids: succeededToQueue,
     status,
-    message,
+    message
   };
 };
 
@@ -296,30 +297,30 @@ const apply = async (deviceList, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info("Application job completed", {
-    params: { result: res, jobId: jobId },
+  logger.info('Application job completed', {
+    params: { result: res, jobId: jobId }
   });
 
-  const { op, org } = res.application;
-  const { _id, application } = res.application.device;
+  const { op, org, app } = res.application;
+  const { _id } = res.application.device;
   try {
     const update =
-      op === "deploy"
-        ? { $set: { "applications.$.status": "installed" } }
-        : { $set: { "applications.$.status": "uninstalled" } };
+      op === 'deploy'
+        ? { $set: { 'applications.$.status': 'installed' } }
+        : { $set: { 'applications.$.status': 'uninstalled' } };
 
     await devices.updateOne(
       {
         _id: _id,
         org: org,
-        "applications._id": application._id,
+        'applications.app': app._id
       },
       update,
       { upsert: false }
     );
   } catch (err) {
-    logger.error("Device application status update failed", {
-      params: { jobId: jobId, res: res, err: err.message },
+    logger.error('Device application status update failed', {
+      params: { jobId: jobId, res: res, err: err.message }
     });
   }
 };
@@ -333,19 +334,29 @@ const complete = async (jobId, res) => {
  * @return {void}
  */
 const error = async (jobId, res) => {
-  logger.error("Application job failed", {
-    params: { result: res, jobId: jobId },
+  logger.error('Application job failed', {
+    params: { result: res, jobId: jobId }
   });
 
-  const { op, org, device } = res.application;  
-  const { _id, application } = device;
+  const { op, org, app } = res.application;
+  const { _id } = res.application.device;
+
+  console.log('op', op);
+  console.log('org', org);
+  console.log('app', app);
+  console.log('_id', _id);
+  console.log('app._id', app._id);
+
   try {
+    console.log(1);
     const status = `${op === 'deploy' ? '' : 'un'}installation failed`;
-    await devices.updateOne(
-      { _id: _id, org: org, 'applications._id': application._id },
+    console.log('status', status);
+    const sdfsdfs = await devices.updateOne(
+      { _id: _id, org: org, 'applications.app': app._id },
       { $set: { 'applications.$.status': status } },
       { upsert: false }
     );
+    console.log('sdfsdfs', sdfsdfs);
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -362,8 +373,9 @@ const error = async (jobId, res) => {
  * @return {void}
  */
 const remove = async (job) => {
-  const { device, org, requestTime } = job.data.response.data.application;
-  const { _id, application } = device;
+  const { org, app, device } = job.data.response.data.application;
+  const { _id } = device;
+
   if (['inactive', 'delayed'].includes(job._state)) {
     logger.info('Application job removed', {
       params: { job: job }
@@ -376,8 +388,8 @@ const remove = async (job) => {
         {
           _id: _id,
           org: org,
-          'application._id': application._id,
-          'application.requestTime': { $eq: requestTime }
+          'applications.app': app._id
+          // 'applications.requestTime': { $eq: requestTime }
         },
         { $set: { 'applications.$.status': status } },
         { upsert: false }
@@ -394,5 +406,5 @@ module.exports = {
   apply: apply,
   complete: complete,
   error: error,
-  remove: remove,
+  remove: remove
 };

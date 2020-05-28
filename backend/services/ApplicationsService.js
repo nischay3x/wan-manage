@@ -28,7 +28,7 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 // const remove = require('lodash/remove');
 
 class ApplicationsService {
-  static async applicationsLibraryGET ({}, { user }) {
+  static async applicationsLibraryGET ({ user }) {
     try {
       const appsList = await applications.find();
 
@@ -141,8 +141,8 @@ class ApplicationsService {
 
       // create app
       let installedApp = await purchasedApplications.create({
-        app: application._id,//.toString(),
-        org: orgList[0],//.toString(),
+        app: application._id, // .toString(),
+        org: orgList[0], // .toString(),
         installedVersion: application.latestVersion,
         purchasedDate: Date.now(),
         configuration: {}
