@@ -210,6 +210,36 @@ class ApplicationsService {
    */
   static async applicationsConfigurationPUT ({ id, application, org }, { user }) {
     try {
+      // check if subdomain already taken
+      const domain = application.configuration.domainName;
+      const domainExists = await purchasedApplications.findOne(
+        {
+          _id: { $ne: id },
+          configuration: { $exists: 1 },
+          'configuration.domainName': domain
+        }
+      );
+
+      if (domainExists) {
+        return Service.rejectResponse(
+          'This domain already taken. please choose other',
+          500
+        );
+      }
+
+      // prevent multi authentications methods enabled
+      console.log(application.configuration);
+      console.log(application.configuration);
+      if (application.configuration && application.configuration.authentications) {
+        const enabledCount = application.configuration.authentications.filter(a => a.enabled);
+        if (enabledCount.length > 1) {
+          return Service.rejectResponse(
+            'Cannot enabled multiple authentication methods',
+            500
+          );
+        }
+      }
+
       const updated = await purchasedApplications.findOneAndUpdate(
         { _id: id },
         { $set: { configuration: application.configuration } },
