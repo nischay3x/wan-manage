@@ -17,19 +17,41 @@
 /* eslint-disable no-unused-vars */
 const Service = require('./Service');
 const createError = require('http-errors');
+const isEqual = require('lodash/isEqual');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const MultiLinkPolicies = require('../models/mlpolicies');
 const { devices } = require('../models/devices');
 const { ObjectId } = require('mongoose').Types;
 
+const emptyPrefix = {
+  ip: '',
+  ports: '',
+  protocol: ''
+};
+
+const emptyApp = {
+  appId: '',
+  category: '',
+  serviceClass: '',
+  importance: ''
+};
+
 class MultiLinkPoliciesService {
   static verifyRequestSchema (rules) {
     for (const rule of rules) {
+      // At least application or prefix
+      // should exist in the request
       const { application, prefix } = rule.classification;
       if (
         (!application && !prefix) ||
         (application && prefix)
       ) return false;
+
+      // Empty prefix is not allowed
+      if (prefix && isEqual(prefix, emptyPrefix)) return false;
+
+      // Empty application is not allowed
+      if (application && isEqual(application, emptyApp)) return false;
     }
     return true;
   }
