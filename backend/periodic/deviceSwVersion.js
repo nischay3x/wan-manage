@@ -46,16 +46,8 @@ class DeviceSwVersion {
     * Starts the check_device_sw_version periodic task.
     * @return {void}
     */
-  async start () {
-    try {
-      this.devSwUpd = await DevSwUpdater.getSwVerUpdaterInstance();
-    } catch (err) {
-      logger.error('Device software version periodic task failed to start', {
-        params: { err: err.message },
-        periodic: { task: this.taskInfo }
-      });
-      return;
-    }
+  start () {
+    this.devSwUpd = DevSwUpdater.getSwVerUpdaterInstance();
 
     // Get the version upon starting up
     this.periodicCheckSwVersion();

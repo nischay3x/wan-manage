@@ -50,16 +50,8 @@ class DeviceSwUpgrade {
      * @async
      * @return {void}
      */
-  async start () {
-    try {
-      this.devSwUpd = await DevSwUpdater.getSwVerUpdaterInstance();
-    } catch (err) {
-      logger.error('Device software version upgrade periodic task failed to start', {
-        params: { err: err.message },
-        periodic: { task: this.taskInfo }
-      });
-      return;
-    }
+  start () {
+    this.devSwUpd = DevSwUpdater.getSwVerUpdaterInstance();
     // Runs once every 15 minutes
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
@@ -75,11 +67,8 @@ class DeviceSwUpgrade {
      */
   periodicDeviceUpgrade () {
     ha.runIfActive(async () => {
-      const [version, latestVerDeadline] = [
-        this.devSwUpd.getLatestDevSwVersion(),
-        this.devSwUpd.getVersionUpDeadline()
-      ];
-
+      const { versions, versionDeadline } = await this.devSwUpd.getLatestSwVersions();
+      const version = versions.device;
       try {
         const now = Date.now();
         // If the software version deadline has passed, upgrade all
@@ -87,7 +76,7 @@ class DeviceSwUpgrade {
         // Otherwise, upgrade only devices scheduled to this period.
         // This is done only if there is no pending previous upgrade
         // jobs already in the devices' queue.
-        const query = latestVerDeadline < now
+        const query = versionDeadline < now
           ? {
             'versions.device': { $ne: version },
             $and: [{ 'upgradeSchedule.jobQueued': { $ne: true } }]

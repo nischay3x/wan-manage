@@ -52,47 +52,15 @@ class SwVersionUpdateManager {
      * @param  {Object} versions the versions of a device and its sub components
      * @param  {Object} deadline the last date to install the new release
      */
-  constructor (versions, deadline) {
+  constructor () {
     this.swRepoUri = configs.get('SwRepositoryUrl');
     this.notificationEmailUri = configs.get('SwVersionUpdateUrl');
-    this.latestVersions = versions;
-    this.pendingUpgradeDeadline = deadline;
 
     this.getLatestSwVersions = this.getLatestSwVersions.bind(this);
     this.notifyUsers = this.notifyUsers.bind(this);
     this.getVersionUpDeadline = this.getVersionUpDeadline.bind(this);
     this.updateSwLatestVersions = this.updateSwLatestVersions.bind(this);
     this.getLatestDevSwVersion = this.getLatestDevSwVersion.bind(this);
-  }
-
-  /**
-   * A static factory method that creates and initializes the
-   * SwVersionUpdateManager instance. The method first retrieves
-   * The required data from the database (an async operation), and
-   * only once the data is available, it creates and populates the instance.
-   * If the promise is rejected, deviceUpdater is set to null, to allow to
-   * reset the singleton.
-   *
-   * @static
-   * @async
-   * @return {Promise} an instance of SwVersionUpdateManager class
-   */
-  static async createSwVerUpdateManager () {
-    // Get the values from the database and use them to
-    // initialize the SwVersionUpdateManager instance.
-    // Use a dummy object if the collection hasn't been created yet.
-    let versionsDoc;
-    try {
-      versionsDoc = await deviceSwVersion.findOne({}, 'versions versionDeadline');
-      if (!versionsDoc) versionsDoc = dummyVersionObject;
-    } catch (err) {
-      deviceUpdater = null;
-      throw err;
-    }
-    return new SwVersionUpdateManager(
-      versionsDoc.versions,
-      versionsDoc.versionDeadline
-    );
   }
 
   /**
@@ -103,7 +71,7 @@ class SwVersionUpdateManager {
    */
   static getSwVerUpdateManagerInstance () {
     if (deviceUpdater) return deviceUpdater;
-    deviceUpdater = SwVersionUpdateManager.createSwVerUpdateManager();
+    deviceUpdater = new SwVersionUpdateManager();
     return deviceUpdater;
   }
 
@@ -192,38 +160,40 @@ class SwVersionUpdateManager {
      * Updates with the new device version and release deadline.
      * Notifies the users if required.
      * @async
-     * @param  {Object} versions the versions of the device and its sub-component
-     * @param  {Object} deadline the latest date to install the software update
+     * @param  {Object} currentVersions the current versions of the device and its sub-component
+     * @param  {Object} newVersions     the new versions of the device and its sub-component
      * @return {void}
      */
-  async updateSwLatestVersions (versions, deadline) {
+  async updateSwLatestVersions (currentVersions, newVersions) {
     // Check if the current deadline should be modified.
     // This might happen in the following cases:
     // 1. The last upgrade deadline has already passed.
     // 2. The new version's deadline is earlier than the
     //    current version's deadline.
-    const tmpCurrentDeadline = new Date(this.pendingUpgradeDeadline);
+    let pendingDeadline = currentVersions.versionDeadline;
+    const tmpCurrentDeadline = new Date(pendingDeadline);
 
-    if (this.pendingUpgradeDeadline.getTime() < Date.now() ||
-           deadline.getTime() < this.pendingUpgradeDeadline.getTime()) {
-      this.pendingUpgradeDeadline = deadline;
+    if (pendingDeadline.getTime() < Date.now() ||
+        newVersions.deadline.getTime() < pendingDeadline.getTime()) {
+      pendingDeadline = newVersions.deadline;
     }
 
-    if (tmpCurrentDeadline.getTime() !== this.pendingUpgradeDeadline.getTime()) {
+    if (tmpCurrentDeadline.getTime() !== pendingDeadline.getTime()) {
       logger.info('Software version deadline updated',
         {
           params: {
-            versions: versions,
+            versions: newVersions.versions,
             formerDeadline: tmpCurrentDeadline,
-            newDeadline: this.pendingUpgradeDeadline
+            newDeadline: pendingDeadline
           }
         });
     }
 
     // Update latest version and deadline in the database
+    const { versions } = newVersions;
     try {
       const query = {};
-      const set = { $set: { versions: versions, versionDeadline: this.pendingUpgradeDeadline } };
+      const set = { $set: { versions: versions, versionDeadline: pendingDeadline } };
       const options = {
         upsert: true,
         new: true,
@@ -234,9 +204,9 @@ class SwVersionUpdateManager {
 
       logger.info('Device latest software versions updated in database', {
         params: {
-          formerVer: this.latestVersions,
-          latestVer: versions,
-          deadline: this.pendingUpgradeDeadline
+          formerVer: currentVersions.versions,
+          latestVer: newVersions.versions,
+          deadline: pendingDeadline
         },
         periodic: { task: this.taskInfo }
       }
@@ -244,11 +214,13 @@ class SwVersionUpdateManager {
 
       // If we failed to fetch the current latest version from the database
       // We update the database, but don't send notification email to users.
-      const shouldNotifyUsers = !(_.isEqual(this.latestVersions, dummyVersionObject.versions));
-      this.latestVersions = versions;
+      const shouldNotifyUsers = !_.isEqual(
+        currentVersions.versions,
+        dummyVersionObject.versions
+      );
 
       // Send notification email to users
-      if (shouldNotifyUsers) this.notifyUsers(this.latestVersions);
+      if (shouldNotifyUsers) this.notifyUsers(versions);
     } catch (err) {
       logger.error('Device software versions update failed',
         {
@@ -292,9 +264,15 @@ class SwVersionUpdateManager {
         return;
       }
 
+      // Compare new versions against the versions in the database
+      const versionsDoc = await deviceSwVersion.findOne(
+        {},
+        'versions versionDeadline'
+      );
+      const deviceVersion = versionsDoc.versions.device;
       // Update the database only if the device version has changed
-      if (this.latestVersions.device !== versions.device) {
-        this.updateSwLatestVersions(versions, deadline);
+      if (deviceVersion !== versions.device) {
+        this.updateSwLatestVersions(versionsDoc, { versions, deadline });
       }
     } catch (err) {
       logger.error('Failed to query device software version', {
@@ -306,26 +284,34 @@ class SwVersionUpdateManager {
 
   /**
      * Get the value of latestVersion
-     * @return {Object} latest software version of a device and its sub-components
+     * @return {Promise} latest software version of a device and its sub-components
      */
   getLatestSwVersions () {
-    return this.latestVersions;
+    return deviceSwVersion.findOne({}, 'versions versionDeadline').lean();
   }
 
   /**
      * Get the value of latestVersion.device
      * @return {Object} latest software version of a device only
      */
-  getLatestDevSwVersion () {
-    return this.latestVersions.device;
+  async getLatestDevSwVersion () {
+    try {
+      const { versions } = await this.getLatestSwVersions();
+      return versions.device;
+    } catch (err) {
+      logger.error('Failed to fetch device latest version', {
+        params: { err: err.message }
+      });
+      return '';
+    }
   }
 
   /**
-     * Get the value of pendingUpgradeDeadline
-     * @return {Object} the date the version upgrade deadline
+     * Get version deadline
+     * @return {Promise} the date the version upgrade deadline
      */
   getVersionUpDeadline () {
-    return this.pendingUpgradeDeadline;
+    return deviceSwVersion.findOne({}, 'versionDeadline'.lean());
   }
 }
 
