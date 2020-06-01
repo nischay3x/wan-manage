@@ -139,6 +139,21 @@ const getOpDevices = async (devicesObj, org, policy) => {
   return result.map(device => device._id);
 };
 
+const filterDevices = (devices, deviceIds, op) => {
+  const filteredDevices = devices.filter(device => {
+    const { status, policy } = device.policies.multilink;
+    // Don't attempt to uninstall a policy if the device
+    // doesn't have one, or if its policy is already in
+    // the process of being uninstalled.
+    const skipUninstall =
+      op === 'uninstall' && (!policy || status === 'uninstalling');
+    const id = device._id.toString();
+    return !skipUninstall && deviceIds.has(id);
+  });
+
+  return filteredDevices;
+};
+
 /**
  * Creates and queues add/remove policy jobs.
  * @async
@@ -222,12 +237,10 @@ const apply = async (deviceList, user, data) => {
     session.endSession();
   }
 
-  // Queue policy jobs. Fail the request if
-  // there are jobs that failed to be queued
+  // Queue policy jobs
   const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
-  const opDevices = deviceList.filter(device => {
-    return deviceIdsSet.has(device._id.toString());
-  });
+  const opDevices = filterDevices(deviceList, deviceIdsSet, op);
+
   const jobs = await queueMlPolicyJob(opDevices, op, requestTime, mLPolicy, user, org);
   const failedToQueue = [];
   const succeededToQueue = [];
