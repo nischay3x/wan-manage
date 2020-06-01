@@ -360,7 +360,7 @@ const deviceApplicationSchema = new Schema({
   _id: false,
   app: {
     type: Schema.Types.ObjectId,
-    ref: 'purchasedApplications',
+    ref: 'applications',
     default: null
   },
   status: {

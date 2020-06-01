@@ -18,7 +18,7 @@
 // const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
-const applications = require('../models/applications');
+const library = require('../models/library');
 
 /***
  * This class serves as the applications update manager, responsible for
@@ -85,13 +85,13 @@ class ApplicationsUpdateManager {
 
       for (let i = 0; i < appList.length; i++) {
         // skip if app not changed on repository
-        const app = await applications.findOne({ name: appList[i].name });
+        const app = await library.findOne({ name: appList[i].name });
         if (app && app.repositoryTime === body.meta.time) {
           continue;
         }
 
         const set = { $set: { repositoryTime: body.meta.time, ...appList[i] } };
-        await applications.findOneAndUpdate({ name: appList[i].name }, set, options);
+        await library.findOneAndUpdate({ name: appList[i].name }, set, options);
       }
 
       logger.info('Applications database updated', {

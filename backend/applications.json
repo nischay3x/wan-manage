@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "time": 15875544024
+  },
+  "applications": [
+    {
+      "name": "Open VPN",
+      "description": "Allow remote VPN access",
+      "latestVersion": "1.2.3.4",
+      "createdDate": 1590392115232,
+      "creator": "Open VPN ltd.",
+      "cpuRequirements": 4,
+      "ramRequirements": 4,
+      "components": ["Manage", "Edge", "Client"],
+      "operatingSystem": ["Linux", "Windows"]
+    },
+    {
+        "name": "Cloud Flare",
+        "description": "Cloud Flare cdn",
+        "latestVersion": "3.4.5.6",
+        "createdDate": 1590392115232,
+        "creator": "Cloud Flare ltd.",
+        "cpuRequirements": 2,
+        "ramRequirements": 4,
+        "components": ["Manage", "Edge", "Client"],
+        "operatingSystem": ["Linux", "Windows"]
+      }
+  ]
+}

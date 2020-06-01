@@ -17,20 +17,21 @@
 
 const Service = require('./Service');
 // const configs = require('../configs')();
-const applications = require('../models/applications');
+const library = require('../models/library');
 const { devices } = require('../models/devices');
-const purchasedApplications = require('../models/purchasedApplications');
+const applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+
 // const { devices } = require('../models/devices');
 // const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-// var mongoose = require('mongoose');
+// const ObjectId = require('mongoose').Types.ObjectId;
 // const find = require('lodash/find');
 // const remove = require('lodash/remove');
 
 class ApplicationsService {
   static async applicationsLibraryGET ({ user }) {
     try {
-      const appsList = await applications.find();
+      const appsList = await library.find();
 
       if (appsList) {
         return Service.successResponse({ applications: appsList });
@@ -49,7 +50,7 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const installedApp = await purchasedApplications
+      const installedApp = await applications
         .findOne({
           org: { $in: orgList },
           removed: false,
@@ -68,7 +69,7 @@ class ApplicationsService {
   }
 
   /**
-   * purchase new application
+   * get all purchased applications
    *
    * @static
    * @param {*} { org }
@@ -80,13 +81,50 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const installedApps = await purchasedApplications
+      const installedApps = await applications
         .find({
           org: { $in: orgList },
           removed: false
         })
         .populate('app')
         .populate('org');
+
+      // TODO: continue implement below to calculate statuses
+      // const installed = await applications.aggregate([
+      //   { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
+      //   {
+      //     $lookup: {
+      //       from: 'devices',
+      //       let: { id: '$_id' },
+      //       pipeline: [
+      //         { $unwind: "$applications" },
+      //         { $match: { $expr: { $eq: ['$applications.app', '$$id'] } } },
+      //         { $project: { 'applications.status': 1 } },
+      //         {
+      //           $group: {
+      //             _id: "$applications.status",
+      //             count: { $sum: 1}
+      //           }
+      //         }
+      //       ],
+      //       as: 'statuses'
+      //     }
+      //   },
+      //   {
+      //     $project: {
+      //       _id: 1,
+      //       app: 1,
+      //       org: 1,
+      //       installedVersion: 1,
+      //       statuses: 1
+      //     }
+      //   }
+      // ]).allowDiskUse(true);
+
+      // await applications.populate(installed, { path: 'app'})
+      // await applications.populate(installed, { path: 'org'})
+
+      // console.log("installed", installed);
 
       return Service.successResponse({ applications: installedApps });
     } catch (e) {
@@ -111,7 +149,7 @@ class ApplicationsService {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // check if app already installed
-      let appAlreadyInstalled = await purchasedApplications.findOne({
+      let appAlreadyInstalled = await applications.findOne({
         org: { $in: orgList },
         app: application._id
       });
@@ -140,7 +178,7 @@ class ApplicationsService {
       }
 
       // create app
-      let installedApp = await purchasedApplications.create({
+      let installedApp = await applications.create({
         app: application._id, // .toString(),
         org: orgList[0], // .toString(),
         installedVersion: application.latestVersion,
@@ -176,7 +214,7 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      await purchasedApplications.updateOne(
+      await applications.updateOne(
         { _id: id },
         { $set: { removed: true } },
         { upsert: false }
@@ -212,7 +250,7 @@ class ApplicationsService {
     try {
       // check if subdomain already taken
       const domain = application.configuration.domainName;
-      const domainExists = await purchasedApplications.findOne(
+      const domainExists = await applications.findOne(
         {
           _id: { $ne: id },
           configuration: { $exists: 1 },
@@ -240,7 +278,7 @@ class ApplicationsService {
         }
       }
 
-      const updated = await purchasedApplications.findOneAndUpdate(
+      const updated = await applications.findOneAndUpdate(
         { _id: id },
         { $set: { configuration: application.configuration } },
         {

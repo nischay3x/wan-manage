@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const createError = require('http-errors');
-const PurchasedApplications = require('../models/purchasedApplications');
+const applications = require('../models/applications');
 const mongoConns = require('../mongoConns.js')();
 const configs = require('../configs')();
 const logger = require('../logging/logging')({
@@ -156,7 +156,7 @@ const apply = async (deviceList, user, data) => {
     session = await mongoConns.getMainDB().startSession();
 
     await session.withTransaction(async () => {
-      app = await PurchasedApplications.findOne({
+      app = await applications.findOne({
         org: org,
         _id: id
       })

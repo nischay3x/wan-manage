@@ -22,81 +22,40 @@ const mongoConns = require('../mongoConns.js')();
 /**
  * Applications Database Schema
  *
- * A schema for the documents that stores all available applications
+ * A schema for the documents that stores all organization applications
  */
-const applicationSchema = new Schema(
-  {
-    // application name
-    name: {
-      type: String,
-      required: true,
-      unique: true,
-      index: true,
-      minlength: [2, 'App name must be at least 2'],
-      maxlength: [30, 'App name must be at most 30']
-    },
-    // application description
-    description: {
-      type: String,
-      required: true,
-      minlength: [2, 'Description must be at least 2'],
-      maxlength: [100, 'Description must be at most 100']
-    },
-    // latest version
-    latestVersion: {
-      type: String,
-      required: true,
-      minlength: [2, 'Latest Version must be at least 2'],
-      maxlength: [30, 'Latest Version must be at most 30']
-    },
-    // created date on repository
-    createdDate: {
-      type: Date,
-      required: true,
-      default: Date.now
-    },
-    repositoryTime: {
-      type: Number
-    },
-    // who is the creator of this application
-    creator: {
-      type: String,
-      minlength: [2, 'Creator must be at least 2'],
-      maxlength: [30, 'Creator must be at most 30']
-    },
-    // cpu requirements
-    cpuRequirements: {
-      type: Number
-    },
-    // ram requirements
-    ramRequirements: {
-      type: Number
-    },
-    // the FlexiWAN components used by application
-    components: {
-      type: [String],
-      enum: ['Manage', 'Edge', 'Client']
-    },
-    // the FlexiWAN components used by application
-    operatingSystem: {
-      type: [String],
-      enum: ['Windows', 'Linux']
-    },
-    // application dependencies
-    dependencies: {
-      type: [String]
-    },
-    // application permissions
-    permissions: {
-      // TODO: complete here
-    }
+const applicationSchema = new Schema({
+  app: {
+    type: Schema.Types.ObjectId,
+    ref: 'library'
   },
-  {
-    timestamps: true
+  org: {
+    type: Schema.Types.ObjectId,
+    ref: 'organizations'
+  },
+  installedVersion: {
+    type: String,
+    required: true,
+    minlength: [2, 'Installed version must be at least 2'],
+    maxlength: [30, 'Installed version must be at most 30']
+  },
+  // created date on repository
+  purchasedDate: {
+    type: Date,
+    required: true
+  },
+  removed: {
+    type: Boolean,
+    default: false
+  },
+  configuration: {
+    type: Object,
+    default: {}
   }
-);
+}, {
+  timestamps: true,
+  minimize: false
+});
 
 // Default exports
-module.exports = mongoConns
-  .getMainDB()
-  .model('applications', applicationSchema);
+module.exports = mongoConns.getMainDB().model('applications', applicationSchema);

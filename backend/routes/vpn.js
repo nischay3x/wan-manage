@@ -20,53 +20,48 @@ const express = require('express');
 const router = express.Router();
 const createError = require('http-errors');
 const bodyParser = require('body-parser');
-const User = require('../models/users');
-const PurchasedApplications = require('../models/purchasedApplications');
-const Applications = require('../models/applications');
-const { validateEmail } = require('../models/validators');
-const {
-  getUserOrganizations,
-  getUserAccounts
-} = require('../utils/membershipUtils');
+const applications = require('../models/applications');
+const { validateDomainName } = require('../models/validators');
 const cors = require('./cors');
+
 var passport = require('passport');
+var OAuth2Strategy = require('passport-oauth2');
+const { AuthorizationCode } = require('simple-oauth2');
 
-const MultiSamlStrategy = require('passport-saml/multiSamlStrategy');
-
-const ProvidersSettings = {
-  'G-Suite': {
-    path: '/login/callback',
-    entryPoint: 'https://samltest.id/saml/idp',
-    issuer: 'passport-saml'
-  }
-};
+router.use(bodyParser.json());
 
 passport.use(
-  new MultiSamlStrategy(
+  new OAuth2Strategy(
     {
-      passReqToCallback: true,
-      // get saml options based on org auth method
-      getSamlOptions: function (request, done) {
-        if (!request.provider) {
-          return done('No provider found');
-        } else {
-          const type = request.provider.type;
-
-          console.log(
-            'ProvidersSettings[type]',
-            ProvidersSettings[type]
-          );
-          return done(null, ProvidersSettings[type]);
-        }
-      }
+      authorizationURL: 'https://accounts.google.com/o/oauth2/auth',
+      tokenURL: 'https://oauth2.googleapis.com/token',
+      clientID:
+        '194818498973-f88p1a7t88ho4j3m93qs05h6s230o7e4.apps.googleusercontent.com',
+      clientSecret: 'cjSFZJJUM6_QwX1BfftQUPEm',
+      callbackURL: 'http://localhost:3000/auth/example/callback'
     },
-    function (profile, done) {
-      return done(null, profile);
+    function (accessToken, refreshToken, profile, cb) {
+      console.log(1);
+      // User.findOrCreate({ exampleId: profile.id }, function (err, user) {
+      //   return cb(err, user);
+      // });
     }
   )
 );
 
-router.use(bodyParser.json());
+router
+  .route('/callback')
+  .options(cors.cors, (req, res) => {
+    res.sendStatus(200);
+  })
+  .get((req, res) => {
+    console.log('callback get');
+    console.log('reqget', req);
+  })
+  .post((req, res) => {
+    console.log('callback post');
+    console.log('reqpost', req);
+  });
 
 router
   .route('/login')
@@ -77,83 +72,69 @@ router
     cors.cors,
     async (req, res, next) => {
       // check if email is valid
-      if (!validateEmail(req.body.username)) {
-        console.log(2);
-        return next(createError(401, 'Could not get user info'));
+      if (!validateDomainName(req.body.organizationDomain)) {
+        return next(createError(401, 'Could not get organization info'));
       }
 
-      // try to get user
-      const user = await User.findOne({ email: req.body.username }).populate(
-        'defaultAccount'
-      );
+      const vpnApp = await applications.findOne({
+        'configuration.domainName': req.body.organizationDomain,
+        removed: false
+      });
 
-      if (user) {
-        const accounts = await getUserAccounts(user);
-
-        if (accounts.length > 1) {
-          console.log('choose account');
-          // TODO: return to select account
-        }
-
-        // get user organization
-        const userOrgs = await getUserOrganizations(user);
-        if (Array.isArray(userOrgs) && userOrgs.length === 0) {
-          console.log('no org found');
-          return next(createError(401, 'Could not get user info'));
-        }
-
-        // if user exists on multi orgs - need to choose one
-        const orgIds = Object.keys(userOrgs);
-        if (orgIds.length > 1) {
-          console.log('choose org');
-          // TODO: return to select org
-        }
-
-        // get open vpn app
-        const openVpn = await Applications.findOne({ name: 'Open VPN' });
-        if (!openVpn) {
-          return next(createError(500, 'No Open VPN app installed'));
-        }
-
-        // check if open vpn install on selected org
-        const vpnInstalled = await PurchasedApplications.findOne({
-          org: orgIds[0],
-          app: openVpn._id,
-          removed: false
-        });
-
-        if (!vpnInstalled) {
-          return next(createError(500, 'No Open VPN app installed'));
-        }
-
+      if (vpnApp) {
         // get enabled authentication methods
-        const authMethods = vpnInstalled.configuration.authentications || [];
-        const enabledAuthMethods = authMethods.filter((a) => a.enabled);
+        const authMethods = vpnApp.configuration.authentications || [];
+        const enabledAuthMethod = authMethods.find((a) => a.enabled);
 
-        if (enabledAuthMethods.length === 0) {
+        if (!enabledAuthMethod) {
           const msg =
             'No Authentication method enabled. please contact your system administrator';
 
           return next(createError(500, msg));
         }
 
-        console.log('user', user);
-        console.log('accounts', accounts);
-        console.log('userOrgs', userOrgs);
-        console.log('enabledAuthMethods', enabledAuthMethods);
-        req.provider = enabledAuthMethods[0];
+        req.config = enabledAuthMethod;
         return next();
       } else {
-        return next(createError(401, 'Could not get user info'));
+        return next(createError(401, 'Could not get organization info'));
       }
     },
-    passport.authenticate('saml'),
+    // passport.authenticate('oauth2', {scope: 'https://www.googleapis.com/auth/plus.login'})
     function (req, res) {
-      console.log('-----------------------------');
-      console.log('login call back dumps');
-      console.log(req.user);
-      console.log('-----------------------------');
-      res.send('Log in Callback Success');
+      const config = {
+        client: {
+          id: req.config.clientId,
+          secret: req.config.clientSecret
+        },
+        auth: {
+          tokenHost: 'https://oauth2.googleapis.com/token',
+          authorizePath: 'https://accounts.google.com/o/oauth2/auth'
+        }
+      };
+
+      const client = new AuthorizationCode(config);
+
+      const authorizationUri = client.authorizeURL({
+        redirect_uri: 'https://local.flexiwan.com:3443/api/vpn/callback',
+        scope: 'plus.login'
+      });
+
+      res.redirect(authorizationUri);
+
+      // //   // const client = new ClientCredentials(config);
+      // //   // const tokenParams = {
+      // //   //   scope: '<scope>',
+      // //   // };
+      // //   // const accessToken = await client.getToken(tokenParams);
+
+      // //   // console.log("client", client)
+
+    // //   // console.log('-----------------------------');
+    // //   // console.log('login call back dumps');
+    // //   // console.log(req.user);
+    // //   // console.log('-----------------------------');
+    // //   // res.send('Log in Callback Success');
+    // // }
     }
   );
 

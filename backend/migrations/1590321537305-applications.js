@@ -29,12 +29,22 @@ async function up () {
 
     logger.info('Database migration info', {
       params: {
-        collections: ['membership'],
+        collections: ['devices'],
         operation: 'up',
         result: results
       }
     });
+  } catch (err) {
+    logger.error('Database migration failed', {
+      params: {
+        collections: ['devices'],
+        operation: 'up',
+        err: err.message
+      }
+    });
+  }
 
+  try {
     await addPerms(membership, 'applications');
   } catch (err) {
     logger.error('Database migration failed', {
@@ -54,7 +64,17 @@ async function down () {
       { $unset: { applications: '' } },
       { upsert: false }
     );
+  } catch (err) {
+    logger.error('Database migration failed', {
+      params: {
+        collections: ['devices'],
+        operation: 'down',
+        err: err.message
+      }
+    });
+  }
 
+  try {
     await removePerms(membership, 'applications');
   } catch (err) {
     logger.error('Database migration failed', {
