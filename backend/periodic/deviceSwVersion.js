@@ -19,7 +19,6 @@ const configs = require('../configs')();
 const periodic = require('./periodic')();
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
-const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 
 /***
  * This class periodically checks if the latest device software has changed
