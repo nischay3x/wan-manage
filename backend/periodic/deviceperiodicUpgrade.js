@@ -67,9 +67,12 @@ class DeviceSwUpgrade {
      */
   periodicDeviceUpgrade () {
     ha.runIfActive(async () => {
-      const { versions, versionDeadline } = await this.devSwUpd.getLatestSwVersions();
-      const version = versions.device;
       try {
+        const {
+          versions,
+          versionDeadline
+        } = await this.devSwUpd.getLatestSwVersions();
+        const version = versions.device;
         const now = Date.now();
         // If the software version deadline has passed, upgrade all
         // devices that are still not running the latest version.

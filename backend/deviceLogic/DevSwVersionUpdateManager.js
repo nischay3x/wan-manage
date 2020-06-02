@@ -39,7 +39,7 @@ const dummyVersionObject = {
     frr: '0.0',
     vpp: '00.00-rc0'
   },
-  versionDeadline: new Date()
+  versionDeadline: new Date(0)
 };
 /***
  * This class serves as the software update manager, responsible for
@@ -212,15 +212,8 @@ class SwVersionUpdateManager {
       }
       );
 
-      // If we failed to fetch the current latest version from the database
-      // We update the database, but don't send notification email to users.
-      const shouldNotifyUsers = !_.isEqual(
-        currentVersions.versions,
-        dummyVersionObject.versions
-      );
-
-      // Send notification email to users
-      if (shouldNotifyUsers) this.notifyUsers(versions);
+      // Notify users about the new version release
+      this.notifyUsers(versions);
     } catch (err) {
       logger.error('Device software versions update failed',
         {
@@ -265,10 +258,18 @@ class SwVersionUpdateManager {
       }
 
       // Compare new versions against the versions in the database
-      const versionsDoc = await deviceSwVersion.findOne(
+      let versionsDoc = await deviceSwVersion.findOne(
         {},
         'versions versionDeadline'
       );
+
+      // If the database has not been updated yet, use the
+      // dummy versions object for the comparison of the
+      // device version and deadline
+      if (!versionsDoc) {
+        versionsDoc = dummyVersionObject;
+      }
+
       const deviceVersion = versionsDoc.versions.device;
       // Update the database only if the device version has changed
       if (deviceVersion !== versions.device) {
