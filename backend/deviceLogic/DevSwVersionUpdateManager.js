@@ -29,7 +29,6 @@ const mailer = require('../utils/mailer')(
   configs.get('mailerPort'),
   configs.get('mailerBypassCert')
 );
-const _ = require('lodash');
 
 const dummyVersionObject = {
   versions: {
