@@ -256,6 +256,20 @@ class DeviceQueues {
           return reject(err);
         }
       });
+      // Move active jobs during pause to failed
+      kue.Job.rangeByType(deviceId, 'active', 0, -1, 'asc', function (err, jobs) {
+        if (err) {
+          return reject(
+            new Error('Pause Queue: unable to iterate active jobs, deviceId=' +
+            deviceId + ', err=' + err)
+          );
+        }
+        jobs.forEach(job => {
+          job.error('Error: Disconnected');
+          job.failed();
+        });
+      });
+
       logger.info('Queue paused, succeeded',
         { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
       this.deviceQueues[deviceId].paused = true;
