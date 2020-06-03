@@ -272,6 +272,19 @@ describe('validatePCI basic BDF format', () => {
   });
 });
 
+describe('validateDHCP', () => {
+  it.each`
+        dhcp                    | result
+        ${'yes'}                | ${true}
+        ${'no'}                 | ${true}
+        ${null}                 | ${false}
+        ${undefined}            | ${false}
+        ${''}                   | ${false}
+  `('Should return $result if interface dhcp is $dhcp', ({ dhcp, result }) => {
+    expect(validators.validateDHCP(dhcp)).toEqual(result);
+  });
+});
+
 describe('validateIPaddr', () => {
   it.each`
         addr                    | result

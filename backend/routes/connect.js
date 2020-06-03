@@ -77,6 +77,7 @@ connectRouter.route('/register')
               // Try to auto populate interfaces parameters
               const ifs = JSON.parse(req.body.interfaces);
               ifs.forEach((intf) => {
+                intf.dhcp = intf.dhcp ? intf.dhcp : 'no';
                 if (intf.name === req.body.default_dev) {
                   intf.isAssigned = true;
                   intf.PublicIP = sourceIP;

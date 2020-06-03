@@ -65,6 +65,7 @@ const apply = async (device, user, data) => {
       if (intf.isAssigned === true) {
         ifnum++;
         ifParams.pci = intf.pciaddr;
+        ifParams.dhcp = intf.dhcp ? intf.dhcp : 'no',
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
         if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
@@ -82,6 +83,7 @@ const apply = async (device, user, data) => {
       const routeParams = {};
       if (intf.isAssigned === true) {
         ifParams.pci = intf.pciaddr;
+        ifParams.dhcp = intf.dhcp ? intf.dhcp : 'no',
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         ifParams.type = intf.type;
         // Device should only be aware of DIA labels.

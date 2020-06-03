@@ -125,6 +125,7 @@ class DevicesService {
         'IPv6',
         'PublicIP',
         'gateway',
+        'dhcp',
         'IPv4',
         'type',
         'MAC',

@@ -354,6 +354,7 @@ const apply = async (device, user, data) => {
       return ({
         _id: ifc._id,
         pci: ifc.pciaddr,
+        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
@@ -378,6 +379,7 @@ const apply = async (device, user, data) => {
       return ({
         _id: ifc._id,
         pci: ifc.pciaddr,
+        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,

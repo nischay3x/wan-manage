@@ -56,6 +56,7 @@ beforeEach(() => {
     pciaddr: '00:02.00',
     driver: 'igb-1000',
     MAC: 'ab:45:90:ed:89:16',
+    dhcp: 'no',
     IPv4: '192.168.100.1',
     IPv4Mask: '24',
     IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7348',
