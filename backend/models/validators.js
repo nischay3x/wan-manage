@@ -41,9 +41,8 @@ const validateIsPhoneNumber = (number) => {
 
   }
 };
-const validateDHCP = dhcp => {
-  return ['yes','no'].includes(dhcp);
-};
+const validateDHCP = dhcp => ['yes', 'no'].includes(dhcp);
+
 // Accept empty IP address values, as they are not mandatory at registration time
 const validateIPv4 = (ip) => { return ip === '' || net.isIPv4(ip); };
 const validateIPv4WithMask = field => {
