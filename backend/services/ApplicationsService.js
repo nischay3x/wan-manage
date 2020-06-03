@@ -81,14 +81,6 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const installedApps = await applications
-        .find({
-          org: { $in: orgList },
-          removed: false
-        })
-        .populate('app')
-        .populate('org');
-
       // TODO: continue implement below to calculate statuses
       const installed = await applications.aggregate([
         { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
@@ -97,11 +89,11 @@ class ApplicationsService {
             from: 'devices',
             let: { id: '$_id' },
             pipeline: [
-              { $unwind: "$applications" },
+              { $unwind: '$applications' },
               { $match: { $expr: { $eq: ['$applications.app', '$$id'] } } },
               { $project: { 'applications.status': 1 } },
-              { $group: { _id: "$applications.status", v: { $sum: 1 } } },
-              { $project: { _id: false, k: "$_id", v: "$v" } }
+              { $group: { _id: '$applications.status', v: { $sum: 1 } } },
+              { $project: { _id: false, k: '$_id', v: '$v' } }
             ],
             as: 'statuses'
           }
@@ -112,15 +104,15 @@ class ApplicationsService {
             app: 1,
             org: 1,
             installedVersion: 1,
-            statuses: { $arrayToObject: "$statuses"}
+            statuses: { $arrayToObject: '$statuses' }
           }
         }
       ]).allowDiskUse(true);
 
-      await applications.populate(installed, { path: 'app'})
-      await applications.populate(installed, { path: 'org'})
+      await applications.populate(installed, { path: 'app' });
+      await applications.populate(installed, { path: 'org' });
 
-      console.log("installed", installed[0].statuses);
+      // console.log("installed", installed[0]);
 
       return Service.successResponse({ applications: installed });
     } catch (e) {
