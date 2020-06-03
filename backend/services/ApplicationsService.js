@@ -24,7 +24,7 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 // const { devices } = require('../models/devices');
 // const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-// const ObjectId = require('mongoose').Types.ObjectId;
+const ObjectId = require('mongoose').Types.ObjectId;
 // const find = require('lodash/find');
 // const remove = require('lodash/remove');
 
@@ -90,43 +90,39 @@ class ApplicationsService {
         .populate('org');
 
       // TODO: continue implement below to calculate statuses
-      // const installed = await applications.aggregate([
-      //   { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
-      //   {
-      //     $lookup: {
-      //       from: 'devices',
-      //       let: { id: '$_id' },
-      //       pipeline: [
-      //         { $unwind: "$applications" },
-      //         { $match: { $expr: { $eq: ['$applications.app', '$$id'] } } },
-      //         { $project: { 'applications.status': 1 } },
-      //         {
-      //           $group: {
-      //             _id: "$applications.status",
-      //             count: { $sum: 1}
-      //           }
-      //         }
-      //       ],
-      //       as: 'statuses'
-      //     }
-      //   },
-      //   {
-      //     $project: {
-      //       _id: 1,
-      //       app: 1,
-      //       org: 1,
-      //       installedVersion: 1,
-      //       statuses: 1
-      //     }
-      //   }
-      // ]).allowDiskUse(true);
+      const installed = await applications.aggregate([
+        { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
+        {
+          $lookup: {
+            from: 'devices',
+            let: { id: '$_id' },
+            pipeline: [
+              { $unwind: "$applications" },
+              { $match: { $expr: { $eq: ['$applications.app', '$$id'] } } },
+              { $project: { 'applications.status': 1 } },
+              { $group: { _id: "$applications.status", v: { $sum: 1 } } },
+              { $project: { _id: false, k: "$_id", v: "$v" } }
+            ],
+            as: 'statuses'
+          }
+        },
+        {
+          $project: {
+            _id: 1,
+            app: 1,
+            org: 1,
+            installedVersion: 1,
+            statuses: { $arrayToObject: "$statuses"}
+          }
+        }
+      ]).allowDiskUse(true);
 
-      // await applications.populate(installed, { path: 'app'})
-      // await applications.populate(installed, { path: 'org'})
+      await applications.populate(installed, { path: 'app'})
+      await applications.populate(installed, { path: 'org'})
 
-      // console.log("installed", installed);
+      console.log("installed", installed[0].statuses);
 
-      return Service.successResponse({ applications: installedApps });
+      return Service.successResponse({ applications: installed });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
