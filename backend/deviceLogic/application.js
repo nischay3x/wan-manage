@@ -44,7 +44,9 @@ const queueApplicationJob = async (
   const jobTitle =
     op === 'deploy'
       ? `Install application ${application.app.name}`
-      : `Uninstall application ${application.app.name}`;
+      : op === 'upgrade'
+        ? `Upgrade application ${application.app.name}`
+        : `Uninstall application ${application.app.name}`;
 
   deviceList.forEach((dev) => {
     const { _id, machineId } = dev;
@@ -52,7 +54,8 @@ const queueApplicationJob = async (
       [
         {
           entity: 'agent',
-          message: `${op === 'deploy' ? 'add' : 'remove'}-application`,
+          message:
+          `${op === 'deploy' ? 'add' : op === 'upgrade' ? 'upgrade' : 'remove'}-application`,
           params: {}
         }
       ]
@@ -71,6 +74,10 @@ const queueApplicationJob = async (
       tasks[0][0].params.routeAllOverVpn = routeAllOverVpn;
       tasks[0][0].params.remoteClientIp = remoteClientIp;
       tasks[0][0].params.connectionsPerDevice = connectionsPerDevice;
+    } else if (op === 'upgrade') {
+      tasks[0][0].params.id = application._id;
+      tasks[0][0].params.name = application.app.name;
+      tasks[0][0].params.version = application.installedVersion;
     } else {
       tasks[0][0].params.id = application._id;
       tasks[0][0].params.name = application.app.name;
@@ -115,7 +122,7 @@ const queueApplicationJob = async (
 const getOpDevices = async (devicesObj, org, purchasedApp) => {
   // If the list of devices is provided in the request
   // return their IDs, otherwise, extract device IDs
-  // of all devices that are currently running the policy
+  // of all devices that are currently running the application
   const devicesList = Object.keys(devicesObj);
   if (devicesList.length > 0) return devicesList;
 
@@ -180,6 +187,7 @@ const apply = async (deviceList, user, data) => {
         : [deviceList[0]._id];
 
       // update db
+      // TODO maybe the db operation need to be on complete job
       const query = {
         _id: { $in: deviceIds },
         org: org
@@ -200,6 +208,23 @@ const apply = async (deviceList, user, data) => {
             }
           }
         };
+      } else if (op === 'upgrade') {
+        query['applications.app'] = id;
+
+        update = {
+          $set: { 'applications.$.status': 'upgrading' }
+        };
+
+        // update version on db
+        console.log('newVersion123', data.meta.newVersion);
+        app = await applications.findOneAndUpdate(
+          { org: org, _id: id },
+          { $set: { installedVersion: data.meta.newVersion, pendingToUpgrade: false } },
+          { new: true }
+        ).populate('app').lean()
+          .session(session);
+
+        console.log(app);
       } else {
         query['applications.app'] = id;
 
@@ -305,7 +330,7 @@ const complete = async (jobId, res) => {
   const { _id } = res.application.device;
   try {
     const update =
-      op === 'deploy'
+      op === 'deploy' || op === 'upgrade'
         ? { $set: { 'applications.$.status': 'installed' } }
         : { $set: { 'applications.$.status': 'uninstalled' } };
 
@@ -348,15 +373,12 @@ const error = async (jobId, res) => {
   console.log('app._id', app._id);
 
   try {
-    console.log(1);
     const status = `${op === 'deploy' ? '' : 'un'}installation failed`;
-    console.log('status', status);
-    const sdfsdfs = await devices.updateOne(
+    await devices.updateOne(
       { _id: _id, org: org, 'applications.app': app._id },
       { $set: { 'applications.$.status': status } },
       { upsert: false }
     );
-    console.log('sdfsdfs', sdfsdfs);
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -389,7 +411,6 @@ const remove = async (job) => {
           _id: _id,
           org: org,
           'applications.app': app._id
-          // 'applications.requestTime': { $eq: requestTime }
         },
         { $set: { 'applications.$.status': status } },
         { upsert: false }

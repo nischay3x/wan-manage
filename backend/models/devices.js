@@ -368,6 +368,7 @@ const deviceApplicationSchema = new Schema({
     enum: [
       '',
       'installing',
+      'upgrading',
       'installed',
       'uninstalling',
       'job queue failed',

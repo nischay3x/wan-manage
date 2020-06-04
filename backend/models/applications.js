@@ -48,6 +48,9 @@ const applicationSchema = new Schema({
     type: Boolean,
     default: false
   },
+  pendingToUpgrade: {
+    type: Boolean
+  },
   configuration: {
     type: Object,
     default: {}

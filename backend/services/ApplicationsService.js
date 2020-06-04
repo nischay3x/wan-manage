@@ -21,10 +21,11 @@ const library = require('../models/library');
 const { devices } = require('../models/devices');
 const applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-
+const dispatcher = require('../deviceLogic/dispatcher');
 // const { devices } = require('../models/devices');
 // const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const ObjectId = require('mongoose').Types.ObjectId;
+const DevicesService = require('./DevicesService');
 // const find = require('lodash/find');
 // const remove = require('lodash/remove');
 
@@ -83,7 +84,12 @@ class ApplicationsService {
 
       // TODO: continue implement below to calculate statuses
       const installed = await applications.aggregate([
-        { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
+        {
+          $match: {
+            org: { $in: orgList.map(o => ObjectId(o)) },
+            removed: false
+          }
+        },
         {
           $lookup: {
             from: 'devices',
@@ -104,6 +110,7 @@ class ApplicationsService {
             app: 1,
             org: 1,
             installedVersion: 1,
+            pendingToUpgrade: 1,
             statuses: { $arrayToObject: '$statuses' }
           }
         }
@@ -155,7 +162,7 @@ class ApplicationsService {
         appAlreadyInstalled.purchasedDate = Date.now();
         appAlreadyInstalled.save();
 
-        // TODO: need to think on upgrade..
+        // TODO: check if need to upgrade..
 
         appAlreadyInstalled = await appAlreadyInstalled
           .populate('app')
@@ -198,7 +205,7 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationsDELETE ({ org, id }, { user }) {
+  static async applicationsDELETE ({ org, id }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -208,15 +215,13 @@ class ApplicationsService {
         { upsert: false }
       );
 
-      // TODO: send jobs to remove from devices
+      // send jobs to device
+      const opDevices = await devices.find({ org: { $in: orgList }, 'applications.app': id });
+      const { ids, status, message } = await dispatcher.apply(opDevices, 'application',
+        user, { org: orgList[0], meta: { op: 'uninstall', id: id } });
 
-      // remove this app from all devices
-      await devices.updateMany(
-        { org: { $in: orgList } },
-        { $pull: { applications: { app: id } } }
-      );
-
-      return Service.successResponse(null, 204);
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -281,6 +286,56 @@ class ApplicationsService {
       // TODO: update application on devices if needed
 
       return Service.successResponse({ application: updated });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * upgrade application
+   *
+   * @static
+   * @param {*} { org, id }
+   * @param {*} { user }
+   * @returns
+   * @memberof ApplicationsService
+   */
+  static async applicationsUpgradePOST ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const app = await applications.findOne(
+        { _id: id }
+      ).populate('app').lean();
+
+      const currentVersion = app.installedVersion;
+      const newVersion = app.app.latestVersion;
+
+      if (currentVersion === newVersion) {
+        return Service.rejectResponse(
+          'This application is already updated with latest version',
+          500
+        );
+      }
+
+      // send jobs to device
+      const opDevices = await devices.find({ org: { $in: orgList }, 'applications.app': id });
+      const { ids, status, message } = await dispatcher.apply(opDevices, 'application',
+        user, { org: orgList[0], meta: { op: 'upgrade', id: id, newVersion: newVersion } });
+
+      console.log('id', id);
+      console.log('orgList', orgList);
+      console.log('app', app);
+      console.log('currentVersion', currentVersion);
+      console.log('newVersion', newVersion);
+      console.log('ids', ids);
+      console.log('status', status);
+      console.log('message', message);
+
+      return Service.successResponse({ data: 'ok' });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

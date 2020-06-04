@@ -45,6 +45,10 @@ class ApplicationsController {
   async applicationGET (request, response) {
     await Controller.handleRequest(request, response, this.service.applicationGET);
   }
+
+  async applicationsUpgradePOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationsUpgradePOST);
+  }
 }
 
 module.exports = ApplicationsController;
