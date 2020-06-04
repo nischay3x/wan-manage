@@ -197,7 +197,7 @@ const apply = async (deviceList, user, data) => {
         // Disabled rules should not be sent to the device
         mLPolicy.rules = mLPolicy.rules.filter(rule => rule.enabled === true);
         if (mLPolicy.rules.length === 0) {
-          throw createError(400, 'cannot install policy with an empty rule base');
+          throw createError(400, 'Policy must have at least one enabled rule');
         }
       }
 
