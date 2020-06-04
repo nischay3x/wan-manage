@@ -19,7 +19,6 @@ const configs = require('../configs')();
 const periodic = require('./periodic')();
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
-const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 
 /***
  * This class periodically checks if the latest device software has changed
@@ -46,16 +45,8 @@ class DeviceSwVersion {
     * Starts the check_device_sw_version periodic task.
     * @return {void}
     */
-  async start () {
-    try {
-      this.devSwUpd = await DevSwUpdater.getSwVerUpdaterInstance();
-    } catch (err) {
-      logger.error('Device software version periodic task failed to start', {
-        params: { err: err.message },
-        periodic: { task: this.taskInfo }
-      });
-      return;
-    }
+  start () {
+    this.devSwUpd = DevSwUpdater.getSwVerUpdaterInstance();
 
     // Get the version upon starting up
     this.periodicCheckSwVersion();
