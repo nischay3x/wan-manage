@@ -290,10 +290,11 @@ class DevicesService {
    **/
   static async devicesLatestVersionsGET () {
     try {
-      const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
+      const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
+      const { versions, versionDeadline } = await swUpdater.getLatestSwVersions();
       return Service.successResponse({
-        versions: swUpdater.getLatestSwVersions(),
-        versionDeadline: swUpdater.getVersionUpDeadline()
+        versions,
+        versionDeadline
       });
     } catch (e) {
       return Service.rejectResponse(
