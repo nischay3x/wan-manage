@@ -17,8 +17,9 @@
 
 const Service = require('./Service');
 
-const { getToken } = require('../tokens');
+const { getAccessKey } = require('../tokens');
 const AccessTokens = require('../models/accesstokens');
+const { getUserPermissions } = require('../models/membership');
 
 class AccessTokensService {
   /**
@@ -88,13 +89,15 @@ class AccessTokensService {
         isValid: true
       });
 
-      const token = await getToken({ user }, {
-        type: 'app_access_token',
+      const token = await getAccessKey({ user }, {
         id: accessToken._id.toString(),
         org: null
       }, false);
-
       accessToken.token = token;
+
+      const perms = await getUserPermissions(user);
+      accessToken.permissions = perms;
+
       await accessToken.save();
 
       return Service.successResponse({

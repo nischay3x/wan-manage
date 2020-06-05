@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -50,11 +50,11 @@ const configEnv = {
     // Default value is not set, which only validate the client side captcha
     captchaKey: '',
     // Mongo main database
-    mongoUrl: 'mongodb://localhost:27017/flexiwan',
+    mongoUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwan?replicaSet=rs`,
     // Mongo analytics database
-    mongoAnalyticsUrl: 'mongodb://localhost:27017/flexiwanAnalytics',
+    mongoAnalyticsUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwanAnalytics?replicaSet=rs`,
     // Mongo Billing database
-    mongoBillingUrl: 'mongodb://localhost:27017/flexibilling',
+    mongoBillingUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexibilling?replicaSet=rs`,
     // Billing Redirect OK page url
     billingRedirectOkUrl: 'https://local.flexiwan.com/ok.html',
     // Biling config site - this is used as the billing site name in ChargeBee
@@ -130,22 +130,21 @@ const configEnv = {
     // Web hooks register device URL, used to send for new registered devices, '' to bypass hook
     webHookRegisterDeviceUrl: '',
     // Web hooks register device secret, send in addition to the message for filtering
-    webHookRegisterDeviceSecret: 'ABC'
+    webHookRegisterDeviceSecret: 'ABC',
+    // Global app identification rules file location
+    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
   },
 
   // Override for development environment, default environment if not specified
   development: {
     clientStaticDir: 'client/build',
-    mongoUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwan?replicaSet=rs`,
-    mongoBillingUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexibilling?replicaSet=rs`,
-    mongoAnalyticsUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwanAnalytics?replicaSet=rs`,
     mailerBypassCert: true,
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
-    useFlexiBilling: false,
-    logLevel: 'debug',
+    logLevel: 'info',
     mailerPort: 1025
   },
+
   testing: {
     // Mgmt-Agent protocol version for testing purposes
     agentApiVersion: '2.0.0',
@@ -221,8 +220,8 @@ const configEnv = {
 };
 
 class Configs {
-  constructor () {
-    const environment = this.getEnv();
+  constructor (env) {
+    const environment = env || this.getEnv();
     console.log('environment=' + environment);
     const combinedConfig = { ...configEnv.default, ...configEnv[environment], environment: environment };
 
@@ -268,10 +267,10 @@ class Configs {
 }
 
 var configs = null;
-module.exports = function () {
+module.exports = function (env = null) {
   if (configs) return configs;
   else {
-    configs = new Configs();
+    configs = new Configs(env);
     return configs;
   }
 };

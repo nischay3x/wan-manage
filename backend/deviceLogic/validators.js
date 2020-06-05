@@ -17,6 +17,7 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
+const { devices } = require('../models/devices');
 
 /**
  * Checks whether a value is empty
@@ -42,10 +43,12 @@ const validateIPv4Mask = mask => {
 /**
  * Checks whether the device configuration is valid,
  * therefore the device can be started.
- * @param  {Object}  device                 the device to check
+ * @param {Object}  device                 the device to check
+ * @param {Boolean} checkLanOverlaps           if need to check LAN subnets overlap
+ * @param {[_id: objectId, name: string, subnet: string]} organizationLanSubnets to check overlaps
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device) => {
+const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -79,12 +82,39 @@ const validateDevice = (device) => {
       };
     }
 
-    // OSPF is not allowed on WAN interfaces
-    if (ifc.type === 'WAN' && ifc.routing === 'OSPF') {
-      return {
-        valid: false,
-        err: 'OSPF should not be configured on WAN interface'
-      };
+    if (ifc.type === 'LAN') {
+      // Path labels are not allowed on LAN interfaces
+      if (ifc.pathlabels.length !== 0) {
+        return {
+          valid: false,
+          err: 'Path Labels are not allowed on LAN interfaces'
+        };
+      }
+
+      // LAN interfaces are not allowed to have a default GW
+      if (ifc.gateway !== '') {
+        return {
+          valid: false,
+          err: 'LAN interfaces should not be assigned a default GW'
+        };
+      }
+    }
+
+    if (ifc.type === 'WAN') {
+      // OSPF is not allowed on WAN interfaces
+      if (ifc.routing === 'OSPF') {
+        return {
+          valid: false,
+          err: 'OSPF should not be configured on WAN interface'
+        };
+      }
+      // WAN interfaces must have default GW assigned to them
+      if (!net.isIPv4(ifc.gateway)) {
+        return {
+          valid: false,
+          err: 'All WAN interfaces should be assigned a default GW'
+        };
+      }
     }
   }
 
@@ -101,6 +131,31 @@ const validateDevice = (device) => {
           valid: false,
           err: 'WAN and LAN IP addresses have an overlap'
         };
+      }
+    }
+  }
+
+  if (checkLanOverlaps && organizationLanSubnets.length > 0) {
+    // LAN subnet must not be overlap with other devices in this org
+    for (const orgDevice of organizationLanSubnets) {
+      for (const currentLanIfc of lanIfcs) {
+        const orgSubnet = orgDevice.subnet;
+        const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
+
+        // Don't check overlapping with same device
+        if (orgDevice._id.toString() === device._id.toString()) {
+          continue;
+        };
+
+        if (cidr.overlap(currentSubnet, orgSubnet)) {
+          const msg =
+          `The LAN subnet ${currentSubnet} overlaps with a LAN subnet of device ${orgDevice.name}`;
+
+          return {
+            valid: false,
+            err: msg
+          };
+        }
       }
     }
   }
@@ -137,7 +192,42 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   return { valid: true, err: '' };
 };
 
+/**
+ * Get all LAN subnets in the same organization
+ * @param  {string} orgId         the id of the organization
+ * @return {[_id: objectId, name: string, subnet: string]} array of LAN subnets with router name
+ */
+const getAllOrganizationLanSubnets = async orgId => {
+  const subnets = await devices.aggregate([
+    { $match: { org: orgId } },
+    {
+      $project: {
+        'interfaces.IPv4': 1,
+        'interfaces.IPv4Mask': 1,
+        'interfaces.type': 1,
+        'interfaces.isAssigned': 1,
+        name: 1,
+        _id: 1
+      }
+    },
+    { $unwind: '$interfaces' },
+    { $match: { 'interfaces.type': 'LAN', 'interfaces.isAssigned': true } },
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        subnet: {
+          $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
+        }
+      }
+    }
+  ]);
+
+  return subnets;
+};
+
 module.exports = {
   validateDevice: validateDevice,
-  validateModifyDeviceMsg: validateModifyDeviceMsg
+  validateModifyDeviceMsg: validateModifyDeviceMsg,
+  getAllOrganizationLanSubnets: getAllOrganizationLanSubnets
 };

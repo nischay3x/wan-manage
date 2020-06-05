@@ -1,3 +1,20 @@
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2020  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -25,6 +42,7 @@ const deviceQueues = require('./periodic/deviceQueue')();
 const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
 const notifyUsers = require('./periodic/notifyUsers')();
+const appRules = require('./periodic/appRules')();
 
 // rate limiter
 const rateLimit = require('express-rate-limit');
@@ -49,6 +67,14 @@ class ExpressServer {
     this.app = express();
     this.openApiPath = openApiYaml;
     this.schema = yamljs.load(openApiYaml);
+    const restServerUrl = configs.get('restServerUrl');
+    const servers = this.schema.servers.filter(server => server.url.includes(restServerUrl));
+    if (servers.length === 0) {
+      this.schema.servers.unshift({
+        description: 'Local Server',
+        url: restServerUrl + '/api'
+      });
+    }
 
     this.setupMiddleware = this.setupMiddleware.bind(this);
     this.addErrorHandler = this.addErrorHandler.bind(this);
@@ -97,6 +123,7 @@ class ExpressServer {
     deviceSwVersion.start();
     deviceSwUpgrade.start();
     notifyUsers.start();
+    appRules.start();
 
     // Secure traffic only
     this.app.all('*', (req, res, next) => {

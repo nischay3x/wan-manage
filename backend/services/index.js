@@ -23,10 +23,12 @@ const MembersService = require('./MembersService');
 const NotificationsService = require('./NotificationsService');
 const OrganizationsService = require('./OrganizationsService');
 const TokensService = require('./TokensService');
+const AppIdentificationsService = require('./AppIdentificationsService');
 const TunnelsService = require('./TunnelsService');
 const UsersService = require('./UsersService');
 const BillingService = require('./BillingService');
 const PathLabelsService = require('./PathLabelsService');
+const MLPoliciesService = require('./MultiLinkPoliciesService');
 
 module.exports = {
   AccessTokensService,
@@ -37,8 +39,10 @@ module.exports = {
   NotificationsService,
   OrganizationsService,
   TokensService,
+  AppIdentificationsService,
   TunnelsService,
   UsersService,
   BillingService,
-  PathLabelsService
+  PathLabelsService,
+  MLPoliciesService
 };

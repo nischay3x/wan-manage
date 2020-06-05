@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2020  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -17,61 +17,60 @@
 
 const configs = require('../configs')();
 const periodic = require('./periodic')();
-const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
+const AppRulesUpdater = require('../deviceLogic/AppRulesUpdateManager');
 const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 
 /***
- * This class periodically checks if the latest device software has changed
- * and if so, updates the database with the new latest version
+ * This class periodically checks if the latest AppIdentification rules were changed
+ * and if so, updates the database with the new version
  ***/
-class DeviceSwVersion {
+class AppRules {
   /**
-     * Creates an instance of the DeviceSwVersion class
-     */
+    * Creates an instance of the AppRules class
+    */
   constructor () {
-    this.devSwUpd = null;
+    this.appRulesUpdater = null;
     this.start = this.start.bind(this);
-    this.periodicCheckSwVersion = this.periodicCheckSwVersion.bind(this);
+    this.periodicCheckAppRules = this.periodicCheckAppRules.bind(this);
 
     this.taskInfo = {
-      name: 'check_device_sw_version',
-      func: this.periodicCheckSwVersion,
+      name: 'check_app_rules',
+      func: this.periodicCheckAppRules,
       handle: null,
-      period: 3600000 // Runs once an hour
+      period: (1000 * 60 * 60 * 24) // Runs once in a day
     };
   }
 
   /**
-    * Starts the check_device_sw_version periodic task.
+    * Starts the check_app_rules periodic task.
     * @return {void}
     */
   start () {
-    this.devSwUpd = DevSwUpdater.getSwVerUpdaterInstance();
+    this.appRulesUpdater = AppRulesUpdater.getAppRulesUpdaterInstance();
 
-    // Get the version upon starting up
-    this.periodicCheckSwVersion();
+    // Get the app rules upon starting up
+    this.periodicCheckAppRules();
 
-    // Runs once every hour
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
     periodic.startTask(name);
   }
 
   /**
-     * Polls device software repository to check if
-     * a new software version has been released.
-     * @return {void}
-     */
-  periodicCheckSwVersion () {
+    * Polls app rules repository to check if
+    * a rules file has been released.
+    * @return {void}
+    */
+  periodicCheckAppRules () {
     ha.runIfActive(() => {
-      this.devSwUpd.pollDevSwRepo();
+      this.appRulesUpdater.pollAppRules();
     });
   }
 }
 
-let checkDevSw = null;
+let appRules = null;
 module.exports = function () {
-  if (checkDevSw) return checkDevSw;
-  checkDevSw = new DeviceSwVersion();
-  return checkDevSw;
+  if (appRules) return appRules;
+  appRules = new AppRules();
+  return appRules;
 };

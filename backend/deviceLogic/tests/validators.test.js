@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const { ObjectId } = require('mongoose').Types;
 const { validateDevice, validateModifyDeviceMsg } = require('../validators');
 
 describe('validateDevice', () => {
@@ -40,9 +41,11 @@ describe('validateDevice', () => {
         IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7348',
         IPv6Mask: '64',
         PublicIP: '72.168.10.30',
+        gateway: '',
         isAssigned: true,
         routing: 'OSPF',
-        type: 'LAN'
+        type: 'LAN',
+        pathlabels: []
       },
       {
         name: 'eth1',
@@ -54,9 +57,11 @@ describe('validateDevice', () => {
         IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7346',
         IPv6Mask: '64',
         PublicIP: '172.23.100.1',
+        gateway: '172.23.100.10',
         isAssigned: true,
         routing: 'None',
-        type: 'WAN'
+        type: 'WAN',
+        pathlabels: [ObjectId('5e65290fbe66a2335718e081')]
       }],
       defaultRoute: '172.23.100.10'
     };
@@ -177,6 +182,60 @@ describe('validateDevice', () => {
   it('Should be an invalid device if OSPF is configured on the WAN interface', () => {
     device.interfaces[1].routing = 'OSPF';
     failureObject.err = 'OSPF should not be configured on WAN interface';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if it has a LAN subnets overlap with other devices', () => {
+    device.name = 'Device 1';
+    device._id = '123456';
+    const organizationLanSubnets = [
+      { _id: '987', name: 'Device 2', subnet: '192.168.100.3' }
+    ];
+
+    const deviceSubnet = `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
+    const overlapsDeviceName = organizationLanSubnets[0].name;
+    failureObject.err =
+    `The LAN subnet ${deviceSubnet} overlaps with a LAN subnet of device ${overlapsDeviceName}`;
+
+    const result = validateDevice(device, true, organizationLanSubnets);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid device if it doesn\'t have a LAN subnets overlap', () => {
+    device.name = 'Device 1';
+    device._id = '123456';
+    const organizationLanSubnets = [
+      { _id: '987', name: 'Device 2', subnet: '192.168.88.3' }
+    ];
+    const result = validateDevice(device, true, organizationLanSubnets);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid device if WAN interface is not assigned a GW', () => {
+    delete device.interfaces[1].gateway;
+    failureObject.err = 'All WAN interfaces should be assigned a default GW';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if WAN interface\'s GW is invalid', () => {
+    device.interfaces[1].gateway = 'invalid-ip-address';
+    failureObject.err = 'All WAN interfaces should be assigned a default GW';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if LAN interface is assigned a GW', () => {
+    device.interfaces[0].gateway = '10.0.0.100';
+    failureObject.err = 'LAN interfaces should not be assigned a default GW';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if LAN interface has path labels', () => {
+    device.interfaces[0].pathlabels = [ObjectId('5e65290fbe66a2335718e081')];
+    failureObject.err = 'Path Labels are not allowed on LAN interfaces';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });

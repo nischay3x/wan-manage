@@ -15,10 +15,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const periodic = require('./periodic')();
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const upgrade = require('../deviceLogic/applyUpgrade');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
+const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 const { devices } = require('../models/devices');
 
 /***
@@ -48,16 +50,8 @@ class DeviceSwUpgrade {
      * @async
      * @return {void}
      */
-  async start () {
-    try {
-      this.devSwUpd = await DevSwUpdater.getSwVerUpdaterInstance();
-    } catch (err) {
-      logger.error('Device software version upgrade periodic task failed to start', {
-        params: { err: err.message },
-        periodic: { task: this.taskInfo }
-      });
-      return;
-    }
+  start () {
+    this.devSwUpd = DevSwUpdater.getSwVerUpdaterInstance();
     // Runs once every 15 minutes
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
@@ -71,86 +65,88 @@ class DeviceSwUpgrade {
      * @async
      * @return {void}
      */
-  async periodicDeviceUpgrade () {
-    const [version, latestVerDeadline] = [
-      this.devSwUpd.getLatestDevSwVersion(),
-      this.devSwUpd.getVersionUpDeadline()
-    ];
+  periodicDeviceUpgrade () {
+    ha.runIfActive(async () => {
+      try {
+        const {
+          versions,
+          versionDeadline
+        } = await this.devSwUpd.getLatestSwVersions();
+        const version = versions.device;
+        const now = Date.now();
+        // If the software version deadline has passed, upgrade all
+        // devices that are still not running the latest version.
+        // Otherwise, upgrade only devices scheduled to this period.
+        // This is done only if there is no pending previous upgrade
+        // jobs already in the devices' queue.
+        const query = versionDeadline < now
+          ? {
+            'versions.device': { $ne: version },
+            $and: [{ 'upgradeSchedule.jobQueued': { $ne: true } }]
+          }
+          : {
+            'upgradeSchedule.time': { $lte: new Date(now) },
+            $and: [
+              { 'versions.device': { $ne: version } },
+              { 'upgradeSchedule.jobQueued': { $ne: true } }
+            ]
+          };
 
-    try {
-      const now = Date.now();
-      // If the software version deadline has passed, upgrade all
-      // devices that are still not running the latest version.
-      // Otherwise, upgrade only devices scheduled to this period.
-      // This is done only if there is no pending previous upgrade
-      // jobs already in the devices' queue.
-      const query = latestVerDeadline < now
-        ? {
-          'versions.device': { $ne: version },
-          $and: [{ 'upgradeSchedule.jobQueued': { $ne: true } }]
-        }
-        : {
-          'upgradeSchedule.time': { $lte: new Date(now) },
-          $and: [
-            { 'versions.device': { $ne: version } },
-            { 'upgradeSchedule.jobQueued': { $ne: true } }
-          ]
-        };
+        // Group the the devices that require upgrade
+        // under the users that own them
+        const organizationDevicesList = await devices.aggregate([
+          { $match: query },
+          {
+            $group: {
+              _id: '$org',
+              devices: { $push: '$$ROOT' }
+            }
+          }
+        ]);
 
-      // Group the the devices that require upgrade
-      // under the users that own them
-      const organizationDevicesList = await devices.aggregate([
-        { $match: query },
-        {
-          $group: {
-            _id: '$org',
-            devices: { $push: '$$ROOT' }
+        for (const orgDevice of organizationDevicesList) {
+          const jobResults = await upgrade.queueUpgradeJobs(
+            orgDevice.devices,
+            'system',
+            orgDevice._id,
+            version
+          );
+          jobResults.forEach(job => {
+            logger.info('Upgrade device job queued', {
+              params: { jobId: job.id, version: version },
+              job: job,
+              periodic: { task: this.taskInfo }
+            });
+          });
+          // Mark the jobs has been queued to the devices
+          const deviceIDs = orgDevice.devices.map(device => { return device._id; });
+          const result = await devices.updateMany(
+            { _id: { $in: deviceIDs }, org: orgDevice._id },
+            { $set: { 'upgradeSchedule.jobQueued': true } }
+          );
+          if (result.nModified !== deviceIDs.length) {
+            logger.error('Device upgrade pending was not set for all devices', {
+              params: {
+                devices: deviceIDs,
+                expected: deviceIDs.length,
+                set: result.nModified
+              },
+              periodic: { task: this.taskInfo }
+            });
+          } else {
+            logger.info('Device upgrade pending flag set for scheduled devices', {
+              params: { devices: deviceIDs },
+              periodic: { task: this.taskInfo }
+            });
           }
         }
-      ]);
-
-      for (const orgDevice of organizationDevicesList) {
-        const jobResults = await upgrade.queueUpgradeJobs(
-          orgDevice.devices,
-          'system',
-          orgDevice._id,
-          version
-        );
-        jobResults.forEach(job => {
-          logger.info('Upgrade device job queued', {
-            params: { jobId: job.id, version: version },
-            job: job,
-            periodic: { task: this.taskInfo }
-          });
+      } catch (err) {
+        logger.error('Device periodic task failed', {
+          params: { reason: 'Failed to queue upgrade jobs', err: err.message },
+          periodic: { task: this.taskInfo }
         });
-        // Mark the jobs has been queued to the devices
-        const deviceIDs = orgDevice.devices.map(device => { return device._id; });
-        const result = await devices.updateMany(
-          { _id: { $in: deviceIDs }, org: orgDevice._id },
-          { $set: { 'upgradeSchedule.jobQueued': true } }
-        );
-        if (result.nModified !== deviceIDs.length) {
-          logger.error('Device upgrade pending was not set for all devices', {
-            params: {
-              devices: deviceIDs,
-              expected: deviceIDs.length,
-              set: result.nModified
-            },
-            periodic: { task: this.taskInfo }
-          });
-        } else {
-          logger.info('Device upgrade pending flag set for scheduled devices', {
-            params: { devices: deviceIDs },
-            periodic: { task: this.taskInfo }
-          });
-        }
       }
-    } catch (err) {
-      logger.error('Device periodic task failed', {
-        params: { reason: 'Failed to queue upgrade jobs', err: err.message },
-        periodic: { task: this.taskInfo }
-      });
-    }
+    });
   }
 }
 

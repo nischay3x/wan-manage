@@ -24,10 +24,12 @@ const MembersController = require('./MembersController');
 const NotificationsController = require('./NotificationsController');
 const OrganizationsController = require('./OrganizationsController');
 const TokensController = require('./TokensController');
+const AppIdentificationsController = require('./AppIdentificationsController');
 const TunnelsController = require('./TunnelsController');
 const UsersController = require('./UsersController');
 const BillingController = require('./BillingController');
 const PathLabelsController = require('./PathLabelsController');
+const MLPoliciesController = require('./MultiLinkPoliciesController');
 
 module.exports = {
   AccessTokensController,
@@ -39,8 +41,10 @@ module.exports = {
   NotificationsController,
   OrganizationsController,
   TokensController,
+  AppIdentificationsController,
   TunnelsController,
   UsersController,
   BillingController,
-  PathLabelsController
+  PathLabelsController,
+  MLPoliciesController
 };

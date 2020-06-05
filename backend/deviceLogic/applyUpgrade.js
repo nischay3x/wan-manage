@@ -93,8 +93,8 @@ const apply = async (devicesIn, user, data) => {
   '_id machineId hostname'
   );
 
-  const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
-  const version = swUpdater.getLatestDevSwVersion();
+  const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
+  const version = await swUpdater.getLatestDevSwVersion();
   const userName = user.username;
   const org = user.defaultOrg._id.toString();
   const jobResults = await queueUpgradeJobs(opDevices, userName, org, version);
@@ -110,8 +110,7 @@ const apply = async (devicesIn, user, data) => {
   // as there's a pending upgrade task in a device's queue.
   const deviceIDs = opDevices.map(dev => { return dev._id; });
   await setQueuedUpgradeFlag(deviceIDs, org, true);
-
-  return jobResults;
+  return { ids: jobResults.map(job => job.id), status: 'completed', message: '' };
 };
 
 /**

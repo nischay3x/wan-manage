@@ -18,7 +18,7 @@
 // Logic to start/stop a device
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
-const { validateDevice } = require('./validators');
+const { validateDevice, getAllOrganizationLanSubnets } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -41,7 +41,10 @@ const apply = async (device, user, data) => {
     params: { machineId: device[0].machineId, user: user, data: data }
   });
 
-  const deviceValidator = validateDevice(device[0]);
+  const organizationLanSubnets = await getAllOrganizationLanSubnets(device[0].org);
+
+  const deviceValidator = validateDevice(device[0], true, organizationLanSubnets);
+
   if (!deviceValidator.valid) {
     logger.warn('Start command validation failed',
       {
@@ -81,9 +84,12 @@ const apply = async (device, user, data) => {
         ifParams.pci = intf.pciaddr;
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         ifParams.type = intf.type;
-        ifParams.multilink = {
-          labels: intf.pathlabels
-        };
+        // Device should only be aware of DIA labels.
+        const labels = [];
+        intf.pathlabels.forEach(label => {
+          if (label.type === 'DIA') labels.push(label._id);
+        });
+        ifParams.multilink = { labels };
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
         // Only if WAN defined and no other routing defined
         if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
@@ -91,6 +97,8 @@ const apply = async (device, user, data) => {
           routeParams.via = device[0].defaultRoute;
           routes.push(routeParams);
         }
+        // Add WAN default GW only to WAN interfaces
+        if (intf.type === 'WAN') ifParams.gateway = intf.gateway;
         interfaces.push(ifParams);
       }
     }
@@ -106,34 +114,39 @@ const apply = async (device, user, data) => {
   const tasks = [];
   const userName = user.username;
   const org = user.defaultOrg._id.toString();
-  const mId = device[0].machineId;
+  const { machineId } = device[0];
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
 
-  const job = await deviceQueues
-    .addJob(
-      mId,
-      userName,
-      org,
-      // Data
-      { title: 'Start device ' + device[0].hostname, tasks: tasks },
-      // Response data
-      {
-        method: 'start',
-        data: {
-          device: device[0]._id,
-          org: org,
-          shouldUpdateTunnel: majorAgentVersion === 0
-        }
-      },
-      // Metadata
-      { priority: 'medium', attempts: 1, removeOnComplete: false },
-      // Complete callback
-      null
-    );
+  try {
+    const job = await deviceQueues
+      .addJob(
+        machineId,
+        userName,
+        org,
+        // Data
+        { title: 'Start device ' + device[0].hostname, tasks: tasks },
+        // Response data
+        {
+          method: 'start',
+          data: {
+            device: device[0]._id,
+            org: org,
+            shouldUpdateTunnel: majorAgentVersion === 0
+          }
+        },
+        // Metadata
+        { priority: 'medium', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null
+      );
 
-  logger.info('Start device job queued', { job: job });
-  return [job];
+    logger.info('Start device job queued', { job: job });
+    return { ids: [job.id], status: 'completed', message: '' };
+  } catch (err) {
+    logger.error('Start device job failed', { params: { machineId, error: err.message } });
+    throw (new Error(err.message || 'Internal server error'));
+  }
 };
 
 /**

@@ -64,18 +64,22 @@ const apply = async (device, user, data) => {
 
     tasks.push({ entity: 'agent', message, params });
 
-    const job = await deviceQueues.addJob(machineId, userName, org,
-      // Data
-      { title: `${titlePrefix} Static Route in device ${device.hostname}`, tasks: tasks },
-      // Response data
-      { method: 'staticroutes', data: { deviceId: device.id, routeId: routeId, message } },
-      // Metadata
-      { priority: 'low', attempts: 1, removeOnComplete: false },
-      // Complete callback
-      null);
-
-    logger.info('Add static route job queued', { params: { job: job } });
-    return [job];
+    try {
+      const job = await deviceQueues.addJob(machineId, userName, org,
+        // Data
+        { title: `${titlePrefix} Static Route in device ${device.hostname}`, tasks: tasks },
+        // Response data
+        { method: 'staticroutes', data: { deviceId: device.id, routeId: routeId, message } },
+        // Metadata
+        { priority: 'low', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null);
+      logger.info('Add static route job queued', { params: { job } });
+      return { ids: [job.id], status: 'completed', message: '' };
+    } catch (err) {
+      logger.error('Add static route job failed', { params: { machineId, error: err.message } });
+      throw (new Error(err.message || 'Internal server error'));
+    }
   }
 };
 

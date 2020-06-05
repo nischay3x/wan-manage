@@ -31,7 +31,7 @@ const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { validateDevice } = require('../deviceLogic/validators');
+const { validateDevice, getAllOrganizationLanSubnets } = require('../deviceLogic/validators');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class DevicesService {
@@ -49,12 +49,10 @@ class DevicesService {
       const opDevices = await devices.find({ org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type');
       // Apply the device command
-      const retJobs = await dispatcher.apply(opDevices, deviceCommand.method, user, deviceCommand);
-      const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        jobIds.join('%2C')}&org=${orgList[0]}`;
-      response.setHeader('Location', location);
-      return Service.successResponse({ ids: jobIds }, 202);
+      const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
+        user, { org: orgList[0], ...deviceCommand });
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -76,16 +74,15 @@ class DevicesService {
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      });
+      })
+        .populate('interfaces.pathlabels', '_id name description color type'); ;
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
 
-      const retJobs = await dispatcher.apply(opDevice, deviceCommand.method, user, deviceCommand);
-      const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        jobIds.join('%2C')}&org=${orgList[0]}`;
-      response.setHeader('Location', location);
-      return Service.successResponse({ ids: jobIds }, 202);
+      const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
+        user, { org: orgList[0], ...deviceCommand });
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -116,6 +113,7 @@ class DevicesService {
       'fromToken',
       'account',
       'ipList',
+      'policies',
       // Internal array, objects
       'labels',
       'upgradeSchedule']);
@@ -126,6 +124,7 @@ class DevicesService {
       const retIf = pick(i, [
         'IPv6',
         'PublicIP',
+        'gateway',
         'IPv4',
         'type',
         'MAC',
@@ -206,7 +205,8 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.find({ org: { $in: orgList } })
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.multilink.policy', '_id name description');
 
       const devicesMap = result.map(item => {
         return DevicesService.selectDeviceParams(item);
@@ -289,10 +289,11 @@ class DevicesService {
    **/
   static async devicesLatestVersionsGET () {
     try {
-      const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
+      const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
+      const { versions, versionDeadline } = await swUpdater.getLatestSwVersions();
       return Service.successResponse({
-        versions: swUpdater.getLatestSwVersions(),
-        versionDeadline: swUpdater.getVersionUpDeadline()
+        versions,
+        versionDeadline
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -312,7 +313,8 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.multilink.policy', '_id name description');
       const device = DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
@@ -516,7 +518,9 @@ class DevicesService {
       const origDevice = await devices.findOne({
         _id: id,
         org: { $in: orgList }
-      }).session(session);
+      })
+        .session(session)
+        .populate('interfaces.pathlabels', '_id name description color type');
 
       // Don't allow any changes if the device is not approved
       if (!origDevice.isApproved && !deviceRequest.isApproved) {
@@ -526,7 +530,22 @@ class DevicesService {
       // Validate device changes only for approved devices,
       // and only if the request contains interfaces.
       if (origDevice.isApproved && deviceRequest.interfaces) {
-        const { valid, err } = validateDevice(deviceRequest);
+        // check LAN subnet overlap if updated device is running
+        const status = deviceStatus.getDeviceStatus(origDevice.machineId);
+        const needCheckLanOverlaps = (status && status.state && status.state === 'running');
+
+        let orgLanSubnets = [];
+
+        if (needCheckLanOverlaps) {
+          orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
+        }
+
+        // add device id to device request
+        const { valid, err } = validateDevice({
+          ...deviceRequest,
+          _id: origDevice._id
+        }, needCheckLanOverlaps, orgLanSubnets);
+
         if (!valid) {
           logger.warn('Device update failed',
             {
@@ -562,7 +581,9 @@ class DevicesService {
         { _id: id, org: { $in: orgList } },
         deviceRequest,
         { new: true, upsert: false, runValidators: true }
-      ).session(session);
+      )
+        .session(session)
+        .populate('interfaces.pathlabels', '_id name description color type');
 
       await session.commitTransaction();
       session = null;
@@ -964,11 +985,8 @@ class DevicesService {
         copy.method = 'dhcp';
         copy._id = dhcpId;
         copy.action = 'del';
-        const retJobs = await dispatcher.apply(device, copy.method, user, copy);
-        const jobIds = retJobs.flat().map(job => job.id);
-        const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-          jobIds.join('%2C')}&org=${orgList[0]}`;
-        response.setHeader('Location', location);
+        const { ids } = await dispatcher.apply(device, copy.method, user, copy);
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
       }
 
       // If force delete specified, delete the entry regardless of the job status
@@ -1095,11 +1113,8 @@ class DevicesService {
         copy.method = 'dhcp';
         copy.action = 'modify';
         copy.origDhcp = origCmpDhcp;
-        const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
-        const jobIds = retJobs.flat().map(job => job.id);
-        const location = `${configs.get('restServerURL')}/api/jobs?status=all&ids=${
-          jobIds.join('%2C')}&org=${orgList[0]}`;
-        response.setHeader('Location', location);
+        const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
 
         await devices.findOneAndUpdate(
           { _id: deviceObject._id },
@@ -1157,11 +1172,8 @@ class DevicesService {
       const copy = Object.assign({}, dhcpObject);
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
-      const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      const jobIds = retJobs.flat().map(job => job.id);
-      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        jobIds.join('%2C')}&org=${orgList[0]}`;
-      response.setHeader('Location', location);
+      const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
 
       const dhcpData = {
         _id: dhcpObject.id,
@@ -1307,12 +1319,9 @@ class DevicesService {
       copy.method = 'dhcp';
       copy._id = dhcp.id;
       copy.action = 'add';
-      const retJobs = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      const jobIds = retJobs.flat().map(job => job.id);
+      const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      const location = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-        jobIds.join('%2C')}&org=${orgList[0]}`;
-      response.setHeader('Location', location);
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
 
       await session.commitTransaction();
       session = null;
@@ -1325,6 +1334,16 @@ class DevicesService {
         e.status || 500
       );
     }
+  }
+
+  /**
+   * Returns an URL of jobs list request
+   * @param {Array} jobsIds - array of jobs ids
+   * @param {string} orgId - ID of the organzation
+   */
+  static jobsListUrl (jobsIds, orgId) {
+    return `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
+      jobsIds.join('%2C')}&org=${orgId}`;
   }
 }
 

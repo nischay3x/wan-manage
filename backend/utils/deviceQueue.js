@@ -26,6 +26,14 @@ const kue = require('kue');
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
+class JobError extends Error {
+  constructor (...args) {
+    const [message, job] = args;
+    super(message);
+    this.job = job;
+  }
+}
+
 class DeviceQueues {
   /**
      * Creates a DeviceQueues. Multiple DeviceQueues per system
@@ -212,7 +220,7 @@ class DeviceQueues {
           });
       }
       job.save((err) => {
-        if (err) return reject(new Error(err));
+        if (err) return reject(new JobError(err, job));
         else if (!init) return resolve(job);
       });
     });
@@ -248,6 +256,20 @@ class DeviceQueues {
           return reject(err);
         }
       });
+      // Move active jobs during pause to failed
+      kue.Job.rangeByType(deviceId, 'active', 0, -1, 'asc', function (err, jobs) {
+        if (err) {
+          return reject(
+            new Error('Pause Queue: unable to iterate active jobs, deviceId=' +
+            deviceId + ', err=' + err)
+          );
+        }
+        jobs.forEach(job => {
+          job.error('Error: Disconnected');
+          job.failed();
+        });
+      });
+
       logger.info('Queue paused, succeeded',
         { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
       this.deviceQueues[deviceId].paused = true;
