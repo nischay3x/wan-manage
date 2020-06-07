@@ -56,8 +56,8 @@ class ApplicationsUpdateManager {
   }
 
   /**
-    * Check if devices need to upgrade
-    * If yes - notify to user
+    * Check on which devices installed older version of application
+    * If found - send notification to the users
     * @async
     * @param {application} libraryApp
     * @param {Boolean}
@@ -170,6 +170,9 @@ class ApplicationsUpdateManager {
       // TODO: fetch from url
       // const result = await fetchUtils.fetchWithRetry(this.applicationsUri, 3);
       // const body = await result.json();
+
+      // TODO: think on removed applications from repositroy
+
       const fs = require('fs');
       const result = fs.readFileSync(this.applicationsUri);
       const body = JSON.parse(result);
@@ -187,8 +190,9 @@ class ApplicationsUpdateManager {
       };
 
       let isUpdated = false;
+
       for (let i = 0; i < appList.length; i++) {
-        // skip if app changed on repository
+        // if app is not changed on repository
         let app = await library.findOne({ name: appList[i].name });
         if (app && app.repositoryTime === body.meta.time) {
           continue;
@@ -196,17 +200,16 @@ class ApplicationsUpdateManager {
 
         isUpdated = true;
 
-        // seve new changes
         const set = { $set: { repositoryTime: body.meta.time, ...appList[i] } };
         app = await library.findOneAndUpdate({ name: appList[i].name }, set, options);
 
-        // notify users about the change
+        // check if devices needs to upgrade
         await this.checkDevicesUpgrade(app);
       }
 
       if (isUpdated) {
         logger.info('Library database updated', {
-          params: { time: body.meta.time, rulesCount: appList.length }
+          params: { time: body.meta.time, appsCount: appList.length }
         });
       }
     } catch (err) {
