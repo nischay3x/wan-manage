@@ -465,31 +465,29 @@ class Connections {
 
       if (origDevice && deviceInfo.reconfig && prevDeviceInfo.reconfig !== deviceInfo.reconfig) {
         // Check if dhcp client is defined on any of interfaces
-        if (origDevice.interfaces && deviceInfo.message.network.interfaces
-          && deviceInfo.message.network.interfaces.length > 0
-          && origDevice.interfaces.filter(i => i.dhcp==='yes').length > 0 ) {
-
+        if (origDevice.interfaces && deviceInfo.message.network.interfaces &&
+          deviceInfo.message.network.interfaces.length > 0 &&
+          origDevice.interfaces.filter(i => i.dhcp === 'yes').length > 0) {
           // Currently we allow only one change at a time to the device,
           // to prevent inconsistencies between the device and the MGMT database.
           // Therefore, we block the request if there's a pending change in the queue.
           // The reconfig hash is not updated so it will try to process again in 10 sec
           if (origDevice.pendingDevModification) {
-            throw new Error('Failed to apply a new congig, only one device change is allowed at any time');
+            throw new Error('Failed to apply new config, only one device change is allowed');
           }
-
           const interfaces = origDevice.interfaces.map(i => {
-            if ( i.dhcp==='yes' ) {
+            if (i.dhcp === 'yes') {
               const updatedConfig = deviceInfo.message.network.interfaces
-                .find(u => u.pciaddr===i.pciaddr);
-              if ( updatedConfig !== undefined ) {
+                .find(u => u.pciaddr === i.pciaddr);
+              if (updatedConfig !== undefined) {
                 return {
                   ...i.toJSON(),
                   IPv4: updatedConfig.IPv4,
                   IPv4Mask: updatedConfig.IPv4Mask,
                   IPv6: updatedConfig.IPv6,
                   IPv6Mask: updatedConfig.IPv6Mask,
-                  gateway: updatedConfig.GW ? updatedConfig.GW : '',
-                }
+                  gateway: updatedConfig.GW ? updatedConfig.GW : ''
+                };
               }
             }
             return i;
@@ -504,7 +502,7 @@ class Connections {
           this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.reconfig);
           // Apply the new config and rebuild tunnels if need
           await modifyDeviceDispatcher.apply(
-            [ origDevice ],
+            [origDevice],
             { userName: 'system' },
             { newDevice: updDevice }
           );
