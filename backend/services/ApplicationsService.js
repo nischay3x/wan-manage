@@ -81,8 +81,6 @@ class ApplicationsService {
   static async applicationsGET ({ org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-
-      // TODO: continue implement below to calculate statuses
       const installed = await applications.aggregate([
         {
           $match: {
@@ -98,8 +96,7 @@ class ApplicationsService {
               { $unwind: '$applications' },
               { $match: { $expr: { $eq: ['$applications.app', '$$id'] } } },
               { $project: { 'applications.status': 1 } },
-              { $group: { _id: '$applications.status', v: { $sum: 1 } } },
-              { $project: { _id: false, k: '$_id', v: '$v' } }
+              { $group: { _id: '$applications.status', count: { $sum: 1 } } },
             ],
             as: 'statuses'
           }
@@ -110,18 +107,41 @@ class ApplicationsService {
             app: 1,
             org: 1,
             installedVersion: 1,
-            pendingToUpgrade: 1,
-            statuses: { $arrayToObject: '$statuses' }
+            pendingToUpgrade: 1,            
+            statuses: 1,
           }
         }
       ]).allowDiskUse(true);
 
       await applications.populate(installed, { path: 'app' });
-      await applications.populate(installed, { path: 'org' });
+      await applications.populate(installed, { path: 'org' });      
 
-      // console.log("installed", installed[0]);
+      const response = installed.map(app => {
+        const statusesTotal = {
+          installed: 0,
+          pending: 0,
+          failed: 0,
+          deleted: 0
+        };
+        app.statuses.forEach(appStatus => {
+          if (appStatus._id === 'installed') {
+            statusesTotal.installed++;
+          } else if (['installing', 'uninstalling'].includes(appStatus._id)) {
+            statusesTotal.pending++;
+          } else if (appStatus._id.includes('fail')) {
+            statusesTotal.failed++;
+          } else if (appStatus._id.includes('deleted')) {
+            statusesTotal.deleted++;
+          }
+        });
+        const { ...rest } = app;
+        return {
+          ...rest,
+          statuses: statusesTotal
+        };
+      });      
 
-      return Service.successResponse({ applications: installed });
+      return Service.successResponse({ applications: response });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
