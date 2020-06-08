@@ -138,6 +138,12 @@ class DeviceStatus {
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
             this.generateDevStatsNotifications();
+
+            // Check if config was modified on the device
+            if (msg.reconfig && msg.reconfig !== deviceInfo.reconfig) {
+              // Call get-device-info and reconfig
+              connections.sendDeviceInfoMsg(deviceID);
+            }
           } else {
             this.setDeviceStatsField(deviceID, 'state', 'stopped');
           }

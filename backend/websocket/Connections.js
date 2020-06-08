@@ -17,6 +17,7 @@
 
 const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
+const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
 const createError = require('http-errors');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
@@ -368,10 +369,10 @@ class Connections {
    * should reply with information regarding the software
    * versions of the different components running on it.
    * @async
-   * @param  {string} device device machine id
+   * @param  {string} machineId the device machine id
    * @return {void}
    */
-  async sendDeviceInfoMsg (device) {
+  async sendDeviceInfoMsg (machineId) {
     const validateDevInfoMessage = msg => {
       const devInfoMsgObj = Joi.extend(joi => ({
         base: joi.object().keys({
@@ -434,10 +435,10 @@ class Connections {
     };
 
     try {
-      logger.info('Device info message sent', { params: { deviceId: device } });
+      logger.info('Device info message sent', { params: { machineId } });
       const deviceInfo = await this.deviceSendMessage(
         null,
-        device,
+        machineId,
         { entity: 'agent', message: 'get-device-info' },
         validateDevInfoMessage
       );
@@ -453,23 +454,74 @@ class Connections {
         versions[component] = info.version;
       }
 
-      await devices.updateOne(
-        { machineId: device },
+      const origDevice = await devices.findOneAndUpdate(
+        { machineId },
         { $set: { versions: versions } },
-        { runValidators: true }
+        { new: true, runValidators: true }
       );
 
+      // Check if config was modified on the device
+      const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
+
+      if (origDevice && deviceInfo.reconfig && prevDeviceInfo.reconfig !== deviceInfo.reconfig) {
+        // Check if dhcp client is defined on any of interfaces
+        if (origDevice.interfaces && deviceInfo.message.network.interfaces
+          && deviceInfo.message.network.interfaces.length > 0
+          && origDevice.interfaces.filter(i => i.dhcp==='yes').length > 0 ) {
+
+          // Currently we allow only one change at a time to the device,
+          // to prevent inconsistencies between the device and the MGMT database.
+          // Therefore, we block the request if there's a pending change in the queue.
+          // The reconfig hash is not updated so it will try to process again in 10 sec
+          if (origDevice.pendingDevModification) {
+            throw new Error('Failed to apply a new congig, only one device change is allowed at any time');
+          }
+
+          const interfaces = origDevice.interfaces.map(i => {
+            if ( i.dhcp==='yes' ) {
+              const updatedConfig = deviceInfo.message.network.interfaces
+                .find(u => u.pciaddr===i.pciaddr);
+              if ( updatedConfig !== undefined ) {
+                return {
+                  ...i.toJSON(),
+                  IPv4: updatedConfig.IPv4,
+                  IPv4Mask: updatedConfig.IPv4Mask,
+                  IPv6: updatedConfig.IPv6,
+                  IPv6Mask: updatedConfig.IPv6Mask,
+                  gateway: updatedConfig.GW ? updatedConfig.GW : '',
+                }
+              }
+            }
+            return i;
+          });
+          // Update interfaces in DB
+          const updDevice = await devices.findOneAndUpdate(
+            { machineId },
+            { $set: { interfaces } },
+            { new: true, runValidators: true }
+          );
+          // Update the reconfig hash before applying to prevent infinite loop
+          this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.reconfig);
+          // Apply the new config and rebuild tunnels if need
+          await modifyDeviceDispatcher.apply(
+            [ origDevice ],
+            { userName: 'system' },
+            { newDevice: updDevice }
+          );
+        }
+      }
+
       logger.info('Device info message response received', {
-        params: { deviceId: device, message: deviceInfo }
+        params: { machineId, message: deviceInfo }
       });
 
-      this.devices.updateDeviceInfo(device, 'ready', true);
-      this.callRegisteredCallbacks(this.connectCallbacks, device);
+      this.devices.updateDeviceInfo(machineId, 'ready', true);
+      this.callRegisteredCallbacks(this.connectCallbacks, machineId);
     } catch (err) {
       logger.error('Failed to receive info from device', {
-        params: { device: device, err: err.message }
+        params: { machineId, err: err.message }
       });
-      this.deviceDisconnect(device);
+      this.deviceDisconnect(machineId);
     }
   }
 

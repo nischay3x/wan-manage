@@ -331,7 +331,9 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
  */
 const apply = async (device, user, data) => {
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = user.defaultOrg
+    ? user.defaultOrg._id.toString()
+    : device[0].org.toString();
   const modifyParams = {};
 
   // Create the default route modification parameters
