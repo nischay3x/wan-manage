@@ -96,7 +96,7 @@ class ApplicationsService {
               { $unwind: '$applications' },
               { $match: { $expr: { $eq: ['$applications.app', '$$id'] } } },
               { $project: { 'applications.status': 1 } },
-              { $group: { _id: '$applications.status', count: { $sum: 1 } } },
+              { $group: { _id: '$applications.status', count: { $sum: 1 } } }
             ],
             as: 'statuses'
           }
@@ -107,14 +107,14 @@ class ApplicationsService {
             app: 1,
             org: 1,
             installedVersion: 1,
-            pendingToUpgrade: 1,            
-            statuses: 1,
+            pendingToUpgrade: 1,
+            statuses: 1
           }
         }
       ]).allowDiskUse(true);
 
       await applications.populate(installed, { path: 'app' });
-      await applications.populate(installed, { path: 'org' });      
+      await applications.populate(installed, { path: 'org' });
 
       const response = installed.map(app => {
         const statusesTotal = {
@@ -139,7 +139,7 @@ class ApplicationsService {
           ...rest,
           statuses: statusesTotal
         };
-      });      
+      });
 
       return Service.successResponse({ applications: response });
     } catch (e) {
@@ -262,34 +262,33 @@ class ApplicationsService {
   static async applicationsConfigurationPUT ({ id, application, org }, { user }) {
     try {
       // check if subdomain already taken
-      const domain = application.configuration.domainName;
-      const domainExists = await applications.findOne(
+      const organization = application.configuration.organization;
+      const organizationExists = await applications.findOne(
         {
           _id: { $ne: id },
           configuration: { $exists: 1 },
-          'configuration.domainName': domain
+          'configuration.organization': organization
         }
       );
 
-      if (domainExists) {
+      if (organizationExists) {
         return Service.rejectResponse(
-          'This domain already taken. please choose other',
+          'This organization already taken. please choose other',
           500
         );
       }
 
       // prevent multi authentications methods enabled
-      console.log(application.configuration);
-      console.log(application.configuration);
-      if (application.configuration && application.configuration.authentications) {
-        const enabledCount = application.configuration.authentications.filter(a => a.enabled);
-        if (enabledCount.length > 1) {
-          return Service.rejectResponse(
-            'Cannot enabled multiple authentication methods',
-            500
-          );
-        }
-      }
+      // console.log(application.configuration);
+      // if (application.configuration && application.configuration.authentications) {
+      //   const enabledCount = application.configuration.authentications.filter(a => a.enabled);
+      //   if (enabledCount.length > 1) {
+      //     return Service.rejectResponse(
+      //       'Cannot enabled multiple authentication methods',
+      //       500
+      //     );
+      //   }
+      // }
 
       const updated = await applications.findOneAndUpdate(
         { _id: id },
