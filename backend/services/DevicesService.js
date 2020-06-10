@@ -440,7 +440,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdPacketTracesGET ({ id, org, limit }, { user }) {
+  static async devicesIdPacketTracesGET ({ id, org, packets, timeout }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.find({
@@ -454,7 +454,7 @@ class DevicesService {
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
           status: 'disconnected',
-          logs: []
+          traces: []
         });
       }
 
@@ -465,7 +465,8 @@ class DevicesService {
           entity: 'agent',
           message: 'get-device-packet-traces',
           params: {
-            limit: limit || '100'
+            packets: packets || '100',
+            timeout: timeout || '5'
           }
         }
       );
@@ -482,7 +483,7 @@ class DevicesService {
 
       return Service.successResponse({
         status: 'connected',
-        logs: devicePacketTraces.message
+        traces: devicePacketTraces.message
       });
     } catch (e) {
       return Service.rejectResponse(

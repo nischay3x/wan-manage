@@ -2477,10 +2477,18 @@ paths:
         schema:
           type: string
         style: simple
-      - description: The numbers of items to return
+      - description: The number of packets to capture
         explode: true
         in: query
-        name: limit
+        name: packets
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The wait time (sec) for packets to capture
+        explode: true
+        in: query
+        name: timeout
         required: false
         schema:
           type: integer
@@ -2496,7 +2504,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BadRequestError'
+                $ref: '#/components/schemas/Error'
           description: Bad Request
         "401":
           content:
