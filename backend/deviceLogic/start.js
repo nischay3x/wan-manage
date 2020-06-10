@@ -96,7 +96,8 @@ const apply = async (device, user, data) => {
         // Only if WAN defined and no other routing defined
         if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
           routeParams.addr = 'default';
-          routeParams.via = device[0].defaultRoute;
+          routeParams.pci = intf.pciaddr;
+          routeParams.via = intf.gateway ? intf.gateway : device[0].defaultRoute;
           routes.push(routeParams);
         }
         ifParams.gateway = intf.gateway ? intf.gateway : '';
