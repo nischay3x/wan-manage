@@ -486,7 +486,7 @@ class Connections {
                   IPv4Mask: updatedConfig.IPv4Mask,
                   IPv6: updatedConfig.IPv6,
                   IPv6Mask: updatedConfig.IPv6Mask,
-                  gateway: updatedConfig.GW ? updatedConfig.GW : ''
+                  gateway: updatedConfig.gateway ? updatedConfig.gateway : ''
                 };
               }
             }

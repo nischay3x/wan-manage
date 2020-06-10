@@ -99,8 +99,7 @@ const apply = async (device, user, data) => {
           routeParams.via = device[0].defaultRoute;
           routes.push(routeParams);
         }
-        // Add WAN default GW only to WAN interfaces
-        if (intf.type === 'WAN') ifParams.gateway = intf.gateway;
+        ifParams.gateway = intf.gateway ? intf.gateway : '';
         interfaces.push(ifParams);
       }
     }

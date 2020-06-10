@@ -76,17 +76,18 @@ connectRouter.route('/register')
 
               // Try to auto populate interfaces parameters
               const ifs = JSON.parse(req.body.interfaces);
+              // Is there gateway on any of interfaces
+              const hasGW = ifs.some(intf => intf.gateway ? true : false);
               ifs.forEach((intf) => {
                 intf.dhcp = intf.dhcp ? intf.dhcp : 'no';
-                if (intf.name === req.body.default_dev) {
+                if (hasGW && intf.gateway || intf.name === req.body.default_dev) {
                   intf.isAssigned = true;
                   intf.PublicIP = sourceIP;
                   intf.type = 'WAN';
-                  intf.gateway = req.body.default_route;
+                  intf.gateway = intf.gateway ? intf.gateway : req.body.default_route;
                 } else {
                   intf.type = 'LAN';
                   intf.routing = 'OSPF';
-                  intf.gateway = '';
                   if (ifs.length === 2) {
                     intf.isAssigned = true;
                   }

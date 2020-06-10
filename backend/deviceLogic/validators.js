@@ -91,11 +91,11 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         };
       }
 
-      // LAN interfaces are not allowed to have a default GW
-      if (ifc.gateway !== '') {
+      // Gateway is allowed on LAN interface
+      if (ifc.gateway !== '' && !net.isIPv4(ifc.gateway)) {
         return {
           valid: false,
-          err: 'LAN interfaces should not be assigned a default GW'
+          err: 'Invalid gateway value on LAN interface'
         };
       }
     }
@@ -109,7 +109,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         };
       }
       // WAN interfaces must have default GW assigned to them
-      if (!net.isIPv4(ifc.gateway)) {
+      if (ifc.dhcp !== 'yes' && !net.isIPv4(ifc.gateway)) {
         return {
           valid: false,
           err: 'All WAN interfaces should be assigned a default GW'
