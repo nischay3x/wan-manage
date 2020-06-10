@@ -94,7 +94,7 @@ const apply = async (device, user, data) => {
         ifParams.multilink = { labels };
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
         // Only if WAN defined and no other routing defined
-        if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
+        if (intf.type === 'WAN' && intf.dhcp !== 'yes' && intf.routing.toUpperCase() === 'NONE') {
           routeParams.addr = 'default';
           routeParams.pci = intf.pciaddr;
           routeParams.via = intf.gateway ? intf.gateway : device[0].defaultRoute;
