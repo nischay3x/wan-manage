@@ -102,7 +102,7 @@ const queueApplicationJob = async (
         // Data
         {
           title: jobTitle,
-          tasks: tasks
+          tasks: tasks[0]
         },
         // Response data
         {
