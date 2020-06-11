@@ -50,12 +50,22 @@ const queueApplicationJob = async (
 
   deviceList.forEach((dev) => {
     const { _id, machineId } = dev;
+
+    const appName = application.app.name;
+
+    let message = '';
+
+    if (appName === 'Open VPN') {
+      if (op === 'deploy') message = 'install-vpn-server';
+      else if (op === 'upgrade') message = 'upgrade-vpn-server';
+      else message = 'remove-vpn-server';
+    }
+
     const tasks = [
       [
         {
           entity: 'agent',
-          message:
-          `${op === 'deploy' ? 'add' : op === 'upgrade' ? 'upgrade' : 'remove'}-application`,
+          message: message,
           params: {}
         }
       ]
