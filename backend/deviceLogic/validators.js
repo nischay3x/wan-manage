@@ -211,12 +211,12 @@ const getAllOrganizationLanSubnets = async orgId => {
       }
     },
     { $unwind: '$interfaces' },
-    { 
-      $match: { 
+    {
+      $match: {
         'interfaces.type': 'LAN',
         'interfaces.isAssigned': true,
         'interfaces.IPv4': { $ne: '' },
-        'interfaces.IPv4Mask': { $ne: '' },
+        'interfaces.IPv4Mask': { $ne: '' }
       }
     },
     {
