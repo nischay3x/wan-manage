@@ -49,9 +49,10 @@ const queueApplicationJob = async (
         : `Uninstall application ${application.app.name}`;
 
   deviceList.forEach((dev) => {
-    const { _id, machineId } = dev;
+    const { _id, machineId, interfaces } = dev;
 
     const appName = application.app.name;
+    const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 
     let message = '';
 
@@ -84,10 +85,12 @@ const queueApplicationJob = async (
       tasks[0][0].params.routeAllOverVpn = routeAllOverVpn;
       tasks[0][0].params.remoteClientIp = remoteClientIp;
       tasks[0][0].params.connectionsPerDevice = connectionsPerDevice;
+      tasks[0][0].params.deviceWANIp = wanIp;
     } else if (op === 'upgrade') {
       tasks[0][0].params.id = application._id;
       tasks[0][0].params.name = application.app.name;
       tasks[0][0].params.version = application.installedVersion;
+      tasks[0][0].params.deviceWANIp = wanIp;
     } else {
       tasks[0][0].params.id = application._id;
       tasks[0][0].params.name = application.app.name;
