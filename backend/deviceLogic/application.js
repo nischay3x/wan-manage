@@ -41,12 +41,16 @@ const queueApplicationJob = async (
   org
 ) => {
   const jobs = [];
-  const jobTitle =
-    op === 'deploy'
-      ? `Install application ${application.app.name}`
-      : op === 'upgrade'
-        ? `Upgrade application ${application.app.name}`
-        : `Uninstall application ${application.app.name}`;
+
+  let jobTitle = '';
+
+  switch (op) {
+    case 'deploy': jobTitle = `Install ${application.app.name} application`; break;
+    case 'upgrade': jobTitle = `Upgrade ${application.app.name} application`; break;
+    case 'config': jobTitle = `Update ${application.app.name} configuration`; break;
+    case 'uninstall': jobTitle = `Uninstall ${application.app.name} application`; break;
+    default: jobTitle = `Application ${application.app.name}`;
+  }
 
   deviceList.forEach((dev) => {
     const { _id, machineId, interfaces } = dev;
@@ -59,6 +63,7 @@ const queueApplicationJob = async (
     if (appName === 'Open VPN') {
       if (op === 'deploy') message = 'install-vpn-server';
       else if (op === 'upgrade') message = 'upgrade-vpn-server';
+      else if (op === 'config') message = 'config-vpn-server';
       else message = 'remove-vpn-server';
     }
 
@@ -78,7 +83,7 @@ const queueApplicationJob = async (
       connectionsPerDevice
     } = application.configuration;
 
-    if (op === 'deploy') {
+    if (op === 'deploy' || op === 'config') {
       tasks[0][0].params.id = application._id;
       tasks[0][0].params.name = application.app.name;
       tasks[0][0].params.version = application.installedVersion;
@@ -167,7 +172,7 @@ const getOpDevices = async (devicesObj, org, purchasedApp) => {
  */
 const apply = async (deviceList, user, data) => {
   const { org } = data;
-  const { op, id } = data.meta;
+  const { op, id, newVersion } = data.meta;
 
   let app, session, deviceIds;
   const requestTime = Date.now();
@@ -176,6 +181,7 @@ const apply = async (deviceList, user, data) => {
     session = await mongoConns.getMainDB().startSession();
 
     await session.withTransaction(async () => {
+      // Get application
       app = await applications.findOne({
         org: org,
         _id: id
@@ -184,6 +190,7 @@ const apply = async (deviceList, user, data) => {
         .lean()
         .session(session);
 
+      // Prevent install removed app
       if (op === 'deploy') {
         if (!app) {
           throw createError(404, `application ${id} does not purchased`);
@@ -199,8 +206,7 @@ const apply = async (deviceList, user, data) => {
         ? await getOpDevices(data.devices, org, app)
         : [deviceList[0]._id];
 
-      // update db
-      // TODO maybe the db operation need to be on complete job
+      // Save status in the devices
       const query = {
         _id: { $in: deviceIds },
         org: org
@@ -209,7 +215,7 @@ const apply = async (deviceList, user, data) => {
       let update;
 
       if (op === 'deploy') {
-        // filter if app already installed
+        // Filter out if app already installed to prevent duplication.
         query['applications.app'] = { $ne: app._id };
 
         update = {
@@ -228,27 +234,26 @@ const apply = async (deviceList, user, data) => {
           $set: { 'applications.$.status': 'upgrading' }
         };
 
-        // update version on db
-        console.log('newVersion123', data.meta.newVersion);
-        app = await applications.findOneAndUpdate(
-          { org: org, _id: id },
-          { $set: { installedVersion: data.meta.newVersion, pendingToUpgrade: false } },
-          { new: true }
-        ).populate('app').lean()
-          .session(session);
-
-        console.log(app);
-      } else {
+        app.installedVersion = newVersion; // TODO: need to test it
+      } else if (op === 'config') {
         query['applications.app'] = id;
 
         update = {
-          $pull: { applications: { app: id } }
+          $set: { 'applications.$.status': 'installing' }
+        };
+      } else if (op === 'uninstall') {
+        query['applications.app'] = id;
+
+        update = {
+          $set: { 'applications.$.status': 'uninstalling' }
         };
       }
 
-      await devices
-        .updateMany(query, update, { upsert: false })
-        .session(session);
+      if (update) {
+        await devices
+          .updateMany(query, update, { upsert: false })
+          .session(session);
+      }
     });
   } catch (error) {
     console.log(error.message);
@@ -311,7 +316,7 @@ const apply = async (deviceList, user, data) => {
         org: org,
         'applications.app': app._id
       },
-      { $set: { 'applications.$.status': 'job queue failed' } }, // TODO: update just nested app
+      { $set: { 'applications.$.status': 'job queue failed' } },
       { upsert: false }
     );
 
@@ -343,9 +348,22 @@ const complete = async (jobId, res) => {
   const { _id } = res.application.device;
   try {
     const update =
-      op === 'deploy' || op === 'upgrade'
+      op === 'deploy' || op === 'upgrade' || op === 'config'
         ? { $set: { 'applications.$.status': 'installed' } }
         : { $set: { 'applications.$.status': 'uninstalled' } };
+
+    // update version on db
+    if (op === 'upgrade') {
+      // TODO: need to improve this part
+      const updatedApp = await applications.findOne(
+        { org: org, _id: app._id }
+      ).populate('app');
+
+      await applications.updateOne(
+        { org: org, _id: app._id },
+        { $set: { installedVersion: updatedApp.app.latestVersion, pendingToUpgrade: false } }
+      );
+    }
 
     await devices.updateOne(
       {
@@ -386,7 +404,7 @@ const error = async (jobId, res) => {
   console.log('app._id', app._id);
 
   try {
-    const status = `${op === 'deploy' ? '' : 'un'}installation failed`;
+    const status = `${op === 'deploy' || op === 'config' ? '' : 'un'}installation failed`;
     await devices.updateOne(
       { _id: _id, org: org, 'applications.app': app._id },
       { $set: { 'applications.$.status': status } },

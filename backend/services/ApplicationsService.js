@@ -261,6 +261,8 @@ class ApplicationsService {
    */
   static async applicationsConfigurationPUT ({ id, application, org }, { user }) {
     try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
       // check if subdomain already taken
       const organization = application.configuration.organization;
       const organizationExists = await applications.findOne(
@@ -302,7 +304,17 @@ class ApplicationsService {
         .populate('org')
         .execPopulate();
 
-      // TODO: update application on devices if needed
+      // update configuration on devices
+      const opDevices = await devices.find({
+        org: { $in: orgList },
+        'applications.app': id,
+        'applications.status': 'installed'
+      });
+
+      if (opDevices.length) {
+        await dispatcher.apply(opDevices, 'application',
+          user, { org: orgList[0], meta: { op: 'config', id: id } });
+      }
 
       return Service.successResponse({ application: updated });
     } catch (e) {

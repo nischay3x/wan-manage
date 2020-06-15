@@ -2411,6 +2411,7 @@ paths:
           - dhcp
           - vpp
           - ospf
+          - open-vpn
           type: string
         style: form
       responses:

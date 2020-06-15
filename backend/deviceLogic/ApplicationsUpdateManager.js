@@ -171,7 +171,7 @@ class ApplicationsUpdateManager {
       // const result = await fetchUtils.fetchWithRetry(this.applicationsUri, 3);
       // const body = await result.json();
 
-      // TODO: think on removed applications from repositroy
+      // TODO: think on removed applications from repository
 
       const fs = require('fs');
       const result = fs.readFileSync(this.applicationsUri);
