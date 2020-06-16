@@ -482,7 +482,7 @@ class DeviceQueues {
      */
   callRegisteredCallback (name, job) {
     if (this.removeCallbacks.hasOwnProperty(name)) {
-      this.removeCallbacks[name](job);
+      return this.removeCallbacks[name](job);
     }
   }
 }

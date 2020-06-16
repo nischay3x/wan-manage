@@ -188,11 +188,6 @@ const staticroutesSchema = new Schema({
       validator: validators.validateIsNumber,
       message: 'Metric should be a number'
     }
-  },
-  // status
-  status: {
-    type: String,
-    default: 'failed'
   }
 }, {
   timestamps: true
@@ -238,8 +233,8 @@ const DHCPSchema = new Schema({
     maxlength: [50, 'Interface length must be at most 50'],
     required: [true, 'Interface must be set'],
     validate: {
-      validator: validators.validateIfcName,
-      message: 'Interface should be a vaild interface name'
+      validator: validators.validatePciAddress,
+      message: 'Interface should be a vaild interface pci address'
     }
   },
   rangeStart: {
@@ -532,11 +527,6 @@ const deviceSchema = new Schema({
   interfaces: [interfacesSchema],
   // labels
   labels: [String],
-  // is modification in progress flag
-  pendingDevModification: {
-    type: Boolean,
-    default: false
-  },
   policies: {
     multilink: {
       type: devicePolicySchema,

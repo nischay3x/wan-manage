@@ -957,6 +957,12 @@ paths:
              schema:
                $ref: '#/components/schemas/Device'
          description: Successful operation
+       "202":
+         content:
+           application/json:
+             schema:
+               $ref: '#/components/schemas/Device'
+         description: Operation queued for processing
        "401":
          content:
            application/json:
@@ -6009,7 +6015,6 @@ components:
           router: router
           device: device
         name: name
-        pendingDevModification: true
         isApproved: true
         staticroutes:
         - destination: destination
@@ -6037,8 +6042,6 @@ components:
           type: boolean
         isConnected:
           type: boolean
-        pendingDevModification:
-          type: boolean
         hostname:
           type: string
         deviceStatus:
@@ -6059,7 +6062,7 @@ components:
           type: array
         dhcp:
           items:
-            $ref: '#/components/schemas/Dhcp'
+            $ref: '#/components/schemas/DhcpRequest'
           type: array
         upgradeSchedule:
           $ref: '#/components/schemas/UpgradeSchedule'
@@ -6131,7 +6134,6 @@ components:
           frr: frr
         name: name
         _id: _id
-        pendingDevModification: true
         isApproved: true
         staticroutes:
         - id: 1
@@ -6164,8 +6166,6 @@ components:
         isApproved:
           type: boolean
         isConnected:
-          type: boolean
-        pendingDevModification:
           type: boolean
         hostname:
           type: string

@@ -108,7 +108,6 @@ class DevicesService {
       'hostname',
       'name',
       '_id',
-      'pendingDevModification',
       'isApproved',
       'fromToken',
       'account',
@@ -147,7 +146,8 @@ class DevicesService {
         '_id',
         'destination',
         'gateway',
-        'interface'
+        'ifname',
+        'metric'
       ]);
       retRoute._id = retRoute._id.toString();
       return retRoute;
@@ -508,7 +508,7 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user }) {
+  static async devicesIdPUT ({ id, org, deviceRequest }, { user }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -570,13 +570,6 @@ class DevicesService {
       delete deviceRequest.defaultAccount;
       delete deviceRequest.defaultOrg;
 
-      // Currently we allow only one change at a time to the device,
-      // to prevent inconsistencies between the device and the MGMT database.
-      // Therefore, we block the request if there's a pending change in the queue.
-      if (origDevice.pendingDevModification) {
-        throw new Error('Only one device change is allowed at any time');
-      }
-
       const updDevice = await devices.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
         deviceRequest,
@@ -585,18 +578,23 @@ class DevicesService {
         .session(session)
         .populate('interfaces.pathlabels', '_id name description color type');
 
-      await session.commitTransaction();
-      session = null;
-
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
+      let modifyDevResult = [];
       if (origDevice) {
-        await dispatcher.apply([origDevice], 'modify', user, {
+        modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
           newDevice: updDevice
         });
       }
 
-      return DevicesService.selectDeviceParams(updDevice);
+      await session.commitTransaction();
+      session = null;
+
+      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
+      const ids = [modifyDevResult.ids[0]];
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      const deviceObj = DevicesService.selectDeviceParams(updDevice);
+      return Service.successResponse(deviceObj, status);
     } catch (e) {
       if (session) session.abortTransaction();
 
@@ -1078,8 +1076,7 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
       // Currently we allow only one change at a time to the device
-      if (deviceObject.pendingDevModification ||
-              deviceObject.dhcp.some(d => d.status.includes('wait'))) {
+      if (deviceObject.dhcp.some(d => d.status.includes('wait'))) {
         throw new Error('Only one device change is allowed at any time');
       }
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
@@ -1154,8 +1151,7 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
       // Currently we allow only one change at a time to the device
-      if (deviceObject.pendingDevModification ||
-        deviceObject.dhcp.some(d => d.status.includes('wait'))) {
+      if (deviceObject.dhcp.some(d => d.status.includes('wait'))) {
         throw new Error('Only one device change is allowed at any time');
       }
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {

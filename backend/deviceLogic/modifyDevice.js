@@ -28,13 +28,13 @@ const {
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
-const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const has = require('lodash/has');
 const omit = require('lodash/omit');
 const differenceWith = require('lodash/differenceWith');
 const pullAllWith = require('lodash/pullAllWith');
 const isEqual = require('lodash/isEqual');
+const pick = require('lodash/pick');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
@@ -84,7 +84,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
       }
     },
     // Metadata
-    { priority: 'medium', attempts: 2, removeOnComplete: false },
+    { priority: 'medium', attempts: 1, removeOnComplete: false },
     // Complete callback
     null
   );
@@ -189,21 +189,65 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
     }
   }
   // Prepare and queue device modification job
+  const modificationMessage = {};
+  if (has(messageParams, 'modify_routes')) {
+    modificationMessage.modify_routes = messageParams.modify_routes;
+  }
   if (has(messageParams, 'modify_router.assign')) {
-    messageParams.modify_router.assign = prepareIfcParams(messageParams.modify_router.assign);
-    messageParams.reconnect = true;
+    modificationMessage.modify_router = {};
+    modificationMessage.modify_router.assign = prepareIfcParams(
+      messageParams.modify_router.assign
+    );
+    modificationMessage.reconnect = true;
   }
   if (has(messageParams, 'modify_router.unassign')) {
-    messageParams.modify_router.unassign = prepareIfcParams(messageParams.modify_router.unassign);
-    messageParams.reconnect = true;
+    if (!modificationMessage.modify_router) {
+      modificationMessage.modify_router = {};
+    }
+    modificationMessage.modify_router.unassign = prepareIfcParams(
+      messageParams.modify_router.unassign
+    );
+    modificationMessage.reconnect = true;
   }
   if (has(messageParams, 'modify_interfaces')) {
-    messageParams.modify_interfaces.interfaces = prepareIfcParams(
+    modificationMessage.modify_interfaces = {};
+    modificationMessage.modify_interfaces.interfaces = prepareIfcParams(
       messageParams.modify_interfaces.interfaces
     );
-    messageParams.reconnect = true;
+    modificationMessage.reconnect = true;
   }
-  const tasks = [{ entity: 'agent', message: 'modify-device', params: messageParams }];
+
+  const tasks = [];
+  if (Object.keys(modificationMessage).length !== 0) {
+    tasks.push([
+      {
+        entity: 'agent',
+        message: 'modify-device',
+        params: modificationMessage
+      }
+    ]);
+  }
+
+  if (has(messageParams, 'modify_dhcp_config')) {
+    const { dhcpRemove, dhcpAdd } = messageParams.modify_dhcp_config;
+
+    if (dhcpRemove.length !== 0) {
+      tasks.push([{
+        entity: 'agent',
+        message: 'remove-dhcp-config',
+        params: dhcpRemove
+      }]);
+    }
+
+    if (dhcpAdd.length !== 0) {
+      tasks.push([{
+        entity: 'agent',
+        message: 'add-dhcp-config',
+        params: dhcpAdd
+      }]);
+    }
+  }
+
   const job = await queueJob(org, user, tasks, device, removedTunnels);
   return [job];
 };
@@ -256,44 +300,155 @@ const reconstructTunnels = async (removedTunnels, org, user) => {
     );
   }
 };
+
 /**
- * Sets the job pending flag value. This flag is used to indicate
- * there's a pending modify-device job in the queue to prevent
- * queuing additional modify-device jobs.
- * @param  {string}  deviceID the id of the device
- * @param  {string}  org      the organization the device belongs to
- * @param  {boolean} flag     the value of the flag
- * @return {Promise}          a promise for updating the flab in the database
+ * Creates a modify-routes object
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing an array of routes
  */
-const setJobPendingInDB = (deviceID, org, flag) => {
-  return devices.update(
-    { _id: deviceID, org: org },
-    { $set: { pendingDevModification: flag } },
-    { upsert: false }
-  );
-};
-/**
- * Reverts the device changes in the database. Since
- * modify-device jobs are sent after the changes had
- * already been updated in the database, the changes
- * must be reverted if the job failed to be sent/
- * processed by the device.
- * @param  {Object}  origDevice device object before changes in the database
- * @return {Promise}            a promise for reverting the changes in the database
- */
-const rollBackDeviceChanges = async (origDevice) => {
-  const { _id, org } = origDevice;
-  const result = await devices.update(
-    { _id: _id, org: org },
-    {
-      $set: {
-        defaultRoute: origDevice.defaultRoute,
-        interfaces: origDevice.interfaces
+const prepareModifyRoutes = (origDevice, newDevice) => {
+  // Handle changes in default route
+  const routes = [];
+  if (origDevice.defaultRoute !== newDevice.defaultRoute) {
+    routes.push({
+      addr: 'default',
+      old_route: origDevice.defaultRoute,
+      new_route: newDevice.defaultRoute
+    });
+  }
+
+  // Handle changes in static routes
+  // Extract only relevant fields from static routes database entries
+  const [newStaticRoutes, origStaticRoutes] = [
+    newDevice.staticroutes.map(route => {
+      return ({
+        destination: route.destination,
+        gateway: route.gateway,
+        ifname: route.ifname,
+        metric: route.metric
+      });
+    }),
+
+    origDevice.staticroutes.map(route => {
+      return ({
+        destination: route.destination,
+        gateway: route.gateway,
+        ifname: route.ifname,
+        metric: route.metric
+      });
+    })
+  ];
+
+  // Compare new and original static routes arrays.
+  // Add all static routes that do not exist in the
+  // original routes array and remove all static routes
+  // that do not appear in the new routes array
+  const [routesToAdd, routesToRemove] = [
+    differenceWith(
+      newStaticRoutes,
+      origStaticRoutes,
+      (origRoute, newRoute) => {
+        return isEqual(origRoute, newRoute);
       }
-    },
-    { upsert: false }
-  );
-  if (result.nModified !== 1) throw new Error('device document was not updated');
+    ),
+    differenceWith(
+      origStaticRoutes,
+      newStaticRoutes,
+      (origRoute, newRoute) => {
+        return isEqual(origRoute, newRoute);
+      }
+    )
+  ];
+
+  routesToRemove.forEach(route => {
+    routes.push({
+      addr: route.destination,
+      old_route: route.gateway,
+      new_route: '',
+      pci: route.ifname ? route.ifname : undefined,
+      metric: route.metric
+    });
+  });
+  routesToAdd.forEach(route => {
+    routes.push({
+      addr: route.destination,
+      new_route: route.gateway,
+      old_route: '',
+      pci: route.ifname ? route.ifname : undefined,
+      metric: route.metric
+    });
+  });
+
+  return { routes: routes };
+};
+
+/**
+ * Creates a modify-dhcp object
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing an array of routes
+ */
+const prepareModifyDHCP = (origDevice, newDevice) => {
+  // Extract only relevant fields from dhcp database entries
+  const [newDHCP, origDHCP] = [
+    newDevice.dhcp.map(dhcp => {
+      return ({
+        interface: dhcp.interface,
+        range_start: dhcp.rangeStart,
+        range_end: dhcp.rangeEnd,
+        dns: dhcp.dns,
+        mac_assign: dhcp.macAssign.map(mac => {
+          return pick(mac, [
+            'host', 'mac', 'ipv4'
+          ]);
+        })
+      });
+    }),
+
+    origDevice.dhcp.map(dhcp => {
+      return ({
+        interface: dhcp.interface,
+        range_start: dhcp.rangeStart,
+        range_end: dhcp.rangeEnd,
+        dns: dhcp.dns,
+        mac_assign: dhcp.macAssign.map(mac => {
+          return pick(mac, [
+            'host', 'mac', 'ipv4'
+          ]);
+        })
+      });
+    })
+  ];
+
+  // Compare new and original dhcp arrays.
+  // Add all dhcp entries that do not exist in the
+  // original dhcp array and remove all dhcp entries
+  // that do not appear in the new dhcp array
+  let [dhcpAdd, dhcpRemove] = [
+    differenceWith(
+      newDHCP,
+      origDHCP,
+      (origRoute, newRoute) => {
+        return isEqual(origRoute, newRoute);
+      }
+    ),
+    differenceWith(
+      origDHCP,
+      newDHCP,
+      (origRoute, newRoute) => {
+        return isEqual(origRoute, newRoute);
+      }
+    )
+  ];
+
+  dhcpRemove = dhcpRemove.map(dhcp => {
+    return {
+      interface: dhcp.interface
+    };
+  });
+
+  return { dhcpRemove, dhcpAdd };
 };
 
 /**
@@ -334,15 +489,15 @@ const apply = async (device, user, data) => {
   const org = user.defaultOrg._id.toString();
   const modifyParams = {};
 
-  // Create the default route modification parameters
-  if (device[0].defaultRoute !== data.newDevice.defaultRoute) {
-    modifyParams.modify_routes = {
-      routes: [{
-        addr: 'default',
-        old_route: device[0].defaultRoute,
-        new_route: data.newDevice.defaultRoute
-      }]
-    };
+  // Create the default/static routes modification parameters
+  const modifyRoutes = prepareModifyRoutes(device[0], data.newDevice);
+  if (modifyRoutes.routes.length > 0) modifyParams.modify_routes = modifyRoutes;
+
+  // Create DHCP modification parameters
+  const modifyDHCP = prepareModifyDHCP(device[0], data.newDevice);
+  if (modifyDHCP.dhcpRemove.length > 0 ||
+      modifyDHCP.dhcpAdd.length > 0) {
+    modifyParams.modify_dhcp_config = modifyDHCP;
   }
 
   // Create interfaces modification parameters
@@ -452,53 +607,57 @@ const apply = async (device, user, data) => {
     modifyParams.modify_interfaces.interfaces = interfacesDiff;
   }
 
-  const modified =
-            has(modifyParams, 'modify_routes') ||
-            has(modifyParams, 'modify_router') ||
-            has(modifyParams, 'modify_interfaces');
+  const shouldQueueJob =
+      has(modifyParams, 'modify_routes') ||
+      has(modifyParams, 'modify_router') ||
+      has(modifyParams, 'modify_interfaces') ||
+      has(modifyParams, 'modify_dhcp_config');
+
+  // Return empty jobs array if the device did not change
+  if (!shouldQueueJob) {
+    return {
+      ids: [],
+      status: 'completed',
+      message: ''
+    };
+  }
+
   try {
-    // Queue job only if the device has changed
-    if (modified) {
-      // First, go over assigned and modified
-      // interfaces and make sure they are valid
-      const assign = has(modifyParams, 'modify_router.assign')
-        ? modifyParams.modify_router.assign
-        : [];
-      const modified = has(modifyParams, 'modify_interfaces')
-        ? modifyParams.modify_interfaces.interfaces
-        : [];
-      const interfaces = [...assign, ...modified];
-      const { valid, err } = validateModifyDeviceMsg(interfaces);
-      if (!valid) {
-        // Rollback device changes in database and return error
-        await rollBackDeviceChanges(device[0]);
-        throw (new Error(err));
-      }
-      const dhcpValidation = validateDhcpConfig(device[0], interfaces);
-      if (!dhcpValidation.valid) {
-        // Rollback device changes in database and return error
-        await rollBackDeviceChanges(device[0]);
-        throw (new Error(dhcpValidation.err));
-      }
-      await setJobPendingInDB(device[0]._id, org, true);
-      const jobs = await queueModifyDeviceJob(device[0], modifyParams, userName, org);
-      return {
-        ids: jobs.flat().map(job => job.id),
-        status: 'completed',
-        message: ''
-      };
-    }
+    // First, go over assigned and modified
+    // interfaces and make sure they are valid
+    const assign = has(modifyParams, 'modify_router.assign')
+      ? modifyParams.modify_router.assign
+      : [];
+    const unassign = has(modifyParams, 'modify_router.unassign')
+      ? modifyParams.modify_router.unassign
+      : [];
+    const modified = has(modifyParams, 'modify_interfaces')
+      ? modifyParams.modify_interfaces.interfaces
+      : [];
+    const interfaces = [...assign, ...modified];
+    const { valid, err } = validateModifyDeviceMsg(interfaces);
+    if (!valid) throw (new Error(err));
+
+    // Don't allow to modify/assign/unassign
+    // interfaces that are assigned with DHCP
+    const dhcpValidation = validateDhcpConfig(device[0], [
+      ...interfaces,
+      ...unassign
+    ]);
+    if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
+
+    // Queue device modification job
+    const jobs = await queueModifyDeviceJob(device[0], modifyParams, userName, org);
+
+    return {
+      ids: jobs.flat().map(job => job.id),
+      status: 'completed',
+      message: ''
+    };
   } catch (err) {
     logger.error('Failed to queue modify device job', {
       params: { err: err.message, device: device[0]._id }
     });
-    try {
-      await setJobPendingInDB(device[0]._id, org, false);
-    } catch (err) {
-      logger.error('Failed to set job pending flag in db', {
-        params: { err: err.message, device: device[0]._id }
-      });
-    }
     throw (new Error(err.message || 'Internal server error'));
   }
 };
@@ -524,85 +683,9 @@ const complete = async (jobId, res) => {
       params: { jobId: jobId, res: res, err: err.message }
     });
   }
-  try {
-    await setJobPendingInDB(res.device, res.org, false);
-  } catch (err) {
-    logger.error('Failed to set job pending flag in db', {
-      params: { err: err.message, jobId: jobId, res: res }
-    });
-  }
-};
-
-/**
- * Called when modify device job fails and
- * reverts the changes in the database.
- * @async
- * @param  {number} jobId Kue job ID number
- * @param  {Object} res   job result
- * @return {void}
- */
-const error = async (jobId, res) => {
-  if (!res || !res.origDevice) {
-    logger.warn('Got an invalid job result', { params: { res: res, jobId: jobId } });
-    return;
-  }
-  logger.warn('Rolling back device changes', { params: { jobId: jobId, res: res } });
-  try {
-    // First rollback changes and only then reconstruct the tunnels. This is
-    // done to make sure tunnels are reconstructed with the previous values.
-    await rollBackDeviceChanges(res.origDevice);
-    await reconstructTunnels(res.tunnels, res.org, res.user);
-  } catch (err) {
-    logger.error('Device change rollback failed', {
-      params: { jobId: jobId, res: res, err: err.message }
-    });
-  }
-  try {
-    await setJobPendingInDB(res.device, res.org, false);
-  } catch (err) {
-    logger.error('Failed to set job pending flag in db', {
-      params: { err: err.message, jobId: jobId, res: res }
-    });
-  }
-};
-
-/**
- * Called when modify-device job is removed either
- * by user or due to expiration. This method should run
- * only for tasks that were deleted before completion/failure
- * @async
- * @param  {Object} job Kue job
- * @return {void}
- */
-const remove = async (job) => {
-  // We rollback changes only for pending jobs, as non-pending
-  // jobs are covered by the complete/error callbacks
-  if (['inactive', 'delayed', 'active'].includes(job._state)) {
-    logger.info('Rolling back device changes for removed task', { params: { job: job } });
-    const { org, user, origDevice, tunnels } = job.data.response.data;
-    try {
-      // First rollback changes and only then reconstruct the tunnels. This is
-      // done to make sure tunnels are reconstructed with the previous values.
-      await rollBackDeviceChanges(origDevice);
-      await reconstructTunnels(tunnels, org, user);
-    } catch (err) {
-      logger.error('Device change rollback failed', {
-        params: { job: job, err: err.message }
-      });
-    }
-    try {
-      await setJobPendingInDB(origDevice, org, false);
-    } catch (err) {
-      logger.error('Failed to set job pending flag in db', {
-        params: { err: err.message, job: job }
-      });
-    }
-  }
 };
 
 module.exports = {
   apply: apply,
-  complete: complete,
-  error: error,
-  remove: remove
+  complete: complete
 };
