@@ -90,6 +90,16 @@ const queueApplicationJob = async (
       tasks[0][0].params.routeAllOverVpn = routeAllOverVpn;
       tasks[0][0].params.remoteClientIp = subnets.shift();
       tasks[0][0].params.deviceWANIp = wanIp;
+
+      if (op === 'deploy') {
+        tasks[0].push({
+          entity: 'agent',
+          message: 'config-vpn-server',
+          params: {
+            ...tasks[0][0].params
+          }
+        });
+      }
     } else if (op === 'upgrade') {
       tasks[0][0].params.id = application._id;
       tasks[0][0].params.name = application.app.name;

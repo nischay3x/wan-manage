@@ -22,7 +22,6 @@ const applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const dispatcher = require('../deviceLogic/dispatcher');
 const ObjectId = require('mongoose').Types.ObjectId;
-const DevicesService = require('./DevicesService');
 const cidrTools = require('cidr-tools');
 const {
   getAvailableIps,
@@ -235,13 +234,18 @@ class ApplicationsService {
         { upsert: false }
       );
 
-      // send jobs to device
-      const opDevices = await devices.find({ org: { $in: orgList }, 'applications.app': id });
-      const { ids, status, message } = await dispatcher.apply(opDevices, 'application',
-        user, { org: orgList[0], meta: { op: 'uninstall', id: id } });
+      // send jobs to device that installed open vpn
+      const opDevices = await devices.find({
+        org: { $in: orgList },
+        'applications.app': id,
+        'applications.status': 'installed'
+      });
+      if (opDevices.length) {
+        await dispatcher.apply(opDevices, 'application',
+          user, { org: orgList[0], meta: { op: 'uninstall', id: id } });
+      }
 
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-      return Service.successResponse({ ids, status, message }, 202);
+      return Service.successResponse({ data: 'ok' });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

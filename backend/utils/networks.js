@@ -23,7 +23,7 @@ const findKey = require('lodash/findKey');
  * @return {number}       number of available ips
  */
 function getAvailableIps (mask) {
-  return findKey(maskByIpRange, ips => ips === mask);
+  return findKey(maskByIpRange, ips => ips === parseInt(mask));
 }
 
 /**
