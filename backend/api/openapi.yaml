@@ -2411,6 +2411,12 @@ paths:
         name: filter
         required: false
         schema:
+          enum:
+          - fwagent
+          - syslog
+          - dhcp
+          - vpp
+          - ospf
           type: string
         style: form
       responses:
@@ -2420,6 +2426,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeviceLog'
           description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
         "401":
           content:
             application/json:
@@ -7196,6 +7208,14 @@ components:
         code:
           type: string
         message:
+          type: string
+      required:
+      - code
+      - message
+      type: object
+    BadRequestError:
+      properties:
+        error:
           type: string
       required:
       - code

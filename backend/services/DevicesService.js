@@ -401,7 +401,7 @@ class DevicesService {
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
           status: 'disconnected',
-          log: []
+          logs: []
         });
       }
 
