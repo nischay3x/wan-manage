@@ -52,6 +52,8 @@ const queueApplicationJob = async (
     default: jobTitle = `Application ${application.app.name}`;
   }
 
+  const subnets = [...application.configuration.subnets];
+
   deviceList.forEach((dev) => {
     const { _id, machineId, interfaces } = dev;
 
@@ -78,9 +80,7 @@ const queueApplicationJob = async (
     ];
 
     const {
-      routeAllOverVpn,
-      remoteClientIp,
-      connectionsPerDevice
+      routeAllOverVpn
     } = application.configuration;
 
     if (op === 'deploy' || op === 'config') {
@@ -88,8 +88,7 @@ const queueApplicationJob = async (
       tasks[0][0].params.name = application.app.name;
       tasks[0][0].params.version = application.installedVersion;
       tasks[0][0].params.routeAllOverVpn = routeAllOverVpn;
-      tasks[0][0].params.remoteClientIp = remoteClientIp;
-      tasks[0][0].params.connectionsPerDevice = connectionsPerDevice;
+      tasks[0][0].params.remoteClientIp = subnets.shift();
       tasks[0][0].params.deviceWANIp = wanIp;
     } else if (op === 'upgrade') {
       tasks[0][0].params.id = application._id;
@@ -128,7 +127,7 @@ const queueApplicationJob = async (
           data: data
         },
         // Metadata
-        { priority: 'high', attempts: 1, removeOnComplete: false },
+        { priority: 'high', attempts: op === 'deploy' ? 2 : 1, removeOnComplete: false },
         // Complete callback
         null
       )

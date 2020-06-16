@@ -16,18 +16,18 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
-// const configs = require('../configs')();
 const library = require('../models/library');
 const { devices } = require('../models/devices');
 const applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const dispatcher = require('../deviceLogic/dispatcher');
-// const { devices } = require('../models/devices');
-// const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const ObjectId = require('mongoose').Types.ObjectId;
 const DevicesService = require('./DevicesService');
-// const find = require('lodash/find');
-// const remove = require('lodash/remove');
+const cidrTools = require('cidr-tools');
+const {
+  getAvailableIps,
+  getSubnetMask
+} = require('../utils/networks');
 
 class ApplicationsService {
   static async applicationsLibraryGET ({ user }) {
@@ -292,6 +292,32 @@ class ApplicationsService {
       //   }
       // }
 
+      // Calculate subnets to entire org
+      const subnets = [];
+      const totalPool = application.configuration.remoteClientIp;
+      const perDevice = application.configuration.connectionsPerDevice;
+      if (totalPool && perDevice) {
+        const mask = totalPool.split('/')[1];
+
+        // get ip range for this mask
+        const availableIps = getAvailableIps(mask);
+
+        // get subnets count for this org
+        const subnetsCount = availableIps / perDevice;
+
+        // get the new subnets mask for splitted subnets
+        const newMask = getSubnetMask(perDevice);
+
+        // get all ips in entire network
+        const ips = cidrTools.expand(totalPool);
+
+        for (let i = 0; i < subnetsCount; i++) {
+          subnets.push(`${ips[i * perDevice]}/${newMask}`);
+        }
+      }
+
+      application.configuration.subnets = subnets;
+
       const updated = await applications.findOneAndUpdate(
         { _id: id },
         { $set: { configuration: application.configuration } },
@@ -304,13 +330,12 @@ class ApplicationsService {
         .populate('org')
         .execPopulate();
 
-      // update configuration on devices
+      // Update devices that installed vpn
       const opDevices = await devices.find({
         org: { $in: orgList },
         'applications.app': id,
         'applications.status': 'installed'
       });
-
       if (opDevices.length) {
         await dispatcher.apply(opDevices, 'application',
           user, { org: orgList[0], meta: { op: 'config', id: id } });
