@@ -28,6 +28,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const ObjectId = require('mongoose').Types.ObjectId;
 // const appComplete = require('./appIdentification').complete;
 // const appError = require('./appIdentification').error;
 // const appRemove = require('./appIdentification').remove;
@@ -52,9 +53,12 @@ const queueApplicationJob = async (
     default: jobTitle = `Application ${application.app.name}`;
   }
 
-  const subnets = [...application.configuration.subnets];
+  // filter out subnets that already in used on devices
+  const subnets = [...application.configuration.subnets.filter(s => s.device == null)];
 
-  deviceList.forEach((dev) => {
+  for (let i = 0; i < deviceList.length; i++) {
+    const dev = deviceList[i];
+
     const { _id, machineId, interfaces } = dev;
 
     const appName = application.app.name;
@@ -84,11 +88,19 @@ const queueApplicationJob = async (
     } = application.configuration;
 
     if (op === 'deploy' || op === 'config') {
+      // get new subnet only if there is no subnet connect with current device
+      let deviceSubnet = '';
+      const exists = application.configuration.subnets.find(
+        s => s.device.toString() === dev._id.toString()
+      );
+      if (exists) deviceSubnet = exists;
+      else deviceSubnet = subnets.shift();
+
       tasks[0][0].params.id = application._id;
       tasks[0][0].params.name = application.app.name;
       tasks[0][0].params.version = application.installedVersion;
       tasks[0][0].params.routeAllOverVpn = routeAllOverVpn;
-      tasks[0][0].params.remoteClientIp = subnets.shift();
+      tasks[0][0].params.remoteClientIp = deviceSubnet.subnet;
       tasks[0][0].params.deviceWANIp = wanIp;
 
       if (op === 'deploy') {
@@ -99,6 +111,15 @@ const queueApplicationJob = async (
             ...tasks[0][0].params
           }
         });
+
+        // set subnet to device to prevent same subnet on multiple devices
+        await applications.updateOne(
+          {
+            _id: application._id,
+            'configuration.subnets.subnet': deviceSubnet.subnet
+          },
+          { $set: { 'configuration.subnets.$.device': _id } }
+        );
       }
     } else if (op === 'upgrade') {
       tasks[0][0].params.id = application._id;
@@ -142,34 +163,35 @@ const queueApplicationJob = async (
         null
       )
     );
-  });
+  }
+
   return Promise.allSettled(jobs);
 };
 
-const getOpDevices = async (devicesObj, org, purchasedApp) => {
-  // If the list of devices is provided in the request
-  // return their IDs, otherwise, extract device IDs
-  // of all devices that are currently running the application
-  const devicesList = Object.keys(devicesObj);
-  if (devicesList.length > 0) return devicesList;
+// const getOpDevices = async (devicesObj, org, purchasedApp) => {
+//   // If the list of devices is provided in the request
+//   // return their IDs, otherwise, extract device IDs
+//   // of all devices that are currently running the application
+//   const devicesList = Object.keys(devicesObj);
+//   if (devicesList.length > 0) return devicesList;
 
-  // TODO: understand this flow
-  // Select only devices on which the application is already
-  // installed or in the process of installation, to make
-  // sure the application is not reinstalled on devices that
-  // are in the process of uninstalling the application.
-  const { _id } = purchasedApp;
-  const result = await devices.find(
-    {
-      org: org,
-      'applications.app': _id,
-      'applications.status': { $nin: ['installing', 'installed'] }
-    },
-    { _id: 1 }
-  );
+//   // TODO: understand this flow
+//   // Select only devices on which the application is already
+//   // installed or in the process of installation, to make
+//   // sure the application is not reinstalled on devices that
+//   // are in the process of uninstalling the application.
+//   const { _id } = purchasedApp;
+//   const result = await devices.find(
+//     {
+//       org: org,
+//       'applications.app': _id,
+//       'applications.status': { $nin: ['installing', 'installed'] }
+//     },
+//     { _id: 1 }
+//   );
 
-  return result.map((device) => device._id);
-};
+//   return result.map((device) => device._id);
+// };
 
 /**
  * Creates and queues add/remove deploy application jobs.
@@ -199,21 +221,37 @@ const apply = async (deviceList, user, data) => {
         .lean()
         .session(session);
 
+      // if the user select multiple devices, then the request is sent to devicesApplyPOST
+      // and the deviceList variable include all the devices event they are not selected.
+      // here we check the data.devices to take only those selected by the user
+      // if the user select only one device, then data.devices should equals to null
+      if (data.devices) {
+        deviceList = deviceList.filter(d => data.devices.hasOwnProperty(d._id));
+      }
+      deviceIds = deviceList.map(d => d._id);
+
       // Prevent install removed app
       if (op === 'deploy') {
         if (!app) {
-          throw createError(404, `application ${id} does not purchased`);
+          throw createError(500, `application ${id} does not purchased`);
         }
 
         if (app.removed) {
-          throw createError(404, `cannot deploy removed application ${id}`);
+          throw createError(500, `cannot deploy removed application ${id}`);
+        }
+
+        // prevent install if all the subnets is already taken by other devices
+        // or if the user selected multiple devices to install but there is not enoughs subnets
+        const freeSubnets = app.configuration.subnets.filter(s => {
+          return s.device === null || deviceIds.includes(s.device);
+        });
+
+        if (freeSubnets.length === 0 || freeSubnets.length < deviceIds.length) {
+          throw createError(500,
+            'There is no subnets remaining, please contact your system administrator'
+          );
         }
       }
-
-      // Extract the device IDs to operate on
-      deviceIds = data.devices
-        ? await getOpDevices(data.devices, org, app)
-        : [deviceList[0]._id];
 
       // Save status in the devices
       const query = {
@@ -371,6 +409,16 @@ const complete = async (jobId, res) => {
       await applications.updateOne(
         { org: org, _id: app._id },
         { $set: { installedVersion: updatedApp.app.latestVersion, pendingToUpgrade: false } }
+      );
+    } else if (op === 'uninstall') {
+      // release subnet
+      await applications.updateOne(
+        {
+          org: org,
+          _id: app._id,
+          'configuration.subnets.device': ObjectId(_id)
+        },
+        { $set: { 'configuration.subnets.$.device': null } }
       );
     }
 

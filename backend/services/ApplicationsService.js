@@ -316,7 +316,7 @@ class ApplicationsService {
         const ips = cidrTools.expand(totalPool);
 
         for (let i = 0; i < subnetsCount; i++) {
-          subnets.push(`${ips[i * perDevice]}/${newMask}`);
+          subnets.push({ device: null, subnet: `${ips[i * perDevice]}/${newMask}` });
         }
       }
 
@@ -340,6 +340,7 @@ class ApplicationsService {
         'applications.app': id,
         'applications.status': 'installed'
       });
+
       if (opDevices.length) {
         await dispatcher.apply(opDevices, 'application',
           user, { org: orgList[0], meta: { op: 'config', id: id } });
@@ -396,6 +397,41 @@ class ApplicationsService {
       console.log('message', message);
 
       return Service.successResponse({ data: 'ok' });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async applicationsStatusGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const devicesList = await devices.aggregate([
+        { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
+        {
+          $project: {
+            name: 1,
+            application: {
+              $arrayElemAt: [
+                {
+                  $filter: {
+                    input: '$applications',
+                    as: 'app',
+                    cond: {
+                      $eq: ['$$app.app', ObjectId(id)]
+                    }
+                  }
+                }, 0
+              ]
+            }
+          }
+        }
+      ]).allowDiskUse(true);
+
+      return Service.successResponse({ data: devicesList || [] });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
