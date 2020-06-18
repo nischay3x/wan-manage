@@ -88,13 +88,29 @@ const queueApplicationJob = async (
     } = application.configuration;
 
     if (op === 'deploy' || op === 'config') {
-      // get new subnet only if there is no subnet connect with current device
+      // get new subnet only if there is no subnet connect with current device      
       let deviceSubnet = '';
       const exists = application.configuration.subnets.find(
-        s => s.device.toString() === dev._id.toString()
+        s => s.device && (s.device.toString() === dev._id.toString())
       );
       if (exists) deviceSubnet = exists;
       else deviceSubnet = subnets.shift();
+
+      // deviceSubnet equal to null means 
+      // that vpn installed on more devices then assigned subnets
+      if (!deviceSubnet) {
+        const msg = `You don't have enoughs subnets to all devices`;
+        throw createError(500, msg);  
+      }     
+
+      // set subnet to device to prevent same subnet on multiple devices
+      await applications.updateOne(
+        {
+          _id: application._id,
+          'configuration.subnets.subnet': deviceSubnet.subnet
+        },
+        { $set: { 'configuration.subnets.$.device': _id } }
+      );
 
       tasks[0][0].params.id = application._id;
       tasks[0][0].params.name = application.app.name;
@@ -111,15 +127,6 @@ const queueApplicationJob = async (
             ...tasks[0][0].params
           }
         });
-
-        // set subnet to device to prevent same subnet on multiple devices
-        await applications.updateOne(
-          {
-            _id: application._id,
-            'configuration.subnets.subnet': deviceSubnet.subnet
-          },
-          { $set: { 'configuration.subnets.$.device': _id } }
-        );
       }
     } else if (op === 'upgrade') {
       tasks[0][0].params.id = application._id;
@@ -241,9 +248,9 @@ const apply = async (deviceList, user, data) => {
         }
 
         // prevent install if all the subnets is already taken by other devices
-        // or if the user selected multiple devices to install but there is not enoughs subnets
+        // or if the user selected multiple devices to install but there is not enoughs subnets   
         const freeSubnets = app.configuration.subnets.filter(s => {
-          return s.device === null || deviceIds.includes(s.device);
+          return s.device === null || deviceIds.map(d => d.toString()).includes(s.device.toString());
         });
 
         if (freeSubnets.length === 0 || freeSubnets.length < deviceIds.length) {
@@ -263,17 +270,36 @@ const apply = async (deviceList, user, data) => {
 
       if (op === 'deploy') {
         // Filter out if app already installed to prevent duplication.
-        query['applications.app'] = { $ne: app._id };
+        for (let i = 0; i < deviceList.length; i++) {
+          const device = deviceList[i];
 
-        update = {
-          $push: {
-            applications: {
-              app: app._id,
-              status: 'installing',
-              requestTime: requestTime
-            }
+          const appExists = (device.applications || []).find(
+            a => a.app && a.app.toString() == app._id.toString());
+
+          if (appExists) {
+            query['applications.app'] = id;
+            update = {
+              $set: { 'applications.$.status': 'installing' }
+            };
+          } else {
+            update = {
+              $push: {
+                applications: {
+                  app: app._id,
+                  status: 'installing',
+                  requestTime: requestTime
+                }
+              }
+            };
           }
-        };
+
+          await devices
+            .updateOne(query, update, { upsert: false })
+            .session(session);
+        }
+
+        // set update to null because we are already update the db
+        update = null;
       } else if (op === 'upgrade') {
         query['applications.app'] = id;
 
@@ -412,14 +438,7 @@ const complete = async (jobId, res) => {
       );
     } else if (op === 'uninstall') {
       // release subnet
-      await applications.updateOne(
-        {
-          org: org,
-          _id: app._id,
-          'configuration.subnets.device': ObjectId(_id)
-        },
-        { $set: { 'configuration.subnets.$.device': null } }
-      );
+      await releaseSubnetForDevice(org, app._id, ObjectId(_id));
     }
 
     await devices.updateOne(
@@ -483,7 +502,7 @@ const error = async (jobId, res) => {
  * @return {void}
  */
 const remove = async (job) => {
-  const { org, app, device } = job.data.response.data.application;
+  const { org, app, device, op } = job.data.response.data.application;
   const { _id } = device;
 
   if (['inactive', 'delayed'].includes(job._state)) {
@@ -503,6 +522,12 @@ const remove = async (job) => {
         { $set: { 'applications.$.status': status } },
         { upsert: false }
       );
+
+      // release the subnet if deploy job removed before he start 
+      if (op === 'deploy') {
+        await releaseSubnetForDevice(org, app._id, ObjectId(_id));
+      }
+
     } catch (err) {
       logger.error('Device application status update failed', {
         params: { job: job, status: status, err: err.message }
@@ -510,6 +535,26 @@ const remove = async (job) => {
     }
   }
 };
+
+
+/**
+ * Release subnet assigned to device
+ * @async
+ * @param  {ObjectId} org org id to filter by
+ * @param  {ObjectId} appId app id to filter by
+ * @param  {ObjectId} deviceId device to release
+ * @return {void}
+ */
+const releaseSubnetForDevice = async (org, appId, deviceId) => {
+  await applications.updateOne(
+    {
+      org: org,
+      _id: appId,
+      'configuration.subnets.device': ObjectId(deviceId)
+    },
+    { $set: { 'configuration.subnets.$.device': null } }
+  );
+}
 
 module.exports = {
   apply: apply,

@@ -124,13 +124,13 @@ class ApplicationsService {
         };
         app.statuses.forEach(appStatus => {
           if (appStatus._id === 'installed') {
-            statusesTotal.installed++;
+            statusesTotal.installed += appStatus.count;
           } else if (['installing', 'uninstalling'].includes(appStatus._id)) {
-            statusesTotal.pending++;
+            statusesTotal.pending += appStatus.count;
           } else if (appStatus._id.includes('fail')) {
-            statusesTotal.failed++;
-          } else if (appStatus._id.includes('deleted')) {
-            statusesTotal.deleted++;
+            statusesTotal.failed += appStatus.count;
+          } else if (appStatus._id.includes('deleted')) {            
+            statusesTotal.deleted += appStatus.count;
           }
         });
         const { ...rest } = app;
@@ -338,7 +338,7 @@ class ApplicationsService {
       const opDevices = await devices.find({
         org: { $in: orgList },
         'applications.app': id,
-        'applications.status': 'installed'
+        'applications.status': { $in: ['installed', 'installing'] }
       });
 
       if (opDevices.length) {
@@ -411,22 +411,24 @@ class ApplicationsService {
 
       const devicesList = await devices.aggregate([
         { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
+        { $unwind: '$applications' },
+        { $match: { 'applications.app': ObjectId(id) } },
+        { $lookup: {
+          from: 'applications',
+          let: { appId: '$applications.app', deviceId: '$_id'},
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$appId'] } } },
+            { $unwind: '$configuration.subnets'},
+            { $match: { $expr: { $eq: ['$configuration.subnets.device', '$$deviceId' ] } } },
+            { $project: { subnet: '$configuration.subnets.subnet'} }
+          ],
+          as: 'subnet'
+        } },
         {
           $project: {
             name: 1,
-            application: {
-              $arrayElemAt: [
-                {
-                  $filter: {
-                    input: '$applications',
-                    as: 'app',
-                    cond: {
-                      $eq: ['$$app.app', ObjectId(id)]
-                    }
-                  }
-                }, 0
-              ]
-            }
+            subnet: { $arrayElemAt: ['$subnet', 0]},
+            status: '$applications.status',            
           }
         }
       ]).allowDiskUse(true);
