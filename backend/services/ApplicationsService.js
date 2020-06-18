@@ -129,7 +129,7 @@ class ApplicationsService {
             statusesTotal.pending += appStatus.count;
           } else if (appStatus._id.includes('fail')) {
             statusesTotal.failed += appStatus.count;
-          } else if (appStatus._id.includes('deleted')) {            
+          } else if (appStatus._id.includes('deleted')) {
             statusesTotal.deleted += appStatus.count;
           }
         });
@@ -413,22 +413,24 @@ class ApplicationsService {
         { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
         { $unwind: '$applications' },
         { $match: { 'applications.app': ObjectId(id) } },
-        { $lookup: {
-          from: 'applications',
-          let: { appId: '$applications.app', deviceId: '$_id'},
-          pipeline: [
-            { $match: { $expr: { $eq: ['$_id', '$$appId'] } } },
-            { $unwind: '$configuration.subnets'},
-            { $match: { $expr: { $eq: ['$configuration.subnets.device', '$$deviceId' ] } } },
-            { $project: { subnet: '$configuration.subnets.subnet'} }
-          ],
-          as: 'subnet'
-        } },
+        {
+          $lookup: {
+            from: 'applications',
+            let: { appId: '$applications.app', deviceId: '$_id' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$_id', '$$appId'] } } },
+              { $unwind: '$configuration.subnets' },
+              { $match: { $expr: { $eq: ['$configuration.subnets.device', '$$deviceId'] } } },
+              { $project: { subnet: '$configuration.subnets.subnet' } }
+            ],
+            as: 'subnet'
+          }
+        },
         {
           $project: {
             name: 1,
-            subnet: { $arrayElemAt: ['$subnet', 0]},
-            status: '$applications.status',            
+            subnet: { $arrayElemAt: ['$subnet', 0] },
+            status: '$applications.status'
           }
         }
       ]).allowDiskUse(true);

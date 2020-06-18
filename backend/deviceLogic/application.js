@@ -88,7 +88,7 @@ const queueApplicationJob = async (
     } = application.configuration;
 
     if (op === 'deploy' || op === 'config') {
-      // get new subnet only if there is no subnet connect with current device      
+      // get new subnet only if there is no subnet connect with current device
       let deviceSubnet = '';
       const exists = application.configuration.subnets.find(
         s => s.device && (s.device.toString() === dev._id.toString())
@@ -96,12 +96,12 @@ const queueApplicationJob = async (
       if (exists) deviceSubnet = exists;
       else deviceSubnet = subnets.shift();
 
-      // deviceSubnet equal to null means 
+      // deviceSubnet equal to null means
       // that vpn installed on more devices then assigned subnets
       if (!deviceSubnet) {
-        const msg = `You don't have enoughs subnets to all devices`;
-        throw createError(500, msg);  
-      }     
+        const msg = 'You don\'t have enoughs subnets to all devices';
+        throw createError(500, msg);
+      }
 
       // set subnet to device to prevent same subnet on multiple devices
       await applications.updateOne(
@@ -248,9 +248,12 @@ const apply = async (deviceList, user, data) => {
         }
 
         // prevent install if all the subnets is already taken by other devices
-        // or if the user selected multiple devices to install but there is not enoughs subnets   
+        // or if the user selected multiple devices to install
+        // but there is not enoughs subnets
         const freeSubnets = app.configuration.subnets.filter(s => {
-          return s.device === null || deviceIds.map(d => d.toString()).includes(s.device.toString());
+          const subnetIsFree = s.device === null;
+          const isCurrentDevice = deviceIds.map(d => d.toString()).includes(s.device.toString());
+          return subnetIsFree || isCurrentDevice;
         });
 
         if (freeSubnets.length === 0 || freeSubnets.length < deviceIds.length) {
@@ -274,7 +277,7 @@ const apply = async (deviceList, user, data) => {
           const device = deviceList[i];
 
           const appExists = (device.applications || []).find(
-            a => a.app && a.app.toString() == app._id.toString());
+            a => a.app && a.app.toString() === app._id.toString());
 
           if (appExists) {
             query['applications.app'] = id;
@@ -523,11 +526,10 @@ const remove = async (job) => {
         { upsert: false }
       );
 
-      // release the subnet if deploy job removed before he start 
+      // release the subnet if deploy job removed before he start
       if (op === 'deploy') {
         await releaseSubnetForDevice(org, app._id, ObjectId(_id));
       }
-
     } catch (err) {
       logger.error('Device application status update failed', {
         params: { job: job, status: status, err: err.message }
@@ -535,7 +537,6 @@ const remove = async (job) => {
     }
   }
 };
-
 
 /**
  * Release subnet assigned to device
@@ -554,7 +555,7 @@ const releaseSubnetForDevice = async (org, appId, deviceId) => {
     },
     { $set: { 'configuration.subnets.$.device': null } }
   );
-}
+};
 
 module.exports = {
   apply: apply,
