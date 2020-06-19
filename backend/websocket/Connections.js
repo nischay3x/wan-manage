@@ -394,7 +394,8 @@ class Connections {
               .keys({ version: Joi.string().required() })
               .required()
           }),
-          network: joi.object().optional()
+          network: joi.object().optional(),
+          reconfig: joi.string().allow('').optional()
         }),
         name: 'versions',
         language: {
@@ -462,8 +463,8 @@ class Connections {
 
       // Check if config was modified on the device
       const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
-
-      if (origDevice && deviceInfo.reconfig && prevDeviceInfo.reconfig !== deviceInfo.reconfig) {
+      if (origDevice && deviceInfo.message.reconfig &&
+        prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
         // Check if dhcp client is defined on any of interfaces
         if (origDevice.interfaces && deviceInfo.message.network.interfaces &&
           deviceInfo.message.network.interfaces.length > 0 &&
@@ -499,7 +500,7 @@ class Connections {
             { new: true, runValidators: true }
           );
           // Update the reconfig hash before applying to prevent infinite loop
-          this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.reconfig);
+          this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
           // Apply the new config and rebuild tunnels if need
           await modifyDeviceDispatcher.apply(
             [origDevice],
