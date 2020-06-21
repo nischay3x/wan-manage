@@ -365,6 +365,64 @@ class Connections {
   }
 
   /**
+   * Checks if reconfig hash is changed on the device.
+   * and applies new parameters in case of dhcp client is used
+   * @async
+   * @param  {Object} origDevice instance of the device from db
+   * @param  {Object} deviceInfo data received on get-device-info message
+   * @return {void}
+   */
+  async reconfigCheck (origDevice, deviceInfo) {
+    const machineId = origDevice.machineId;
+    const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
+    if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
+      // Check if dhcp client is defined on any of interfaces
+      if (origDevice.interfaces && deviceInfo.message.network.interfaces &&
+        deviceInfo.message.network.interfaces.length > 0 &&
+        origDevice.interfaces.filter(i => i.dhcp === 'yes').length > 0) {
+        // Currently we allow only one change at a time to the device,
+        // to prevent inconsistencies between the device and the MGMT database.
+        // Therefore, we block the request if there's a pending change in the queue.
+        // The reconfig hash is not updated so it will try to process again in 10 sec
+        if (origDevice.pendingDevModification) {
+          throw new Error('Failed to apply new config, only one device change is allowed');
+        }
+        const interfaces = origDevice.interfaces.map(i => {
+          if (i.dhcp === 'yes') {
+            const updatedConfig = deviceInfo.message.network.interfaces
+              .find(u => u.pciaddr === i.pciaddr);
+            if (updatedConfig !== undefined) {
+              return {
+                ...i.toJSON(),
+                IPv4: updatedConfig.IPv4,
+                IPv4Mask: updatedConfig.IPv4Mask,
+                IPv6: updatedConfig.IPv6,
+                IPv6Mask: updatedConfig.IPv6Mask,
+                gateway: updatedConfig.gateway ? updatedConfig.gateway : ''
+              };
+            }
+          }
+          return i;
+        });
+        // Update interfaces in DB
+        const updDevice = await devices.findOneAndUpdate(
+          { machineId },
+          { $set: { interfaces } },
+          { new: true, runValidators: true }
+        );
+        // Update the reconfig hash before applying to prevent infinite loop
+        this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
+        // Apply the new config and rebuild tunnels if need
+        await modifyDeviceDispatcher.apply(
+          [origDevice],
+          { userName: 'system' },
+          { newDevice: updDevice }
+        );
+      }
+    }
+  }
+
+  /**
    * Sends a get-info message to the device. The device
    * should reply with information regarding the software
    * versions of the different components running on it.
@@ -462,53 +520,7 @@ class Connections {
       );
 
       // Check if config was modified on the device
-      const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
-      if (origDevice && deviceInfo.message.reconfig &&
-        prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
-        // Check if dhcp client is defined on any of interfaces
-        if (origDevice.interfaces && deviceInfo.message.network.interfaces &&
-          deviceInfo.message.network.interfaces.length > 0 &&
-          origDevice.interfaces.filter(i => i.dhcp === 'yes').length > 0) {
-          // Currently we allow only one change at a time to the device,
-          // to prevent inconsistencies between the device and the MGMT database.
-          // Therefore, we block the request if there's a pending change in the queue.
-          // The reconfig hash is not updated so it will try to process again in 10 sec
-          if (origDevice.pendingDevModification) {
-            throw new Error('Failed to apply new config, only one device change is allowed');
-          }
-          const interfaces = origDevice.interfaces.map(i => {
-            if (i.dhcp === 'yes') {
-              const updatedConfig = deviceInfo.message.network.interfaces
-                .find(u => u.pciaddr === i.pciaddr);
-              if (updatedConfig !== undefined) {
-                return {
-                  ...i.toJSON(),
-                  IPv4: updatedConfig.IPv4,
-                  IPv4Mask: updatedConfig.IPv4Mask,
-                  IPv6: updatedConfig.IPv6,
-                  IPv6Mask: updatedConfig.IPv6Mask,
-                  gateway: updatedConfig.gateway ? updatedConfig.gateway : ''
-                };
-              }
-            }
-            return i;
-          });
-          // Update interfaces in DB
-          const updDevice = await devices.findOneAndUpdate(
-            { machineId },
-            { $set: { interfaces } },
-            { new: true, runValidators: true }
-          );
-          // Update the reconfig hash before applying to prevent infinite loop
-          this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
-          // Apply the new config and rebuild tunnels if need
-          await modifyDeviceDispatcher.apply(
-            [origDevice],
-            { userName: 'system' },
-            { newDevice: updDevice }
-          );
-        }
-      }
+      this.reconfigCheck(origDevice, deviceInfo);
 
       logger.info('Device info message response received', {
         params: { machineId, message: deviceInfo }
