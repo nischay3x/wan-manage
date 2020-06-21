@@ -207,7 +207,13 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.find({ org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type')
-        .populate('policies.multilink.policy', '_id name description');
+        .populate('policies.multilink.policy', '_id name description')
+        .populate({
+          path: 'applications.app',
+          populate: {
+            path: 'app'
+          }
+        });
 
       const devicesMap = result.map(item => {
         return DevicesService.selectDeviceParams(item);
