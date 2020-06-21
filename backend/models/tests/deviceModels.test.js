@@ -32,7 +32,6 @@ beforeEach(() => {
     account: mongoose.Types.ObjectId('4edd40c86762e0fb12000002'),
     org: mongoose.Types.ObjectId('4edd40c86762e0fb12000001'),
     machineId: 'C9B35F0D-DF7C-43D5-8F8F-C2C576FEBAF7',
-    defaultRoute: '192.168.200.1',
     fromToken: 'Token-A',
     versions: {
       device: '1.0.0',
@@ -164,16 +163,6 @@ describe('Device schema', () => {
       expect(err.message).toBe(
         'devices validation failed: hostname: Device hostname should ' +
         'contain English characters, digits, hyphens and dots');
-    });
-  });
-
-  it('Should be a invalid if defaultRoute is an invalid IP address', () => {
-    deviceModel.defaultRoute = null;
-
-    deviceModel.validate((err) => {
-      expect(err.message).toBe(
-        'devices validation failed: defaultRoute: defaultRoute should be a vaild ip address'
-      );
     });
   });
 

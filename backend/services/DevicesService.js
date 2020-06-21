@@ -101,7 +101,6 @@ class DevicesService {
     const retDevice = pick(item, [
       'org',
       'description',
-      'defaultRoute',
       'deviceToken',
       'machineId',
       'site',

@@ -5965,6 +5965,7 @@ components:
         - IPv6: IPv6
           PublicIP: PublicIP
           IPv4: IPv4
+          gateway: gateway
           type: WAN
           MAC: MAC
           dhcp: "no"
@@ -5997,7 +5998,6 @@ components:
           _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
-        defaultRoute: defaultRoute
         deviceStatus: deviceStatus
         deviceToken: deviceToken
         labels:
@@ -6032,8 +6032,6 @@ components:
         description:
           type: string
         site:
-          type: string
-        defaultRoute:
           type: string
         isApproved:
           type: boolean
@@ -6118,7 +6116,6 @@ components:
           _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
-        defaultRoute: defaultRoute
         deviceStatus: deviceStatus
         deviceToken: deviceToken
         labels:
@@ -6162,8 +6159,6 @@ components:
         description:
           type: string
         site:
-          type: string
-        defaultRoute:
           type: string
         isApproved:
           type: boolean

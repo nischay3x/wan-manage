@@ -132,7 +132,6 @@ connectRouter.route('/register')
                     hostname: req.body.machine_name,
                     ipList: req.body.ip_list,
                     machineId: req.body.machine_id,
-                    defaultRoute: req.body.default_route,
                     fromToken: resp[0].name,
                     interfaces: ifs,
                     deviceToken: deviceToken,

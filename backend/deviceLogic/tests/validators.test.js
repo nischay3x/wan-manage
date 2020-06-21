@@ -64,8 +64,7 @@ describe('validateDevice', () => {
         routing: 'None',
         type: 'WAN',
         pathlabels: [ObjectId('5e65290fbe66a2335718e081')]
-      }],
-      defaultRoute: '172.23.100.10'
+      }]
     };
   });
 

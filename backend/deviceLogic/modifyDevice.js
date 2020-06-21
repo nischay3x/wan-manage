@@ -284,7 +284,6 @@ const rollBackDeviceChanges = async (origDevice) => {
     { _id: _id, org: org },
     {
       $set: {
-        defaultRoute: origDevice.defaultRoute,
         interfaces: origDevice.interfaces
       }
     },
@@ -332,18 +331,6 @@ const apply = async (device, user, data) => {
     ? user.defaultOrg._id.toString()
     : device[0].org.toString();
   const modifyParams = {};
-
-  // Create the default route modification parameters
-  if (device[0].defaultRoute !== data.newDevice.defaultRoute) {
-    modifyParams.modify_routes = {
-      routes: [{
-        addr: 'default',
-        old_route: device[0].defaultRoute,
-        new_route: data.newDevice.defaultRoute
-      }]
-    };
-  }
-
   // Create interfaces modification parameters
   // Compare the array of interfaces, and return
   // an array of the interfaces that have changed
