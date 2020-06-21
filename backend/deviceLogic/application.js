@@ -247,18 +247,18 @@ const apply = async (deviceList, user, data) => {
           throw createError(500, `cannot deploy removed application ${id}`);
         }
 
-        // prevent install if all the subnets is already taken by other devices
+        // prevent to install if all the subnets is already taken by other devices
         // or if the user selected multiple devices to install
         // but there is not enoughs subnets
         const freeSubnets = app.configuration.subnets.filter(s => {
-          const subnetIsFree = s.device === null;
+          if (s.device === null) return true;
           const isCurrentDevice = deviceIds.map(d => d.toString()).includes(s.device.toString());
-          return subnetIsFree || isCurrentDevice;
+          return isCurrentDevice;
         });
 
         if (freeSubnets.length === 0 || freeSubnets.length < deviceIds.length) {
           throw createError(500,
-            'There is no subnets remaining, please contact your system administrator'
+            'There is no subnets remaining, please check again the configuration'
           );
         }
       }
