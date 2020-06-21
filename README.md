@@ -16,7 +16,7 @@ The flexiManage backend component provides REST API for managing the flexiWAN ne
 The repository includes two git submodules which are used by the flexiWAN SaaS service and are not open. 
 
 When pulling the flexiManage repository, 
-these submodules would be seen as an empty direcory:
+these submodules would be seen as an empty directory:
 * client - a git submodule for the flexiWAN SaaS UI. The UI provides the user side logic and design for managing the network. It uses REST to access flexiManage
 * backend/billing - a git submodule for managing the flexiWAN SaaS billing
 
@@ -26,7 +26,7 @@ To experience the complete flexiWAN system, open a free account on our [hosted s
 ## Install and use flexiManage locally
 
 ### Prerequisites
-FlexiManagre requires the following to run:
+FlexiManage requires the following to run:
 * Node.js v10+
 * npm v6+
 * MongoDB 4.0.9, running as a replica-set with 3 nodes on ports 27017, 27018, 27019
