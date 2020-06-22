@@ -330,9 +330,7 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
  */
 const apply = async (device, user, data) => {
   const userName = user.username;
-  const org = user.defaultOrg
-    ? user.defaultOrg._id.toString()
-    : device[0].org.toString();
+  const org = user.serviceAccount ? data.org : user.defaultOrg._id.toString();
   const modifyParams = {};
   // Create interfaces modification parameters
   // Compare the array of interfaces, and return
