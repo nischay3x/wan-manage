@@ -67,10 +67,12 @@ const queueApplicationJob = async (
     let message = '';
 
     if (appName === 'Open VPN') {
-      if (op === 'deploy') message = 'install-vpn-server';
+      if (op === 'deploy') message = 'install-vpn-application';
+      // if (op === 'deploy') message = 'install-application';
       else if (op === 'upgrade') message = 'upgrade-vpn-server';
-      else if (op === 'config') message = 'config-vpn-server';
-      else message = 'remove-vpn-server';
+      else if (op === 'config') message = 'modify-vpn-server';
+      // else message = 'remove-vpn-server';
+      else message = 'uninstall-vpn-application';
     }
 
     const tasks = [
