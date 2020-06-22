@@ -17,6 +17,14 @@
 
 /* eslint-disable max-len */
 const deviceStatus = require('../deviceStatus')();
+const configs = require('../../configs')();
+const deviceQueues = require('../../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
+afterAll(() => {
+  deviceQueues.shutdown();
+});
 
 let deviceStatsMsg;
 
