@@ -633,7 +633,7 @@ class Connections {
         // Increment seq and update queue with resolve function for this promise,
         // set timeout to 60s to clear when no response received
         var tohandle = setTimeout(() => {
-          reject(new Error('Send Timeout'));
+          reject(new Error('Error: Send Timeout'));
           // delete queue for this seq
           delete msgQ[seq];
         }, 120000);

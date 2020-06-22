@@ -219,7 +219,14 @@ const getAllOrganizationLanSubnets = async orgId => {
       }
     },
     { $unwind: '$interfaces' },
-    { $match: { 'interfaces.type': 'LAN', 'interfaces.isAssigned': true } },
+    {
+      $match: {
+        'interfaces.type': 'LAN',
+        'interfaces.isAssigned': true,
+        'interfaces.IPv4': { $ne: '' },
+        'interfaces.IPv4Mask': { $ne: '' }
+      }
+    },
     {
       $project: {
         _id: 1,

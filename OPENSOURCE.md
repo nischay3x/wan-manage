@@ -331,10 +331,11 @@ jsonwebtoken | https://www.npmjs.com/package/jsonwebtoken | MIT | No | 2015 Auth
 kue | https://www.npmjs.com/package/kue | MIT | No | 2011 LearnBoost 
 lodash | https://www.npmjs.com/package/lodash | MIT | No | Foundation and other contributors <https://js.foundation/> 
 math-random | https://www.npmjs.com/package/math-random | MIT | No | michaelrhodes, bluelovers 
+migrate-mongoose | https://www.npmjs.com/package/migrate-mongoose | MIT | No | 2016 Borna Almasi 
 mongo-express | https://www.npmjs.com/package/mongo-express | MIT | No | 2012 Chun-hao Hu, 2016-present Multiple Contributors 
 mongoose | https://www.npmjs.com/package/mongoose | MIT | No | 2010 LearnBoost dev@learnboost.com 
 morgan | https://www.npmjs.com/package/morgan | MIT | No | 2014 Jonathan Ong, 2014-2017 Douglas Christopher Wilson 
-netmask | https://www.npmjs.com/package/netmask | MIT |  | 2011 Olivier Poitrey 
+netmask | https://www.npmjs.com/package/netmask | MIT | No | 2011 Olivier Poitrey 
 node-fetch | https://www.npmjs.com/package/node-fetch | MIT | No | 2016 David Frank 
 node-mocks-http | https://www.npmjs.com/package/node-mocks-http | MIT | No | 2012-2014, Howard Abrams and other collaborators 
 node.js | https://nodejs.org/ | MIT | No | 2012-2018 by various contributors,2017-2018 by Adrian Heine,2007 - 2018, Daniel Stenberg with many contributors,1995-2016 International Business Machines Corporation and others,2006-2008, Google Inc.,1999 TaBE Project.,1999 Pai-Hsiang Hsiao.,1999 Computer Systems and Communication Lab,,2013 International Business Machines Corporation,2013 Brian Eugene Wilson, Robert Martin Campbell.,2014 International Business Machines Corporation,2013, LeRoy Benjamin Sharon,2015-present libuv project contributors.,1998-2019 The OpenSSL Project.  All rights reserved.,2016 Jean-Philippe Aumasson <jeanphilippe.aumasson@gmail.com>,1995-2017 Jean-loup Gailly and Mark Adler,npm, Inc. and Contributors,their respective copyright owners,Mathias Pettersson and Brian Hammond,Tjarda Koster, https://jelloween.deviantart.com,2000-2006, The Perl Foundation.,2009 Google Inc. All rights reserved.,2009 by the Jinja Team,2010 by Armin Ronacher and contributors.,2009 Google Inc. All rights reserved.,2014-2016 Sebastian McKenzie <sebmck@gmail.com>,2012, 2014, 2015, 2016 Tatsuhiro Tsujikawa,2012, 2014, 2015, 2016 nghttp2 contributors,2018 Intel Corporation,2011 Google Inc.,2018 Agoric,2009, 2010, 2013-2016 by the Brotli Authors.,2012, 2013, 2014 Gil Tene,2014 Michael Barker,2014 Matt Warren,2012, Ben Noordhuis <info@bnoordhuis.nl>,2014, StrongLoop Inc.,Isaac Z. Schlueter and Contributors,2019 Colin Ihrig and Contributors 
@@ -342,6 +343,8 @@ passport | https://www.npmjs.com/package/passport | MIT | No | 2011-2019 Jared H
 passport-jwt | https://www.npmjs.com/package/passport-jwt | MIT | No | 2014 themikenicholson 
 passport-local | https://www.npmjs.com/package/passport-local | MIT | No | 2011-2014 Jared Hanson 
 passport-local-mongoose | https://www.npmjs.com/package/passport-local-mongoose | MIT | No | 2013 Christoph Walcher 
+redis | https://www.npmjs.com/package/redis | MIT | No | 2016-present Node Redis contributors 
+redis-leader | https://www.npmjs.com/package/redis-leader | MIT | No | 2015 Pierre Inglebert 
 swagger-jsdoc | https://www.npmjs.com/package/swagger-jsdoc | MIT | No | 2013 Fliptoo, 2015 devlouisc, 2015 Surnet 
 swagger-ui-express | https://www.npmjs.com/package/swagger-ui-express | MIT | No | 2018 Scott IT London 
 valid-url | https://www.npmjs.com/package/valid-url | MIT | No | 2013 Odysseas Tsatalos and oDesk Corporation 

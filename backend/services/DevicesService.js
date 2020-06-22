@@ -289,10 +289,11 @@ class DevicesService {
    **/
   static async devicesLatestVersionsGET () {
     try {
-      const swUpdater = await DevSwUpdater.getSwVerUpdaterInstance();
+      const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
+      const { versions, versionDeadline } = await swUpdater.getLatestSwVersions();
       return Service.successResponse({
-        versions: swUpdater.getLatestSwVersions(),
-        versionDeadline: swUpdater.getVersionUpDeadline()
+        versions,
+        versionDeadline
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -400,7 +401,7 @@ class DevicesService {
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
           status: 'disconnected',
-          log: []
+          logs: []
         });
       }
 
@@ -430,6 +431,59 @@ class DevicesService {
       return Service.successResponse({
         status: 'connected',
         logs: deviceLogs.message
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async devicesIdPacketTracesGET ({ id, org, packets, timeout }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!device || device.length === 0) {
+        return Service.rejectResponse('Device not found');
+      }
+
+      if (!connections.isConnected(device[0].machineId)) {
+        return Service.successResponse({
+          status: 'disconnected',
+          traces: []
+        });
+      }
+
+      const devicePacketTraces = await connections.deviceSendMessage(
+        null,
+        device[0].machineId,
+        {
+          entity: 'agent',
+          message: 'get-device-packet-traces',
+          params: {
+            packets: packets || '100',
+            timeout: timeout || '5'
+          }
+        }
+      );
+
+      if (!devicePacketTraces.ok) {
+        logger.error('Failed to get device packet traces', {
+          params: {
+            deviceId: id,
+            response: devicePacketTraces.message
+          }
+        });
+        return Service.rejectResponse('Failed to get device packet traces', 500);
+      }
+
+      return Service.successResponse({
+        status: 'connected',
+        traces: devicePacketTraces.message
       });
     } catch (e) {
       return Service.rejectResponse(

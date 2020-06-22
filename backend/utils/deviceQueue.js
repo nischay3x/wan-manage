@@ -256,6 +256,7 @@ class DeviceQueues {
           return reject(err);
         }
       });
+
       logger.info('Queue paused, succeeded',
         { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
       this.deviceQueues[deviceId].paused = true;
