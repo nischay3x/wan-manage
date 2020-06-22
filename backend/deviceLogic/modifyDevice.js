@@ -51,6 +51,9 @@ const prepareIfcParams = (interfaces) => {
     });
     newIfc.multilink = { labels };
 
+    // Don't send interface default GW for LAN interfaces
+    if (newIfc.type !== 'WAN') delete newIfc.gateway;
+
     return newIfc;
   });
 };
