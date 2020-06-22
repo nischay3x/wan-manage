@@ -412,10 +412,18 @@ class Connections {
         );
         // Update the reconfig hash before applying to prevent infinite loop
         this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
+
         // Apply the new config and rebuild tunnels if need
+        logger.info('Applying new configuraton from the device', {
+          params: {
+            reconfig: deviceInfo.message.reconfig,
+            machineId,
+            interfaces
+          }
+        });
         await modifyDeviceDispatcher.apply(
           [origDevice],
-          { username: 'system', serviceAccount: true },
+          { username: 'system' },
           { newDevice: updDevice, org: origDevice.org.toString() }
         );
       }

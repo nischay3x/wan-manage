@@ -591,6 +591,7 @@ class DevicesService {
       // device itself, add a 'modify' job to the device's queue.
       if (origDevice) {
         await dispatcher.apply([origDevice], 'modify', user, {
+          org: orgList[0],
           newDevice: updDevice
         });
       }
@@ -1109,6 +1110,7 @@ class DevicesService {
       // in that case no need to resend data
       if (!isEqual(dhcpRequest, origCmpDhcp)) {
         const copy = Object.assign({}, dhcpRequest);
+        copy.org = orgList[0];
         copy.method = 'dhcp';
         copy.action = 'modify';
         copy.origDhcp = origCmpDhcp;
