@@ -91,11 +91,19 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         };
       }
 
-      // Gateway is allowed on LAN interface
-      if (ifc.gateway !== '' && !net.isIPv4(ifc.gateway)) {
+      // LAN interfaces are not allowed to have a default GW
+      if (ifc.gateway !== '') {
         return {
           valid: false,
-          err: 'Invalid gateway value on LAN interface'
+          err: 'LAN interfaces should not be assigned a default GW'
+        };
+      }
+
+      // DHCP client is not allowed on LAN interface
+      if (ifc.dhcp === 'yes') {
+        return {
+          valid: false,
+          err: 'LAN interfaces should not be set to DHCP'
         };
       }
     }
