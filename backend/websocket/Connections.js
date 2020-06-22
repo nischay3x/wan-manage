@@ -415,7 +415,7 @@ class Connections {
         // Apply the new config and rebuild tunnels if need
         await modifyDeviceDispatcher.apply(
           [origDevice],
-          { username: 'system' , serviceAccount: true },
+          { username: 'system', serviceAccount: true },
           { newDevice: updDevice, org: origDevice.org.toString() }
         );
       }
