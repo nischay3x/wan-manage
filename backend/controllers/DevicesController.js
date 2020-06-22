@@ -58,6 +58,10 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdLogsGET);
   }
 
+  async devicesIdPacketTracesGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdPacketTracesGET);
+  }
+
   async devicesIdDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdDELETE);
   }
