@@ -89,7 +89,7 @@ const applyTunnelAdd = async (devices, user, data) => {
         // Add a set of the interface's path labels
         const deviceAIntfs = [];
         deviceA.interfaces.forEach(intf => {
-          if (intf.isAssigned === true && intf.type === 'WAN') {
+          if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
             const labelsSet = new Set(intf.pathlabels.map(label => {
               // DIA interfaces cannot be used in tunnels
               return label.type !== 'DIA' ? label._id : null;
@@ -103,7 +103,7 @@ const applyTunnelAdd = async (devices, user, data) => {
 
         const deviceBIntfs = [];
         deviceB.interfaces.forEach(intf => {
-          if (intf.isAssigned === true && intf.type === 'WAN') {
+          if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
             const labelsSet = new Set(intf.pathlabels.map(label => {
               // DIA interfaces cannot be used in tunnels
               return label.type !== 'DIA' ? label._id : null;
@@ -602,7 +602,6 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer, 
     'crypto-alg': 'aes-cbc-128',
     'integr-alg': 'sha-256-128'
   };
-
   paramsDeviceA.src = deviceAIntf.IPv4;
   paramsDeviceA.dst = ((deviceBIntf.PublicIP === '') ? deviceBIntf.IPv4 : deviceBIntf.PublicIP);
   paramsDeviceA['tunnel-id'] = tunnelnum;

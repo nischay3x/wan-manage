@@ -98,6 +98,14 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
           err: 'LAN interfaces should not be assigned a default GW'
         };
       }
+
+      // DHCP client is not allowed on LAN interface
+      if (ifc.dhcp === 'yes') {
+        return {
+          valid: false,
+          err: 'LAN interfaces should not be set to DHCP'
+        };
+      }
     }
 
     if (ifc.type === 'WAN') {
@@ -109,7 +117,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         };
       }
       // WAN interfaces must have default GW assigned to them
-      if (!net.isIPv4(ifc.gateway)) {
+      if (ifc.dhcp !== 'yes' && !net.isIPv4(ifc.gateway)) {
         return {
           valid: false,
           err: 'All WAN interfaces should be assigned a default GW'

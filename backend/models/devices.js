@@ -65,6 +65,16 @@ const interfacesSchema = new Schema({
       message: 'MAC should be a valid MAC address'
     }
   },
+  // DHCP client for IPv4 : yes|no
+  dhcp: {
+    type: String,
+    uppercase: false,
+    validate: {
+      validator: validators.validateDHCP,
+      message: 'DHCP should be yes or no'
+    },
+    default: 'no'
+  },
   // ipv4 address
   IPv4: {
     type: String,
@@ -454,16 +464,6 @@ const deviceSchema = new Schema({
       validator: validators.validateHostName,
       message: 'Device hostname should contain English characters, digits, hyphens and dots'
     }
-  },
-  // default route
-  defaultRoute: {
-    type: String,
-    maxlength: [50, 'defaultRoute length must be at most 50'],
-    validate: {
-      validator: validators.validateIPv4,
-      message: 'defaultRoute should be a vaild ip address'
-    },
-    default: ''
   },
   // list of IPs
   ipList: {
