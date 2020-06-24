@@ -287,7 +287,6 @@ const rollBackDeviceChanges = async (origDevice) => {
     { _id: _id, org: org },
     {
       $set: {
-        defaultRoute: origDevice.defaultRoute,
         interfaces: origDevice.interfaces
       }
     },
@@ -331,20 +330,8 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
  */
 const apply = async (device, user, data) => {
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const modifyParams = {};
-
-  // Create the default route modification parameters
-  if (device[0].defaultRoute !== data.newDevice.defaultRoute) {
-    modifyParams.modify_routes = {
-      routes: [{
-        addr: 'default',
-        old_route: device[0].defaultRoute,
-        new_route: data.newDevice.defaultRoute
-      }]
-    };
-  }
-
   // Create interfaces modification parameters
   // Compare the array of interfaces, and return
   // an array of the interfaces that have changed
@@ -354,6 +341,7 @@ const apply = async (device, user, data) => {
       return ({
         _id: ifc._id,
         pci: ifc.pciaddr,
+        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
@@ -378,6 +366,7 @@ const apply = async (device, user, data) => {
       return ({
         _id: ifc._id,
         pci: ifc.pciaddr,
+        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,

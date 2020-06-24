@@ -65,10 +65,11 @@ const apply = async (device, user, data) => {
       if (intf.isAssigned === true) {
         ifnum++;
         ifParams.pci = intf.pciaddr;
+        ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
         if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
-          startParams['default-route'] = device[0].defaultRoute;
+          startParams['default-route'] = intf.gateway;
         }
         startParams['iface' + (ifnum)] = ifParams;
       }
@@ -82,6 +83,7 @@ const apply = async (device, user, data) => {
       const routeParams = {};
       if (intf.isAssigned === true) {
         ifParams.pci = intf.pciaddr;
+        ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         ifParams.type = intf.type;
         // Device should only be aware of DIA labels.
@@ -92,13 +94,13 @@ const apply = async (device, user, data) => {
         ifParams.multilink = { labels };
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
         // Only if WAN defined and no other routing defined
-        if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
+        if (intf.type === 'WAN' && intf.gateway && intf.routing.toUpperCase() === 'NONE') {
           routeParams.addr = 'default';
-          routeParams.via = device[0].defaultRoute;
+          routeParams.pci = intf.pciaddr;
+          routeParams.via = intf.gateway;
           routes.push(routeParams);
         }
-        // Add WAN default GW only to WAN interfaces
-        if (intf.type === 'WAN') ifParams.gateway = intf.gateway;
+        ifParams.gateway = intf.gateway ? intf.gateway : '';
         interfaces.push(ifParams);
       }
     }

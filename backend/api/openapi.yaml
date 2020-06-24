@@ -6605,8 +6605,10 @@ components:
         - IPv6: IPv6
           PublicIP: PublicIP
           IPv4: IPv4
+          gateway: gateway
           type: WAN
           MAC: MAC
+          dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
@@ -6620,6 +6622,7 @@ components:
           IPv4: IPv4
           type: WAN
           MAC: MAC
+          dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
@@ -6635,7 +6638,6 @@ components:
           _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
-        defaultRoute: defaultRoute
         deviceStatus: deviceStatus
         deviceToken: deviceToken
         labels:
@@ -6670,8 +6672,6 @@ components:
         description:
           type: string
         site:
-          type: string
-        defaultRoute:
           type: string
         isApproved:
           type: boolean
@@ -6723,6 +6723,7 @@ components:
           type: WAN
           gateway: gateway
           MAC: MAC
+          dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
@@ -6738,6 +6739,7 @@ components:
           type: WAN
           gateway: gateway
           MAC: MAC
+          dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
@@ -6754,7 +6756,6 @@ components:
           _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
-        defaultRoute: defaultRoute
         deviceStatus: deviceStatus
         deviceToken: deviceToken
         labels:
@@ -6798,8 +6799,6 @@ components:
         description:
           type: string
         site:
-          type: string
-        defaultRoute:
           type: string
         isApproved:
           type: boolean
@@ -6866,6 +6865,7 @@ components:
         type: WAN
         MAC: MAC
         gateway: gateway
+        dhcp: "no"
         routing: OSPF
         IPv6Mask: "64"
         isAssigned: true
@@ -6883,6 +6883,11 @@ components:
         pciaddr:
           type: string
         driver:
+          type: string
+        dhcp:
+          enum:
+          - yes
+          - no
           type: string
         IPv4:
           type: string

@@ -41,6 +41,7 @@ const validateIsPhoneNumber = (number) => {
 
   }
 };
+const validateDHCP = dhcp => ['yes', 'no'].includes(dhcp);
 
 // Accept empty IP address values, as they are not mandatory at registration time
 const validateIPv4 = (ip) => { return ip === '' || net.isIPv4(ip); };
@@ -144,6 +145,7 @@ const validateRuleName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name ||
 
 const validateDomainName = domain => /^[a-zA-Z0-9\-.]+\.(com|org|net|edu)$/i.test(domain || '');
 module.exports = {
+  validateDHCP,
   validateIPv4,
   validateIPv4WithMask,
   validateIPv6,

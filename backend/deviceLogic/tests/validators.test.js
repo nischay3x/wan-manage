@@ -36,6 +36,7 @@ describe('validateDevice', () => {
         pciaddr: '00:02.00',
         driver: 'igb-1000',
         MAC: 'ab:45:90:ed:89:16',
+        dhcp: 'no',
         IPv4: '192.168.100.1',
         IPv4Mask: '24',
         IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7348',
@@ -52,6 +53,7 @@ describe('validateDevice', () => {
         pciaddr: '00:02.01',
         driver: 'igb-1000',
         MAC: 'ab:45:90:ed:89:17',
+        dhcp: 'no',
         IPv4: '172.23.100.1',
         IPv4Mask: '24',
         IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7346',
@@ -62,8 +64,7 @@ describe('validateDevice', () => {
         routing: 'None',
         type: 'WAN',
         pathlabels: [ObjectId('5e65290fbe66a2335718e081')]
-      }],
-      defaultRoute: '172.23.100.10'
+      }]
     };
   });
 
@@ -79,6 +80,7 @@ describe('validateDevice', () => {
       pciaddr: '00:02.01',
       driver: 'igb-1000',
       MAC: 'ab:45:90:ed:89:17',
+      dhcp: 'invalid-dhcp',
       IPv4: 'invalid-IPv4',
       IPv4Mask: 'invalid-mask',
       IPv6: 'invalid-IPv6',
