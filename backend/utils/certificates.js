@@ -96,7 +96,7 @@ const splitLineEveryNChars = (str, regex) => {
   const finalString = arr.join('\n');
 
   return finalString;
-}
+};
 
 const generateDhKeys = () => {
   const diffieHellman = createDiffieHellman(2048);
