@@ -417,13 +417,12 @@ class Connections {
         logger.info('Applying new configuraton from the device', {
           params: {
             reconfig: deviceInfo.message.reconfig,
-            machineId,
-            interfaces
+            machineId
           }
         });
         await modifyDeviceDispatcher.apply(
           [origDevice],
-          { username: 'system' },
+          { username: 'system', serviceAccount: true },
           { newDevice: updDevice, org: origDevice.org.toString() }
         );
       }
