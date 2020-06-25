@@ -29,9 +29,12 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const ObjectId = require('mongoose').Types.ObjectId;
-// const appComplete = require('./appIdentification').complete;
-// const appError = require('./appIdentification').error;
-// const appRemove = require('./appIdentification').remove;
+const {
+  generateKeys,
+  generateCA,
+  generateTlsKey
+  // generateDhKeys
+} = require('../utils/certificates');
 
 const queueApplicationJob = async (
   deviceList,
@@ -105,13 +108,45 @@ const queueApplicationJob = async (
         throw createError(500, msg);
       }
 
+      const update = {
+        'configuration.subnets.$.device': _id
+      };
+
+      let caPrivateKey, caPublicKey;
+      let serverKey, serverCrt, tlsKey;
+      if (!application.configuration.keys) {
+        const ca = generateCA();
+        const { publicKey, privateKey } = generateKeys(ca.privateKey);
+        tlsKey = generateTlsKey();
+        // const dhKey = generateDhKeys();
+
+        caPrivateKey = ca.privateKey;
+        caPublicKey = ca.publicKey;
+        serverKey = privateKey;
+        serverCrt = publicKey;
+
+        // save on db
+        update['configuration.keys.caKey'] = caPrivateKey;
+        update['configuration.keys.caCrt'] = caPublicKey;
+        update['configuration.keys.serverKey'] = serverKey;
+        update['configuration.keys.serverCrt'] = serverCrt;
+        update['configuration.keys.tlsKey'] = tlsKey;
+      } else {
+        caPrivateKey = application.configuration.keys.caKey;
+        caPublicKey = application.configuration.keys.caCrt;
+        serverKey = application.configuration.keys.serverKey;
+        serverCrt = application.configuration.keys.serverCrt;
+        tlsKey = application.configuration.keys.tlsKey;
+      }
+
       // set subnet to device to prevent same subnet on multiple devices
       await applications.updateOne(
         {
           _id: application._id,
           'configuration.subnets.subnet': deviceSubnet.subnet
         },
-        { $set: { 'configuration.subnets.$.device': _id } }
+        { $set: update }
+        // { $set: { 'configuration.subnets.$.device': _id } }
       );
 
       tasks[0][0].params.id = application._id;
@@ -120,6 +155,12 @@ const queueApplicationJob = async (
       tasks[0][0].params.routeAllOverVpn = routeAllOverVpn;
       tasks[0][0].params.remoteClientIp = deviceSubnet.subnet;
       tasks[0][0].params.deviceWANIp = wanIp;
+      tasks[0][0].params.caKey = caPrivateKey;
+      tasks[0][0].params.caCrt = caPublicKey;
+      tasks[0][0].params.serverKey = serverKey;
+      tasks[0][0].params.serverCrt = serverCrt;
+      tasks[0][0].params.tlsKey = tlsKey;
+      // tasks[0][0].params.dhKey = dhKey;
 
       if (op === 'deploy') {
         tasks[0].push({
