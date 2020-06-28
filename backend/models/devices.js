@@ -395,6 +395,39 @@ const versionUpgradeSchema = new Schema({
 });
 
 /**
+ * Device sync Database Schema
+ */
+const deviceSyncSchema = new Schema({
+  _id: false,
+  state: {
+    type: String,
+    enum: [
+      'synced',
+      'syncing',
+      'not-synced'
+    ],
+    default: 'synced'
+  },
+  hash: {
+    type: String,
+    default: ''
+  },
+  trials: {
+    type: Number,
+    default: 0
+  },
+  autoSync: {
+    type: String,
+    enum: ['on', 'off'],
+    default: 'on'
+  },
+  failedJobRetried: {
+    type: Boolean,
+    default: false
+  }
+});
+
+/**
  * Device Database Schema
  */
 const deviceSchema = new Schema({
@@ -532,6 +565,10 @@ const deviceSchema = new Schema({
       type: devicePolicySchema,
       default: devicePolicySchema
     }
+  },
+  sync: {
+    type: deviceSyncSchema,
+    default: deviceSyncSchema
   }
 },
 {

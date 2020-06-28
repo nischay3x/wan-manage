@@ -18,6 +18,7 @@
 // File used to dispatch the apply logic to the right function
 const start = require('./start');
 const stop = require('./stop');
+const reset = require('./reset');
 const modify = require('./modifyDevice');
 const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
@@ -25,6 +26,7 @@ const upgrade = require('./applyUpgrade');
 const mlpolicy = require('./mlpolicy');
 const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
+const sync = require('./sync');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -51,6 +53,11 @@ const methods = {
     apply: stop.apply,
     complete: stop.complete,
     error: errorNOOP
+  },
+  reset: {
+    apply: reset.apply,
+    complete: reset.complete,
+    error: reset.error
   },
   modify: {
     apply: modify.apply,
@@ -97,6 +104,12 @@ const methods = {
     complete: appIdentification.complete,
     error: appIdentification.error,
     remove: appIdentification.remove
+  },
+  sync: {
+    apply: sync.apply,
+    complete: sync.complete,
+    error: sync.error,
+    remove: errorNOOP
   }
 };
 
@@ -110,7 +123,7 @@ Object.entries(methods).forEach(([method, functions]) => {
  * Calls the apply method for to the method
  *
  * @param  {Array}    devices     an array of devices
- * @param  {String}   method      apply methond to execute
+ * @param  {String}   method      apply method to execute
  * @param  {Object}   user        User data
  * @param  {Object}   data=null   additional data per caller's choice
  * @return {void}
