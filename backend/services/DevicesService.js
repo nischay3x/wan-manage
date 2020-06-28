@@ -115,7 +115,8 @@ class DevicesService {
       'policies',
       // Internal array, objects
       'labels',
-      'upgradeSchedule']);
+      'upgradeSchedule',
+      'sync']);
     retDevice.deviceStatus = (retDevice.deviceStatus === '1');
 
     // pick interfaces
@@ -190,7 +191,6 @@ class DevicesService {
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
       ? deviceStatus.getDeviceStatus(retDevice.machineId) || {} : {};
-
     return retDevice;
   }
 
@@ -569,6 +569,7 @@ class DevicesService {
       delete deviceRequest.emailTokens;
       delete deviceRequest.defaultAccount;
       delete deviceRequest.defaultOrg;
+      delete deviceRequest.sync;
 
       const updDevice = await devices.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
@@ -577,6 +578,8 @@ class DevicesService {
       )
         .session(session)
         .populate('interfaces.pathlabels', '_id name description color type');
+      await session.commitTransaction();
+      session = null;
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
@@ -586,9 +589,6 @@ class DevicesService {
           newDevice: updDevice
         });
       }
-
-      await session.commitTransaction();
-      session = null;
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;
       const ids = [modifyDevResult.ids[0]];
@@ -1327,6 +1327,35 @@ class DevicesService {
       if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get Device Status Information
+   *
+   * id String Numeric ID of the Device to retrieve configuration
+   * org String Organization to be filtered by (optional)
+   * returns DeviceStatus
+   **/
+  static async devicesIdStatusGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const { sync, machineId, isApproved } = await devices.findOne(
+        { _id: id, org: { $in: orgList } },
+        'sync machineId isApproved'
+      ).lean();
+
+      const isConnected = connections.isConnected(machineId);
+      return Service.successResponse({
+        sync,
+        isApproved,
+        connection: `${isConnected ? '' : 'dis'}connected`
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
         e.status || 500
       );
     }
