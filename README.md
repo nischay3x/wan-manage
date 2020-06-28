@@ -16,7 +16,7 @@ The flexiManage backend component provides REST API for managing the flexiWAN ne
 The repository includes two git submodules which are used by the flexiWAN SaaS service and are not open. 
 
 When pulling the flexiManage repository, 
-these submodules would be seen as an empty direcory:
+these submodules would be seen as an empty directory:
 * client - a git submodule for the flexiWAN SaaS UI. The UI provides the user side logic and design for managing the network. It uses REST to access flexiManage
 * backend/billing - a git submodule for managing the flexiWAN SaaS billing
 
@@ -26,7 +26,7 @@ To experience the complete flexiWAN system, open a free account on our [hosted s
 ## Install and use flexiManage locally
 
 ### Prerequisites
-FlexiManagre requires the following to run:
+FlexiManage requires the following to run:
 * Node.js v10+
 * npm v6+
 * MongoDB 4.0.9, running as a replica-set with 3 nodes on ports 27017, 27018, 27019
@@ -58,9 +58,9 @@ To create your first user, use the procedure below:
 ```
 curl -X POST -k "https://local.flexiwan.com:3443/api/users/register" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"accountName\":\"account\",\"userFirstName\":\"user\",\"userLastName\":\"lastname\",\"email\":\"user@example.com\",\"password\":\"xxxxxxxx\",\"userJobTitle\":\"eng\",\"userPhoneNumber\":\"\",\"country\":\"US\",\"companySize\":\"0-10\",\"serviceType\":\"Provider\",\"numberSites\":\"10\",\"companyType\":\"\",\"companyDesc\":\"\",\"captcha\":\"\"}"
 ```
-2) You should get an email to user@example.com with a verification link. Copy the email and token and execute the verification API:
+2) You should get an email to user@example.com with a verification link. In the verification link, copy the id and t (token) parameters and execute the verification API:
 ```
-curl -X POST -k "https://local.flexiwan.com:3443/api/users/verify-account" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"token\":\"<token on received email>\"}"
+curl -X POST -k "https://local.flexiwan.com:3443/api/users/verify-account" -H "accept: application/json" -H "Content-Type: application/json" -d "{\"id\":\"<id parameter in the verification link>\",\"token\":\"<token parameter in the verification link>\"}"
 ```
 3) Execute a login API:
 ```

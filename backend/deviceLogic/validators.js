@@ -74,7 +74,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
       };
     }
 
-    if (!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') {
+    if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') && ifc.dhcp !== 'yes') {
       return {
         valid: false,
         err: `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
@@ -98,6 +98,14 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
           err: 'LAN interfaces should not be assigned a default GW'
         };
       }
+
+      // DHCP client is not allowed on LAN interface
+      if (ifc.dhcp === 'yes') {
+        return {
+          valid: false,
+          err: 'LAN interfaces should not be set to DHCP'
+        };
+      }
     }
 
     if (ifc.type === 'WAN') {
@@ -109,7 +117,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         };
       }
       // WAN interfaces must have default GW assigned to them
-      if (!net.isIPv4(ifc.gateway)) {
+      if (ifc.dhcp !== 'yes' && !net.isIPv4(ifc.gateway)) {
         return {
           valid: false,
           err: 'All WAN interfaces should be assigned a default GW'
@@ -120,7 +128,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
 
   // LAN and WAN interfaces must not be on the same subnet
   // WAN IP address and default GW IP addresses must be on the same subnet
-  for (const wanIfc of wanIfcs) {
+  for (const wanIfc of wanIfcs.filter(i => !(i.dhcp === 'yes' && i.IPv4 === ''))) {
     for (const lanIfc of lanIfcs) {
       const wanSubnet = `${wanIfc.IPv4}/${wanIfc.IPv4Mask}`;
       const lanSubnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
@@ -181,6 +189,10 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
+    if (ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') {
+      // allow empty IP on WAN with dhcp client
+      continue;
+    }
     const [ip, mask] = (ifc.addr || '/').split('/');
     if (!net.isIPv4(ip) || !validateIPv4Mask(mask)) {
       return {

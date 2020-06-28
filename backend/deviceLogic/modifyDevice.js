@@ -62,16 +62,16 @@ const prepareIfcParams = (interfaces) => {
 /**
  * Queues a modify-device job to the device queue.
  * @param  {string}  org                   the organization to which the user belongs
- * @param  {string}  user                  the user that requested the job
+ * @param  {string}  username              name of the user that requested the job
  * @param  {Array}   tasks                 the message to be sent to the device
  * @param  {Object}  device                the device to which the job should be queued
  * @param  {Array}   removedTunnelsList=[] tunnels that have been removed as part of
  *                                         the device modification
  * @return {Promise}                       a promise for queuing a job
  */
-const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
+const queueJob = async (org, username, tasks, device, removedTunnelsList = []) => {
   const job = await deviceQueues.addJob(
-    device.machineId, user, org,
+    device.machineId, username, org,
     // Data
     { title: `Modify device ${device.hostname}`, tasks: tasks },
     // Response data
@@ -80,7 +80,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
       data: {
         device: device._id,
         org: org,
-        user: user,
+        user: username,
         origDevice: device,
         tunnels: removedTunnelsList
       }
@@ -100,7 +100,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
  * the modified interfaces and then queues the modify device job.
  * @param  {Object}  device        original device object, before the changes
  * @param  {Object}  messageParams device changes that will be sent to the device
- * @param  {string}  user          the user that created the request
+ * @param  {Object}  user          the user that created the request
  * @param  {string}  org           organization to which the user belongs
  * @return {Job}                   The queued modify-device job
  */
@@ -125,8 +125,11 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   if (has(messageParams, 'modify_interfaces')) {
     const { interfaces } = messageParams.modify_interfaces;
     interfaces.forEach(ifc => {
-      interfacesIdsSet.add(ifc._id);
-      modifiedIfcsMap[ifc._id] = ifc;
+      if (ifc.dhcp !== 'yes' || user.serviceAccount) {
+        // apply for dhcp only with assigned IP from the device message
+        interfacesIdsSet.add(ifc._id);
+        modifiedIfcsMap[ifc._id] = ifc;
+      }
     });
   }
 
@@ -143,7 +146,6 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
 
     for (const tunnel of tunnels) {
       let { deviceA, deviceB, pathlabel, num, _id } = tunnel;
-
       // Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
       if (deviceA._id.toString() === device._id.toString()) deviceA = device;
@@ -169,7 +171,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       const pathLabelRemoved = pathlabel && !pathlabels.includes(pathlabel.toString());
 
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
-        await oneTunnelDel(_id, user, org);
+        await oneTunnelDel(_id, user.username, org);
       } else {
         await queueTunnel(
           false,
@@ -177,7 +179,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
           `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
           tasksDeviceA,
           tasksDeviceB,
-          user,
+          user.username,
           org,
           deviceA.machineId,
           deviceB.machineId,
@@ -249,8 +251,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       });
     }
   }
-
-  const job = await queueJob(org, user, tasks, device, removedTunnels);
+  const job = await queueJob(org, user.username, tasks, device, removedTunnels);
   return [job];
 };
 
@@ -259,10 +260,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
  * sending a modify-device message to a device.
  * @param  {Array}   removedTunnels an array of ids of the removed tunnels
  * @param  {string}  org            the organization to which the tunnels belong
- * @param  {string}  user           the user that requested the device change
+ * @param  {string}  username       name of the user that requested the device change
  * @return {Promise}                a promise for reconstructing tunnels
  */
-const reconstructTunnels = async (removedTunnels, org, user) => {
+const reconstructTunnels = async (removedTunnels, org, username) => {
   const tunnels = await tunnelsModel
     .find({ _id: { $in: removedTunnels }, isActive: true })
     .populate('deviceA')
@@ -291,7 +292,7 @@ const reconstructTunnels = async (removedTunnels, org, user) => {
       `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
       tasksDeviceA,
       tasksDeviceB,
-      user,
+      username,
       org,
       deviceA.machineId,
       deviceB.machineId,
@@ -487,8 +488,7 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
  * @return {None}
  */
 const apply = async (device, user, data) => {
-  const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const modifyParams = {};
 
   // Create the default/static routes modification parameters
@@ -511,6 +511,7 @@ const apply = async (device, user, data) => {
       return ({
         _id: ifc._id,
         pci: ifc.pciaddr,
+        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
@@ -535,6 +536,7 @@ const apply = async (device, user, data) => {
       return ({
         _id: ifc._id,
         pci: ifc.pciaddr,
+        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
@@ -554,7 +556,6 @@ const apply = async (device, user, data) => {
       });
     })
   ];
-
   // Handle changes in the 'assigned' field. assignedDiff will contain
   // all the interfaces that have changed their 'isAssigned' field
   const assignedDiff = differenceWith(
@@ -649,7 +650,7 @@ const apply = async (device, user, data) => {
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
 
     // Queue device modification job
-    const jobs = await queueModifyDeviceJob(device[0], modifyParams, userName, org);
+    const jobs = await queueModifyDeviceJob(device[0], modifyParams, user, org);
 
     return {
       ids: jobs.flat().map(job => job.id),
@@ -733,7 +734,8 @@ const sync = async (deviceId, org) => {
       routing,
       type,
       pathlabels,
-      gateway
+      gateway,
+      dhcp
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -742,10 +744,11 @@ const sync = async (deviceId, org) => {
     );
     // Skip interfaces with invalid IPv4 addresses.
     // Currently we allow empty IPv6 address
-    if (!isIPv4Address(IPv4, IPv4Mask)) continue;
+    if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask)) continue;
 
     const ifcInfo = {
       pci: pciaddr,
+      dhcp: dhcp || 'no',
       addr: `${IPv4}/${IPv4Mask}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
       routing,

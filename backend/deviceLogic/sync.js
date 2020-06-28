@@ -35,7 +35,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'j
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
 
-// Create a list of all sync handlers
+// Create a object of all sync handlers
 const syncHandlers = {
   deviceConf: {
     syncHandler: deviceConfSyncHandler,

@@ -101,7 +101,6 @@ class DevicesService {
     const retDevice = pick(item, [
       'org',
       'description',
-      'defaultRoute',
       'deviceToken',
       'machineId',
       'site',
@@ -125,6 +124,7 @@ class DevicesService {
         'IPv6',
         'PublicIP',
         'gateway',
+        'dhcp',
         'IPv4',
         'type',
         'MAC',
@@ -440,6 +440,59 @@ class DevicesService {
     }
   }
 
+  static async devicesIdPacketTracesGET ({ id, org, packets, timeout }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.find({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!device || device.length === 0) {
+        return Service.rejectResponse('Device not found');
+      }
+
+      if (!connections.isConnected(device[0].machineId)) {
+        return Service.successResponse({
+          status: 'disconnected',
+          traces: []
+        });
+      }
+
+      const devicePacketTraces = await connections.deviceSendMessage(
+        null,
+        device[0].machineId,
+        {
+          entity: 'agent',
+          message: 'get-device-packet-traces',
+          params: {
+            packets: packets || '100',
+            timeout: timeout || '5'
+          }
+        }
+      );
+
+      if (!devicePacketTraces.ok) {
+        logger.error('Failed to get device packet traces', {
+          params: {
+            deviceId: id,
+            response: devicePacketTraces.message
+          }
+        });
+        return Service.rejectResponse('Failed to get device packet traces', 500);
+      }
+
+      return Service.successResponse({
+        status: 'connected',
+        traces: devicePacketTraces.message
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
   /**
    * Delete device
    *
@@ -586,6 +639,7 @@ class DevicesService {
       let modifyDevResult = [];
       if (origDevice) {
         modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
+          org: orgList[0],
           newDevice: updDevice
         });
       }
@@ -1107,6 +1161,7 @@ class DevicesService {
       // in that case no need to resend data
       if (!isEqual(dhcpRequest, origCmpDhcp)) {
         const copy = Object.assign({}, dhcpRequest);
+        copy.org = orgList[0];
         copy.method = 'dhcp';
         copy.action = 'modify';
         copy.origDhcp = origCmpDhcp;

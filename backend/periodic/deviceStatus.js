@@ -83,6 +83,7 @@ class DeviceStatus {
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().required(),
+      reconfig: Joi.string().allow('').optional(),
       stats: Joi.object().pattern(/^[a-z0-9_/-]{1,64}$/i, Joi.object({
         rx_bytes: Joi.number().required(),
         rx_pkts: Joi.number().required(),
@@ -150,6 +151,12 @@ class DeviceStatus {
               deviceID,
               msg.hash
             );
+
+            // Check if config was modified on the device
+            if (lastUpdateEntry.reconfig && lastUpdateEntry.reconfig !== deviceInfo.reconfig) {
+              // Call get-device-info and reconfig
+              connections.sendDeviceInfoMsg(deviceID, deviceInfo.deviceObj);
+            }
           } else {
             this.setDeviceStatsField(deviceID, 'state', 'stopped');
           }
