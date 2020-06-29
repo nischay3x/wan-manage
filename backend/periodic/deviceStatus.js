@@ -78,7 +78,7 @@ class DeviceStatus {
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().required(),
       reconfig: Joi.string().allow('').optional(),
-      stats: Joi.object().pattern(/^[a-z0-9_/-]{1,64}$/i, Joi.object({
+      stats: Joi.object().pattern(/^[a-z0-9:\._/-]{1,64}$/i, Joi.object({
         rx_bytes: Joi.number().required(),
         rx_pkts: Joi.number().required(),
         tx_bytes: Joi.number().required(),
