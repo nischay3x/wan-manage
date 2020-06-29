@@ -68,7 +68,8 @@ const apply = async (device, user, data) => {
         ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        if (intf.type === 'WAN' && intf.routing.toUpperCase() === 'NONE') {
+        if (intf.type === 'WAN' && Number(intf.metric) === 0 &&
+          intf.routing.toUpperCase() === 'NONE') {
           startParams['default-route'] = intf.gateway;
         }
         startParams['iface' + (ifnum)] = ifParams;
@@ -98,6 +99,7 @@ const apply = async (device, user, data) => {
           routeParams.addr = 'default';
           routeParams.pci = intf.pciaddr;
           routeParams.via = intf.gateway;
+          routeParams.metric = intf.metric;
           routes.push(routeParams);
         }
         ifParams.gateway = intf.gateway ? intf.gateway : '';
