@@ -29,12 +29,136 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const ObjectId = require('mongoose').Types.ObjectId;
+
 const {
   generateKeys,
   generateCA,
   generateTlsKey
   // generateDhKeys
 } = require('../utils/certificates');
+
+const getDeviceSubnet = (subnets, deviceId) => {
+  // if already assigned device   subnet, return this subnet
+  const exists = subnets.find(
+    s => s.device && (s.device.toString() === deviceId)
+  );
+
+  if (exists) return exists;
+  else return subnets.shift();
+};
+
+const getDeviceKeys = application => {
+  let isNew = false;
+  let caPrivateKey;
+  let caPublicKey;
+  let serverKey;
+  let serverCrt;
+  let tlsKey;
+
+  if (!application.configuration.keys) {
+    isNew = true;
+    const ca = generateCA();
+    const server = generateKeys(ca.privateKey);
+    tlsKey = generateTlsKey();
+    caPrivateKey = ca.privateKey;
+    caPublicKey = ca.publicKey;
+    serverKey = server.privateKey;
+    serverCrt = server.publicKey;
+  } else {
+    caPrivateKey = application.configuration.keys.caKey;
+    caPublicKey = application.configuration.keys.caCrt;
+    serverKey = application.configuration.keys.serverKey;
+    serverCrt = application.configuration.keys.serverCrt;
+    tlsKey = application.configuration.keys.tlsKey;
+  }
+
+  return {
+    isNew: isNew,
+    caPrivateKey,
+    caPublicKey,
+    serverKey,
+    serverCrt,
+    tlsKey
+  };
+};
+
+const getOpenVpnParams = async (device, applicationId, op) => {
+  const params = {};
+  const { _id, interfaces } = device;
+
+  const application = await applications.findOne({ _id: applicationId });
+
+  if (op === 'deploy' || op === 'config') {
+    // get the WanIp to be used by open vpn server to listen
+    const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
+
+    // get new subnet only if there is no subnet connect with current device
+    const deviceSubnet = getDeviceSubnet(application.configuration.subnets, _id.toString());
+
+    // deviceSubnet equal to null means
+    // that vpn installed on more devices then assigned subnets
+    if (!deviceSubnet) {
+      const msg = 'You don\'t have enoughs subnets to all devices';
+      throw createError(500, msg);
+    }
+
+    const update = {
+      'configuration.subnets.$.device': _id
+    };
+
+    const {
+      isNew, caPrivateKey, caPublicKey,
+      serverKey, serverCrt, tlsKey
+    } = getDeviceKeys(application);
+
+    // if is new keys, save them on db
+    if (isNew) {
+      update['configuration.keys.caKey'] = caPrivateKey;
+      update['configuration.keys.caCrt'] = caPublicKey;
+      update['configuration.keys.serverKey'] = serverKey;
+      update['configuration.keys.serverCrt'] = serverCrt;
+      update['configuration.keys.tlsKey'] = tlsKey;
+    }
+
+    // set subnet to device to prevent same subnet on multiple devices
+    await applications.updateOne(
+      {
+        _id: application._id,
+        'configuration.subnets.subnet': deviceSubnet.subnet
+      },
+      { $set: update }
+    );
+
+    params.version = application.installedVersion;
+    params.routeAllOverVpn = application.configuration.routeAllOverVpn;
+    params.remoteClientIp = deviceSubnet.subnet;
+    params.deviceWANIp = wanIp;
+    params.caKey = caPrivateKey;
+    params.caCrt = caPublicKey;
+    params.serverKey = serverKey;
+    params.serverCrt = serverCrt;
+    params.tlsKey = tlsKey;
+    // params.dhKey = dhKey;
+  } else if (op === 'upgrade') {
+    params.version = application.installedVersion;
+  }
+
+  return params;
+};
+
+const getJobParams = async (device, application, op) => {
+  const appName = application.app.name;
+
+  if (appName === 'Open VPN') {
+    return {
+      type: 'open-vpn',
+      name: appName,
+      config: await getOpenVpnParams(device, application._id, op)
+    };
+  }
+
+  return {};
+};
 
 const queueApplicationJob = async (
   deviceList,
@@ -46,145 +170,50 @@ const queueApplicationJob = async (
 ) => {
   const jobs = [];
 
+  // set job title to be shown to the user on Jobs screen
+  // and job message to be handle by the device
   let jobTitle = '';
-
-  switch (op) {
-    case 'deploy': jobTitle = `Install ${application.app.name} application`; break;
-    case 'upgrade': jobTitle = `Upgrade ${application.app.name} application`; break;
-    case 'config': jobTitle = `Update ${application.app.name} configuration`; break;
-    case 'uninstall': jobTitle = `Uninstall ${application.app.name} application`; break;
-    default: jobTitle = `Application ${application.app.name}`;
+  let message = '';
+  if (op === 'deploy') {
+    jobTitle = `Install ${application.app.name} application`;
+    // message = 'install-vpn-application';
+    message = 'install-service';
+  } else if (op === 'upgrade') {
+    jobTitle = `Upgrade ${application.app.name} application`;
+    // message = 'upgrade-vpn-server';
+    message = 'upgrade-service';
+  } else if (op === 'config') {
+    jobTitle = `Update ${application.app.name} configuration`;
+    // message = 'modify-vpn-server';
+    message = 'modify-service';
+  } else if (op === 'uninstall') {
+    jobTitle = `Uninstall ${application.app.name} application`;
+    // message = 'uninstall-vpn-application';
+    message = 'uninstall-service';
+  } else {
+    return jobs;
   }
 
-  // filter out subnets that already in used on devices
-  const subnets = [...application.configuration.subnets.filter(s => s.device == null)];
-
+  // generate job for each selected device
   for (let i = 0; i < deviceList.length; i++) {
     const dev = deviceList[i];
 
-    const { _id, machineId, interfaces } = dev;
-
-    const appName = application.app.name;
-    const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
-
-    let message = '';
-
-    if (appName === 'Open VPN') {
-      if (op === 'deploy') message = 'install-vpn-application';
-      // if (op === 'deploy') message = 'install-application';
-      else if (op === 'upgrade') message = 'upgrade-vpn-server';
-      else if (op === 'config') message = 'modify-vpn-server';
-      // else message = 'remove-vpn-server';
-      else message = 'uninstall-vpn-application';
-    }
+    const params = await getJobParams(dev, application, op);
 
     const tasks = [
       [
         {
           entity: 'agent',
           message: message,
-          params: {}
+          params: params
         }
       ]
     ];
 
-    const {
-      routeAllOverVpn
-    } = application.configuration;
-
-    if (op === 'deploy' || op === 'config') {
-      // get new subnet only if there is no subnet connect with current device
-      let deviceSubnet = '';
-      const exists = application.configuration.subnets.find(
-        s => s.device && (s.device.toString() === dev._id.toString())
-      );
-      if (exists) deviceSubnet = exists;
-      else deviceSubnet = subnets.shift();
-
-      // deviceSubnet equal to null means
-      // that vpn installed on more devices then assigned subnets
-      if (!deviceSubnet) {
-        const msg = 'You don\'t have enoughs subnets to all devices';
-        throw createError(500, msg);
-      }
-
-      const update = {
-        'configuration.subnets.$.device': _id
-      };
-
-      let caPrivateKey, caPublicKey;
-      let serverKey, serverCrt, tlsKey;
-      if (!application.configuration.keys) {
-        const ca = generateCA();
-        const { publicKey, privateKey } = generateKeys(ca.privateKey);
-        tlsKey = generateTlsKey();
-        // const dhKey = generateDhKeys();
-
-        caPrivateKey = ca.privateKey;
-        caPublicKey = ca.publicKey;
-        serverKey = privateKey;
-        serverCrt = publicKey;
-
-        // save on db
-        update['configuration.keys.caKey'] = caPrivateKey;
-        update['configuration.keys.caCrt'] = caPublicKey;
-        update['configuration.keys.serverKey'] = serverKey;
-        update['configuration.keys.serverCrt'] = serverCrt;
-        update['configuration.keys.tlsKey'] = tlsKey;
-      } else {
-        caPrivateKey = application.configuration.keys.caKey;
-        caPublicKey = application.configuration.keys.caCrt;
-        serverKey = application.configuration.keys.serverKey;
-        serverCrt = application.configuration.keys.serverCrt;
-        tlsKey = application.configuration.keys.tlsKey;
-      }
-
-      // set subnet to device to prevent same subnet on multiple devices
-      await applications.updateOne(
-        {
-          _id: application._id,
-          'configuration.subnets.subnet': deviceSubnet.subnet
-        },
-        { $set: update }
-        // { $set: { 'configuration.subnets.$.device': _id } }
-      );
-
-      tasks[0][0].params.id = application._id;
-      tasks[0][0].params.name = application.app.name;
-      tasks[0][0].params.version = application.installedVersion;
-      tasks[0][0].params.routeAllOverVpn = routeAllOverVpn;
-      tasks[0][0].params.remoteClientIp = deviceSubnet.subnet;
-      tasks[0][0].params.deviceWANIp = wanIp;
-      tasks[0][0].params.caKey = caPrivateKey;
-      tasks[0][0].params.caCrt = caPublicKey;
-      tasks[0][0].params.serverKey = serverKey;
-      tasks[0][0].params.serverCrt = serverCrt;
-      tasks[0][0].params.tlsKey = tlsKey;
-      // tasks[0][0].params.dhKey = dhKey;
-
-      if (op === 'deploy') {
-        tasks[0].push({
-          entity: 'agent',
-          message: 'config-vpn-server',
-          params: {
-            ...tasks[0][0].params
-          }
-        });
-      }
-    } else if (op === 'upgrade') {
-      tasks[0][0].params.id = application._id;
-      tasks[0][0].params.name = application.app.name;
-      tasks[0][0].params.version = application.installedVersion;
-      tasks[0][0].params.deviceWANIp = wanIp;
-    } else {
-      tasks[0][0].params.id = application._id;
-      tasks[0][0].params.name = application.app.name;
-    }
-
     // response data
     const data = {
       application: {
-        device: { _id: _id },
+        device: { _id: dev._id },
         app: application,
         requestTime: requestTime,
         op: op,
@@ -194,7 +223,7 @@ const queueApplicationJob = async (
 
     jobs.push(
       deviceQueues.addJob(
-        machineId,
+        dev.machineId,
         user.username,
         org,
         // Data
