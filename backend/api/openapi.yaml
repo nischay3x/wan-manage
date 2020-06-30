@@ -6354,7 +6354,7 @@ components:
         gateway:
           type: string
         metric:
-          type: integer
+          type: string
         isAssigned:
           type: boolean
         routing:
