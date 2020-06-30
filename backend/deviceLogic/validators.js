@@ -65,6 +65,14 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     };
   }
 
+  const defaultMetricIfcs = interfaces.filter(i => i.type === 'WAN' && Number(i.metric) === 0);
+  if (defaultMetricIfcs.length !== 1) {
+    return {
+      valid: false,
+      err: 'One and only one WAN interface is allowed to have a GW metric of 0'
+    };
+  }
+
   for (const ifc of assignedIfs) {
     // Assigned interfaces must be either WAN or LAN
     if (!['WAN', 'LAN'].includes(ifc.type)) {

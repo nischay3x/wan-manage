@@ -78,6 +78,7 @@ connectRouter.route('/register')
               const ifs = JSON.parse(req.body.interfaces);
               // Is there gateway on any of interfaces
               const hasGW = ifs.some(intf => intf.gateway);
+              let metric = '0';
               ifs.forEach((intf) => {
                 if ((hasGW && intf.gateway) || intf.name === req.body.default_dev) {
                   intf.isAssigned = true;
@@ -85,6 +86,8 @@ connectRouter.route('/register')
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp ? intf.dhcp : 'no';
                   intf.gateway = intf.gateway ? intf.gateway : req.body.default_route;
+                  intf.metric = metric;
+                  metric = '10';
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
@@ -92,6 +95,8 @@ connectRouter.route('/register')
                   if (ifs.length === 2) {
                     intf.isAssigned = true;
                   }
+                  intf.gateway = '';
+                  intf.metric = '';
                 }
               });
 

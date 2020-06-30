@@ -103,6 +103,7 @@ const apply = async (device, user, data) => {
           routes.push(routeParams);
         }
         ifParams.gateway = intf.gateway ? intf.gateway : '';
+        ifParams.metric = intf.metric;
         interfaces.push(ifParams);
       }
     }
