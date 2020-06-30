@@ -1,12 +1,12 @@
 {
   "meta": {
-    "time": 15875544029
+    "time": 15875544031
   },
   "applications": [
     {
       "name": "Open VPN",
       "description": "Allow remote VPN access",
-      "latestVersion": "1.2.3.5",
+      "latestVersion": "3.1.0",
       "createdDate": 1590392115232,
       "creator": "Open VPN ltd.",
       "cpuRequirements": 4,

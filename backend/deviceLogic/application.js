@@ -86,9 +86,9 @@ const getOpenVpnParams = async (device, applicationId, op) => {
   const params = {};
   const { _id, interfaces } = device;
 
-  const application = await applications.findOne({ _id: applicationId });
+  const application = await applications.findOne({ _id: applicationId }).populate('app').lean();
 
-  if (op === 'deploy' || op === 'config') {
+  if (op === 'deploy' || op === 'config' || op === 'upgrade') {
     // get the WanIp to be used by open vpn server to listen
     const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 
@@ -129,7 +129,12 @@ const getOpenVpnParams = async (device, applicationId, op) => {
       { $set: update }
     );
 
-    params.version = application.installedVersion;
+    let version = application.installedVersion;
+    if (op === 'upgrade') {
+      version = application.app.latestVersion;
+    }
+
+    params.version = version;
     params.routeAllOverVpn = application.configuration.routeAllOverVpn;
     params.remoteClientIp = deviceSubnet.subnet;
     params.deviceWANIp = wanIp;
@@ -139,13 +144,22 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     params.serverCrt = serverCrt;
     params.tlsKey = tlsKey;
     // params.dhKey = dhKey;
-  } else if (op === 'upgrade') {
-    params.version = application.installedVersion;
   }
+  // else if (op === 'upgrade') {
+  //   params.version = application.installedVersion;
+  // }
 
   return params;
 };
 
+/**
+ * Creates the job parameters based on application name.
+ * @async
+ * @param  {Object}   device      device to be modified
+ * @param  {Object}   application application object
+ * @param  {String}   op          operation type
+ * @return {Object}               parameters object
+ */
 const getJobParams = async (device, application, op) => {
   const appName = application.app.name;
 
@@ -247,31 +261,6 @@ const queueApplicationJob = async (
   return Promise.allSettled(jobs);
 };
 
-// const getOpDevices = async (devicesObj, org, purchasedApp) => {
-//   // If the list of devices is provided in the request
-//   // return their IDs, otherwise, extract device IDs
-//   // of all devices that are currently running the application
-//   const devicesList = Object.keys(devicesObj);
-//   if (devicesList.length > 0) return devicesList;
-
-//   // TODO: understand this flow
-//   // Select only devices on which the application is already
-//   // installed or in the process of installation, to make
-//   // sure the application is not reinstalled on devices that
-//   // are in the process of uninstalling the application.
-//   const { _id } = purchasedApp;
-//   const result = await devices.find(
-//     {
-//       org: org,
-//       'applications.app': _id,
-//       'applications.status': { $nin: ['installing', 'installed'] }
-//     },
-//     { _id: 1 }
-//   );
-
-//   return result.map((device) => device._id);
-// };
-
 /**
  * Creates and queues add/remove deploy application jobs.
  * @async
@@ -282,7 +271,7 @@ const queueApplicationJob = async (
  */
 const apply = async (deviceList, user, data) => {
   const { org } = data;
-  const { op, id, newVersion } = data.meta;
+  const { op, id } = data.meta;
 
   let app, session, deviceIds;
   const requestTime = Date.now();
@@ -382,7 +371,7 @@ const apply = async (deviceList, user, data) => {
           $set: { 'applications.$.status': 'upgrading' }
         };
 
-        app.installedVersion = newVersion; // TODO: need to test it
+        // app.installedVersion = newVersion; // TODO: need to test it
       } else if (op === 'config') {
         query['applications.app'] = id;
 
@@ -505,7 +494,7 @@ const complete = async (jobId, res) => {
       // TODO: need to improve this part
       const updatedApp = await applications.findOne(
         { org: org, _id: app._id }
-      ).populate('app');
+      ).populate('app').lean();
 
       await applications.updateOne(
         { org: org, _id: app._id },
