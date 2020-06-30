@@ -26,7 +26,7 @@ async function up () {
     const devDocuments = await devices.find({});
     for (const deviceDoc of devDocuments) {
       const { _id, interfaces, defaultRoute } = deviceDoc;
-      let defaultGwIfc = undefined;
+      let defaultGwIfc;
       if (defaultRoute) {
         let defaultWanIfcs = interfaces.filter(i => i.gateway === defaultRoute);
         if (defaultWanIfcs.length > 1) {
