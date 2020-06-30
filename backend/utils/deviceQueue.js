@@ -53,6 +53,7 @@ class DeviceQueues {
     this.removeJobIdsByOrg = this.removeJobIdsByOrg.bind(this);
     this.getLastJob = this.getLastJob.bind(this);
     this.getQueueJobsByState = this.getQueueJobsByState.bind(this);
+    this.getOPendingJobsCount = this.getOPendingJobsCount.bind(this);
 
     this.updateSyncState = async (deviceId, job) => {};
     this.removeCallbacks = {};
@@ -414,17 +415,48 @@ class DeviceQueues {
     }
   }
 
-  getQueueJobsByState (deviceId, state) {
+  /**
+   * Gets all jobs of a specific status and range in
+   * the queue of the device specified by "deviceId"
+   * @param  {string} deviceId device UUID
+   * @param  {string}  state   job state (complete/failed/etc.)
+   * @param  {number}  from    start index
+   * @param  {number}  to      stop index
+   * @return {Promise}         a list of job ids with the requested state
+   */
+  getQueueJobsByState (deviceId, state, from = 0, to = -1) {
     return new Promise((resolve, reject) => {
-      // We call rangeByType() with 'from' and 'to' set
-      // to -1 to get only the last job in the queue
-      kue.Job.rangeByType(deviceId, state, -1, -1, 'asc', (err, ids) => {
+      kue.Job.rangeByType(deviceId, state, from, to, 'asc', (err, ids) => {
         if (err) return resolve([]);
         resolve(ids);
       });
     });
   }
 
+  /**
+   * Gets the number of pending (waiting/running) jobs
+   * for the device specified by "deviceId"
+   * @param  {string} deviceId device UUID
+   * @return {Promise}         a list of job ids of pending jobs
+   */
+  async getOPendingJobsCount (deviceId) {
+    let pendingJobs = [];
+    for (const state of [
+      'inactive',
+      'active'
+    ]) {
+      const jobIds = await this.getQueueJobsByState(deviceId, state);
+      pendingJobs = pendingJobs.concat(jobIds);
+    }
+    return pendingJobs.length;
+  }
+
+  /**
+   * Gets the last job in the queue of
+   * the device specified by "deviceId"
+   * @param  {string} deviceId device UUID
+   * @return {Promise}         last queued job
+   */
   async getLastJob (deviceId) {
     let allJobs = [];
     for (const state of [
@@ -434,7 +466,9 @@ class DeviceQueues {
       'delayed',
       'active'
     ]) {
-      const jobIds = await this.getQueueJobsByState(deviceId, state);
+      // We call getQueueJobsByState() with 'from' and 'to'
+      // set to -1 to get only the last job in the queue
+      const jobIds = await this.getQueueJobsByState(deviceId, state, -1, -1);
       allJobs = allJobs.concat(jobIds);
     }
 
@@ -552,9 +586,9 @@ class DeviceQueues {
   }
 
   /**
-   * Registers a callback to be called when a job is removed from the queue.
-   * @param  {string}   name      the name of the module that registered the callback.
-   * @param  {Callback} callback  the callback method to be called
+   * Registers a method to be called as part of
+   * addJob() and update the device sync status
+   * @param  {Function} method  the callback method to be called
    * @return {void}
    */
   registerUpdateSyncMethod (method) {

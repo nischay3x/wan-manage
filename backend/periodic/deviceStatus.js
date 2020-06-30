@@ -149,7 +149,7 @@ class DeviceStatus {
               deviceInfo.org,
               deviceInfo.deviceObj,
               deviceID,
-              msg.hash
+              msg['router-cfg-hash']
             );
 
             // Check if config was modified on the device

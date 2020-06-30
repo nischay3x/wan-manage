@@ -720,6 +720,7 @@ const sync = async (deviceId, org) => {
 
   // Prepare add-interface message
   const deviceConfRequests = [];
+  let defaultRouteIfcInfo;
   for (const ifc of interfaces) {
     // Skip unassigned/un-typed interfaces, as they
     // cannot be part of the device configuration
@@ -735,6 +736,7 @@ const sync = async (deviceId, org) => {
       type,
       pathlabels,
       gateway,
+      metric,
       dhcp
     } = ifc;
     // Non-DIA interfaces should not be
@@ -746,6 +748,16 @@ const sync = async (deviceId, org) => {
     // Currently we allow empty IPv6 address
     if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask)) continue;
 
+    // If found an interface with gateway metric of "0"
+    // we have to add it's gateway to the static routes
+    // sync requests
+    if (metric === '0') {
+      defaultRouteIfcInfo = {
+        pciaddr,
+        gateway
+      };
+    }
+
     const ifcInfo = {
       pci: pciaddr,
       dhcp: dhcp || 'no',
@@ -753,6 +765,7 @@ const sync = async (deviceId, org) => {
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
       routing,
       type,
+      metric,
       multilink: { labels: labels.map((label) => label._id.toString()) }
     };
     if (ifc.type === 'WAN') ifcInfo.gateway = gateway;
@@ -778,6 +791,21 @@ const sync = async (deviceId, org) => {
       }
     });
   });
+
+  // Add default route if needed
+  if (defaultRouteIfcInfo) {
+    const { pciaddr, gateway } = defaultRouteIfcInfo;
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-route',
+      params: {
+        addr: 'default',
+        via: gateway,
+        pci: pciaddr,
+        metric: 0
+      }
+    });
+  }
 
   // Prepare add-dhcp-config message
   dhcp.forEach(entry => {

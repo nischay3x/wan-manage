@@ -360,11 +360,21 @@ class Connections {
     });
     socket.on('close', () => this.closeConnection(device));
 
-    // Query device for additional required information. Only after getting the device's
-    // response and updating the information, the device can be considered ready.
+    // Query device for additional required information (such as
+    // device version, network information, tunnel keys, etc.)
+    // Only after getting the device's response and updating
+    // the information, the device can be considered ready.
     this.sendDeviceInfoMsg(device, info.deviceObj);
   }
 
+  /**
+   * Gets the tunnel numbers of all tunnels that don't have
+   * the information about the tunnels keys in the database.
+   * @async
+   * @param  {string} deviceId The mongodb id of the device
+   * @return {Array}           An array of tunnels numbers of the tunnels
+   *                           that require keys information from the device
+   */
   async getTunnelsWithEmptyKeys (deviceId) {
     // Retrieve all device's tunnels that
     // don't have tunnel parameters
@@ -383,6 +393,13 @@ class Connections {
     return result.map(tunnel => tunnel.num);
   }
 
+  /**
+   * Updates the keys for each of the tunnels sent by
+   * the device in the management database
+   * @async
+   * @param  {Array} tunnels An array of tunnels information
+   * @return {void}
+   */
   async updateTunnelKeys (tunnels) {
     // Update all tunnels with the keys sent by the device
     const tunnelsOps = [];
@@ -471,6 +488,7 @@ class Connections {
    * versions of the different components running on it.
    * @async
    * @param  {string} machineId the device machine id
+   * @param  {string} deviceId the device mongodb id
    * @return {void}
    */
   async sendDeviceInfoMsg (machineId, deviceId) {

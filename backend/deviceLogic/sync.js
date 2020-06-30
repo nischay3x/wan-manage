@@ -56,7 +56,7 @@ const syncHandlers = {
 };
 
 const calcChangeHash = (currHash, message) => {
-  const contents = message.tasks;
+  const contents = message.tasks[0];
   return SHA1(currHash + stringify(contents)).toString();
 };
 
@@ -64,7 +64,7 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
   // Calculate the new configuration hash
   const { sync } = await devices.findOne(
     { machineId: machineId },
-    { 'sync.hash': 1 }
+    { 'sync.hash': 1, 'sync.state': 1 }
   )
     .lean();
   const { hash } = sync || {};
@@ -110,14 +110,14 @@ const updateSyncState = (org, deviceId, state) => {
   );
 };
 
-const calculateNewSyncState = (currHash, newHash, autoSyncState) => {
+const calculateNewSyncState = (mgmtHash, deviceHash, autoSyncState) => {
   // Calculate the next state in the state machine.
   // If hash values are equal, we assume MGMT
   // and device are synced. Otherwise, if auto
   // sync is on, the device can still be in
   // syncing phase, and if not - it should be
   // marked as "not-synced"
-  if (currHash === newHash) return 'synced';
+  if (mgmtHash === deviceHash) return 'synced';
   return autoSyncState === 'on' ? 'syncing' : 'not-synced';
 };
 
@@ -157,6 +157,7 @@ const queueFullSyncJob = async (device, hash, org) => {
   const params = {
     type: 'full-sync',
     'router-cfg-hash': hash,
+    reconnect: true,
     requests: []
   };
 
@@ -203,7 +204,7 @@ const queueFullSyncJob = async (device, hash, org) => {
   await incAutoSyncTrials(deviceId);
 
   logger.info('Sync device job queued', {
-    params: { deviceId, jobId: job }
+    params: { deviceId, jobId: job.id }
   });
   return job;
 };
@@ -273,11 +274,10 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
     // Don't attempt to sync if there are pending jobs
     // in the queue, as sync state might change when
     // the jobs are completed
-    const waitingJobs = await deviceQueues.getCount('inactive');
-    const runningJobs = await deviceQueues.getCount('active');
-    if (waitingJobs > 0 || runningJobs > 0) {
+    const pendingJobs = await deviceQueues.getOPendingJobsCount(machineId);
+    if (pendingJobs > 0) {
       logger.debug('Full sync skipped due to pending jobs', {
-        params: { deviceId, waitingJobs, runningJobs }
+        params: { deviceId, pendingJobs }
       });
       return;
     }
@@ -319,14 +319,8 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
 const apply = async (device, user, data) => {
   const { _id, machineId, hostname, org } = device[0];
   // Get device current configuration hash
-  const { sync } = await devices.findOneAndUpdate(
+  const { sync } = await devices.findOne(
     { org, _id },
-    {
-      'sync.state': 'syncing',
-      'sync.autoSync': 'on',
-      'sync.trials': 0,
-      'sync.failedJobRetried': false
-    },
     { sync: 1 }
   )
     .lean();
@@ -337,6 +331,19 @@ const apply = async (device, user, data) => {
     hash,
     org
   );
+
+  // Reset auto sync in database
+  await devices.findOneAndUpdate(
+    { org, _id },
+    {
+      'sync.state': 'syncing',
+      'sync.autoSync': 'on',
+      'sync.trials': 0,
+      'sync.failedJobRetried': false
+    },
+    { sync: 1 }
+  )
+    .lean();
 
   return {
     ids: [job.id],

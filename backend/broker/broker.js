@@ -119,7 +119,7 @@ const deviceProcessor = async (job) => {
         // response. Use it to update the device's sync status
         try {
           const { deviceObj } = connections.getDeviceInfo(mId);
-          await updateSyncStatus(org, deviceObj, mId, results.hash);
+          await updateSyncStatus(org, deviceObj, mId, results['router-cfg-hash']);
         } catch (err) {
           logger.error('Device sync status update failed', {
             params: { err: err.message, machineId: mId }

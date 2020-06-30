@@ -6473,7 +6473,6 @@ components:
     DeviceSyncStatus:
       example:
         state: sync state
-        hash: configuration hash value
         trials: remaining automatic sync trials
         autoSync: auto sync state
       properties:
@@ -6492,12 +6491,9 @@ components:
           type: number
           minimum: 0
           maximum: 3
-        hash:
-          type: string
       required:
         - state
         - autoSync
-        - hash
         - trials
     Role:
       enum:
