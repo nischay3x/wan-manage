@@ -16,19 +16,40 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
+const cidr = require('cidr-tools');
 
 async function up () {
   try {
     // Add the metric field to all interfaces
-    // set metric 0 to the first WAN interfaceand 10 to others
+    // try to identify WAN interface with the default router
+    // set metric 0 to that WAN interface and 100 to other WANs
     const devDocuments = await devices.find({});
     for (const deviceDoc of devDocuments) {
-      const { _id, interfaces } = deviceDoc;
-      let metric = '0';
+      const { _id, interfaces, defaultRoute } = deviceDoc;
+      let defaultGwIfc = undefined;
+      if (defaultRoute) {
+        let defaultWanIfcs = interfaces.filter(i => i.gateway === defaultRoute);
+        if (defaultWanIfcs.length > 1) {
+          const defaultGwSubnet = `${defaultRoute}/32`;
+          defaultWanIfcs = defaultWanIfcs.filter(i =>
+            cidr.overlap(`${i.IPv4}/${i.IPv4Mask}`, defaultGwSubnet));
+          if (defaultWanIfcs.length > 0) {
+            defaultGwIfc = defaultWanIfcs[0];
+          }
+        } else if (defaultWanIfcs.length === 1) {
+          defaultGwIfc = defaultWanIfcs[0];
+        }
+      }
       interfaces.forEach(ifc => {
-        if (ifc.type === 'WAN') {
-          ifc.metric = metric;
-          metric = '10';
+        if (ifc.type === 'WAN' && ifc.gateway) {
+          if (!defaultGwIfc) {
+            defaultGwIfc = ifc;
+            ifc.metric = '0';
+          } else if (defaultGwIfc._id === ifc._id) {
+            ifc.metric = '0';
+          } else {
+            ifc.metric = '100';
+          }
         } else {
           ifc.metric = '';
         }
