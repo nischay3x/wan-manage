@@ -283,7 +283,7 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationsConfigurationPUT ({ id, application, org }, { user }) {
+  static async applicationsConfigurationPUT ({ id, configurationRequest, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -293,7 +293,7 @@ class ApplicationsService {
       }
 
       // check if subdomain already taken
-      const organization = application.configuration.organization;
+      const organization = configurationRequest.organization;
       const organizationExists = await applications.findOne(
         {
           _id: { $ne: id },
@@ -323,8 +323,8 @@ class ApplicationsService {
 
       // Calculate subnets to entire org
       const subnets = [];
-      const totalPool = application.configuration.remoteClientIp;
-      const perDevice = application.configuration.connectionsPerDevice;
+      const totalPool = configurationRequest.remoteClientIp;
+      const perDevice = configurationRequest.connectionsPerDevice;
       if (totalPool && perDevice) {
         const mask = totalPool.split('/')[1];
 
@@ -345,11 +345,11 @@ class ApplicationsService {
         }
       }
 
-      application.configuration.subnets = subnets;
+      configurationRequest.subnets = subnets;
 
       const updated = await applications.findOneAndUpdate(
         { _id: id },
-        { $set: { configuration: application.configuration } },
+        { $set: { configuration: configurationRequest } },
         {
           new: true
         }

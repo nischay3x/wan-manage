@@ -5979,6 +5979,11 @@ paths:
         schema:
           type: string
         style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigurationRequest'
       responses:        
         "200":
           content:
@@ -6179,6 +6184,8 @@ components:
           type: array
         dependencies:
           type: array
+    ConfigurationRequest:
+      type: object
     PurchasedApplication:
       example:
         _id: _id
