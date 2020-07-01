@@ -87,13 +87,14 @@ const getOpenVpnParams = async (device, applicationId, op) => {
   const { _id, interfaces } = device;
 
   const application = await applications.findOne({ _id: applicationId }).populate('app').lean();
+  const config = application.configuration;
 
   if (op === 'deploy' || op === 'config' || op === 'upgrade') {
     // get the WanIp to be used by open vpn server to listen
     const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 
     // get new subnet only if there is no subnet connect with current device
-    const deviceSubnet = getDeviceSubnet(application.configuration.subnets, _id.toString());
+    const deviceSubnet = getDeviceSubnet(config.subnets, _id.toString());
 
     // deviceSubnet equal to null means
     // that vpn installed on more devices then assigned subnets
@@ -134,8 +135,14 @@ const getOpenVpnParams = async (device, applicationId, op) => {
       version = application.app.latestVersion;
     }
 
+    const dnsIp = config.dnsIp && config.dnsIp !== ''
+      ? config.dnsIp.split(';') : [];
+
+    const dnsDomain = config.dnsDomain && config.dnsDomain !== ''
+      ? config.dnsDomain.split(';') : [];
+
     params.version = version;
-    params.routeAllOverVpn = application.configuration.routeAllOverVpn;
+    params.routeAllOverVpn = config.routeAllOverVpn;
     params.remoteClientIp = deviceSubnet.subnet;
     params.deviceWANIp = wanIp;
     params.caKey = caPrivateKey;
@@ -143,6 +150,8 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     params.serverKey = serverKey;
     params.serverCrt = serverCrt;
     params.tlsKey = tlsKey;
+    params.dnsIp = dnsIp;
+    params.dnsName = dnsDomain;
     // params.dhKey = dhKey;
   }
   // else if (op === 'upgrade') {

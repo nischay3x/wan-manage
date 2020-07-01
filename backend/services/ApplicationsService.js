@@ -350,14 +350,10 @@ class ApplicationsService {
       const updated = await applications.findOneAndUpdate(
         { _id: id },
         { $set: { configuration: configurationRequest } },
-        {
-          new: true
-        }
+        { new: true }
       );
 
-      await updated.populate('app')
-        .populate('org')
-        .execPopulate();
+      await updated.populate('app').populate('org').execPopulate();
 
       // Update devices that installed vpn
       const opDevices = await devices.find({
