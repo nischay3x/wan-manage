@@ -133,6 +133,15 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // metric
+  metric: {
+    type: String,
+    default: '0',
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'Metric should be a number'
+    }
+  },
   // assigned
   isAssigned: {
     type: Boolean,

@@ -6578,6 +6578,7 @@ components:
           PublicIP: PublicIP
           IPv4: IPv4
           gateway: gateway
+          metric: 0
           type: WAN
           MAC: MAC
           dhcp: "no"
@@ -6694,6 +6695,7 @@ components:
           IPv4: IPv4
           type: WAN
           gateway: gateway
+          metric: 0
           MAC: MAC
           dhcp: "no"
           routing: OSPF
@@ -6710,6 +6712,7 @@ components:
           IPv4: IPv4
           type: WAN
           gateway: gateway
+          metric: 0
           MAC: MAC
           dhcp: "no"
           routing: OSPF
@@ -6837,6 +6840,7 @@ components:
         type: WAN
         MAC: MAC
         gateway: gateway
+        metric: 0
         dhcp: "no"
         routing: OSPF
         IPv6Mask: "64"
@@ -6868,6 +6872,8 @@ components:
         PublicIP:
           type: string
         gateway:
+          type: string
+        metric:
           type: string
         isAssigned:
           type: boolean
