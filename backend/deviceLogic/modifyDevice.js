@@ -123,11 +123,8 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   if (has(messageParams, 'modify_interfaces')) {
     const { interfaces } = messageParams.modify_interfaces;
     interfaces.forEach(ifc => {
-      if (ifc.dhcp !== 'yes' || user.serviceAccount) {
-        // apply for dhcp only with assigned IP from the device message
-        interfacesIdsSet.add(ifc._id);
-        modifiedIfcsMap[ifc._id] = ifc;
-      }
+      interfacesIdsSet.add(ifc._id);
+      modifiedIfcsMap[ifc._id] = ifc;
     });
   }
 
@@ -171,6 +168,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
         await oneTunnelDel(_id, user.username, org);
       } else {
+        if (ifc.dhcp === 'yes' && !user.serviceAccount) {
+          // apply for dhcp only with assigned IP from the device message
+          continue;
+        }
         await queueTunnel(
           false,
           // eslint-disable-next-line max-len
@@ -347,6 +348,7 @@ const apply = async (device, user, data) => {
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
         gateway: ifc.gateway,
+        metric: Number(ifc.metric),
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,
@@ -372,6 +374,7 @@ const apply = async (device, user, data) => {
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
         gateway: ifc.gateway,
+        metric: Number(ifc.metric),
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,

@@ -124,6 +124,7 @@ class DevicesService {
         'IPv6',
         'PublicIP',
         'gateway',
+        'metric',
         'dhcp',
         'IPv4',
         'type',
