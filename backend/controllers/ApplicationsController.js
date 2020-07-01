@@ -30,12 +30,12 @@ class ApplicationsController {
     await Controller.handleRequest(request, response, this.service.applicationsGET);
   }
 
-  async applicationsPOST (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationsPOST);
+  async applicationPOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationPOST);
   }
 
-  async applicationsDELETE (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationsDELETE);
+  async applicationDELETE (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationDELETE);
   }
 
   async applicationsConfigurationPUT (request, response) {
@@ -50,8 +50,8 @@ class ApplicationsController {
     await Controller.handleRequest(request, response, this.service.applicationsUpgradePOST);
   }
 
-  async applicationsStatusGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationsStatusGET);
+  async applicationStatusGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.applicationStatusGET);
   }
 }
 

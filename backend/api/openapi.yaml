@@ -5616,7 +5616,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Application'
+                type: object
+                properties:
+                  applications:
+                    items:
+                      $ref: '#/components/schemas/Application'
+                    type: array
                 x-content-type: application/json
           description: Successful operation
         "401":
@@ -5656,22 +5661,6 @@ paths:
     get:
       operationId: applicationsGET
       parameters:
-      - description: Devices application installed on
-        explode: true
-        in: query
-        name: offset
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: The numbers of items to return
-        explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-        style: form
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -5680,6 +5669,64 @@ paths:
         schema:
           type: string
       responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applications:
+                    items:
+                      $ref: '#/components/schemas/PurchasedApplicationList'
+                    type: array                
+                    x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all installed applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /applications/{id}:
+    get: 
+      operationId: applicationGET
+      parameters:
+      - description: Purchased application id
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:        
         "200":
           content:
             application/json:
@@ -5714,49 +5761,29 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all installed applications
+      summary: Get purchased application
       tags:
       - Applications
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
     post: 
-      operationId: applicationsPOST
+      operationId: applicationPOST
       parameters:
-      - description: Devices application installed on
+      - description: Purchased application id
         explode: true
-        in: query
-        name: offset
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: The numbers of items to return
-        explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
+        in: path
+        name: id
+        required: true
         schema:
           type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Application'
+        style: simple
       responses:        
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Application'
+                $ref: '#/components/schemas/PurchasedApplication'
                 x-content-type: application/json
           description: Successful operation
         "401":
@@ -5786,7 +5813,54 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all installed applications
+      summary: Purchase application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+    delete: 
+      operationId: applicationDELETE
+      parameters:
+      - description: Application id to remove
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:        
+        "200":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Remove application from your organization
       tags:
       - Applications
       x-swagger-router-controller: Applications
@@ -5794,7 +5868,7 @@ paths:
       x-openapi-router-service: ApplicationsService
   /applications/{id}/status:
     get: 
-      operationId: applicationsStatusGET
+      operationId: applicationStatusGET
       parameters:
       - description: application id to get status
         explode: true
@@ -5804,28 +5878,13 @@ paths:
         schema:
           type: string
         style: simple
-      - description: The numbers of items to return
-        explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
       responses:        
         "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-                x-content-type: application/json
+          # content:
+            # application/json:
+              # schema:
+              #   $ref: '#/components/schemas/PurchasedApplication'
+              #   x-content-type: application/json
           description: Successful operation
         "401":
           content:
@@ -5872,28 +5931,8 @@ paths:
         schema:
           type: string
         style: simple
-      - description: The numbers of items to return
-        explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
       responses:        
         "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-                x-content-type: application/json
           description: Successful operation
         "401":
           content:
@@ -5940,32 +5979,12 @@ paths:
         schema:
           type: string
         style: simple
-      - description: The numbers of items to return
-        explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Application'
       responses:        
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Application'
+                $ref: '#/components/schemas/PurchasedApplication'
                 x-content-type: application/json
           description: Successful operation
         "401":
@@ -5996,141 +6015,6 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Update application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-  /applications/{id}:
-    get: 
-      operationId: applicationGET
-      parameters:
-      - description: Purchased application id
-        explode: true
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: The numbers of items to return
-        explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      responses:        
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-                x-content-type: application/json
-          description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Get purchased application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-    delete: 
-      operationId: applicationsDELETE
-      parameters:
-      - description: Purchased application id to remove
-        explode: true
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: The numbers of items to return
-        explode: true
-        in: query
-        name: limit
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: Organization to be filtered by
-        explode: true
-        in: query
-        name: org
-        required: false
-        schema:
-          type: string
-      responses:        
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Application'
-                x-content-type: application/json
-          description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Uninstall application
       tags:
       - Applications
       x-swagger-router-controller: Applications
@@ -6257,21 +6141,102 @@ components:
       type: object
     Application: 
       example:
-        name: open-vpn
+        _id: library id
+        name: Application Name
+        description: description
+        latestVersion: 1.2.3.4
+        cpuRequirements: 4
+        ramRequirements: 4
+        components:
+        - Manage
+        - Edge
+        - Client
+        operatingSystem: 
+        - Linux
+        - Windows
+        dependencies: []
+        createdAt: date
+        createdDate: date
+        creator: Application creator
+        repositoryTime: timestamp
+        updatedAt: date
       properties: 
-        name:
+        _id:
+          type: string
+        name: 
           type: string
         description:
           type: string 
+        latestVersion: 
+          type: string
+        cpuRequirements:
+          type: number
+        ramRequirements: 
+          type: number
+        components:
+          type: array
+        operatingSystem:
+          type: array
+        dependencies:
+          type: array
     PurchasedApplication:
       example:
+        _id: _id
+        app: library object 
+        org: organization object
+        installedVersion: 1.2.3.5
+        purchasedDate: date
+        configuration: object
+        updatedAt: date
+        removed: false
       properties:
-        installedVersion:
+        _id: 
+          maxLength: 24
+          minLength: 24
           type: string
-        purchasedDate:
+        app:                
+          type: string          
+        org:
           type: string
-        configuration:
+        installedVersion2: 
+          type: string
+        configuration: 
           type: object
+        removed: 
+          type: boolean
+    PurchasedApplicationList:
+      example:
+        _id: _id
+        app: library object 
+        org: organization object
+        installedVersion: 1.2.3.5
+        statuses:
+          installed: 1
+          pending: 0
+          failed: 0
+          deleted: 1
+      properties:
+        _id: 
+          maxLength: 24
+          minLength: 24
+          type: string          
+        app:                             
+          type: object          
+        org:          
+          type: object
+        installedVersion: 
+          type: string
+        statuses:
+          type: object
+          properties:
+            installed:
+              type: number
+            pending:
+              type: number
+            failed:
+              type: number
+            deleted:
+              type: number
     AppIdentificationRules:
       example:
         ip: 127.0.0.1
@@ -6287,7 +6252,7 @@ components:
           - tcp
           - udp
           type: string
-      type: object
+      type: object        
     AppIdentification:
       example:
         _id: _id
@@ -7868,6 +7833,7 @@ components:
       - code
       - message
       type: object
+      
   securitySchemes:
     apiKey:
       in: header

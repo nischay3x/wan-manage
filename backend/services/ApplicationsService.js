@@ -48,7 +48,12 @@ class ApplicationsService {
 
   static async applicationGET ({ org, id }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      // check if user didn't pass request body or if app id is not valid
+      if (!ObjectId.isValid(id)) {
+        return Service.rejectResponse('Invalid request', 500);
+      }
 
       const installedApp = await applications
         .findOne({
@@ -79,7 +84,7 @@ class ApplicationsService {
    */
   static async applicationsGET ({ org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      const orgList = await getAccessTokenOrgList(user, org, false);
       const installed = await applications.aggregate([
         {
           $match: {
@@ -140,7 +145,10 @@ class ApplicationsService {
         };
       });
 
-      return Service.successResponse({ applications: response });
+      // TODO: the response is mongoose object and not a plain javascript
+      // so i converted it to plain object. and its not a nice solution!
+      // return Service.successResponse({ applications: response });
+      return Service.successResponse({ applications: JSON.parse(JSON.stringify(response)) });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -153,58 +161,61 @@ class ApplicationsService {
    * purchase new application
    *
    * @static
-   * @param {*} { org, application }
+   * @param {*} { org, applicationRequest }
    * @param {*} { user }
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationsPOST ({ org, application }, { user }) {
+  static async applicationPOST ({ org, id }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      const orgList = await getAccessTokenOrgList(user, org, false);
 
-      // check if app already installed
-      let appAlreadyInstalled = await applications.findOne({
-        org: { $in: orgList },
-        app: application._id
-      });
-
-      if (appAlreadyInstalled && !appAlreadyInstalled.removed) {
-        return Service.rejectResponse(
-          'This Application is already purchased',
-          500
-        );
+      // check if user didn't pass request body or if app id is not valid
+      if (!ObjectId.isValid(id)) {
+        return Service.rejectResponse('Invalid request', 500);
       }
 
-      // if this app installed in the past - we store the configuration
-      if (appAlreadyInstalled && appAlreadyInstalled.removed) {
-        appAlreadyInstalled.removed = false;
-        appAlreadyInstalled.purchasedDate = Date.now();
-        appAlreadyInstalled.save();
+      // check if application._id is library application
+      const libraryApp = await library.findOne({ _id: id });
+      if (!libraryApp) {
+        return Service.rejectResponse('Application id is not known', 500);
+      }
 
-        // TODO: check if need to upgrade..
+      // check if app already installed
+      let appExists = await applications.findOne({
+        org: { $in: orgList },
+        app: id
+      });
 
-        appAlreadyInstalled = await appAlreadyInstalled
-          .populate('app')
-          .populate('org')
-          .execPopulate();
+      if (appExists && !appExists.removed) {
+        return Service.rejectResponse('This Application is already purchased', 500);
+      }
 
-        return Service.successResponse(appAlreadyInstalled);
+      // don't create new app if this app installed in the past
+      if (appExists && appExists.removed) {
+        appExists.removed = false;
+        appExists.purchasedDate = Date.now();
+        appExists.save();
+
+        appExists = await appExists.populate('app').populate('org').execPopulate();
+
+        console.log(appExists);
+        return Service.successResponse(appExists);
       }
 
       // create app
       let installedApp = await applications.create({
-        app: application._id, // .toString(),
-        org: orgList[0], // .toString(),
-        installedVersion: application.latestVersion,
+        app: libraryApp._id,
+        org: orgList[0],
+        installedVersion: libraryApp.latestVersion,
         purchasedDate: Date.now(),
         configuration: {}
       });
 
       // return populated document
-      installedApp = await installedApp
-        .populate('app')
-        .populate('org')
-        .execPopulate();
+      installedApp = await installedApp.populate('app').populate('org').execPopulate();
+
+      console.log(installedApp);
 
       return Service.successResponse(installedApp);
     } catch (e) {
@@ -224,15 +235,24 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationsDELETE ({ org, id }, { user }, response) {
+  static async applicationDELETE ({ org, id }, { user }, response) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      const orgList = await getAccessTokenOrgList(user, org, false);
 
-      await applications.updateOne(
-        { _id: id },
+      // check if user didn't pass request body or if app id is not valid
+      if (!ObjectId.isValid(id)) {
+        return Service.rejectResponse('Invalid request', 500);
+      }
+
+      const mongoRes = await applications.updateOne(
+        { _id: id, org: { $in: orgList }, removed: false },
         { $set: { removed: true } },
         { upsert: false }
       );
+
+      if (mongoRes.nModified === 0) {
+        return Service.rejectResponse('Invalid application id', 500);
+      }
 
       // send jobs to device that installed open vpn
       const opDevices = await devices.find({
@@ -266,6 +286,11 @@ class ApplicationsService {
   static async applicationsConfigurationPUT ({ id, application, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      // check if user didn't pass request body or if app id is not valid
+      if (!ObjectId.isValid(id)) {
+        return Service.rejectResponse('Invalid request', 500);
+      }
 
       // check if subdomain already taken
       const organization = application.configuration.organization;
@@ -368,6 +393,11 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
+      // check if user didn't pass request body or if app id is not valid
+      if (!ObjectId.isValid(id)) {
+        return Service.rejectResponse('Invalid request', 500);
+      }
+
       const app = await applications.findOne(
         { _id: id }
       ).populate('app').lean();
@@ -405,9 +435,14 @@ class ApplicationsService {
     }
   }
 
-  static async applicationsStatusGET ({ id, org }, { user }) {
+  static async applicationStatusGET ({ id, org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      // check if user didn't pass request body or if app id is not valid
+      if (!ObjectId.isValid(id)) {
+        return Service.rejectResponse('Invalid request', 500);
+      }
 
       const devicesList = await devices.aggregate([
         { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
