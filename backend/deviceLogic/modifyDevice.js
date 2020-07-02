@@ -341,17 +341,17 @@ const apply = async (device, user, data) => {
     i.gateway && i.type === 'WAN' && Number(i.metric) === 0);
   const newDefaultIfc = data.newDevice.interfaces.filter(i =>
     i.gateway && i.type === 'WAN' && Number(i.metric) === 0);
-  const old_route = oldDefaultIfc.length === 0 ?
-    device[0].defaultRoute : oldDefaultIfc[0].gateway;
-  const new_route = newDefaultIfc.length === 0 ?
-    data.newDevice.defaultRoute : newDefaultIfc[0].gateway;
+  const oldDefaultGW = oldDefaultIfc.length === 0
+    ? device[0].defaultRoute : oldDefaultIfc[0].gateway;
+  const newDefaultGW = newDefaultIfc.length === 0
+    ? data.newDevice.defaultRoute : newDefaultIfc[0].gateway;
 
   if (new_route && new_route !== old_route) {
     modifyParams.modify_routes = {
       routes: [{
         addr: 'default',
-        old_route,
-        new_route
+        old_route: oldDefaultGW,
+        new_route: newDefaultGW
       }]
     };
   }
