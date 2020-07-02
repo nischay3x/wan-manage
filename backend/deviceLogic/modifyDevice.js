@@ -334,6 +334,28 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
 const apply = async (device, user, data) => {
   const org = data.org;
   const modifyParams = {};
+
+  // Create the default route modification parameters
+  // for old agent version compatibility
+  const oldDefaultIfc = device[0].interfaces.filter(i =>
+    i.gateway && i.type === 'WAN' && Number(i.metric) === 0);
+  const newDefaultIfc = data.newDevice.interfaces.filter(i =>
+    i.gateway && i.type === 'WAN' && Number(i.metric) === 0);
+  const old_route = oldDefaultIfc.length === 0 ?
+    device[0].defaultRoute : oldDefaultIfc[0].gateway;
+  const new_route = newDefaultIfc.length === 0 ?
+    data.newDevice.defaultRoute : newDefaultIfc[0].gateway;
+
+  if (new_route && new_route !== old_route) {
+    modifyParams.modify_routes = {
+      routes: [{
+        addr: 'default',
+        old_route,
+        new_route
+      }]
+    };
+  }
+
   // Create interfaces modification parameters
   // Compare the array of interfaces, and return
   // an array of the interfaces that have changed
