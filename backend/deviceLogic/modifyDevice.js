@@ -346,7 +346,7 @@ const apply = async (device, user, data) => {
   const newDefaultGW = newDefaultIfc.length === 0
     ? data.newDevice.defaultRoute : newDefaultIfc[0].gateway;
 
-  if (new_route && new_route !== old_route) {
+  if (newDefaultGW && newDefaultGW !== oldDefaultGW) {
     modifyParams.modify_routes = {
       routes: [{
         addr: 'default',
