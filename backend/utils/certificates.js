@@ -1,5 +1,6 @@
 const { createDiffieHellman, randomBytes } = require('crypto');
 const forge = require('node-forge');
+const asn = require('asn1.js');
 const pki = forge.pki;
 
 const generateCA = () => {
@@ -103,16 +104,16 @@ const generateDhKeys = () => {
 
   diffieHellman.generateKeys();
 
-  // const privateKey = diffieHellman.getPrivateKey('base64');
-  const publicKey = diffieHellman.getPublicKey('base64');
+  const defined = asn.define('', function () {
+    return this.seq().obj(this.key('p').int(), this.key('g').int());
+  });
 
-  const key = splitLineEveryNChars(publicKey, /(.{64})/g);
+  const params = defined.encode({
+    p: diffieHellman.getPrime(),
+    g: 2
+  }, 'pem', { label: 'DH PARAMETERS' });
 
-  const ret = `-----BEGIN DH PARAMETERS-----\n
-${key}\n
------END DH PARAMETERS-----`;
-
-  return ret;
+  return params;
 };
 
 module.exports = {

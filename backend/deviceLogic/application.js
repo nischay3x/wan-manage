@@ -33,8 +33,8 @@ const ObjectId = require('mongoose').Types.ObjectId;
 const {
   generateKeys,
   generateCA,
-  generateTlsKey
-  // generateDhKeys
+  generateTlsKey,
+  generateDhKeys
 } = require('../utils/certificates');
 
 const getDeviceSubnet = (subnets, deviceId) => {
@@ -54,6 +54,7 @@ const getDeviceKeys = application => {
   let serverKey;
   let serverCrt;
   let tlsKey;
+  let dhKey;
 
   if (!application.configuration.keys) {
     isNew = true;
@@ -64,12 +65,14 @@ const getDeviceKeys = application => {
     caPublicKey = ca.publicKey;
     serverKey = server.privateKey;
     serverCrt = server.publicKey;
+    dhKey = generateDhKeys();
   } else {
     caPrivateKey = application.configuration.keys.caKey;
     caPublicKey = application.configuration.keys.caCrt;
     serverKey = application.configuration.keys.serverKey;
     serverCrt = application.configuration.keys.serverCrt;
     tlsKey = application.configuration.keys.tlsKey;
+    dhKey = application.configuration.keys.dhKey;
   }
 
   return {
@@ -78,7 +81,8 @@ const getDeviceKeys = application => {
     caPublicKey,
     serverKey,
     serverCrt,
-    tlsKey
+    tlsKey,
+    dhKey
   };
 };
 
@@ -109,7 +113,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
 
     const {
       isNew, caPrivateKey, caPublicKey,
-      serverKey, serverCrt, tlsKey
+      serverKey, serverCrt, tlsKey, dhKey
     } = getDeviceKeys(application);
 
     // if is new keys, save them on db
@@ -119,6 +123,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
       update['configuration.keys.serverKey'] = serverKey;
       update['configuration.keys.serverCrt'] = serverCrt;
       update['configuration.keys.tlsKey'] = tlsKey;
+      update['configuration.keys.dhKey'] = dhKey;
     }
 
     // set subnet to device to prevent same subnet on multiple devices
@@ -152,7 +157,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     params.tlsKey = tlsKey;
     params.dnsIp = dnsIp;
     params.dnsName = dnsDomain;
-    // params.dhKey = dhKey;
+    params.dhKey = dhKey;
   }
   // else if (op === 'upgrade') {
   //   params.version = application.installedVersion;
