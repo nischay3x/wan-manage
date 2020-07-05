@@ -420,13 +420,36 @@ class DevicesService {
       );
 
       if (!deviceLogs.ok) {
-        logger.error('Failed to get device logs', {
+        let errorMessage = '';
+        switch (filter) {
+          case 'fwagent':
+            errorMessage = 'Failed to get flexiEdge agent logs';
+            break;
+          case 'syslog':
+            errorMessage = 'Failed to get syslog logs';
+            break;
+          case 'dhcp':
+            errorMessage =
+              'Failed to get DHCP Server logs.' +
+              ' Please verify DHCP Server is enabled on the device';
+            break;
+          case 'vpp':
+            errorMessage = 'Failed to get VPP logs';
+            break;
+          case 'ospf':
+            errorMessage = 'Failed to get OSPF logs';
+            break;
+          default:
+            errorMessage = 'Failed to get device logs';
+        }
+        logger.error(errorMessage, {
           params: {
             deviceId: id,
-            response: deviceLogs.message
+            response: deviceLogs.message,
+            filter: filter
           }
         });
-        return Service.rejectResponse('Failed to get device logs', 500);
+        return Service.rejectResponse(errorMessage, 500);
       }
 
       return Service.successResponse({
