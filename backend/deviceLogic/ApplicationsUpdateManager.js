@@ -44,7 +44,7 @@ class ApplicationsUpdateManager {
   }
 
   /**
-    * A static singleton that creates an ApplicationsManagerInstance.
+    * A static singleton that creates an ApplicationsUpdateManager Instance.
     *
     * @static
     * @return an instance of an ApplicationsUpdateManager class
@@ -56,22 +56,22 @@ class ApplicationsUpdateManager {
   }
 
   /**
-    * Check on which devices installed older version of application
-    * If found - send notification to the users
+    * Upgrade application version on devices if needed.
+    * if yes - notify and send emails
     * @async
     * @param {application} libraryApp
     * @param {Boolean}
     * @return {void}
     */
   async checkDevicesUpgrade (libraryApp) {
-    // check if orgs have lower version - if yes notify
-    const oldVersions = await applications.aggregate([
+    // get devices with old version of libraryApp
+    const oldVersionsDevices = await applications.aggregate([
       {
         $match: {
           app: ObjectId(libraryApp._id),
           removed: false,
           installedVersion: { $ne: libraryApp.latestVersion },
-          $or: [{ pendingToUpgrade: { $exists: false } }, { pendingToUpgrade: false }]
+          pendingToUpgrade: { $ne: true }
         }
       },
       {
@@ -92,20 +92,20 @@ class ApplicationsUpdateManager {
       }
     ]);
 
-    if (oldVersions.length > 0) {
+    if (oldVersionsDevices.length) {
       const notifications = [];
 
-      for (let i = 0; i < oldVersions.length; i++) {
-        const installedApp = oldVersions[i];
-        const devices = installedApp.devices;
+      for (let i = 0; i < oldVersionsDevices.length; i++) {
+        const app = oldVersionsDevices[i];
+        const devices = app.devices;
 
         if (devices.length) {
-          const oldVersion = installedApp.installedVersion;
+          const oldVersion = app.installedVersion;
           const newVersion = libraryApp.latestVersion;
 
           devices.forEach(device => {
             notifications.push({
-              org: installedApp.org,
+              org: app.org,
               title: `Application ${libraryApp.name} upgrade`,
               time: new Date(),
               device: device._id,
@@ -117,19 +117,17 @@ class ApplicationsUpdateManager {
 
           // mark as sent upgrade message
           await applications.updateOne(
-            { _id: installedApp._id },
+            { _id: app._id },
             { $set: { pendingToUpgrade: true } }
           );
 
-          const organization = await organizations.findOne({ _id: installedApp.org });
+          const organization = await organizations.findOne({ _id: app.org });
 
           const memberships = await membership.find({
             account: organization.account,
             to: 'account',
             role: 'owner'
-          },
-          'user')
-            .populate('user');
+          }, 'user').populate('user');
 
           const emailAddresses = memberships.map(doc => { return doc.user.email; });
 
@@ -158,7 +156,7 @@ class ApplicationsUpdateManager {
   }
 
   /**
-    * Polls the applications file.
+    * Polls the applications file
     * @async
     * @return {void}
     */
@@ -184,7 +182,6 @@ class ApplicationsUpdateManager {
 
       const options = {
         upsert: true,
-        setDefaultsOnInsert: true,
         useFindAndModify: false,
         new: true
       };
@@ -192,7 +189,7 @@ class ApplicationsUpdateManager {
       let isUpdated = false;
 
       for (let i = 0; i < appList.length; i++) {
-        // if app is not changed on repository
+        // skip if app is not changed on repository
         let app = await library.findOne({ name: appList[i].name });
         if (app && app.repositoryTime === body.meta.time) {
           continue;

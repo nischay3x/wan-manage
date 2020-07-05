@@ -22,7 +22,7 @@ const mongoConns = require('../mongoConns.js')();
 /**
  * Applications Database Schema
  *
- * A schema for the documents that stores all organization applications
+ * A schema for the documents that stores all installed applications
  */
 const applicationSchema = new Schema({
   app: {
@@ -39,7 +39,6 @@ const applicationSchema = new Schema({
     minlength: [2, 'Installed version must be at least 2'],
     maxlength: [30, 'Installed version must be at most 30']
   },
-  // created date on repository
   purchasedDate: {
     type: Date,
     required: true

@@ -125,6 +125,7 @@ class AppIdentificationsService {
    * @static
    * @param {*} { org, appIdentification }
    * @param {*} { user }
+   * @returns
    * @memberof AppIdentificationsService
    */
   static async appIdentificationsPOST ({ org, appIdentification }, { user }, response) {

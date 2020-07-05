@@ -400,10 +400,6 @@ const deviceApplicationSchema = new Schema({
   requestTime: {
     type: Date,
     default: null
-  },
-  lastUpdateTime: {
-    type: Date,
-    default: null
   }
 });
 
@@ -431,6 +427,7 @@ const devicePolicySchema = new Schema({
     ],
     default: ''
   },
+  // TODO: check if really needed
   requestTime: {
     type: Date,
     default: null

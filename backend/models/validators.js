@@ -143,7 +143,6 @@ const validateLabelColor = (color) => { return /^#[0-9A-F]{6}$/i.test(color); };
 const validatePolicyName = (name) => { return /^[a-z0-9-_ .]{3,50}$/i.test(name || ''); };
 const validateRuleName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name || ''); };
 
-const validateDomainName = domain => /^[a-zA-Z0-9\-.]+\.(com|org|net|edu)$/i.test(domain || '');
 module.exports = {
   validateDHCP,
   validateIPv4,
@@ -176,6 +175,5 @@ module.exports = {
   validateLabelColor,
   validatePolicyName,
   validateRuleName,
-  validateIsNumber,
-  validateDomainName
+  validateIsNumber
 };

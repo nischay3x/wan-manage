@@ -5880,11 +5880,6 @@ paths:
         style: simple
       responses:        
         "200":
-          # content:
-            # application/json:
-              # schema:
-              #   $ref: '#/components/schemas/PurchasedApplication'
-              #   x-content-type: application/json
           description: Successful operation
         "401":
           content:
@@ -6259,7 +6254,7 @@ components:
           - tcp
           - udp
           type: string
-      type: object        
+      type: object
     AppIdentification:
       example:
         _id: _id

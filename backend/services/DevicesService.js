@@ -320,13 +320,15 @@ class DevicesService {
   static async devicesIdGET ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      let result = await devices.findOne({ _id: id, org: { $in: orgList } })
+      const result = await devices.findOne({ _id: id, org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.multilink.policy', '_id name description')
-        .populate('applications.app');
-
-      // populate nested app
-      result = await result.populate('applications.app.app').execPopulate();
+        .populate({
+          path: 'applications.app',
+          populate: {
+            path: 'app'
+          }
+        });
 
       const device = DevicesService.selectDeviceParams(result);
 

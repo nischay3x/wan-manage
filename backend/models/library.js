@@ -22,7 +22,7 @@ const mongoConns = require('../mongoConns.js')();
 /**
  * Library Database Schema
  *
- * A schema for the documents that stores all available applications
+ * A schema for the documents that stores all applications we offer
  */
 const librarySchema = new Schema(
   {
@@ -48,12 +48,6 @@ const librarySchema = new Schema(
       required: true,
       minlength: [2, 'Latest Version must be at least 2'],
       maxlength: [30, 'Latest Version must be at most 30']
-    },
-    // created date on repository
-    createdDate: {
-      type: Date,
-      required: true,
-      default: Date.now
     },
     repositoryTime: {
       type: Number
