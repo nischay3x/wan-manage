@@ -392,7 +392,7 @@ const getDeviceSubnet = (subnets, deviceId) => {
   );
 
   if (exists) return exists;
-  else return subnets.shift();
+  else return subnets.find(s => s.device === null);
 };
 
 const getDeviceKeys = application => {
@@ -620,7 +620,14 @@ const appsValidations = (app, op, deviceIds) => {
 
   if (isVpn(appName)) {
     if (op === 'deploy') {
-      // prevent to install if all the subnets is already taken by other devices
+      // prevent installation if there are missing required configurations
+      if (!app.configuration.remoteClientIp || !app.configuration.connectionsPerDevice) {
+        throw createError(500,
+          'Required configurations is missing, please check again the configurations'
+        );
+      }
+
+      // prevent installation if all the subnets is already taken by other devices
       // or if the user selected multiple devices to install
       // but there is not enoughs subnets
       const freeSubnets = app.configuration.subnets.filter(s => {
@@ -631,7 +638,7 @@ const appsValidations = (app, op, deviceIds) => {
 
       if (freeSubnets.length === 0 || freeSubnets.length < deviceIds.length) {
         throw createError(500,
-          'There is no subnets remaining, please check again the configuration'
+          'There is no subnets remaining, please check again the configurations'
         );
       }
     }

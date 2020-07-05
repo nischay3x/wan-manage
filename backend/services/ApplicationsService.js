@@ -268,7 +268,7 @@ class ApplicationsService {
     }
   }
 
-  static async validateVpnConfiguration (configurationRequest, applicationId) {
+  static async validateVpnConfiguration (configurationRequest, applicationId, orgList) {
     // check if subdomain already taken
     const organization = configurationRequest.organization;
     const organizationExists = await applications.findOne(
@@ -285,11 +285,32 @@ class ApplicationsService {
         err: 'This organization already taken. please choose other'
       };
     }
+
+    // check subnets
+    if (configurationRequest.subnets) {
+      const installedDevices = await devices.find({
+        org: { $in: orgList },
+        'applications.app': applicationId,
+        $or: [
+          { 'applications.status': 'installed' },
+          { 'applications.status': 'installing' }
+        ]
+      });
+
+      if (installedDevices.length > configurationRequest.subnets.length) {
+        return {
+          valid: false,
+          err: 'There is more installed devices then subnets. Please increase your subnets'
+        };
+      }
+    }
+
+    return { valid: true, err: '' };
   }
 
-  static async validateConfiguration (configurationRequest, app) {
+  static async validateConfiguration (configurationRequest, app, orgList) {
     if (isVpn(app.app.name)) {
-      return this.validateVpnConfiguration(configurationRequest, app._id);
+      return ApplicationsService.validateVpnConfiguration(configurationRequest, app._id, orgList);
     }
 
     return { valid: true, err: '' };
@@ -315,19 +336,9 @@ class ApplicationsService {
 
       const app = await applications
         .findOne({ org: { $in: orgList }, removed: false, _id: id })
-        .populate('app').populate('org');
+        .populate('app').populate('org').lean();
 
       if (!app) return Service.rejectResponse('Invalid application id', 500);
-
-      const { valid, err } = await this.validateConfiguration(configurationRequest, app);
-
-      if (!valid) {
-        logger.warn('Application update failed',
-          {
-            params: { config: configurationRequest, err: err }
-          });
-        return Service.rejectResponse(err, 500);
-      }
 
       if (isVpn(app.app.name)) {
         // Calculate subnets to entire org
@@ -357,9 +368,24 @@ class ApplicationsService {
         configurationRequest.subnets = subnets;
       }
 
+      const {
+        valid, err
+      } = await ApplicationsService.validateConfiguration(configurationRequest, app, orgList);
+
+      if (!valid) {
+        logger.warn('Application update failed',
+          {
+            params: { config: configurationRequest, err: err }
+          });
+        return Service.rejectResponse(err, 500);
+      }
+
+      // update old configuration object with new one
+      const combinedConfig = { ...app.configuration, ...configurationRequest };
+
       const updated = await applications.findOneAndUpdate(
         { _id: id },
-        { $set: { configuration: configurationRequest } },
+        { $set: { configuration: combinedConfig } },
         { new: true, upsert: false }
       );
 
