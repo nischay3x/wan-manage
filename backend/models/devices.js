@@ -393,7 +393,9 @@ const deviceApplicationSchema = new Schema({
       'job queue failed',
       'job deleted',
       'installation failed',
-      'uninstallation failed'
+      'uninstallation failed',
+      'configuration failed',
+      'job failed'
     ],
     default: ''
   },
