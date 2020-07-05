@@ -94,17 +94,17 @@ const apply = async (device, user, data) => {
         });
         ifParams.multilink = { labels };
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        // Only if WAN defined and no other routing defined
-        if (intf.type === 'WAN' && intf.gateway && intf.routing.toUpperCase() === 'NONE') {
-          routeParams.addr = 'default';
-          routeParams.pci = intf.pciaddr;
-          routeParams.via = intf.gateway;
-          routeParams.metric = intf.metric;
-          routes.push(routeParams);
-        }
         ifParams.gateway = intf.gateway ? intf.gateway : '';
         ifParams.metric = intf.metric;
         interfaces.push(ifParams);
+      }
+      // Only if WAN and gateway defined and no other routing defined
+      if (intf.type === 'WAN' && intf.gateway && intf.routing.toUpperCase() === 'NONE') {
+        routeParams.addr = 'default';
+        routeParams.pci = intf.pciaddr;
+        routeParams.via = intf.gateway;
+        routeParams.metric = intf.metric;
+        routes.push(routeParams);
       }
     }
     startParams.interfaces = interfaces;
