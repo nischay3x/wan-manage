@@ -23,21 +23,26 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const dispatcher = require('../deviceLogic/dispatcher');
 const ObjectId = require('mongoose').Types.ObjectId;
 const cidrTools = require('cidr-tools');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const {
   getAvailableIps,
   getSubnetMask
 } = require('../utils/networks');
+const { isVpn } = require('../deviceLogic/application');
 
 class ApplicationsService {
+  /**
+   * get all applications in our library
+   *
+   * @static
+   * @param {*} { user }
+   * @returns {Object} object with applications array
+   * @memberof ApplicationsService
+   */
   static async applicationsLibraryGET ({ user }) {
     try {
       const appsList = await library.find();
-
-      if (appsList) {
-        return Service.successResponse({ applications: appsList });
-      }
-
-      return Service.successResponse({ applications: [] });
+      return Service.successResponse({ applications: appsList });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -46,23 +51,27 @@ class ApplicationsService {
     }
   }
 
+  /**
+   * get purchased application by id
+   *
+   * @static
+   * @param {*} { org, id } org id and application id
+   * @param {*} { user }
+   * @returns {Object} object with applications array
+   * @memberof ApplicationsService
+   */
   static async applicationGET ({ org, id }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
-      // check if user didn't pass request body or if app id is not valid
+      // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
 
       const installedApp = await applications
-        .findOne({
-          org: { $in: orgList },
-          removed: false,
-          _id: id
-        })
-        .populate('app')
-        .populate('org');
+        .findOne({ org: { $in: orgList }, removed: false, _id: id })
+        .populate('app').populate('org');
 
       return Service.successResponse({ application: installedApp });
     } catch (e) {
@@ -86,12 +95,7 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const installed = await applications.aggregate([
-        {
-          $match: {
-            org: { $in: orgList.map(o => ObjectId(o)) },
-            removed: false
-          }
-        },
+        { $match: { org: { $in: orgList.map(o => ObjectId(o)) }, removed: false } },
         {
           $lookup: {
             from: 'devices',
@@ -145,10 +149,7 @@ class ApplicationsService {
         };
       });
 
-      // TODO: the response is mongoose object and not a plain javascript
-      // so i converted it to plain object. and its not a nice solution!
-      // return Service.successResponse({ applications: response });
-      return Service.successResponse({ applications: JSON.parse(JSON.stringify(response)) });
+      return Service.successResponse({ applications: response });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -161,7 +162,7 @@ class ApplicationsService {
    * purchase new application
    *
    * @static
-   * @param {*} { org, applicationRequest }
+   * @param {*} { org, id }
    * @param {*} { user }
    * @returns
    * @memberof ApplicationsService
@@ -170,12 +171,12 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
-      // check if user didn't pass request body or if app id is not valid
+      // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      // check if application._id is library application
+      // check if application._id is a library application
       const libraryApp = await library.findOne({ _id: id });
       if (!libraryApp) {
         return Service.rejectResponse('Application id is not known', 500);
@@ -183,15 +184,14 @@ class ApplicationsService {
 
       // check if app already installed
       let appExists = await applications.findOne({
-        org: { $in: orgList },
-        app: id
+        org: { $in: orgList }, app: id
       });
 
       if (appExists && !appExists.removed) {
         return Service.rejectResponse('This Application is already purchased', 500);
       }
 
-      // don't create new app if this app installed in the past
+      // don't create new app if this app installed in the past but removed
       if (appExists && appExists.removed) {
         appExists.removed = false;
         appExists.purchasedDate = Date.now();
@@ -199,7 +199,6 @@ class ApplicationsService {
 
         appExists = await appExists.populate('app').populate('org').execPopulate();
 
-        console.log(appExists);
         return Service.successResponse(appExists);
       }
 
@@ -215,8 +214,6 @@ class ApplicationsService {
       // return populated document
       installedApp = await installedApp.populate('app').populate('org').execPopulate();
 
-      console.log(installedApp);
-
       return Service.successResponse(installedApp);
     } catch (e) {
       return Service.rejectResponse(
@@ -230,7 +227,7 @@ class ApplicationsService {
    * uninstall application
    *
    * @static
-   * @param {*} { org, application }
+   * @param {*} { org, id }
    * @param {*} { user }
    * @returns
    * @memberof ApplicationsService
@@ -239,20 +236,16 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
-      // check if user didn't pass request body or if app id is not valid
+      // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      const mongoRes = await applications.updateOne(
+      await applications.updateOne(
         { _id: id, org: { $in: orgList }, removed: false },
         { $set: { removed: true } },
         { upsert: false }
       );
-
-      if (mongoRes.nModified === 0) {
-        return Service.rejectResponse('Invalid application id', 500);
-      }
 
       // send jobs to device that installed open vpn
       const opDevices = await devices.find({
@@ -260,6 +253,7 @@ class ApplicationsService {
         'applications.app': id,
         'applications.status': 'installed'
       });
+
       if (opDevices.length) {
         await dispatcher.apply(opDevices, 'application',
           user, { org: orgList[0], meta: { op: 'uninstall', id: id } });
@@ -272,6 +266,33 @@ class ApplicationsService {
         e.status || 500
       );
     }
+  }
+
+  static async validateVpnConfiguration (configurationRequest, applicationId) {
+    // check if subdomain already taken
+    const organization = configurationRequest.organization;
+    const organizationExists = await applications.findOne(
+      {
+        _id: { $ne: applicationId },
+        configuration: { $exists: 1 },
+        'configuration.organization': organization
+      }
+    );
+
+    if (organizationExists) {
+      return {
+        valid: false,
+        err: 'This organization already taken. please choose other'
+      };
+    }
+  }
+
+  static async validateConfiguration (configurationRequest, app) {
+    if (isVpn(app.app.name)) {
+      return this.validateVpnConfiguration(configurationRequest, app._id);
+    }
+
+    return { valid: true, err: '' };
   }
 
   /**
@@ -287,70 +308,59 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      // check if user didn't pass request body or if app id is not valid
+      // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      // check if subdomain already taken
-      const organization = configurationRequest.organization;
-      const organizationExists = await applications.findOne(
-        {
-          _id: { $ne: id },
-          configuration: { $exists: 1 },
-          'configuration.organization': organization
-        }
-      );
+      const app = await applications
+        .findOne({ org: { $in: orgList }, removed: false, _id: id })
+        .populate('app').populate('org');
 
-      if (organizationExists) {
-        return Service.rejectResponse(
-          'This organization already taken. please choose other',
-          500
-        );
+      if (!app) return Service.rejectResponse('Invalid application id', 500);
+
+      const { valid, err } = await this.validateConfiguration(configurationRequest, app);
+
+      if (!valid) {
+        logger.warn('Application update failed',
+          {
+            params: { config: configurationRequest, err: err }
+          });
+        return Service.rejectResponse(err, 500);
       }
 
-      // prevent multi authentications methods enabled
-      // console.log(application.configuration);
-      // if (application.configuration && application.configuration.authentications) {
-      //   const enabledCount = application.configuration.authentications.filter(a => a.enabled);
-      //   if (enabledCount.length > 1) {
-      //     return Service.rejectResponse(
-      //       'Cannot enabled multiple authentication methods',
-      //       500
-      //     );
-      //   }
-      // }
+      if (isVpn(app.app.name)) {
+        // Calculate subnets to entire org
+        const subnets = [];
+        const totalPool = configurationRequest.remoteClientIp;
+        const perDevice = configurationRequest.connectionsPerDevice;
+        if (totalPool && perDevice) {
+          const mask = totalPool.split('/')[1];
 
-      // Calculate subnets to entire org
-      const subnets = [];
-      const totalPool = configurationRequest.remoteClientIp;
-      const perDevice = configurationRequest.connectionsPerDevice;
-      if (totalPool && perDevice) {
-        const mask = totalPool.split('/')[1];
+          // get ip range for this mask
+          const availableIps = getAvailableIps(mask);
 
-        // get ip range for this mask
-        const availableIps = getAvailableIps(mask);
+          // get subnets count for this org
+          const subnetsCount = availableIps / perDevice;
 
-        // get subnets count for this org
-        const subnetsCount = availableIps / perDevice;
+          // get the new subnets mask for splitted subnets
+          const newMask = getSubnetMask(perDevice);
 
-        // get the new subnets mask for splitted subnets
-        const newMask = getSubnetMask(perDevice);
+          // get all ips in entire network
+          const ips = cidrTools.expand(totalPool);
 
-        // get all ips in entire network
-        const ips = cidrTools.expand(totalPool);
-
-        for (let i = 0; i < subnetsCount; i++) {
-          subnets.push({ device: null, subnet: `${ips[i * perDevice]}/${newMask}` });
+          for (let i = 0; i < subnetsCount; i++) {
+            subnets.push({ device: null, subnet: `${ips[i * perDevice]}/${newMask}` });
+          }
         }
-      }
 
-      configurationRequest.subnets = subnets;
+        configurationRequest.subnets = subnets;
+      }
 
       const updated = await applications.findOneAndUpdate(
         { _id: id },
         { $set: { configuration: configurationRequest } },
-        { new: true }
+        { new: true, upsert: false }
       );
 
       await updated.populate('app').populate('org').execPopulate();
@@ -389,7 +399,7 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      // check if user didn't pass request body or if app id is not valid
+      // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
@@ -410,17 +420,8 @@ class ApplicationsService {
 
       // send jobs to device
       const opDevices = await devices.find({ org: { $in: orgList }, 'applications.app': id });
-      const { ids, status, message } = await dispatcher.apply(opDevices, 'application',
+      await dispatcher.apply(opDevices, 'application',
         user, { org: orgList[0], meta: { op: 'upgrade', id: id, newVersion: newVersion } });
-
-      console.log('id', id);
-      console.log('orgList', orgList);
-      console.log('app', app);
-      console.log('currentVersion', currentVersion);
-      console.log('newVersion', newVersion);
-      console.log('ids', ids);
-      console.log('status', status);
-      console.log('message', message);
 
       return Service.successResponse({ data: 'ok' });
     } catch (e) {
@@ -435,7 +436,7 @@ class ApplicationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
-      // check if user didn't pass request body or if app id is not valid
+      // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
@@ -466,7 +467,7 @@ class ApplicationsService {
         }
       ]).allowDiskUse(true);
 
-      return Service.successResponse({ data: devicesList || [] });
+      return Service.successResponse({ data: devicesList });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

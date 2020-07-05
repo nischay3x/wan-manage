@@ -355,7 +355,7 @@ const remove = async (job) => {
 const onComplete = async (org, app, op, deviceId) => {
   const appName = app.app.name;
 
-  if (appName === 'Open VPN') {
+  if (isVpn(appName)) {
     if (op === 'uninstall') {
       // release the subnet if deploy job removed
       await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
@@ -366,7 +366,7 @@ const onComplete = async (org, app, op, deviceId) => {
 const onFailed = async (org, app, op, deviceId) => {
   const appName = app.app.name;
 
-  if (appName === 'Open VPN') {
+  if (isVpn(appName)) {
     if (op === 'deploy') {
       // release the subnet if deploy job removed
       await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
@@ -377,7 +377,7 @@ const onFailed = async (org, app, op, deviceId) => {
 const onRemoved = async (org, app, op, deviceId) => {
   const appName = app.app.name;
 
-  if (appName === 'Open VPN') {
+  if (isVpn(appName)) {
     if (op === 'deploy') {
       // release the subnet if deploy job removed
       await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
@@ -525,7 +525,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
 const getJobParams = async (device, application, op) => {
   const appName = application.app.name;
 
-  if (appName === 'Open VPN') {
+  if (isVpn(appName)) {
     return {
       type: 'open-vpn',
       name: appName,
@@ -618,7 +618,7 @@ const queueApplicationJob = async (
 const appsValidations = (app, op, deviceIds) => {
   const appName = app.app.name;
 
-  if (appName === 'Open VPN') {
+  if (isVpn(appName)) {
     if (op === 'deploy') {
       // prevent to install if all the subnets is already taken by other devices
       // or if the user selected multiple devices to install
@@ -657,9 +657,14 @@ const releaseSubnetForDevice = async (org, appId, deviceId) => {
   );
 };
 
+const isVpn = applicationName => {
+  return applicationName === 'Open VPN';
+};
+
 module.exports = {
   apply: apply,
   complete: complete,
   error: error,
-  remove: remove
+  remove: remove,
+  isVpn
 };

@@ -5670,16 +5670,16 @@ paths:
           type: string
       responses:
         "200":
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  applications:
-                    items:
-                      $ref: '#/components/schemas/PurchasedApplicationList'
-                    type: array                
-                    x-content-type: application/json
+          # content:
+          #   application/json:
+          #     schema:
+          #       type: object
+          #       properties:
+          #         applications:
+          #           items:
+          #             $ref: '#/components/schemas/PurchasedApplicationList'
+          #           type: array                
+          #           x-content-type: application/json
           description: Successful operation
         "401":
           content:
