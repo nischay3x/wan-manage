@@ -95,7 +95,6 @@ const apply = async (deviceList, user, data) => {
       let update;
 
       if (op === 'deploy') {
-        // Filter out if app already installed to prevent duplication.
         for (let i = 0; i < deviceList.length; i++) {
           const device = deviceList[i];
 
@@ -103,6 +102,10 @@ const apply = async (deviceList, user, data) => {
             a => a.app && a.app.toString() === app._id.toString());
 
           if (appExists) {
+            if (appExists.status === 'installing') {
+              throw createError(500, `Device ${device.name} has a pending installation job`);
+            }
+
             query['applications.app'] = id;
             update = {
               $set: { 'applications.$.status': 'installing' }
