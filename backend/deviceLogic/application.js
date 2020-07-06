@@ -498,7 +498,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
       ? config.dnsDomain.split(';') : [];
 
     params.version = version;
-    params.routeAllOverVpn = config.routeAllOverVpn;
+    params.routeAllOverVpn = config.routeAllOverVpn || false;
     params.remoteClientIp = deviceSubnet.subnet;
     params.deviceWANIp = wanIp;
     params.caKey = caPrivateKey;
@@ -510,9 +510,6 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     params.dnsName = dnsDomain;
     params.dhKey = dhKey;
   }
-  // else if (op === 'upgrade') {
-  //   params.version = application.installedVersion;
-  // }
 
   return params;
 };
@@ -555,7 +552,7 @@ const queueApplicationJob = async (
   let message = '';
   if (op === 'deploy') {
     jobTitle = `Install ${application.app.name} application`;
-    message = 'install-service';
+    message = 'add-service';
   } else if (op === 'upgrade') {
     jobTitle = `Upgrade ${application.app.name} application`;
     message = 'upgrade-service';
@@ -564,7 +561,7 @@ const queueApplicationJob = async (
     message = 'modify-service';
   } else if (op === 'uninstall') {
     jobTitle = `Uninstall ${application.app.name} application`;
-    message = 'uninstall-service';
+    message = 'remove-service';
   } else {
     return jobs;
   }
