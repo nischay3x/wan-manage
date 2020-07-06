@@ -18,7 +18,8 @@
 // Logic to start/stop a device
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
-const { validateDevice, getAllOrganizationLanSubnets } = require('./validators');
+const { validateDevice } = require('./validators');
+const { getAllOrganizationLanSubnets, getDefaultGateway } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -68,13 +69,10 @@ const apply = async (device, user, data) => {
         ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        if (intf.type === 'WAN' && Number(intf.metric) === 0 &&
-          intf.routing.toUpperCase() === 'NONE') {
-          startParams['default-route'] = intf.gateway;
-        }
         startParams['iface' + (ifnum)] = ifParams;
       }
     }
+    startParams['default-route'] = getDefaultGateway(device[0]);
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
     const interfaces = [];
     const routes = [];
@@ -94,17 +92,17 @@ const apply = async (device, user, data) => {
         });
         ifParams.multilink = { labels };
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        // Only if WAN defined and no other routing defined
-        if (intf.type === 'WAN' && intf.gateway && intf.routing.toUpperCase() === 'NONE') {
-          routeParams.addr = 'default';
-          routeParams.pci = intf.pciaddr;
-          routeParams.via = intf.gateway;
-          routeParams.metric = intf.metric;
-          routes.push(routeParams);
-        }
         ifParams.gateway = intf.gateway ? intf.gateway : '';
         ifParams.metric = intf.metric;
         interfaces.push(ifParams);
+      }
+      // Only if WAN and gateway defined and no other routing defined
+      if (intf.type === 'WAN' && intf.gateway && intf.routing.toUpperCase() === 'NONE') {
+        routeParams.addr = 'default';
+        routeParams.pci = intf.pciaddr;
+        routeParams.via = intf.gateway;
+        routeParams.metric = intf.metric;
+        routes.push(routeParams);
       }
     }
     startParams.interfaces = interfaces;
