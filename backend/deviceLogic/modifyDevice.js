@@ -27,6 +27,7 @@ const {
   oneTunnelDel
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg } = require('./validators');
+const { getDefaultGateway } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -52,7 +53,7 @@ const prepareIfcParams = (interfaces) => {
     newIfc.multilink = { labels };
 
     // Don't send interface default GW for LAN interfaces
-    if (newIfc.type !== 'WAN') delete newIfc.gateway;
+    if (ifc.type !== 'WAN' && ifc.isAssigned) delete newIfc.gateway;
 
     return newIfc;
   });
@@ -337,16 +338,10 @@ const apply = async (device, user, data) => {
 
   // Create the default route modification parameters
   // for old agent version compatibility
-  const oldDefaultIfc = device[0].interfaces.filter(i =>
-    i.gateway && i.type === 'WAN' && Number(i.metric) === 0);
-  const newDefaultIfc = data.newDevice.interfaces.filter(i =>
-    i.gateway && i.type === 'WAN' && Number(i.metric) === 0);
-  const oldDefaultGW = oldDefaultIfc.length === 0
-    ? device[0].defaultRoute : oldDefaultIfc[0].gateway;
-  const newDefaultGW = newDefaultIfc.length === 0
-    ? data.newDevice.defaultRoute : newDefaultIfc[0].gateway;
+  const oldDefaultGW = getDefaultGateway(device[0]);
+  const newDefaultGW = getDefaultGateway(data.newDevice);
 
-  if (newDefaultGW && newDefaultGW !== oldDefaultGW) {
+  if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
     modifyParams.modify_routes = {
       routes: [{
         addr: 'default',
