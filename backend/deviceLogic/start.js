@@ -58,6 +58,7 @@ const apply = async (device, user, data) => {
   const majorAgentVersion = getMajorVersion(device[0].versions.agent);
   const startParams = {};
   let ifnum = 0;
+  const defaultGateway = getDefaultGateway(device[0]);
 
   if (majorAgentVersion === 0) { // version 0.X.X
     for (let idx = 0; idx < device[0].interfaces.length; idx++) {
@@ -72,14 +73,12 @@ const apply = async (device, user, data) => {
         startParams['iface' + (ifnum)] = ifParams;
       }
     }
-    startParams['default-route'] = getDefaultGateway(device[0]);
+    startParams['default-route'] = defaultGateway || '';
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
     const interfaces = [];
-    const routes = [];
     for (let idx = 0; idx < device[0].interfaces.length; idx++) {
       const intf = device[0].interfaces[idx];
       const ifParams = {};
-      const routeParams = {};
       if (intf.isAssigned === true) {
         ifParams.pci = intf.pciaddr;
         ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
@@ -96,15 +95,16 @@ const apply = async (device, user, data) => {
         ifParams.metric = intf.metric;
         interfaces.push(ifParams);
       }
-      // Only if WAN and gateway defined and no other routing defined
-      if (intf.type === 'WAN' && intf.gateway && intf.routing.toUpperCase() === 'NONE') {
-        routeParams.addr = 'default';
-        routeParams.pci = intf.pciaddr;
-        routeParams.via = intf.gateway;
-        routeParams.metric = intf.metric;
-        routes.push(routeParams);
-      }
     }
+    // Send route for backward compatibility (agent version < 1.2.15)
+    const routes = [];
+    if (defaultGateway) {
+      routes.push({
+        addr: 'default',
+        via: defaultGateway
+      });
+    }
+
     startParams.interfaces = interfaces;
     startParams.routes = routes;
   }
