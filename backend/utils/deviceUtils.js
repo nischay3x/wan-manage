@@ -64,9 +64,10 @@ const getAllOrganizationLanSubnets = async orgId => {
  * @return {string} defaultRouter
  */
 const getDefaultGateway = device => {
-  const defaultIfc = device.interfaces.reduce((d, i) =>
-    i.type !== 'WAN' || i.routing !== 'NONE' || !i.gateway ||
-    (d && Number(d.metric) < Number(i.metric)) ? d : i);
+  const defaultIfc = device.interfaces.reduce((d, i) => {
+    return i.type !== 'WAN' || i.routing !== 'NONE' || !i.gateway ||
+      (d && Number(d.metric) < Number(i.metric)) ? d : i;
+  }, false);
   return !defaultIfc ? device.defaultRoute : defaultIfc.gateway;
 };
 
