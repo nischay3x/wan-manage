@@ -24,6 +24,7 @@ const logger = require('../logging/logging')({
   type: 'req'
 });
 const { devices } = require('../models/devices');
+const diffieHellmans = require('../models/diffieHellmans');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -398,7 +399,7 @@ const getDeviceSubnet = (subnets, deviceId) => {
   else return subnets.find(s => s.device === null);
 };
 
-const getDeviceKeys = application => {
+const getDeviceKeys = async application => {
   let isNew = false;
   let caPrivateKey;
   let caPublicKey;
@@ -416,7 +417,10 @@ const getDeviceKeys = application => {
     caPublicKey = ca.publicKey;
     serverKey = server.privateKey;
     serverCrt = server.publicKey;
-    dhKey = generateDhKeys();
+
+    const dhKeyDoc = await diffieHellmans.findOneAndRemove();
+    if (!dhKeyDoc) dhKey = generateDhKeys();
+    else dhKey = dhKeyDoc.key;
   } else {
     caPrivateKey = application.configuration.keys.caKey;
     caPublicKey = application.configuration.keys.caCrt;
@@ -465,7 +469,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     const {
       isNew, caPrivateKey, caPublicKey,
       serverKey, serverCrt, tlsKey, dhKey
-    } = getDeviceKeys(application);
+    } = await getDeviceKeys(application);
 
     // if is new keys, save them on db
     if (isNew) {

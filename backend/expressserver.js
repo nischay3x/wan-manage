@@ -44,6 +44,7 @@ const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
 const notifyUsers = require('./periodic/notifyUsers')();
 const appRules = require('./periodic/appRules')();
 const applications = require('./periodic/applications')();
+const diffieHellmanStack = require('./periodic/diffieHellmanStack')();
 
 // rate limiter
 const rateLimit = require('express-rate-limit');
@@ -126,6 +127,7 @@ class ExpressServer {
     notifyUsers.start();
     appRules.start();
     applications.start();
+    diffieHellmanStack.start();
 
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
