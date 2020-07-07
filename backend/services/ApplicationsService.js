@@ -208,7 +208,22 @@ class ApplicationsService {
         org: orgList[0],
         installedVersion: libraryApp.latestVersion,
         purchasedDate: Date.now(),
-        configuration: {}
+        configuration: {
+          authentications: [
+            {
+              type: 'G-Suite',
+              enabled: false,
+              domainName: '',
+              group: ''
+            },
+            {
+              type: 'Office 365',
+              enabled: false,
+              domainName: '',
+              group: ''
+            }
+          ]
+        }
       });
 
       // return populated document
