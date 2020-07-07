@@ -217,6 +217,31 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
   }
+  
+  // Override for appqa02 environment
+  appqa02: {
+    restServerUrl: 'https://appqa02.flexiwan.com:443',
+    uiServerUrl: 'https://appqa02.flexiwan.com:443',
+    shouldRedirectHttps: false,
+    redirectHttpsPort: 443,
+    userTokenExpiration: 300,
+    userIpReqRateLimit: 3000,
+    unreadNotificationPeriod: 300000,
+    userRefreshTokenExpiration: 86400,
+    agentBroker: 'appqa01.flexiwan.com:443',
+    clientStaticDir: 'client/build',
+    logFilePath: '/var/log/flexiwan/flexiwan.log',
+    reqLogFilePath: '/var/log/flexiwan/flexiwanReq.log',
+    billingConfigSite: 'flexiwan-test',
+    billingDefaultPlan: 'enterprise',
+    useFlexiBilling: true,
+    billingRedirectOkUrl: 'https://appqa02.flexiwan.com/ok.html',
+    SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
+    logLevel: 'info',
+    logUserName: true,
+    corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80']
+  }
+  
 };
 
 class Configs {
