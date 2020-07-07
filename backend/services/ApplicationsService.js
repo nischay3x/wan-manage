@@ -217,7 +217,7 @@ class ApplicationsService {
               group: ''
             },
             {
-              type: 'Office 365',
+              type: 'Office365',
               enabled: false,
               domainName: '',
               group: ''
