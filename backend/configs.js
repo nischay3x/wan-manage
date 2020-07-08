@@ -218,8 +218,8 @@ const configEnv = {
     logLevel: 'info',
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
-  }
-  
+  },
+
   // Override for appqa02 environment
   appqa02: {
     restServerUrl: 'https://appqa02.flexiwan.com:443',
@@ -243,7 +243,6 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80']
   }
-  
 };
 
 class Configs {
