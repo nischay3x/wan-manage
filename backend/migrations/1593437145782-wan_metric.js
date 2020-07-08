@@ -40,6 +40,7 @@ async function up () {
           defaultGwIfc = defaultWanIfcs[0];
         }
       }
+      let autoAssignedMetric = 100;
       interfaces.forEach(ifc => {
         if (ifc.type === 'WAN' && ifc.gateway) {
           if (!defaultGwIfc) {
@@ -48,7 +49,7 @@ async function up () {
           } else if (defaultGwIfc._id === ifc._id) {
             ifc.metric = '0';
           } else {
-            ifc.metric = '100';
+            ifc.metric = (autoAssignedMetric++).toString();
           }
         } else {
           ifc.metric = '';

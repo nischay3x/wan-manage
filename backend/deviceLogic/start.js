@@ -18,7 +18,8 @@
 // Logic to start/stop a device
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
-const { validateDevice, getAllOrganizationLanSubnets } = require('./validators');
+const { validateDevice } = require('./validators');
+const { getAllOrganizationLanSubnets, getDefaultGateway } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -57,6 +58,7 @@ const apply = async (device, user, data) => {
   const majorAgentVersion = getMajorVersion(device[0].versions.agent);
   const startParams = {};
   let ifnum = 0;
+  const defaultGateway = getDefaultGateway(device[0]);
 
   if (majorAgentVersion === 0) { // version 0.X.X
     for (let idx = 0; idx < device[0].interfaces.length; idx++) {
@@ -68,20 +70,15 @@ const apply = async (device, user, data) => {
         ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
         ifParams.addr = `${intf.IPv4}/${intf.IPv4Mask}`;
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        if (intf.type === 'WAN' && Number(intf.metric) === 0 &&
-          intf.routing.toUpperCase() === 'NONE') {
-          startParams['default-route'] = intf.gateway;
-        }
         startParams['iface' + (ifnum)] = ifParams;
       }
     }
+    startParams['default-route'] = defaultGateway || '';
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
     const interfaces = [];
-    const routes = [];
     for (let idx = 0; idx < device[0].interfaces.length; idx++) {
       const intf = device[0].interfaces[idx];
       const ifParams = {};
-      const routeParams = {};
       if (intf.isAssigned === true) {
         ifParams.pci = intf.pciaddr;
         ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
@@ -94,19 +91,20 @@ const apply = async (device, user, data) => {
         });
         ifParams.multilink = { labels };
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        // Only if WAN defined and no other routing defined
-        if (intf.type === 'WAN' && intf.gateway && intf.routing.toUpperCase() === 'NONE') {
-          routeParams.addr = 'default';
-          routeParams.pci = intf.pciaddr;
-          routeParams.via = intf.gateway;
-          routeParams.metric = intf.metric;
-          routes.push(routeParams);
-        }
         ifParams.gateway = intf.gateway ? intf.gateway : '';
         ifParams.metric = intf.metric;
         interfaces.push(ifParams);
       }
     }
+    // Send route for backward compatibility (agent version < 1.2.15)
+    const routes = [];
+    if (defaultGateway) {
+      routes.push({
+        addr: 'default',
+        via: defaultGateway
+      });
+    }
+
     startParams.interfaces = interfaces;
     startParams.routes = routes;
   }

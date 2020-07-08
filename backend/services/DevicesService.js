@@ -31,7 +31,8 @@ const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { validateDevice, getAllOrganizationLanSubnets } = require('../deviceLogic/validators');
+const { validateDevice } = require('../deviceLogic/validators');
+const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 
 class DevicesService {

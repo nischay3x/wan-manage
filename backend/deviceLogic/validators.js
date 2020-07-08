@@ -17,7 +17,6 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
-const { devices } = require('../models/devices');
 
 /**
  * Checks whether a value is empty
@@ -62,14 +61,6 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     return {
       valid: false,
       err: 'There should be at least one LAN and one WAN interfaces'
-    };
-  }
-
-  const defaultMetricIfcs = interfaces.filter(i => i.type === 'WAN' && Number(i.metric) === 0);
-  if (defaultMetricIfcs.length !== 1) {
-    return {
-      valid: false,
-      err: 'One and only one WAN interface is allowed to have a GW metric of 0'
     };
   }
 
@@ -176,6 +167,18 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     }
   }
 
+  // Checks if all interfaces metrics are different
+  const metricsArray = device.interfaces
+    .filter(i => i.type === 'WAN' && i.gateway)
+    .map(i => Number(i.metric));
+  const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
+  if (hasDuplicates) {
+    return {
+      valid: false,
+      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
+    };
+  }
+
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -212,49 +215,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   return { valid: true, err: '' };
 };
 
-/**
- * Get all LAN subnets in the same organization
- * @param  {string} orgId         the id of the organization
- * @return {[_id: objectId, name: string, subnet: string]} array of LAN subnets with router name
- */
-const getAllOrganizationLanSubnets = async orgId => {
-  const subnets = await devices.aggregate([
-    { $match: { org: orgId } },
-    {
-      $project: {
-        'interfaces.IPv4': 1,
-        'interfaces.IPv4Mask': 1,
-        'interfaces.type': 1,
-        'interfaces.isAssigned': 1,
-        name: 1,
-        _id: 1
-      }
-    },
-    { $unwind: '$interfaces' },
-    {
-      $match: {
-        'interfaces.type': 'LAN',
-        'interfaces.isAssigned': true,
-        'interfaces.IPv4': { $ne: '' },
-        'interfaces.IPv4Mask': { $ne: '' }
-      }
-    },
-    {
-      $project: {
-        _id: 1,
-        name: 1,
-        subnet: {
-          $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
-        }
-      }
-    }
-  ]);
-
-  return subnets;
-};
-
 module.exports = {
-  validateDevice: validateDevice,
-  validateModifyDeviceMsg: validateModifyDeviceMsg,
-  getAllOrganizationLanSubnets: getAllOrganizationLanSubnets
+  validateDevice,
+  validateModifyDeviceMsg
 };
