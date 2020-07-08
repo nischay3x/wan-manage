@@ -391,14 +391,15 @@ class Connections {
           if (i.dhcp === 'yes') {
             const updatedConfig = deviceInfo.message.network.interfaces
               .find(u => u.pciaddr === i.pciaddr);
-            if (updatedConfig !== undefined) {
+            // ignore if IPv4 or gateway is not assigned by DHCP server
+            if (updatedConfig && updatedConfig.IPv4 && updatedConfig.gateway) {
               return {
                 ...i.toJSON(),
                 IPv4: updatedConfig.IPv4,
                 IPv4Mask: updatedConfig.IPv4Mask,
                 IPv6: updatedConfig.IPv6,
                 IPv6Mask: updatedConfig.IPv6Mask,
-                gateway: updatedConfig.gateway ? updatedConfig.gateway : ''
+                gateway: updatedConfig.gateway
               };
             }
           }
@@ -422,7 +423,7 @@ class Connections {
         });
         await modifyDeviceDispatcher.apply(
           [origDevice],
-          { username: 'system', serviceAccount: true },
+          { username: 'system' },
           { newDevice: updDevice, org: origDevice.org.toString() }
         );
       }

@@ -169,8 +169,14 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
         await oneTunnelDel(_id, user.username, org);
       } else {
-        if (ifc.dhcp === 'yes' && !user.serviceAccount) {
-          // apply for dhcp only with assigned IP from the device message
+        // if dhcp was changed from 'no' to 'yes'
+        // then we need to wait for the device new config
+        const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
+        const modifiedIfcB = modifiedIfcsMap[tunnel.interfaceB.toString()];
+        const waitingDhcpInfo =
+          (modifiedIfcA && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes') ||
+          (modifiedIfcB && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
+        if (waitingDhcpInfo) {
           continue;
         }
         await queueTunnel(
