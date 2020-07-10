@@ -503,7 +503,7 @@ const apply = async (device, user, data) => {
         message: ''
       };
     } else {
-      logger.warning('The device was not modified, nothing to apply', {
+      logger.warn('The device was not modified, nothing to apply', {
         params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
       });
     }
