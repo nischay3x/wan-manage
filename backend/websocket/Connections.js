@@ -403,7 +403,7 @@ class Connections {
               };
             } else {
               // Missing some DHCP parameters
-              logger.warning('Missing some DHCP parameters, the config will not be applied', {
+              logger.warn('Missing some DHCP parameters, the config will not be applied', {
                 params: {
                   reconfig: deviceInfo.message.reconfig,
                   machineId: machineId,
