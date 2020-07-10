@@ -502,6 +502,10 @@ const apply = async (device, user, data) => {
         status: 'completed',
         message: ''
       };
+    } else {
+      logger.warning('The device was not modified, nothing to apply', {
+        params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
+      });
     }
   } catch (err) {
     logger.error('Failed to queue modify device job', {
