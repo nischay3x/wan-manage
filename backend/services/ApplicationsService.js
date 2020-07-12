@@ -28,7 +28,7 @@ const {
   getAvailableIps,
   getSubnetMask
 } = require('../utils/networks');
-const { isVpn } = require('../deviceLogic/application');
+const { isVpn } = require('../deviceLogic/validators');
 
 class ApplicationsService {
   /**

@@ -127,8 +127,13 @@ const apply = async (deviceList, user, data) => {
                 }
               }
             };
+
+            await devices.updateOne(query, update, { upsert: false }).session(session);
           }
         }
+
+        // set update to null because we are already updated in this case
+        update = null;
       } else if (op === 'upgrade') {
         query['applications.app'] = id;
 
