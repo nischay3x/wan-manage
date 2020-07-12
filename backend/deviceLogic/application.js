@@ -677,5 +677,7 @@ module.exports = {
   complete: complete,
   error: error,
   remove: remove,
-  isVpn
+  isVpn,
+  appsValidations,
+  getDeviceSubnet
 };
