@@ -20,7 +20,7 @@ const {
   isVpn,
   appsValidations,
   getDeviceSubnet
-} = require('../application');
+} = require('../validators');
 
 describe('validate vpn configuration', () => {
   let app = null;

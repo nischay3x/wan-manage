@@ -32,6 +32,12 @@ const deviceQueues = require('../utils/deviceQueue')(
 const ObjectId = require('mongoose').Types.ObjectId;
 
 const {
+  isVpn,
+  appsValidations,
+  getDeviceSubnet
+} = require('./validators');
+
+const {
   generateKeys,
   generateCA,
   generateTlsKey,
@@ -389,16 +395,6 @@ const onRemoved = async (org, app, op, deviceId) => {
   }
 };
 
-const getDeviceSubnet = (subnets, deviceId) => {
-  // if subnet already assigned to this device, return the subnet
-  const exists = subnets.find(
-    s => s.device && (s.device.toString() === deviceId)
-  );
-
-  if (exists) return exists;
-  else return subnets.find(s => s.device === null);
-};
-
 const getDeviceKeys = async application => {
   let isNew = false;
   let caPrivateKey;
@@ -619,36 +615,6 @@ const queueApplicationJob = async (
   return Promise.allSettled(jobs);
 };
 
-const appsValidations = (app, op, deviceIds) => {
-  const appName = app.app.name;
-
-  if (isVpn(appName)) {
-    if (op === 'deploy') {
-      // prevent installation if there are missing required configurations
-      if (!app.configuration.remoteClientIp || !app.configuration.connectionsPerDevice) {
-        throw createError(500,
-          'Required configurations is missing, please check again the configurations'
-        );
-      }
-
-      // prevent installation if all the subnets is already taken by other devices
-      // or if the user selected multiple devices to install
-      // but there is not enoughs subnets
-      const freeSubnets = app.configuration.subnets.filter(s => {
-        if (s.device === null) return true;
-        const isCurrentDevice = deviceIds.map(d => d.toString()).includes(s.device.toString());
-        return isCurrentDevice;
-      });
-
-      if (freeSubnets.length === 0 || freeSubnets.length < deviceIds.length) {
-        throw createError(500,
-          'There is no subnets remaining, please check again the configurations'
-        );
-      }
-    }
-  }
-};
-
 /**
  * Release subnet assigned to device
  * @async
@@ -668,16 +634,9 @@ const releaseSubnetForDevice = async (org, appId, deviceId) => {
   );
 };
 
-const isVpn = applicationName => {
-  return applicationName === 'Open VPN';
-};
-
 module.exports = {
   apply: apply,
   complete: complete,
   error: error,
-  remove: remove,
-  isVpn,
-  appsValidations,
-  getDeviceSubnet
+  remove: remove
 };
