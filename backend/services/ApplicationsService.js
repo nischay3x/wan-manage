@@ -28,7 +28,12 @@ const {
   getAvailableIps,
   getSubnetMask
 } = require('../utils/networks');
-const { isVpn } = require('../deviceLogic/validators');
+const { isVpn } = require('../applicationLogic/openvpn');
+
+const {
+  getInitialConfigObject,
+  validateConfiguration
+} = require('../applicationLogic/applications');
 
 class ApplicationsService {
   /**
@@ -208,22 +213,7 @@ class ApplicationsService {
         org: orgList[0],
         installedVersion: libraryApp.latestVersion,
         purchasedDate: Date.now(),
-        configuration: {
-          authentications: [
-            {
-              type: 'G-Suite',
-              enabled: false,
-              domainName: '',
-              group: ''
-            },
-            {
-              type: 'Office365',
-              enabled: false,
-              domainName: '',
-              group: ''
-            }
-          ]
-        }
+        configuration: getInitialConfigObject(libraryApp)
       });
 
       // return populated document
@@ -262,7 +252,7 @@ class ApplicationsService {
         { upsert: false }
       );
 
-      // send jobs to device that installed open vpn
+      // send jobs to device that installed this app
       const opDevices = await devices.find({
         org: { $in: orgList },
         'applications.applicationInfo': id,
@@ -281,54 +271,6 @@ class ApplicationsService {
         e.status || 500
       );
     }
-  }
-
-  static async validateVpnConfiguration (configurationRequest, applicationId, orgList) {
-    // check if subdomain already taken
-    const organization = configurationRequest.organization;
-    const organizationExists = await applications.findOne(
-      {
-        _id: { $ne: applicationId },
-        configuration: { $exists: 1 },
-        'configuration.organization': organization
-      }
-    );
-
-    if (organizationExists) {
-      return {
-        valid: false,
-        err: 'This organization already taken. please choose other'
-      };
-    }
-
-    // check subnets
-    if (configurationRequest.subnets) {
-      const installedDevices = await devices.find({
-        org: { $in: orgList },
-        'applications.applicationInfo': applicationId,
-        $or: [
-          { 'applications.status': 'installed' },
-          { 'applications.status': 'installing' }
-        ]
-      });
-
-      if (installedDevices.length > configurationRequest.subnets.length) {
-        return {
-          valid: false,
-          err: 'There is more installed devices then subnets. Please increase your subnets'
-        };
-      }
-    }
-
-    return { valid: true, err: '' };
-  }
-
-  static async validateConfiguration (configurationRequest, app, orgList) {
-    if (isVpn(app.libraryApp.name)) {
-      return ApplicationsService.validateVpnConfiguration(configurationRequest, app._id, orgList);
-    }
-
-    return { valid: true, err: '' };
   }
 
   /**
@@ -383,9 +325,7 @@ class ApplicationsService {
         configurationRequest.subnets = subnets;
       }
 
-      const {
-        valid, err
-      } = await ApplicationsService.validateConfiguration(configurationRequest, app, orgList);
+      const { valid, err } = await validateConfiguration(configurationRequest, app, orgList);
 
       if (!valid) {
         logger.warn('Application update failed',
@@ -406,7 +346,7 @@ class ApplicationsService {
 
       await updated.populate('libraryApp').populate('org').execPopulate();
 
-      // Update devices that installed vpn
+      // Update devices
       const opDevices = await devices.find({
         org: { $in: orgList },
         'applications.applicationInfo': id,
@@ -469,50 +409,6 @@ class ApplicationsService {
         user, { org: orgList[0], meta: { op: 'upgrade', id: id, newVersion: newVersion } });
 
       return Service.successResponse({ data: 'ok' });
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
-
-  static async applicationStatusGET ({ id, org }, { user }) {
-    try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
-
-      // check if user didn't pass request body or if app id is invalid
-      if (!ObjectId.isValid(id)) {
-        return Service.rejectResponse('Invalid request', 500);
-      }
-
-      const devicesList = await devices.aggregate([
-        { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
-        { $unwind: '$applications' },
-        { $match: { 'applications.applicationInfo': ObjectId(id) } },
-        {
-          $lookup: {
-            from: 'applications',
-            let: { appId: '$applications.applicationInfo', deviceId: '$_id' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$appId'] } } },
-              { $unwind: '$configuration.subnets' },
-              { $match: { $expr: { $eq: ['$configuration.subnets.device', '$$deviceId'] } } },
-              { $project: { subnet: '$configuration.subnets.subnet' } }
-            ],
-            as: 'subnet'
-          }
-        },
-        {
-          $project: {
-            name: 1,
-            subnet: { $arrayElemAt: ['$subnet', 0] },
-            status: '$applications.status'
-          }
-        }
-      ]).allowDiskUse(true);
-
-      return Service.successResponse({ data: devicesList });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

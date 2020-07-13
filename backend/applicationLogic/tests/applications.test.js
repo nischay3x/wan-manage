@@ -16,11 +16,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { ObjectId } = require('mongoose').Types;
-const {
-  isVpn,
-  appsValidations,
-  getDeviceSubnet
-} = require('../validators');
+const { isVpn, getDeviceSubnet } = require('../openvpn');
+const { validateApplication } = require('../applications');
 
 describe('validate vpn configuration', () => {
   let app = null;
@@ -53,7 +50,7 @@ describe('validate vpn configuration', () => {
     app.configuration = {};
 
     expect(() => {
-      appsValidations(app, 'deploy', devicesIds);
+      validateApplication(app, 'deploy', devicesIds);
     }).toThrow(
       new Error('Required configurations is missing, please check again the configurations')
     );
@@ -62,7 +59,7 @@ describe('validate vpn configuration', () => {
   it('Should be an invalid because of there is no subnets', () => {
     app.configuration.subnets = [];
     expect(() => {
-      appsValidations(app, 'deploy', devicesIds);
+      validateApplication(app, 'deploy', devicesIds);
     }).toThrow(
       new Error('There is no subnets remaining, please check again the configurations')
     );
@@ -79,7 +76,7 @@ describe('validate vpn configuration', () => {
     ];
 
     expect(() => {
-      appsValidations(app, 'deploy', devicesIds);
+      validateApplication(app, 'deploy', devicesIds);
     }).not.toThrow();
   });
 
@@ -94,7 +91,7 @@ describe('validate vpn configuration', () => {
     ];
 
     expect(() => {
-      appsValidations(app, 'deploy', devicesIds);
+      validateApplication(app, 'deploy', devicesIds);
     }).toThrow(
       new Error('There is no subnets remaining, please check again the configurations')
     );
@@ -115,7 +112,7 @@ describe('validate vpn configuration', () => {
     ];
 
     expect(() => {
-      appsValidations(app, 'deploy', devicesIds);
+      validateApplication(app, 'deploy', devicesIds);
     }).not.toThrow();
   });
 
@@ -150,7 +147,7 @@ describe('validate vpn configuration', () => {
     ];
 
     expect(() => {
-      appsValidations(app, 'deploy', devicesIds);
+      validateApplication(app, 'deploy', devicesIds);
     }).toThrow(
       new Error('There is no subnets remaining, please check again the configurations')
     );
@@ -185,7 +182,7 @@ describe('validate vpn configuration', () => {
     ];
 
     expect(() => {
-      appsValidations(app, 'deploy', devicesIds);
+      validateApplication(app, 'deploy', devicesIds);
     }).not.toThrow();
   });
 

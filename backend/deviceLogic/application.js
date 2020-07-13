@@ -24,7 +24,6 @@ const logger = require('../logging/logging')({
   type: 'req'
 });
 const { devices } = require('../models/devices');
-const diffieHellmans = require('../models/diffieHellmans');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -32,17 +31,12 @@ const deviceQueues = require('../utils/deviceQueue')(
 const ObjectId = require('mongoose').Types.ObjectId;
 
 const {
-  isVpn,
-  appsValidations,
-  getDeviceSubnet
-} = require('./validators');
-
-const {
-  generateKeys,
-  generateCA,
-  generateTlsKey,
-  generateDhKeys
-} = require('../utils/certificates');
+  onJobComplete,
+  onJobRemoved,
+  onJobFailed,
+  validateApplication,
+  getJobParams
+} = require('../applicationLogic/applications');
 
 /**
  * Creates and queues add/remove deploy application jobs.
@@ -91,7 +85,10 @@ const apply = async (deviceList, user, data) => {
         }
       }
 
-      appsValidations(app, op, deviceIds);
+      const { valid, err } = validateApplication(app, op, deviceIds);
+      if (!valid) {
+        throw createError(500, err);
+      }
 
       // Save status in the devices
       const query = {
@@ -270,7 +267,7 @@ const complete = async (jobId, res) => {
     );
 
     // do actions on job complete
-    await onComplete(org, app, op, ObjectId(_id));
+    await onJobComplete(org, app, op, ObjectId(_id));
   } catch (err) {
     logger.error('Device application status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -319,7 +316,7 @@ const error = async (jobId, res) => {
     );
 
     // do actions on job failed
-    await onFailed(org, app, op, _id);
+    await onJobFailed(org, app, op, _id);
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -358,188 +355,13 @@ const remove = async (job) => {
       );
 
       // do actions on app removed
-      await onRemoved(org, app, op, ObjectId(_id));
+      await onJobRemoved(org, app, op, ObjectId(_id));
     } catch (err) {
       logger.error('Device application status update failed', {
         params: { job: job, status: status, err: err.message }
       });
     }
   }
-};
-
-const onComplete = async (org, app, op, deviceId) => {
-  const appName = app.libraryApp.name;
-
-  if (isVpn(appName)) {
-    if (op === 'uninstall') {
-      // release the subnet if deploy job removed
-      await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
-    }
-  }
-};
-
-const onFailed = async (org, app, op, deviceId) => {
-  const appName = app.libraryApp.name;
-
-  if (isVpn(appName)) {
-    if (op === 'deploy') {
-      // release the subnet if deploy job removed
-      await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
-    }
-  }
-};
-
-const onRemoved = async (org, app, op, deviceId) => {
-  const appName = app.libraryApp.name;
-
-  if (isVpn(appName)) {
-    if (op === 'deploy') {
-      // release the subnet if deploy job removed
-      await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
-    }
-  }
-};
-
-const getDeviceKeys = async application => {
-  let isNew = false;
-  let caPrivateKey;
-  let caPublicKey;
-  let serverKey;
-  let serverCrt;
-  let tlsKey;
-  let dhKey;
-
-  if (!application.configuration.keys) {
-    isNew = true;
-    const ca = generateCA();
-    const server = generateKeys(ca.privateKey);
-    tlsKey = generateTlsKey();
-    caPrivateKey = ca.privateKey;
-    caPublicKey = ca.publicKey;
-    serverKey = server.privateKey;
-    serverCrt = server.publicKey;
-
-    const dhKeyDoc = await diffieHellmans.findOneAndRemove();
-    if (!dhKeyDoc) dhKey = generateDhKeys();
-    else dhKey = dhKeyDoc.key;
-  } else {
-    caPrivateKey = application.configuration.keys.caKey;
-    caPublicKey = application.configuration.keys.caCrt;
-    serverKey = application.configuration.keys.serverKey;
-    serverCrt = application.configuration.keys.serverCrt;
-    tlsKey = application.configuration.keys.tlsKey;
-    dhKey = application.configuration.keys.dhKey;
-  }
-
-  return {
-    isNew: isNew,
-    caPrivateKey,
-    caPublicKey,
-    serverKey,
-    serverCrt,
-    tlsKey,
-    dhKey
-  };
-};
-
-const getOpenVpnParams = async (device, applicationId, op) => {
-  const params = {};
-  const { _id, interfaces } = device;
-
-  const application = await applications.findOne({ _id: applicationId })
-    .populate('libraryApp').lean();
-  const config = application.configuration;
-
-  if (op === 'deploy' || op === 'config' || op === 'upgrade') {
-    // get the WanIp to be used by open vpn server to listen
-    const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
-
-    // get new subnet only if there is no subnet connect with current device
-    const deviceSubnet = getDeviceSubnet(config.subnets, _id.toString());
-
-    // deviceSubnet equal to null means
-    // that vpn installed on more devices then assigned subnets
-    if (!deviceSubnet) {
-      const msg = 'You don\'t have enoughs subnets to all devices';
-      throw createError(500, msg);
-    }
-
-    const update = {
-      'configuration.subnets.$.device': _id
-    };
-
-    const {
-      isNew, caPrivateKey, caPublicKey,
-      serverKey, serverCrt, tlsKey, dhKey
-    } = await getDeviceKeys(application);
-
-    // if is new keys, save them on db
-    if (isNew) {
-      update['configuration.keys.caKey'] = caPrivateKey;
-      update['configuration.keys.caCrt'] = caPublicKey;
-      update['configuration.keys.serverKey'] = serverKey;
-      update['configuration.keys.serverCrt'] = serverCrt;
-      update['configuration.keys.tlsKey'] = tlsKey;
-      update['configuration.keys.dhKey'] = dhKey;
-    }
-
-    // set subnet to device to prevent same subnet on multiple devices
-    await applications.updateOne(
-      {
-        _id: application._id,
-        'configuration.subnets.subnet': deviceSubnet.subnet
-      },
-      { $set: update }
-    );
-
-    let version = application.installedVersion;
-    if (op === 'upgrade') {
-      version = application.app.latestVersion;
-    }
-
-    const dnsIp = config.dnsIp && config.dnsIp !== ''
-      ? config.dnsIp.split(';') : [];
-
-    const dnsDomain = config.dnsDomain && config.dnsDomain !== ''
-      ? config.dnsDomain.split(';') : [];
-
-    params.version = version;
-    params.routeAllOverVpn = config.routeAllOverVpn || false;
-    params.remoteClientIp = deviceSubnet.subnet;
-    params.deviceWANIp = wanIp;
-    params.caKey = caPrivateKey;
-    params.caCrt = caPublicKey;
-    params.serverKey = serverKey;
-    params.serverCrt = serverCrt;
-    params.tlsKey = tlsKey;
-    params.dnsIp = dnsIp;
-    params.dnsName = dnsDomain;
-    params.dhKey = dhKey;
-  }
-
-  return params;
-};
-
-/**
- * Creates the job parameters based on application name.
- * @async
- * @param  {Object}   device      device to be modified
- * @param  {Object}   application application object
- * @param  {String}   op          operation type
- * @return {Object}               parameters object
- */
-const getJobParams = async (device, application, op) => {
-  const appName = application.libraryApp.name;
-
-  if (isVpn(appName)) {
-    return {
-      type: 'open-vpn',
-      name: appName,
-      config: await getOpenVpnParams(device, application._id, op)
-    };
-  }
-
-  return {};
 };
 
 const queueApplicationJob = async (
@@ -619,25 +441,6 @@ const queueApplicationJob = async (
   }
 
   return Promise.allSettled(jobs);
-};
-
-/**
- * Release subnet assigned to device
- * @async
- * @param  {ObjectId} org org id to filter by
- * @param  {ObjectId} appId app id to filter by
- * @param  {ObjectId} deviceId device to release
- * @return {void}
- */
-const releaseSubnetForDevice = async (org, appId, deviceId) => {
-  await applications.updateOne(
-    {
-      org: org,
-      _id: appId,
-      'configuration.subnets.device': ObjectId(deviceId)
-    },
-    { $set: { 'configuration.subnets.$.device': null } }
-  );
 };
 
 module.exports = {
