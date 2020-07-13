@@ -17,7 +17,6 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
-const { devices } = require('../models/devices');
 
 /**
  * Checks whether a value is empty
@@ -166,6 +165,18 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         }
       }
     }
+  }
+
+  // Checks if all interfaces metrics are different
+  const metricsArray = device.interfaces
+    .filter(i => i.type === 'WAN' && i.gateway)
+    .map(i => Number(i.metric));
+  const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
+  if (hasDuplicates) {
+    return {
+      valid: false,
+      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
+    };
   }
 
   /*

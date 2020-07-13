@@ -134,7 +134,6 @@ const configEnv = {
     // Global app identification rules file location
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
   },
-
   // Override for development environment, default environment if not specified
   development: {
     clientStaticDir: 'client/build',
@@ -144,14 +143,12 @@ const configEnv = {
     logLevel: 'info',
     mailerPort: 1025
   },
-
   testing: {
     // Mgmt-Agent protocol version for testing purposes
     agentApiVersion: '2.0.0',
     // Kue prefix
     kuePrefix: 'testq'
   },
-
   // Override for production environment
   production: {
     restServerUrl: 'https://app.flexiwan.com:443',
@@ -171,7 +168,6 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80']
   },
-
   // Override for manage environment for production
   manage: {
     restServerUrl: 'https://manage.flexiwan.com:443',
@@ -193,7 +189,6 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80']
   },
-
   // Override for appqa01 environment
   appqa01: {
     restServerUrl: 'https://appqa01.flexiwan.com:443',
@@ -216,6 +211,29 @@ const configEnv = {
     logLevel: 'info',
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
+  },
+  // Override for appqa02 environment
+  appqa02: {
+    restServerUrl: 'https://appqa02.flexiwan.com:443',
+    uiServerUrl: 'https://appqa02.flexiwan.com:443',
+    shouldRedirectHttps: false,
+    redirectHttpsPort: 443,
+    userTokenExpiration: 300,
+    userIpReqRateLimit: 3000,
+    unreadNotificationPeriod: 300000,
+    userRefreshTokenExpiration: 86400,
+    agentBroker: 'appqa01.flexiwan.com:443',
+    clientStaticDir: 'client/build',
+    logFilePath: '/var/log/flexiwan/flexiwan.log',
+    reqLogFilePath: '/var/log/flexiwan/flexiwanReq.log',
+    billingConfigSite: 'flexiwan-test',
+    billingDefaultPlan: 'enterprise',
+    useFlexiBilling: true,
+    billingRedirectOkUrl: 'https://appqa02.flexiwan.com/ok.html',
+    SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
+    logLevel: 'info',
+    logUserName: true,
+    corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80']
   }
 };
 

@@ -247,79 +247,11 @@ const completeSync = async (jobId, jobsData) => {
  * @return {void}
  */
 const errorTunnelAdd = async (jobId, res) => {
-  logger.info('Tunnel add error. rollback tunnel',
+  logger.info('Tunnel add error.',
     { params: { result: res, jobId: jobId } });
   if (!res || !res.deviceA || !res.deviceB || !res.target || !res.username || !res.org) {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
-    return;
   }
-  const { deviceA, deviceB, org, tunnelId } = res;
-  tunnelsModel
-    .findOne({
-      num: tunnelId,
-      org: org,
-      isActive: true
-    })
-    .then(
-      async tunnel => {
-        if (tunnel != null) {
-          const jobs = await oneTunnelDel(
-            tunnel._id,
-            res.username,
-            res.org,
-            msg => {
-              logger.info('One tunnel del', { params: { message: msg } });
-            },
-            () => {
-              logger.info('Tunnel deleted', {
-                params: {
-                  org: res.org,
-                  tunnelId: tunnel._id,
-                  tunnelNum: tunnel.num
-                }
-              });
-            }
-          );
-          return jobs;
-        } else {
-          logger.error('errorTunnelAdd no tunnel found', {
-            params: {
-              tunnelId: tunnelId,
-              deviceA: res.deviceA,
-              deviceB: res.deviceB,
-              org: res.org,
-              isActive: true
-            }
-          });
-          return [];
-        }
-      },
-      err => {
-        logger.error('errorTunnelAdd error', {
-          params: {
-            tunnelId: tunnelId,
-            deviceA: deviceA,
-            deviceB: deviceB,
-            org: org,
-            isActive: true,
-            message: err.message
-          }
-        });
-        return [];
-      }
-    )
-    .catch(err => {
-      logger.error('errorTunnelAdd error', {
-        params: {
-          deviceA: deviceA,
-          deviceB: deviceB,
-          org: org,
-          isActive: true,
-          message: err.message
-        }
-      });
-      return [];
-    });
 };
 
 /**

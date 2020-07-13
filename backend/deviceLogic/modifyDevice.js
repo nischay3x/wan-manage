@@ -27,6 +27,7 @@ const {
   oneTunnelDel
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg } = require('./validators');
+const { getDefaultGateway } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const { isIPv4Address } = require('./validators');
@@ -54,7 +55,7 @@ const prepareIfcParams = (interfaces) => {
     newIfc.multilink = { labels };
 
     // Don't send interface default GW for LAN interfaces
-    if (newIfc.type !== 'WAN') delete newIfc.gateway;
+    if (ifc.type !== 'WAN' && ifc.isAssigned) delete newIfc.gateway;
 
     return newIfc;
   });
@@ -125,11 +126,8 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   if (has(messageParams, 'modify_interfaces')) {
     const { interfaces } = messageParams.modify_interfaces;
     interfaces.forEach(ifc => {
-      if (ifc.dhcp !== 'yes' || user.serviceAccount) {
-        // apply for dhcp only with assigned IP from the device message
-        interfacesIdsSet.add(ifc._id);
-        modifiedIfcsMap[ifc._id] = ifc;
-      }
+      interfacesIdsSet.add(ifc._id);
+      modifiedIfcsMap[ifc._id] = ifc;
     });
   }
 
@@ -173,6 +171,16 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
         await oneTunnelDel(_id, user.username, org);
       } else {
+        // if dhcp was changed from 'no' to 'yes'
+        // then we need to wait for the device new config
+        const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
+        const modifiedIfcB = modifiedIfcsMap[tunnel.interfaceB.toString()];
+        const waitingDhcpInfo =
+          (modifiedIfcA && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes') ||
+          (modifiedIfcB && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
+        if (waitingDhcpInfo) {
+          continue;
+        }
         await queueTunnel(
           false,
           // eslint-disable-next-line max-len
@@ -502,6 +510,22 @@ const apply = async (device, user, data) => {
     modifyParams.modify_dhcp_config = modifyDHCP;
   }
 
+
+  // Create the default route modification parameters
+  // for old agent version compatibility
+  const oldDefaultGW = getDefaultGateway(device[0]);
+  const newDefaultGW = getDefaultGateway(data.newDevice);
+
+  if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
+    modifyParams.modify_routes = {
+      routes: [{
+        addr: 'default',
+        old_route: oldDefaultGW,
+        new_route: newDefaultGW
+      }]
+    };
+  }
+
   // Create interfaces modification parameters
   // Compare the array of interfaces, and return
   // an array of the interfaces that have changed
@@ -516,6 +540,7 @@ const apply = async (device, user, data) => {
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
         gateway: ifc.gateway,
+        metric: ifc.metric,
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,
@@ -541,6 +566,7 @@ const apply = async (device, user, data) => {
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
         gateway: ifc.gateway,
+        metric: ifc.metric,
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,
@@ -626,37 +652,42 @@ const apply = async (device, user, data) => {
   }
 
   try {
-    // First, go over assigned and modified
-    // interfaces and make sure they are valid
-    const assign = has(modifyParams, 'modify_router.assign')
-      ? modifyParams.modify_router.assign
-      : [];
-    const unassign = has(modifyParams, 'modify_router.unassign')
-      ? modifyParams.modify_router.unassign
-      : [];
-    const modified = has(modifyParams, 'modify_interfaces')
-      ? modifyParams.modify_interfaces.interfaces
-      : [];
-    const interfaces = [...assign, ...modified];
-    const { valid, err } = validateModifyDeviceMsg(interfaces);
-    if (!valid) throw (new Error(err));
-
-    // Don't allow to modify/assign/unassign
-    // interfaces that are assigned with DHCP
-    const dhcpValidation = validateDhcpConfig(device[0], [
-      ...interfaces,
-      ...unassign
-    ]);
-    if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
-
-    // Queue device modification job
-    const jobs = await queueModifyDeviceJob(device[0], modifyParams, user, org);
-
-    return {
-      ids: jobs.flat().map(job => job.id),
-      status: 'completed',
-      message: ''
-    };
+    // Queue job only if the device has changed
+    if (modified) {
+      // First, go over assigned and modified
+      // interfaces and make sure they are valid
+      const assign = has(modifyParams, 'modify_router.assign')
+        ? modifyParams.modify_router.assign
+        : [];
+      const unassign = has(modifyParams, 'modify_router.unassign')
+        ? modifyParams.modify_router.unassign
+        : [];        
+      const modified = has(modifyParams, 'modify_interfaces')
+        ? modifyParams.modify_interfaces.interfaces
+        : [];
+      const interfaces = [...assign, ...modified];
+      const { valid, err } = validateModifyDeviceMsg(interfaces);
+      if (!valid) throw (new Error(err));
+      // Don't allow to modify/assign/unassign
+      // interfaces that are assigned with DHCP
+      const dhcpValidation = validateDhcpConfig(device[0], [
+        ...interfaces,
+        ...unassign
+      ]);
+      if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
+      await setJobPendingInDB(device[0]._id, org, true);
+      // Queue device modification job
+      const jobs = await queueModifyDeviceJob(device[0], modifyParams, user, org);
+      return {
+        ids: jobs.flat().map(job => job.id),
+        status: 'completed',
+        message: ''
+      };
+    } else {
+      logger.warn('The device was not modified, nothing to apply', {
+        params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
+      });
+    }
   } catch (err) {
     logger.error('Failed to queue modify device job', {
       params: { err: err.message, device: device[0]._id }

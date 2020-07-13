@@ -78,13 +78,23 @@ connectRouter.route('/register')
               const ifs = JSON.parse(req.body.interfaces);
               // Is there gateway on any of interfaces
               const hasGW = ifs.some(intf => intf.gateway);
+              let autoAssignedMetric = 100;
               ifs.forEach((intf) => {
-                if ((hasGW && intf.gateway) || intf.name === req.body.default_dev) {
+                if (!hasGW && intf.name === req.body.default_dev) {
+                  // old version agent
                   intf.isAssigned = true;
                   intf.PublicIP = sourceIP;
                   intf.type = 'WAN';
-                  intf.dhcp = intf.dhcp ? intf.dhcp : 'no';
-                  intf.gateway = intf.gateway ? intf.gateway : req.body.default_route;
+                  intf.dhcp = intf.dhcp || 'no';
+                  intf.gateway = req.body.default_route;
+                  intf.metric = '0';
+                } else if (intf.gateway) {
+                  intf.isAssigned = true;
+                  intf.type = 'WAN';
+                  intf.dhcp = intf.dhcp || 'no';
+                  intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
+                    ? '0' : intf.metric || (autoAssignedMetric++).toString();
+                  intf.PublicIP = intf.metric === '0' ? sourceIP : '';
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
@@ -92,6 +102,8 @@ connectRouter.route('/register')
                   if (ifs.length === 2) {
                     intf.isAssigned = true;
                   }
+                  intf.gateway = '';
+                  intf.metric = '';
                 }
               });
 
