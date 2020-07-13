@@ -27,7 +27,7 @@ describe('validate vpn configuration', () => {
   let devicesIds = null;
   beforeEach(() => {
     app = {
-      app: {
+      libraryApp: {
         name: 'Open VPN'
       },
       configuration: {
