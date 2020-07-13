@@ -313,6 +313,23 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
 };
 
 /**
+ * Sets the job pending flag value. This flag is used to indicate
+ * there's a pending modify-device job in the queue to prevent
+ * queuing additional modify-device jobs.
+ * @param  {string}  deviceID the id of the device
+ * @param  {string}  org      the organization the device belongs to
+ * @param  {boolean} flag     the value of the flag
+ * @return {Promise}          a promise for updating the flab in the database
+ */
+const setJobPendingInDB = (deviceID, org, flag) => {
+  return devices.update(
+    { _id: deviceID, org: org },
+    { $set: { pendingDevModification: flag } },
+    { upsert: false }
+  );
+};
+
+/**
  * Creates a modify-routes object
  * @param  {Object} origDevice device object before changes in the database
  * @param  {Object} newDevice  device object after changes in the database
@@ -510,7 +527,6 @@ const apply = async (device, user, data) => {
     modifyParams.modify_dhcp_config = modifyDHCP;
   }
 
-
   // Create the default route modification parameters
   // for old agent version compatibility
   const oldDefaultGW = getDefaultGateway(device[0]);
@@ -651,6 +667,11 @@ const apply = async (device, user, data) => {
     };
   }
 
+  const modified =
+  has(modifyParams, 'modify_routes') ||
+  has(modifyParams, 'modify_router') ||
+  has(modifyParams, 'modify_interfaces');
+
   try {
     // Queue job only if the device has changed
     if (modified) {
@@ -661,7 +682,7 @@ const apply = async (device, user, data) => {
         : [];
       const unassign = has(modifyParams, 'modify_router.unassign')
         ? modifyParams.modify_router.unassign
-        : [];        
+        : [];
       const modified = has(modifyParams, 'modify_interfaces')
         ? modifyParams.modify_interfaces.interfaces
         : [];

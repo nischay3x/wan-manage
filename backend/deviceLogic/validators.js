@@ -17,6 +17,7 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
+const { devices } = require('../models/devices');
 
 /**
  * Checks whether a value is empty
