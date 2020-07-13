@@ -377,7 +377,7 @@ const deviceVersionsSchema = new Schema({
  */
 const deviceApplicationSchema = new Schema({
   _id: false,
-  app: {
+  applicationInfo: {
     type: Schema.Types.ObjectId,
     ref: 'applications',
     default: null

@@ -78,7 +78,7 @@ class ApplicationsUpdateManager {
         $lookup: {
           from: 'devices',
           localField: '_id',
-          foreignField: 'applications.app',
+          foreignField: 'applications.applicationInfo',
           as: 'devices'
         }
       },

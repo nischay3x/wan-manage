@@ -211,7 +211,7 @@ class DevicesService {
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.multilink.policy', '_id name description')
         .populate({
-          path: 'applications.app',
+          path: 'applications.applicationInfo',
           populate: {
             path: 'libraryApp'
           }
@@ -325,7 +325,7 @@ class DevicesService {
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.multilink.policy', '_id name description')
         .populate({
-          path: 'applications.app',
+          path: 'applications.applicationInfo',
           populate: {
             path: 'libraryApp'
           }

@@ -106,14 +106,14 @@ const apply = async (deviceList, user, data) => {
           const device = deviceList[i];
 
           const appExists = device.applications && device.applications.find(
-            a => a.app && a.app.toString() === app._id.toString());
+            a => a.applicationInfo && a.applicationInfo.toString() === app._id.toString());
 
           if (appExists) {
             if (appExists.status === 'installing') {
               throw createError(500, `Device ${device.name} has a pending installation job`);
             }
 
-            query['applications.app'] = id;
+            query['applications.applicationInfo'] = id;
             update = {
               $set: { 'applications.$.status': 'installing' }
             };
@@ -121,7 +121,7 @@ const apply = async (deviceList, user, data) => {
             update = {
               $push: {
                 applications: {
-                  app: app._id,
+                  applicationInfo: app._id,
                   status: 'installing',
                   requestTime: requestTime
                 }
@@ -135,19 +135,19 @@ const apply = async (deviceList, user, data) => {
         // set update to null because we are already updated in this case
         update = null;
       } else if (op === 'upgrade') {
-        query['applications.app'] = id;
+        query['applications.applicationInfo'] = id;
 
         update = {
           $set: { 'applications.$.status': 'upgrading' }
         };
       } else if (op === 'config') {
-        query['applications.app'] = id;
+        query['applications.applicationInfo'] = id;
 
         update = {
           $set: { 'applications.$.status': 'installing' }
         };
       } else if (op === 'uninstall') {
-        query['applications.app'] = id;
+        query['applications.applicationInfo'] = id;
 
         update = {
           $set: { 'applications.$.status': 'uninstalling' }
@@ -212,7 +212,7 @@ const apply = async (deviceList, user, data) => {
       {
         _id: { $in: failedDevices },
         org: org,
-        'applications.app': app._id
+        'applications.applicationInfo': app._id
       },
       { $set: { 'applications.$.status': 'job queue failed' } },
       { upsert: false }
@@ -263,7 +263,7 @@ const complete = async (jobId, res) => {
       {
         _id: _id,
         org: org,
-        'applications.app': app._id
+        'applications.applicationInfo': app._id
       },
       update,
       { upsert: false }
@@ -313,7 +313,7 @@ const error = async (jobId, res) => {
     }
 
     await devices.updateOne(
-      { _id: _id, org: org, 'applications.app': app._id },
+      { _id: _id, org: org, 'applications.applicationInfo': app._id },
       { $set: { 'applications.$.status': status } },
       { upsert: false }
     );
@@ -351,7 +351,7 @@ const remove = async (job) => {
         {
           _id: _id,
           org: org,
-          'applications.app': app._id
+          'applications.applicationInfo': app._id
         },
         { $set: { 'applications.$.status': status } },
         { upsert: false }

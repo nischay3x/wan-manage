@@ -102,7 +102,7 @@ class ApplicationsService {
             let: { id: '$_id' },
             pipeline: [
               { $unwind: '$applications' },
-              { $match: { $expr: { $eq: ['$applications.app', '$$id'] } } },
+              { $match: { $expr: { $eq: ['$applications.applicationInfo', '$$id'] } } },
               { $project: { 'applications.status': 1 } },
               { $group: { _id: '$applications.status', count: { $sum: 1 } } }
             ],
@@ -265,7 +265,7 @@ class ApplicationsService {
       // send jobs to device that installed open vpn
       const opDevices = await devices.find({
         org: { $in: orgList },
-        'applications.app': id,
+        'applications.applicationInfo': id,
         'applications.status': 'installed'
       });
 
@@ -305,7 +305,7 @@ class ApplicationsService {
     if (configurationRequest.subnets) {
       const installedDevices = await devices.find({
         org: { $in: orgList },
-        'applications.app': applicationId,
+        'applications.applicationInfo': applicationId,
         $or: [
           { 'applications.status': 'installed' },
           { 'applications.status': 'installing' }
@@ -409,7 +409,7 @@ class ApplicationsService {
       // Update devices that installed vpn
       const opDevices = await devices.find({
         org: { $in: orgList },
-        'applications.app': id,
+        'applications.applicationInfo': id,
         'applications.status': { $in: ['installed', 'installing'] }
       });
 
@@ -460,7 +460,11 @@ class ApplicationsService {
       }
 
       // send jobs to device
-      const opDevices = await devices.find({ org: { $in: orgList }, 'applications.app': id });
+      const opDevices = await devices.find({
+        org: { $in: orgList },
+        'applications.applicationInfo': id
+      });
+
       await dispatcher.apply(opDevices, 'application',
         user, { org: orgList[0], meta: { op: 'upgrade', id: id, newVersion: newVersion } });
 
@@ -485,11 +489,11 @@ class ApplicationsService {
       const devicesList = await devices.aggregate([
         { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
         { $unwind: '$applications' },
-        { $match: { 'applications.app': ObjectId(id) } },
+        { $match: { 'applications.applicationInfo': ObjectId(id) } },
         {
           $lookup: {
             from: 'applications',
-            let: { appId: '$applications.app', deviceId: '$_id' },
+            let: { appId: '$applications.applicationInfo', deviceId: '$_id' },
             pipeline: [
               { $match: { $expr: { $eq: ['$_id', '$$appId'] } } },
               { $unwind: '$configuration.subnets' },
