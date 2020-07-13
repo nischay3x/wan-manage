@@ -221,7 +221,7 @@ const isVpn = applicationName => {
 };
 
 const appsValidations = (app, op, deviceIds) => {
-  const appName = app.app.name;
+  const appName = app.libraryApp.name;
 
   if (isVpn(appName)) {
     if (op === 'deploy') {

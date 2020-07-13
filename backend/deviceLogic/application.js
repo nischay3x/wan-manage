@@ -67,7 +67,7 @@ const apply = async (deviceList, user, data) => {
       app = await applications.findOne({
         org: org,
         _id: id
-      }).populate('app').lean().session(session);
+      }).populate('libraryApp').lean().session(session);
 
       // if the user selected multiple devices, the request goes to devicesApplyPOST function
       // and the deviceList variable here contain *all* the devices even they are not selected.
@@ -368,7 +368,7 @@ const remove = async (job) => {
 };
 
 const onComplete = async (org, app, op, deviceId) => {
-  const appName = app.app.name;
+  const appName = app.libraryApp.name;
 
   if (isVpn(appName)) {
     if (op === 'uninstall') {
@@ -379,7 +379,7 @@ const onComplete = async (org, app, op, deviceId) => {
 };
 
 const onFailed = async (org, app, op, deviceId) => {
-  const appName = app.app.name;
+  const appName = app.libraryApp.name;
 
   if (isVpn(appName)) {
     if (op === 'deploy') {
@@ -390,7 +390,7 @@ const onFailed = async (org, app, op, deviceId) => {
 };
 
 const onRemoved = async (org, app, op, deviceId) => {
-  const appName = app.app.name;
+  const appName = app.libraryApp.name;
 
   if (isVpn(appName)) {
     if (op === 'deploy') {
@@ -446,7 +446,8 @@ const getOpenVpnParams = async (device, applicationId, op) => {
   const params = {};
   const { _id, interfaces } = device;
 
-  const application = await applications.findOne({ _id: applicationId }).populate('app').lean();
+  const application = await applications.findOne({ _id: applicationId })
+    .populate('libraryApp').lean();
   const config = application.configuration;
 
   if (op === 'deploy' || op === 'config' || op === 'upgrade') {
@@ -528,7 +529,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
  * @return {Object}               parameters object
  */
 const getJobParams = async (device, application, op) => {
-  const appName = application.app.name;
+  const appName = application.libraryApp.name;
 
   if (isVpn(appName)) {
     return {
@@ -556,16 +557,16 @@ const queueApplicationJob = async (
   let jobTitle = '';
   let message = '';
   if (op === 'deploy') {
-    jobTitle = `Install ${application.app.name} application`;
+    jobTitle = `Install ${application.libraryApp.name} application`;
     message = 'add-service';
   } else if (op === 'upgrade') {
-    jobTitle = `Upgrade ${application.app.name} application`;
+    jobTitle = `Upgrade ${application.libraryApp.name} application`;
     message = 'upgrade-service';
   } else if (op === 'config') {
-    jobTitle = `Update ${application.app.name} configuration`;
+    jobTitle = `Update ${application.libraryApp.name} configuration`;
     message = 'modify-service';
   } else if (op === 'uninstall') {
-    jobTitle = `Uninstall ${application.app.name} application`;
+    jobTitle = `Uninstall ${application.libraryApp.name} application`;
     message = 'remove-service';
   } else {
     return jobs;

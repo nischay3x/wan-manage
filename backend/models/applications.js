@@ -25,7 +25,7 @@ const mongoConns = require('../mongoConns.js')();
  * A schema for the documents that stores all installed applications
  */
 const applicationSchema = new Schema({
-  app: {
+  libraryApp: {
     type: Schema.Types.ObjectId,
     ref: 'applicationsLibrary'
   },

@@ -68,7 +68,7 @@ class ApplicationsUpdateManager {
     const oldVersionsDevices = await applications.aggregate([
       {
         $match: {
-          app: ObjectId(libraryApp._id),
+          libraryApp: ObjectId(libraryApp._id),
           removed: false,
           installedVersion: { $ne: libraryApp.latestVersion },
           pendingToUpgrade: { $ne: true }

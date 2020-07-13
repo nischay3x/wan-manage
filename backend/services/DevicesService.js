@@ -213,7 +213,7 @@ class DevicesService {
         .populate({
           path: 'applications.app',
           populate: {
-            path: 'app'
+            path: 'libraryApp'
           }
         });
 
@@ -327,7 +327,7 @@ class DevicesService {
         .populate({
           path: 'applications.app',
           populate: {
-            path: 'app'
+            path: 'libraryApp'
           }
         });
 

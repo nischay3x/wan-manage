@@ -71,7 +71,7 @@ class ApplicationsService {
 
       const installedApp = await applications
         .findOne({ org: { $in: orgList }, removed: false, _id: id })
-        .populate('app').populate('org');
+        .populate('libraryApp').populate('org');
 
       return Service.successResponse({ application: installedApp });
     } catch (e) {
@@ -112,7 +112,7 @@ class ApplicationsService {
         {
           $project: {
             _id: 1,
-            app: 1,
+            libraryApp: 1,
             org: 1,
             installedVersion: 1,
             pendingToUpgrade: 1,
@@ -121,7 +121,7 @@ class ApplicationsService {
         }
       ]).allowDiskUse(true);
 
-      await applications.populate(installed, { path: 'app' });
+      await applications.populate(installed, { path: 'libraryApp' });
       await applications.populate(installed, { path: 'org' });
 
       const response = installed.map(app => {
@@ -184,7 +184,7 @@ class ApplicationsService {
 
       // check if app already installed
       let appExists = await applications.findOne({
-        org: { $in: orgList }, app: id
+        org: { $in: orgList }, libraryApp: id
       });
 
       if (appExists && !appExists.removed) {
@@ -197,14 +197,14 @@ class ApplicationsService {
         appExists.purchasedDate = Date.now();
         appExists.save();
 
-        appExists = await appExists.populate('app').populate('org').execPopulate();
+        appExists = await appExists.populate('libraryApp').populate('org').execPopulate();
 
         return Service.successResponse(appExists);
       }
 
       // create app
       let installedApp = await applications.create({
-        app: libraryApp._id,
+        libraryApp: libraryApp._id,
         org: orgList[0],
         installedVersion: libraryApp.latestVersion,
         purchasedDate: Date.now(),
@@ -227,7 +227,7 @@ class ApplicationsService {
       });
 
       // return populated document
-      installedApp = await installedApp.populate('app').populate('org').execPopulate();
+      installedApp = await installedApp.populate('libraryApp').populate('org').execPopulate();
 
       return Service.successResponse(installedApp);
     } catch (e) {
@@ -324,7 +324,7 @@ class ApplicationsService {
   }
 
   static async validateConfiguration (configurationRequest, app, orgList) {
-    if (isVpn(app.app.name)) {
+    if (isVpn(app.libraryApp.name)) {
       return ApplicationsService.validateVpnConfiguration(configurationRequest, app._id, orgList);
     }
 
@@ -351,11 +351,11 @@ class ApplicationsService {
 
       const app = await applications
         .findOne({ org: { $in: orgList }, removed: false, _id: id })
-        .populate('app').populate('org').lean();
+        .populate('libraryApp').populate('org').lean();
 
       if (!app) return Service.rejectResponse('Invalid application id', 500);
 
-      if (isVpn(app.app.name)) {
+      if (isVpn(app.libraryApp.name)) {
         // Calculate subnets to entire org
         const subnets = [];
         const totalPool = configurationRequest.remoteClientIp;
@@ -404,7 +404,7 @@ class ApplicationsService {
         { new: true, upsert: false }
       );
 
-      await updated.populate('app').populate('org').execPopulate();
+      await updated.populate('libraryApp').populate('org').execPopulate();
 
       // Update devices that installed vpn
       const opDevices = await devices.find({
@@ -447,7 +447,7 @@ class ApplicationsService {
 
       const app = await applications.findOne(
         { _id: id }
-      ).populate('app').lean();
+      ).populate('libraryApp').lean();
 
       const currentVersion = app.installedVersion;
       const newVersion = app.app.latestVersion;
