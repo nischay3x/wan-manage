@@ -91,7 +91,8 @@ const applicationLibrarySchema = new Schema(
     }
   },
   {
-    collection: 'library',
+    // set collection name to prevent from mongoose to pluralize to 'libraries'
+    collection: 'applicationsLibrary',
     timestamps: true
   }
 );

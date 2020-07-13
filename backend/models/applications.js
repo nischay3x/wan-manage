@@ -27,7 +27,7 @@ const mongoConns = require('../mongoConns.js')();
 const applicationSchema = new Schema({
   app: {
     type: Schema.Types.ObjectId,
-    ref: 'library'
+    ref: 'applicationsLibrary'
   },
   org: {
     type: Schema.Types.ObjectId,
