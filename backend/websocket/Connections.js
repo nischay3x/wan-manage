@@ -391,15 +391,25 @@ class Connections {
           if (i.dhcp === 'yes') {
             const updatedConfig = deviceInfo.message.network.interfaces
               .find(u => u.pciaddr === i.pciaddr);
-            if (updatedConfig !== undefined) {
+            // ignore if IPv4 or gateway is not assigned by DHCP server
+            if (updatedConfig && updatedConfig.IPv4 && updatedConfig.gateway) {
               return {
                 ...i.toJSON(),
                 IPv4: updatedConfig.IPv4,
                 IPv4Mask: updatedConfig.IPv4Mask,
                 IPv6: updatedConfig.IPv6,
                 IPv6Mask: updatedConfig.IPv6Mask,
-                gateway: updatedConfig.gateway ? updatedConfig.gateway : ''
+                gateway: updatedConfig.gateway
               };
+            } else {
+              // Missing some DHCP parameters
+              logger.warn('Missing some DHCP parameters, the config will not be applied', {
+                params: {
+                  reconfig: deviceInfo.message.reconfig,
+                  machineId: machineId,
+                  updatedConfig: JSON.stringify(updatedConfig)
+                }
+              });
             }
           }
           return i;
@@ -422,7 +432,7 @@ class Connections {
         });
         await modifyDeviceDispatcher.apply(
           [origDevice],
-          { username: 'system', serviceAccount: true },
+          { username: 'system' },
           { newDevice: updDevice, org: origDevice.org.toString() }
         );
       }

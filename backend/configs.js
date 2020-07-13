@@ -136,7 +136,6 @@ const configEnv = {
     // Global applications file locations
     applicationsUrl: './applications.json'
   },
-
   // Override for development environment, default environment if not specified
   development: {
     clientStaticDir: 'client/build',
@@ -146,14 +145,12 @@ const configEnv = {
     logLevel: 'info',
     mailerPort: 1025
   },
-
   testing: {
     // Mgmt-Agent protocol version for testing purposes
     agentApiVersion: '2.0.0',
     // Kue prefix
     kuePrefix: 'testq'
   },
-
   // Override for production environment
   production: {
     restServerUrl: 'https://app.flexiwan.com:443',
@@ -173,7 +170,6 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80']
   },
-
   // Override for manage environment for production
   manage: {
     restServerUrl: 'https://manage.flexiwan.com:443',
@@ -195,7 +191,6 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80']
   },
-
   // Override for appqa01 environment
   appqa01: {
     restServerUrl: 'https://appqa01.flexiwan.com:443',
@@ -219,7 +214,6 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
   },
-
   // Override for appqa02 environment
   appqa02: {
     restServerUrl: 'https://appqa02.flexiwan.com:443',
