@@ -76,11 +76,11 @@ const librarySchema = new Schema(
       type: [String],
       enum: ['Manage', 'Edge', 'Client']
     },
-    // the FlexiWAN components used by application
-    operatingSystem: {
-      type: [String],
-      enum: ['Windows', 'Linux']
-    },
+    // // the FlexiWAN components used by application
+    // operatingSystem: {
+    //   type: [String],
+    //   enum: ['Windows', 'Linux']
+    // },
     // application dependencies
     dependencies: {
       type: [String]

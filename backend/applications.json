@@ -11,8 +11,7 @@
       "creator": "Open VPN ltd.",
       "cpuRequirements": 4,
       "ramRequirements": 4,
-      "components": ["Manage", "Edge", "Client"],
-      "operatingSystem": ["Linux", "Windows"]
+      "components": ["Manage", "Edge", "Client"]
     }
   ]
 }
