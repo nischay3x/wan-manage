@@ -60,12 +60,16 @@ const applicationSchema = new Schema({
   pendingToUpgrade: {
     type: Boolean
   },
+  // configuration object. this object is a generic,
+  // and can store any configurations for each type of application
   configuration: {
     type: Object,
     default: {}
   }
 }, {
   timestamps: true,
+  // set minimize to false to allow mongoose to save empty objects.
+  // this because we want to save an empty configuration object on initialization
   minimize: false
 });
 
