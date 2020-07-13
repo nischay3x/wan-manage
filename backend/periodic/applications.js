@@ -37,7 +37,7 @@ class Applications {
       name: 'check_applications',
       func: this.periodicCheckApplications,
       handle: null,
-      period: (1000 * 60 * 60 * 24) // Runs once in a day
+      period: 3600000 // Runs once an hour
     };
   }
 

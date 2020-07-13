@@ -35,9 +35,11 @@ const applicationSchema = new Schema({
   },
   installedVersion: {
     type: String,
-    required: true,
-    minlength: [2, 'Installed version must be at least 2'],
-    maxlength: [30, 'Installed version must be at most 30']
+    match: [
+      /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/,
+      'installedVersion must be a valid Semver version'
+    ],
+    required: true
   },
   purchasedDate: {
     type: Date,

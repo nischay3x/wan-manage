@@ -46,9 +46,14 @@ const librarySchema = new Schema(
     latestVersion: {
       type: String,
       required: true,
-      minlength: [2, 'Latest Version must be at least 2'],
-      maxlength: [30, 'Latest Version must be at most 30']
+      match: [
+        /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/,
+        'installedVersion must be a valid Semver version'
+      ]
     },
+    // the time of repository update time
+    // used to check if the app is not updated
+    // the type is number because it's an EPOCH time
     repositoryTime: {
       type: Number
     },
