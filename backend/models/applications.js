@@ -25,14 +25,17 @@ const mongoConns = require('../mongoConns.js')();
  * A schema for the documents that stores all installed applications
  */
 const applicationSchema = new Schema({
+  // reference to application in library
   libraryApp: {
     type: Schema.Types.ObjectId,
     ref: 'applicationsLibrary'
   },
+  // reference to organization that installed this application
   org: {
     type: Schema.Types.ObjectId,
     ref: 'organizations'
   },
+  // the installed version of application (can be different from library version)
   installedVersion: {
     type: String,
     match: [
@@ -41,14 +44,19 @@ const applicationSchema = new Schema({
     ],
     required: true
   },
+  // the application purchased date
   purchasedDate: {
     type: Date,
     required: true
   },
+  // indicates if organization removed this app
+  // in this case we still storing the configs but marks this app as removed
   removed: {
     type: Boolean,
     default: false
   },
+  // indicates if organization removed this app
+  // in this case we still storing the configs but marks this app as removed
   pendingToUpgrade: {
     type: Boolean
   },
