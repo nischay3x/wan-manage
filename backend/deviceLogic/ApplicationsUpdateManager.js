@@ -18,7 +18,7 @@
 // const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
-const library = require('../models/library');
+const applicationsLibrary = require('../models/applicationsLibrary');
 const applications = require('../models/applications');
 const organizations = require('../models/organizations');
 const { membership } = require('../models/membership');
@@ -190,7 +190,7 @@ class ApplicationsUpdateManager {
 
       for (let i = 0; i < appList.length; i++) {
         // skip if app is not changed on repository
-        let app = await library.findOne({ name: appList[i].name });
+        let app = await applicationsLibrary.findOne({ name: appList[i].name });
         if (app && app.repositoryTime === body.meta.time) {
           continue;
         }
@@ -198,7 +198,7 @@ class ApplicationsUpdateManager {
         isUpdated = true;
 
         const set = { $set: { repositoryTime: body.meta.time, ...appList[i] } };
-        app = await library.findOneAndUpdate({ name: appList[i].name }, set, options);
+        app = await applicationsLibrary.findOneAndUpdate({ name: appList[i].name }, set, options);
 
         // check if devices needs to upgrade
         await this.checkDevicesUpgrade(app);

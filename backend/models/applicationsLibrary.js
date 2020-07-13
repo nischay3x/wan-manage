@@ -24,7 +24,7 @@ const mongoConns = require('../mongoConns.js')();
  *
  * A schema for the documents that stores all applications we offer
  */
-const librarySchema = new Schema(
+const applicationLibrarySchema = new Schema(
   {
     // application name
     name: {
@@ -99,4 +99,4 @@ const librarySchema = new Schema(
 // Default exports
 module.exports = mongoConns
   .getMainDB()
-  .model('library', librarySchema);
+  .model('applicationsLibrary', applicationLibrarySchema);

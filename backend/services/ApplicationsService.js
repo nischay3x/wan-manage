@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
-const library = require('../models/library');
+const applicationsLibrary = require('../models/applicationsLibrary');
 const { devices } = require('../models/devices');
 const applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -32,7 +32,7 @@ const { isVpn } = require('../deviceLogic/validators');
 
 class ApplicationsService {
   /**
-   * get all applications in our library
+   * get all applications in our applications library
    *
    * @static
    * @param {*} { user }
@@ -41,7 +41,7 @@ class ApplicationsService {
    */
   static async applicationsLibraryGET ({ user }) {
     try {
-      const appsList = await library.find();
+      const appsList = await applicationsLibrary.find();
       return Service.successResponse({ applications: appsList });
     } catch (e) {
       return Service.rejectResponse(
@@ -176,8 +176,8 @@ class ApplicationsService {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      // check if application._id is a library application
-      const libraryApp = await library.findOne({ _id: id });
+      // check if application._id is an application in library
+      const libraryApp = await applicationsLibrary.findOne({ _id: id });
       if (!libraryApp) {
         return Service.rejectResponse('Application id is not known', 500);
       }
