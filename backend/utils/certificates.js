@@ -99,6 +99,8 @@ const splitLineEveryNChars = (str, regex) => {
   return finalString;
 };
 
+// this function is called from a worker (/workers/diffie_hellman.js)
+// because this is an heavy function and running about a minute to create a key
 const generateDhKeys = () => {
   const diffieHellman = createDiffieHellman(2048);
 
