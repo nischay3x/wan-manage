@@ -91,24 +91,26 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
   }
 
   // validate subnets
-  const subnetsCount = getTotalSubnets(
-    configurationRequest.remoteClientIp, configurationRequest.connectionsPerDevice
-  ).length;
+  if (configurationRequest.remoteClientIp && configurationRequest.connectionsPerDevice) {
+    const subnetsCount = getTotalSubnets(
+      configurationRequest.remoteClientIp, configurationRequest.connectionsPerDevice
+    ).length;
 
-  const installedDevices = await devices.find({
-    org: { $in: orgList },
-    'applications.applicationInfo': applicationId,
-    $or: [
-      { 'applications.status': 'installed' },
-      { 'applications.status': 'installing' }
-    ]
-  });
+    const installedDevices = await devices.find({
+      org: { $in: orgList },
+      'applications.applicationInfo': applicationId,
+      $or: [
+        { 'applications.status': 'installed' },
+        { 'applications.status': 'installing' }
+      ]
+    });
 
-  if (installedDevices.length > subnetsCount) {
-    return {
-      valid: false,
-      err: 'There is more installed devices then subnets. Please increase your subnets'
-    };
+    if (installedDevices.length > subnetsCount) {
+      return {
+        valid: false,
+        err: 'There is more installed devices then subnets. Please increase your subnets'
+      };
+    }
   }
 
   return { valid: true, err: '' };
