@@ -5819,6 +5819,63 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
+    put: 
+      operationId: applicationsConfigurationPUT
+      parameters:
+      - description: application id to update
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigurationRequest'
+      responses:        
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasedApplication'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Update application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
     delete: 
       operationId: applicationDELETE
       parameters:
@@ -5961,65 +6018,8 @@ paths:
       - Applications
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-  /applications/{id}/configuration:
-    put: 
-      operationId: applicationsConfigurationPUT
-      parameters:
-      - description: application id to update
-        explode: true
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ConfigurationRequest'
-      responses:        
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PurchasedApplication'
-                x-content-type: application/json
-          description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Update application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
+      x-openapi-router-service: ApplicationsService  
+    
 
           
 components:
