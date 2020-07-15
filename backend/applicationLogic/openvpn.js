@@ -144,12 +144,16 @@ const getTotalSubnets = (remoteClientIp, connectionsPerDevice) => {
 
 /**
  * Get the subnet that will be assigned to the device
- * @param {[string]} totalSubnets array of all organization subnets
- * @param {[{device: ObjectID, subnet: string}]} assignedSubnets the subnet that already assigned
+ * @param {object} config configuration object
  * @param {ObjectID} deviceId the if of the device to be assigned
  * @return {{device: ObjectID, subnet: string}}  object of subnet to be assigned
  */
-const getFreeSubnet = (totalSubnets, assignedSubnets = [], deviceId = '') => {
+const getFreeSubnet = (config, deviceId = '') => {
+  // check if has available subnet to assign
+  const totalSubnets = getTotalSubnets(config.remoteClientIp, config.connectionsPerDevice);
+
+  const assignedSubnets = config.subnets || [];
+
   // if subnet already assigned to this device, return the subnet
   const exists = assignedSubnets.find(
     s => s.device && (s.device.toString() === deviceId)
@@ -319,11 +323,8 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     // get the WanIp to be used by open vpn server to listen
     const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 
-    // // check if has available subnet to assign
-    const totalSubnets = getTotalSubnets(config.remoteClientIp, config.connectionsPerDevice);
-
     // get new subnet only if there is no subnet connect with current device
-    const deviceSubnet = getFreeSubnet(totalSubnets, config.subnets, _id.toString());
+    const deviceSubnet = getFreeSubnet(config, _id.toString());
 
     const update = {
       $set: {},
@@ -382,7 +383,7 @@ module.exports = {
   isVpn,
   getOpenVpnInitialConfiguration,
   validateVpnConfiguration,
-  getDeviceSubnet: getFreeSubnet,
+  getFreeSubnet,
   onVpnJobComplete,
   onVpnJobRemoved,
   onVpnJobFailed,

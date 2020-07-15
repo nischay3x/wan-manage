@@ -16,10 +16,19 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { ObjectId } = require('mongoose').Types;
-const { isVpn, getDeviceSubnet } = require('../openvpn');
+const { isVpn, getFreeSubnet } = require('../openvpn');
 const { validateApplication } = require('../applications');
 
 describe('validate vpn configuration', () => {
+  const successObject = {
+    valid: true,
+    err: ''
+  };
+  const failureObject = {
+    valid: false,
+    err: ''
+  };
+
   let app = null;
   let devicesIds = null;
   beforeEach(() => {
@@ -30,16 +39,7 @@ describe('validate vpn configuration', () => {
       configuration: {
         remoteClientIp: '192.168.0.0/24',
         connectionsPerDevice: 128,
-        subnets: [
-          {
-            subnet: '192.168.0.0/25',
-            device: null
-          },
-          {
-            subnet: '192.168.0.128/25',
-            device: null
-          }
-        ]
+        subnets: []
       }
     };
 
@@ -48,53 +48,57 @@ describe('validate vpn configuration', () => {
 
   it('Should be an invalid configuration', () => {
     app.configuration = {};
-
-    expect(() => {
-      validateApplication(app, 'deploy', devicesIds);
-    }).toThrow(
-      new Error('Required configurations is missing, please check again the configurations')
-    );
+    const result = validateApplication(app, 'deploy', devicesIds);
+    failureObject.err = 'Required configurations is missing, please check again the configurations';
+    expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid because of there is no subnets', () => {
-    app.configuration.subnets = [];
-    expect(() => {
-      validateApplication(app, 'deploy', devicesIds);
-    }).toThrow(
-      new Error('There is no subnets remaining, please check again the configurations')
-    );
+  it('Should be an invalid because of there is no enough subnets for selected devices', () => {
+    devicesIds = [
+      ObjectId('5e65290fbe66a2335718e081'),
+      ObjectId('5e65290fbe66a2335718e082'),
+      ObjectId('5e65290fbe66a2335718e083')
+    ];
+    const result = validateApplication(app, 'deploy', devicesIds);
+    failureObject.err = 'There is no subnets remaining. Please check again the configurations';
+    expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be a valid configs if is one device and one subnet and both is the same', () => {
-    const deviceId = ObjectId('5e65290fbe66a2335718e081');
+  it('Should be an invalid because of all the subnets are assigned', () => {
+    const deviceId = ObjectId('5e65290fbe66a2335718e082');
     devicesIds = [deviceId];
     app.configuration.subnets = [
       {
-        subnet: '192.168.0.0/24',
-        device: deviceId
+        subnet: '192.168.0.0/25',
+        device: ObjectId('5e65290fbe66a2335718e081')
+      },
+      {
+        subnet: '192.168.0.128/25',
+        device: ObjectId('5e65290fbe66a2335718e083')
       }
     ];
 
-    expect(() => {
-      validateApplication(app, 'deploy', devicesIds);
-    }).not.toThrow();
+    const result = validateApplication(app, 'deploy', devicesIds);
+    failureObject.err = 'There is no subnets remaining. Please check again the configurations';
+    expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid configs if there is no subnets remaining', () => {
-    const deviceId = ObjectId('5e65290fbe66a2335718e081');
+  it('Should be a valid configs if the device and one of the subnets are the same', () => {
+    const deviceId = ObjectId('5e65290fbe66a2335718e083');
     devicesIds = [deviceId];
     app.configuration.subnets = [
       {
-        subnet: '192.168.0.0/24',
-        device: ObjectId('5e65290fbe66a2335718e082')
+        subnet: '192.168.0.0/25',
+        device: ObjectId('5e65290fbe66a2335718e081')
+      },
+      {
+        subnet: '192.168.0.128/25',
+        device: ObjectId('5e65290fbe66a2335718e083')
       }
     ];
 
-    expect(() => {
-      validateApplication(app, 'deploy', devicesIds);
-    }).toThrow(
-      new Error('There is no subnets remaining, please check again the configurations')
-    );
+    const result = validateApplication(app, 'deploy', devicesIds);
+    expect(result).toMatchObject(successObject);
   });
 
   it('Should be a valid configs if there is a free subnet', () => {
@@ -104,53 +108,31 @@ describe('validate vpn configuration', () => {
       {
         subnet: '192.168.0.0/25',
         device: deviceId
-      },
-      {
-        subnet: '192.168.0.128/25',
-        device: null
       }
     ];
 
-    expect(() => {
-      validateApplication(app, 'deploy', devicesIds);
-    }).not.toThrow();
+    const result = validateApplication(app, 'deploy', devicesIds);
+    expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an invalid configs if there is no subnets remaining', () => {
-    const deviceId = ObjectId('5e65290fbe66a2335718e081');
-    devicesIds = [
-      deviceId,
-      ObjectId('5e65290fbe66a2335718e082'),
-      ObjectId('5e65290fbe66a2335718e083'),
-      ObjectId('5e65290fbe66a2335718e084'),
-      ObjectId('5e65290fbe66a2335718e085'),
-      ObjectId('5e65290fbe66a2335718e086')
-    ];
+  it('Should be a valid configs if the devices and the assigned subnets are the same', () => {
+    const deviceA = ObjectId('5e65290fbe66a2335718e081');
+    const deviceB = ObjectId('5e65290fbe66a2335718e082');
+    devicesIds = [deviceA, deviceB];
 
     app.configuration.subnets = [
       {
-        subnet: '192.168.0.0/26',
-        device: deviceId
+        subnet: '192.168.0.0/25',
+        device: deviceA
       },
       {
-        subnet: '192.168.0.64/26',
-        device: null
-      },
-      {
-        subnet: '192.168.0.128/26',
-        device: null
-      },
-      {
-        subnet: '192.168.0.192/26',
-        device: null
+        subnet: '192.168.0.128/25',
+        device: deviceB
       }
     ];
 
-    expect(() => {
-      validateApplication(app, 'deploy', devicesIds);
-    }).toThrow(
-      new Error('There is no subnets remaining, please check again the configurations')
-    );
+    const result = validateApplication(app, 'deploy', devicesIds);
+    expect(result).toMatchObject(successObject);
   });
 
   it('Should be a valid configs', () => {
@@ -162,42 +144,44 @@ describe('validate vpn configuration', () => {
       ObjectId('5e65290fbe66a2335718e084')
     ];
 
+    app.configuration.remoteClientIp = '192.168.0.0/24';
+    app.configuration.connectionsPerDevice = 64;
+
     app.configuration.subnets = [
-      {
-        subnet: '192.168.0.0/26',
-        device: null
-      },
-      {
-        subnet: '192.168.0.64/26',
-        device: null
-      },
       {
         subnet: '192.168.0.128/26',
         device: deviceId
-      },
-      {
-        subnet: '192.168.0.192/26',
-        device: null
       }
     ];
 
-    expect(() => {
-      validateApplication(app, 'deploy', devicesIds);
-    }).not.toThrow();
+    const result = validateApplication(app, 'deploy', devicesIds);
+    expect(result).toMatchObject(successObject);
   });
 
   it('Should return the assigned subnet', () => {
     const deviceId = ObjectId('5e65290fbe66a2335718e081');
-    app.configuration.subnets[0].device = deviceId;
-    const subnet = getDeviceSubnet(app.configuration.subnets, deviceId.toString());
+    app.configuration.subnets = [
+      {
+        device: deviceId,
+        subnet: '192.168.0.0/25'
+      }
+    ];
+
+    const subnet = getFreeSubnet(app.configuration, deviceId.toString());
     expect(subnet).toMatchObject(app.configuration.subnets[0]);
   });
 
-  it('Should return the free subnet', () => {
+  it('Should return the next free subnet', () => {
     const deviceId = ObjectId('5e65290fbe66a2335718e081');
-    app.configuration.subnets[0].device = ObjectId('5e65290fbe66a2335718e082');
-    const subnet = getDeviceSubnet(app.configuration.subnets, deviceId.toString());
-    expect(subnet).toMatchObject(app.configuration.subnets[1]);
+    app.configuration.subnets = [
+      {
+        device: ObjectId('5e65290fbe66a2335718e082'),
+        subnet: '192.168.0.0/25'
+      }
+    ];
+
+    const subnet = getFreeSubnet(app.configuration, deviceId.toString());
+    expect(subnet).toMatchObject({ device: deviceId, subnet: '192.168.0.128/25' });
   });
 });
 
