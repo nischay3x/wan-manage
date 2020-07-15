@@ -5608,7 +5608,7 @@ paths:
       x-swagger-router-controller: AppIdentifications
       x-openapi-router-controller: AppIdentificationsController
       x-openapi-router-service: AppIdentificationsService
-  /library:
+  /applicationLibrary:
     get:
       operationId: applicationsLibraryGET
       responses:        
