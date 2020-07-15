@@ -6812,13 +6812,13 @@ components:
             $ref: '#/components/schemas/Interface'
           type: array
         applications:
-          items:
-            type: object
-            properties:
-              applicationInfo:
-                type: string
-              status:
-                type: string
+          # items:
+          #   type: object
+          #   properties:
+          #     applicationInfo:
+          #       type: string
+          #     status:
+          #       type: string
           type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
