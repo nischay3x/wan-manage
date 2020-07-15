@@ -270,7 +270,6 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
       tunnel.num,
       pathlabel
     );
-    setTunnelPendingInDB(tunnel._id, org, false);
   }
 };
 /**
@@ -565,10 +564,16 @@ const complete = async (jobId, res) => {
     logger.error('Tunnel reconstruction failed', {
       params: { jobId: jobId, res: res, err: err.message }
     });
-    res.tunnels.forEach(tunnel => {
-      setTunnelPendingInDB(tunnel._id, res.org, false);
-    });
   }
+  res.tunnels.forEach(async tunnelID => {
+    try {
+      await setTunnelPendingInDB(tunnelID, res.org, false);
+    } catch (err) {
+      logger.error('Failed to set tunnel pending flag in db', {
+        params: { err: err.message, tunnelID }
+      });
+    }
+  });
   try {
     await setJobPendingInDB(res.device, res.org, false);
   } catch (err) {
@@ -607,10 +612,16 @@ const error = async (jobId, res) => {
     logger.error('Reconstruct tunnels on device change rollback failed', {
       params: { jobId: jobId, res: res, err: err.message }
     });
-    res.tunnels.forEach(tunnel => {
-      setTunnelPendingInDB(tunnel._id, res.org, false);
-    });
   }
+  res.tunnels.forEach(async tunnelID => {
+    try {
+      await setTunnelPendingInDB(tunnelID, res.org, false);
+    } catch (err) {
+      logger.error('Failed to set tunnel pending flag in db', {
+        params: { err: err.message, tunnelID, res }
+      });
+    }
+  });
   try {
     await setJobPendingInDB(res.device, res.org, false);
   } catch (err) {
@@ -649,10 +660,16 @@ const remove = async (job) => {
       logger.error('Reconstruct tunnels on device change rollback for removed task failed', {
         params: { job: job, err: err.message }
       });
-      tunnels.forEach(tunnel => {
-        setTunnelPendingInDB(tunnel._id, org, false);
-      });
     }
+    tunnels.forEach(async tunnelID => {
+      try {
+        await setTunnelPendingInDB(tunnelID, org, false);
+      } catch (err) {
+        logger.error('Failed to set tunnel pending flag in db', {
+          params: { err: err.message, tunnelID }
+        });
+      }
+    });
     try {
       await setJobPendingInDB(origDevice, org, false);
     } catch (err) {
