@@ -125,7 +125,13 @@ const apply = async (deviceList, user, data) => {
               }
             };
 
-            await devices.updateOne(query, update, { upsert: false }).session(session);
+            // this updated should be for each device separately
+            // because some of them already have this application and some of them haven't
+            await devices.updateOne(
+              { _id: device._id },
+              update,
+              { upsert: false }
+            ).session(session);
           }
         }
 

@@ -16,9 +16,15 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const ObjectId = require('mongoose').Types.ObjectId;
+const cidrTools = require('cidr-tools');
 const applications = require('../models/applications');
-const devices = require('../models/devices');
-const createError = require('http-errors');
+const { devices } = require('../models/devices');
+const diffieHellmans = require('../models/diffieHellmans');
+
+const {
+  getAvailableIps,
+  getSubnetMask
+} = require('../utils/networks');
 
 const {
   generateKeys,
@@ -26,8 +32,11 @@ const {
   generateTlsKey,
   generateDhKeys
 } = require('../utils/certificates');
-const diffieHellmans = require('../models/diffieHellmans');
 
+/**
+ * Get initial configuration object for VPN application
+ * @return {object}
+ */
 const getOpenVpnInitialConfiguration = () => {
   return {
     authentications: [
@@ -47,10 +56,22 @@ const getOpenVpnInitialConfiguration = () => {
   };
 };
 
+/**
+ * Indicate if application is open vpn
+ * @param {string} applicationName
+ * @return {boolean}
+ */
 const isVpn = applicationName => {
   return applicationName === 'Open VPN';
 };
 
+/**
+ * Validate vpn configurations. called when a user update the configurations
+ * @param {object} configurationRequest
+ * @param {objectId} applicationId
+ * @param {[orgList]} orgList array of organizations
+ * @return {{valid: boolean, err: string}}  test result + error if message is invalid
+ */
 const validateVpnConfiguration = async (configurationRequest, applicationId, orgList) => {
   // check if subdomain already taken
   const organization = configurationRequest.organization;
@@ -69,36 +90,81 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
     };
   }
 
-  // check subnets
-  if (configurationRequest.subnets) {
-    const installedDevices = await devices.find({
-      org: { $in: orgList },
-      'applications.applicationInfo': applicationId,
-      $or: [
-        { 'applications.status': 'installed' },
-        { 'applications.status': 'installing' }
-      ]
-    });
+  // validate subnets
+  const subnetsCount = getTotalSubnets(
+    configurationRequest.remoteClientIp, configurationRequest.connectionsPerDevice
+  ).length;
 
-    if (installedDevices.length > configurationRequest.subnets.length) {
-      return {
-        valid: false,
-        err: 'There is more installed devices then subnets. Please increase your subnets'
-      };
-    }
+  const installedDevices = await devices.find({
+    org: { $in: orgList },
+    'applications.applicationInfo': applicationId,
+    $or: [
+      { 'applications.status': 'installed' },
+      { 'applications.status': 'installing' }
+    ]
+  });
+
+  if (installedDevices.length > subnetsCount) {
+    return {
+      valid: false,
+      err: 'There is more installed devices then subnets. Please increase your subnets'
+    };
   }
 
   return { valid: true, err: '' };
 };
 
-const getDeviceSubnet = (subnets, deviceId) => {
+/**
+ * Calculate the entire subnets configure by the user
+ * @param {string} remoteClientIp
+ * @param {string} connectionsPerDevice
+ * @return {[string]}  array of all subnets
+ */
+const getTotalSubnets = (remoteClientIp, connectionsPerDevice) => {
+  const mask = remoteClientIp.split('/').pop();
+
+  // get the new subnets mask for splitted subnets
+  const deviceMask = getSubnetMask(connectionsPerDevice);
+
+  // get ip range for this mask
+  const availableIpsCount = getAvailableIps(mask);
+
+  // get subnets count for this org
+  const subnetsCount = availableIpsCount / connectionsPerDevice;
+
+  const ips = cidrTools.expand(remoteClientIp);
+
+  const subnets = [];
+  for (let i = 0; i < subnetsCount; i++) {
+    subnets.push(`${ips[i * connectionsPerDevice]}/${deviceMask}`);
+  };
+
+  return subnets;
+};
+
+/**
+ * Get the subnet that will be assigned to the device
+ * @param {[string]} totalSubnets array of all organization subnets
+ * @param {[{device: ObjectID, subnet: string}]} assignedSubnets the subnet that already assigned
+ * @param {ObjectID} deviceId the if of the device to be assigned
+ * @return {{device: ObjectID, subnet: string}}  object of subnet to be assigned
+ */
+const getFreeSubnet = (totalSubnets, assignedSubnets = [], deviceId = '') => {
   // if subnet already assigned to this device, return the subnet
-  const exists = subnets.find(
+  const exists = assignedSubnets.find(
     s => s.device && (s.device.toString() === deviceId)
   );
-
   if (exists) return exists;
-  else return subnets.find(s => s.device === null);
+
+  // get the first subnet that not exists in assignedSubnets
+  const freeSubnet = totalSubnets.find(s => {
+    return assignedSubnets.findIndex(as => as.subnet === s) === -1;
+  });
+
+  return {
+    device: ObjectId(deviceId),
+    subnet: freeSubnet
+  };
 };
 
 const onVpnJobComplete = async (org, app, op, deviceId) => {
@@ -132,15 +198,18 @@ const onVpnJobFailed = async (org, app, op, deviceId) => {
  */
 const releaseSubnetForDevice = async (org, appId, deviceId) => {
   await applications.updateOne(
-    {
-      org: org,
-      _id: appId,
-      'configuration.subnets.device': ObjectId(deviceId)
-    },
-    { $set: { 'configuration.subnets.$.device': null } }
+    { org: org, _id: appId },
+    { $pull: { 'configuration.subnets': { device: ObjectId(deviceId) } } }
   );
 };
 
+/**
+ * Validate application. called before starting to install application on the devices
+ * @param {object} app the application will be installed
+ * @param {string} op the operation of the job (deploy, config, etc.)
+ * @param {[ObjectID]} deviceIds the devices id, that application should installed on them
+ * @return {{valid: boolean, err: string}}  test result + error if message is invalid
+ */
 const validateVpnApplication = (app, op, deviceIds) => {
   if (op === 'deploy') {
     // prevent installation if there are missing required configurations
@@ -151,19 +220,24 @@ const validateVpnApplication = (app, op, deviceIds) => {
       };
     }
 
-    // prevent installation if all the subnets is already taken by other devices
-    // or if the user selected multiple devices to install
-    // but there is not enoughs subnets
-    const freeSubnets = app.configuration.subnets.filter(s => {
-      if (s.device === null) return true;
-      const isCurrentDevice = deviceIds.map(d => d.toString()).includes(s.device.toString());
-      return isCurrentDevice;
+    // prevent installation if selected more devices then subnets
+    const takenSubnets = app.configuration.subnets ? app.configuration.subnets.length : 0;
+    const freeSubnets = getTotalSubnets(
+      app.configuration.remoteClientIp,
+      app.configuration.connectionsPerDevice
+    ).length - takenSubnets;
+
+    // create a new devicesIds array without subnet
+    const deviceWithoutSubnets = deviceIds.filter(d => {
+      return app.configuration.subnets.findIndex(s => s.device.toString() === d.toString()) === -1;
     });
 
-    if (freeSubnets.length === 0 || freeSubnets.length < deviceIds.length) {
+    const isMoreDevicesThenSubnets = freeSubnets < deviceWithoutSubnets.length;
+
+    if (isMoreDevicesThenSubnets) {
       return {
         valid: false,
-        err: 'There is no subnets remaining, please check again the configurations'
+        err: 'There is no subnets remaining. Please check again the configurations'
       };
     }
   }
@@ -171,6 +245,19 @@ const validateVpnApplication = (app, op, deviceIds) => {
   return { valid: true, err: '' };
 };
 
+/**
+ * Generate key for vpn server
+ * @param {object} application the application to generate for
+ * @return {{
+    isNew: boolean
+    caPrivateKey: string
+    caPublicKey: string
+    serverKey: string
+    serverCrt: string
+    tlsKey: string
+    dhKey: string
+  }}  the keys to send to device
+ */
 const getDeviceKeys = async application => {
   let isNew = false;
   let caPrivateKey;
@@ -213,6 +300,13 @@ const getDeviceKeys = async application => {
   };
 };
 
+/**
+ * Generate params object to be sent to the device
+ * @param {object} device the device to get params for
+ * @param {string} applicationId the application id to be installed
+ * @param {string} op the operation of the job (deploy, config, etc.)
+ * @return {object} params to be sent to device
+*/
 const getOpenVpnParams = async (device, applicationId, op) => {
   const params = {};
   const { _id, interfaces } = device;
@@ -225,18 +319,17 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     // get the WanIp to be used by open vpn server to listen
     const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 
-    // get new subnet only if there is no subnet connect with current device
-    const deviceSubnet = getDeviceSubnet(config.subnets, _id.toString());
+    // // check if has available subnet to assign
+    const totalSubnets = getTotalSubnets(config.remoteClientIp, config.connectionsPerDevice);
 
-    // deviceSubnet equal to null means
-    // that vpn installed on more devices then assigned subnets
-    if (!deviceSubnet) {
-      const msg = 'You don\'t have enoughs subnets to all devices';
-      throw createError(500, msg);
-    }
+    // get new subnet only if there is no subnet connect with current device
+    const deviceSubnet = getFreeSubnet(totalSubnets, config.subnets, _id.toString());
 
     const update = {
-      'configuration.subnets.$.device': _id
+      $set: {},
+      $addToSet: {
+        'configuration.subnets': deviceSubnet
+      }
     };
 
     const {
@@ -246,22 +339,16 @@ const getOpenVpnParams = async (device, applicationId, op) => {
 
     // if is new keys, save them on db
     if (isNew) {
-      update['configuration.keys.caKey'] = caPrivateKey;
-      update['configuration.keys.caCrt'] = caPublicKey;
-      update['configuration.keys.serverKey'] = serverKey;
-      update['configuration.keys.serverCrt'] = serverCrt;
-      update['configuration.keys.tlsKey'] = tlsKey;
-      update['configuration.keys.dhKey'] = dhKey;
+      update.$set['configuration.keys.caKey'] = caPrivateKey;
+      update.$set['configuration.keys.caCrt'] = caPublicKey;
+      update.$set['configuration.keys.serverKey'] = serverKey;
+      update.$set['configuration.keys.serverCrt'] = serverCrt;
+      update.$set['configuration.keys.tlsKey'] = tlsKey;
+      update.$set['configuration.keys.dhKey'] = dhKey;
     }
 
     // set subnet to device to prevent same subnet on multiple devices
-    await applications.updateOne(
-      {
-        _id: application._id,
-        'configuration.subnets.subnet': deviceSubnet.subnet
-      },
-      { $set: update }
-    );
+    await applications.updateOne({ _id: application._id }, update);
 
     let version = application.installedVersion;
     if (op === 'upgrade') {
@@ -295,7 +382,7 @@ module.exports = {
   isVpn,
   getOpenVpnInitialConfiguration,
   validateVpnConfiguration,
-  getDeviceSubnet,
+  getDeviceSubnet: getFreeSubnet,
   onVpnJobComplete,
   onVpnJobRemoved,
   onVpnJobFailed,

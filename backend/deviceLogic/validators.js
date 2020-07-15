@@ -17,7 +17,6 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
-const createError = require('http-errors');
 
 /**
  * Checks whether a value is empty

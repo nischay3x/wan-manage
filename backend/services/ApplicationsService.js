@@ -22,13 +22,7 @@ const applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const dispatcher = require('../deviceLogic/dispatcher');
 const ObjectId = require('mongoose').Types.ObjectId;
-const cidrTools = require('cidr-tools');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const {
-  getAvailableIps,
-  getSubnetMask
-} = require('../utils/networks');
-const { isVpn } = require('../applicationLogic/openvpn');
 
 const {
   getInitialConfigObject,
@@ -252,11 +246,14 @@ class ApplicationsService {
         { upsert: false }
       );
 
-      // send jobs to device that installed this app
+      // send jobs to device that installed or installing this app
       const opDevices = await devices.find({
         org: { $in: orgList },
         'applications.applicationInfo': id,
-        'applications.status': 'installed'
+        $or: [
+          { 'applications.status': 'installed' },
+          { 'applications.status': 'installing' }
+        ]
       });
 
       if (opDevices.length) {
@@ -297,34 +294,6 @@ class ApplicationsService {
 
       if (!app) return Service.rejectResponse('Invalid application id', 500);
 
-      if (isVpn(app.libraryApp.name)) {
-        // Calculate subnets to entire org
-        const subnets = [];
-        const totalPool = configurationRequest.remoteClientIp;
-        const perDevice = configurationRequest.connectionsPerDevice;
-        if (totalPool && perDevice) {
-          const mask = totalPool.split('/')[1];
-
-          // get ip range for this mask
-          const availableIps = getAvailableIps(mask);
-
-          // get subnets count for this org
-          const subnetsCount = availableIps / perDevice;
-
-          // get the new subnets mask for splitted subnets
-          const newMask = getSubnetMask(perDevice);
-
-          // get all ips in entire network
-          const ips = cidrTools.expand(totalPool);
-
-          for (let i = 0; i < subnetsCount; i++) {
-            subnets.push({ device: null, subnet: `${ips[i * perDevice]}/${newMask}` });
-          }
-        }
-
-        configurationRequest.subnets = subnets;
-      }
-
       const { valid, err } = await validateConfiguration(configurationRequest, app, orgList);
 
       if (!valid) {
@@ -334,6 +303,10 @@ class ApplicationsService {
           });
         return Service.rejectResponse(err, 500);
       }
+
+      // reset the subnets array
+      // in the jobs logic, new subnets will allocated
+      configurationRequest.subnets = [];
 
       // update old configuration object with new one
       const combinedConfig = { ...app.configuration, ...configurationRequest };
