@@ -6744,6 +6744,9 @@ components:
         _id: _id
         pendingDevModification: true
         isApproved: true
+        applications:
+        - applicationInfo: applicationInfo
+          status: status
         staticroutes:
         - id: 1
           destination: 20.20.0.0
@@ -6807,6 +6810,15 @@ components:
         interfaces:
           items:
             $ref: '#/components/schemas/Interface'
+          type: array
+        applications:
+          items:
+            type: object
+            properties:
+              applicationInfo:
+                type: string
+              status:
+                type: string
           type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
