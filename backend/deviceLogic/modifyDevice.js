@@ -161,7 +161,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
-      const pathlabels = modifiedIfcsMap[ifc._id]
+      const pathlabels = modifiedIfcsMap[ifc._id] && modifiedIfcsMap[ifc._id].pathlabels
         ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
         : [];
       const pathLabelRemoved = pathlabel && !pathlabels.includes(pathlabel.toString());
@@ -179,6 +179,12 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         if (waitingDhcpInfo) {
           continue;
         }
+        // this could happen if both interfaces are modified at the same time
+        // we need to skip adding duplicated jobs
+        if (tunnel.pendingTunnelModification) {
+          continue;
+        }
+        await setTunnelPendingInDB(tunnel._id, org, true);
         await queueTunnel(
           false,
           // eslint-disable-next-line max-len
@@ -264,6 +270,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
       tunnel.num,
       pathlabel
     );
+    setTunnelPendingInDB(tunnel._id, org, false);
   }
 };
 /**
@@ -279,6 +286,22 @@ const setJobPendingInDB = (deviceID, org, flag) => {
   return devices.update(
     { _id: deviceID, org: org },
     { $set: { pendingDevModification: flag } },
+    { upsert: false }
+  );
+};
+/**
+ * Sets the tunnel rebuilding process pending flag value. This flag is used to indicate
+ * there are pending delete-tunnel/add-tunnel jobs in the queue to prevent
+ * duplication of jobs.
+ * @param  {string}  tunnelID the id of the tunnel
+ * @param  {string}  org      the organization the tunnel belongs to
+ * @param  {boolean} flag     the value of the flag
+ * @return {Promise}          a promise for updating the flab in the database
+ */
+const setTunnelPendingInDB = (tunnelID, org, flag) => {
+  return tunnelsModel.update(
+    { _id: tunnelID, org: org },
+    { $set: { pendingTunnelModification: flag } },
     { upsert: false }
   );
 };
@@ -542,6 +565,9 @@ const complete = async (jobId, res) => {
     logger.error('Tunnel reconstruction failed', {
       params: { jobId: jobId, res: res, err: err.message }
     });
+    res.tunnels.forEach(tunnel => {
+      setTunnelPendingInDB(tunnel._id, res.org, false);
+    });
   }
   try {
     await setJobPendingInDB(res.device, res.org, false);
@@ -570,10 +596,19 @@ const error = async (jobId, res) => {
     // First rollback changes and only then reconstruct the tunnels. This is
     // done to make sure tunnels are reconstructed with the previous values.
     await rollBackDeviceChanges(res.origDevice);
-    await reconstructTunnels(res.tunnels, res.org, res.user);
   } catch (err) {
     logger.error('Device change rollback failed', {
       params: { jobId: jobId, res: res, err: err.message }
+    });
+  }
+  try {
+    await reconstructTunnels(res.tunnels, res.org, res.user);
+  } catch (err) {
+    logger.error('Reconstruct tunnels on device change rollback failed', {
+      params: { jobId: jobId, res: res, err: err.message }
+    });
+    res.tunnels.forEach(tunnel => {
+      setTunnelPendingInDB(tunnel._id, res.org, false);
     });
   }
   try {
@@ -603,10 +638,19 @@ const remove = async (job) => {
       // First rollback changes and only then reconstruct the tunnels. This is
       // done to make sure tunnels are reconstructed with the previous values.
       await rollBackDeviceChanges(origDevice);
-      await reconstructTunnels(tunnels, org, user);
     } catch (err) {
       logger.error('Device change rollback failed', {
         params: { job: job, err: err.message }
+      });
+    }
+    try {
+      await reconstructTunnels(tunnels, org, user);
+    } catch (err) {
+      logger.error('Reconstruct tunnels on device change rollback for removed task failed', {
+        params: { job: job, err: err.message }
+      });
+      tunnels.forEach(tunnel => {
+        setTunnelPendingInDB(tunnel._id, org, false);
       });
     }
     try {
