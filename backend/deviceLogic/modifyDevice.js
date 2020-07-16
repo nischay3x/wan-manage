@@ -605,15 +605,9 @@ const error = async (jobId, res) => {
     // First rollback changes and only then reconstruct the tunnels. This is
     // done to make sure tunnels are reconstructed with the previous values.
     await rollBackDeviceChanges(res.origDevice);
-  } catch (err) {
-    logger.error('Device change rollback failed', {
-      params: { jobId: jobId, res: res, err: err.message }
-    });
-  }
-  try {
     await reconstructTunnels(res.tunnels, res.org, res.user);
   } catch (err) {
-    logger.error('Reconstruct tunnels on device change rollback failed', {
+    logger.error('Device change rollback failed', {
       params: { jobId: jobId, res: res, err: err.message }
     });
   }
@@ -644,15 +638,9 @@ const remove = async (job) => {
       // First rollback changes and only then reconstruct the tunnels. This is
       // done to make sure tunnels are reconstructed with the previous values.
       await rollBackDeviceChanges(origDevice);
-    } catch (err) {
-      logger.error('Device change rollback failed', {
-        params: { job: job, err: err.message }
-      });
-    }
-    try {
       await reconstructTunnels(tunnels, org, user);
     } catch (err) {
-      logger.error('Reconstruct tunnels on device change rollback for removed task failed', {
+      logger.error('Device change rollback failed', {
         params: { job: job, err: err.message }
       });
     }
