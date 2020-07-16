@@ -184,7 +184,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         if (tunnel.pendingTunnelModification) {
           continue;
         }
-        await setTunnelPendingInDB(tunnel._id, org, true);
+        await setTunnelsPendingInDB([tunnel._id], org, true);
         await queueTunnel(
           false,
           // eslint-disable-next-line max-len
@@ -233,43 +233,56 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
  * @return {Promise}                a promise for reconstructing tunnels
  */
 const reconstructTunnels = async (removedTunnels, org, username) => {
-  const tunnels = await tunnelsModel
-    .find({ _id: { $in: removedTunnels }, isActive: true })
-    .populate('deviceA')
-    .populate('deviceB');
+  try {
+    const tunnels = await tunnelsModel
+      .find({ _id: { $in: removedTunnels }, isActive: true })
+      .populate('deviceA')
+      .populate('deviceB');
 
-  for (const tunnel of tunnels) {
-    const { deviceA, deviceB, pathlabel } = tunnel;
-    const ifcA = deviceA.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceA.toString();
-    });
-    const ifcB = deviceB.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceB.toString();
-    });
+    for (const tunnel of tunnels) {
+      const { deviceA, deviceB, pathlabel } = tunnel;
+      const ifcA = deviceA.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceA.toString();
+      });
+      const ifcB = deviceB.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceB.toString();
+      });
 
-    const { agent } = deviceB.versions;
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
-      tunnel.num,
-      ifcA,
-      ifcB,
-      agent,
-      pathlabel
-    );
-    await queueTunnel(
-      true,
-      // eslint-disable-next-line max-len
-      `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
-      tasksDeviceA,
-      tasksDeviceB,
-      username,
-      org,
-      deviceA.machineId,
-      deviceB.machineId,
-      deviceA._id,
-      deviceB._id,
-      tunnel.num,
-      pathlabel
-    );
+      const { agent } = deviceB.versions;
+      const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
+        tunnel.num,
+        ifcA,
+        ifcB,
+        agent,
+        pathlabel
+      );
+      await queueTunnel(
+        true,
+        // eslint-disable-next-line max-len
+        `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
+        tasksDeviceA,
+        tasksDeviceB,
+        username,
+        org,
+        deviceA.machineId,
+        deviceB.machineId,
+        deviceA._id,
+        deviceB._id,
+        tunnel.num,
+        pathlabel
+      );
+    }
+  } catch (err) {
+    logger.error('Failed to queue Add tunnel jobs', {
+      params: { err: err.message, removedTunnels }
+    });
+  };
+  try {
+    await setTunnelsPendingInDB(removedTunnels, org, false);
+  } catch (err) {
+    logger.error('Failed to set tunnel pending flag in db', {
+      params: { err: err.message, removedTunnels }
+    });
   }
 };
 /**
@@ -292,14 +305,14 @@ const setJobPendingInDB = (deviceID, org, flag) => {
  * Sets the tunnel rebuilding process pending flag value. This flag is used to indicate
  * there are pending delete-tunnel/add-tunnel jobs in the queue to prevent
  * duplication of jobs.
- * @param  {string}  tunnelID the id of the tunnel
+ * @param  {array}  tunnelIDs array of ids of tunnels
  * @param  {string}  org      the organization the tunnel belongs to
  * @param  {boolean} flag     the value of the flag
  * @return {Promise}          a promise for updating the flab in the database
  */
-const setTunnelPendingInDB = (tunnelID, org, flag) => {
-  return tunnelsModel.update(
-    { _id: tunnelID, org: org },
+const setTunnelsPendingInDB = (tunnelIDs, org, flag) => {
+  return tunnelsModel.updateMany(
+    { _id: { $in: tunnelIDs }, org: org },
     { $set: { pendingTunnelModification: flag } },
     { upsert: false }
   );
@@ -565,15 +578,6 @@ const complete = async (jobId, res) => {
       params: { jobId: jobId, res: res, err: err.message }
     });
   }
-  res.tunnels.forEach(async tunnelID => {
-    try {
-      await setTunnelPendingInDB(tunnelID, res.org, false);
-    } catch (err) {
-      logger.error('Failed to set tunnel pending flag in db', {
-        params: { err: err.message, tunnelID }
-      });
-    }
-  });
   try {
     await setJobPendingInDB(res.device, res.org, false);
   } catch (err) {
@@ -613,15 +617,6 @@ const error = async (jobId, res) => {
       params: { jobId: jobId, res: res, err: err.message }
     });
   }
-  res.tunnels.forEach(async tunnelID => {
-    try {
-      await setTunnelPendingInDB(tunnelID, res.org, false);
-    } catch (err) {
-      logger.error('Failed to set tunnel pending flag in db', {
-        params: { err: err.message, tunnelID, res }
-      });
-    }
-  });
   try {
     await setJobPendingInDB(res.device, res.org, false);
   } catch (err) {
@@ -661,15 +656,6 @@ const remove = async (job) => {
         params: { job: job, err: err.message }
       });
     }
-    tunnels.forEach(async tunnelID => {
-      try {
-        await setTunnelPendingInDB(tunnelID, org, false);
-      } catch (err) {
-        logger.error('Failed to set tunnel pending flag in db', {
-          params: { err: err.message, tunnelID }
-        });
-      }
-    });
     try {
       await setJobPendingInDB(origDevice, org, false);
     } catch (err) {
