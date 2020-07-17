@@ -65,6 +65,16 @@ const interfacesSchema = new Schema({
       message: 'MAC should be a valid MAC address'
     }
   },
+  // DHCP client for IPv4 : yes|no
+  dhcp: {
+    type: String,
+    uppercase: false,
+    validate: {
+      validator: validators.validateDHCP,
+      message: 'DHCP should be yes or no'
+    },
+    default: 'no'
+  },
   // ipv4 address
   IPv4: {
     type: String,
@@ -122,6 +132,15 @@ const interfacesSchema = new Schema({
       message: 'gateway should be a valid IPv4 or IPv6 address'
     },
     default: ''
+  },
+  // metric
+  metric: {
+    type: String,
+    default: '0',
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'Metric should be a number'
+    }
   },
   // assigned
   isAssigned: {

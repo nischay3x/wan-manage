@@ -17,7 +17,6 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
-const { devices } = require('../models/devices');
 
 /**
  * Checks whether a value is empty
@@ -74,7 +73,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
       };
     }
 
-    if (!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') {
+    if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') && ifc.dhcp !== 'yes') {
       return {
         valid: false,
         err: `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
@@ -98,6 +97,14 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
           err: 'LAN interfaces should not be assigned a default GW'
         };
       }
+
+      // DHCP client is not allowed on LAN interface
+      if (ifc.dhcp === 'yes') {
+        return {
+          valid: false,
+          err: 'LAN interfaces should not be set to DHCP'
+        };
+      }
     }
 
     if (ifc.type === 'WAN') {
@@ -109,7 +116,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         };
       }
       // WAN interfaces must have default GW assigned to them
-      if (!net.isIPv4(ifc.gateway)) {
+      if (ifc.dhcp !== 'yes' && !net.isIPv4(ifc.gateway)) {
         return {
           valid: false,
           err: 'All WAN interfaces should be assigned a default GW'
@@ -120,7 +127,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
 
   // LAN and WAN interfaces must not be on the same subnet
   // WAN IP address and default GW IP addresses must be on the same subnet
-  for (const wanIfc of wanIfcs) {
+  for (const wanIfc of wanIfcs.filter(i => !(i.dhcp === 'yes' && i.IPv4 === ''))) {
     for (const lanIfc of lanIfcs) {
       const wanSubnet = `${wanIfc.IPv4}/${wanIfc.IPv4Mask}`;
       const lanSubnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
@@ -160,6 +167,18 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     }
   }
 
+  // Checks if all interfaces metrics are different
+  const metricsArray = device.interfaces
+    .filter(i => i.type === 'WAN')
+    .map(i => Number(i.metric));
+  const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
+  if (hasDuplicates) {
+    return {
+      valid: false,
+      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
+    };
+  }
+
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -181,6 +200,10 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
+    if (ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') {
+      // allow empty IP on WAN with dhcp client
+      continue;
+    }
     const [ip, mask] = (ifc.addr || '/').split('/');
     if (!net.isIPv4(ip) || !validateIPv4Mask(mask)) {
       return {
@@ -192,49 +215,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   return { valid: true, err: '' };
 };
 
-/**
- * Get all LAN subnets in the same organization
- * @param  {string} orgId         the id of the organization
- * @return {[_id: objectId, name: string, subnet: string]} array of LAN subnets with router name
- */
-const getAllOrganizationLanSubnets = async orgId => {
-  const subnets = await devices.aggregate([
-    { $match: { org: orgId } },
-    {
-      $project: {
-        'interfaces.IPv4': 1,
-        'interfaces.IPv4Mask': 1,
-        'interfaces.type': 1,
-        'interfaces.isAssigned': 1,
-        name: 1,
-        _id: 1
-      }
-    },
-    { $unwind: '$interfaces' },
-    {
-      $match: {
-        'interfaces.type': 'LAN',
-        'interfaces.isAssigned': true,
-        'interfaces.IPv4': { $ne: '' },
-        'interfaces.IPv4Mask': { $ne: '' }
-      }
-    },
-    {
-      $project: {
-        _id: 1,
-        name: 1,
-        subnet: {
-          $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
-        }
-      }
-    }
-  ]);
-
-  return subnets;
-};
-
 module.exports = {
-  validateDevice: validateDevice,
-  validateModifyDeviceMsg: validateModifyDeviceMsg,
-  getAllOrganizationLanSubnets: getAllOrganizationLanSubnets
+  validateDevice,
+  validateModifyDeviceMsg
 };

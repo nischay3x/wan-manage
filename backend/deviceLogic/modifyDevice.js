@@ -27,6 +27,7 @@ const {
   oneTunnelDel
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg } = require('./validators');
+const { getDefaultGateway } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -52,7 +53,7 @@ const prepareIfcParams = (interfaces) => {
     newIfc.multilink = { labels };
 
     // Don't send interface default GW for LAN interfaces
-    if (newIfc.type !== 'WAN') delete newIfc.gateway;
+    if (ifc.type !== 'WAN' && ifc.isAssigned) delete newIfc.gateway;
 
     return newIfc;
   });
@@ -60,16 +61,16 @@ const prepareIfcParams = (interfaces) => {
 /**
  * Queues a modify-device job to the device queue.
  * @param  {string}  org                   the organization to which the user belongs
- * @param  {string}  user                  the user that requested the job
+ * @param  {string}  username              name of the user that requested the job
  * @param  {Array}   tasks                 the message to be sent to the device
  * @param  {Object}  device                the device to which the job should be queued
  * @param  {Array}   removedTunnelsList=[] tunnels that have been removed as part of
  *                                         the device modification
  * @return {Promise}                       a promise for queuing a job
  */
-const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
+const queueJob = async (org, username, tasks, device, removedTunnelsList = []) => {
   const job = await deviceQueues.addJob(
-    device.machineId, user, org,
+    device.machineId, username, org,
     // Data
     { title: `Modify device ${device.hostname}`, tasks: tasks },
     // Response data
@@ -78,7 +79,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
       data: {
         device: device._id,
         org: org,
-        user: user,
+        user: username,
         origDevice: device,
         tunnels: removedTunnelsList
       }
@@ -98,7 +99,7 @@ const queueJob = async (org, user, tasks, device, removedTunnelsList = []) => {
  * the modified interfaces and then queues the modify device job.
  * @param  {Object}  device        original device object, before the changes
  * @param  {Object}  messageParams device changes that will be sent to the device
- * @param  {string}  user          the user that created the request
+ * @param  {Object}  user          the user that created the request
  * @param  {string}  org           organization to which the user belongs
  * @return {Job}                   The queued modify-device job
  */
@@ -141,7 +142,6 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
 
     for (const tunnel of tunnels) {
       let { deviceA, deviceB, pathlabel, num, _id } = tunnel;
-
       // Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
       if (deviceA._id.toString() === device._id.toString()) deviceA = device;
@@ -161,21 +161,37 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
-      const pathlabels = modifiedIfcsMap[ifc._id]
+      const pathlabels = modifiedIfcsMap[ifc._id] && modifiedIfcsMap[ifc._id].pathlabels
         ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
         : [];
       const pathLabelRemoved = pathlabel && !pathlabels.includes(pathlabel.toString());
 
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
-        await oneTunnelDel(_id, user, org);
+        await oneTunnelDel(_id, user.username, org);
       } else {
+        // if dhcp was changed from 'no' to 'yes'
+        // then we need to wait for the device new config
+        const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
+        const modifiedIfcB = modifiedIfcsMap[tunnel.interfaceB.toString()];
+        const waitingDhcpInfo =
+          (modifiedIfcA && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes') ||
+          (modifiedIfcB && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
+        if (waitingDhcpInfo) {
+          continue;
+        }
+        // this could happen if both interfaces are modified at the same time
+        // we need to skip adding duplicated jobs
+        if (tunnel.pendingTunnelModification) {
+          continue;
+        }
+        await setTunnelsPendingInDB([tunnel._id], org, true);
         await queueTunnel(
           false,
           // eslint-disable-next-line max-len
           `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
           tasksDeviceA,
           tasksDeviceB,
-          user,
+          user.username,
           org,
           deviceA.machineId,
           deviceB.machineId,
@@ -204,7 +220,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
     messageParams.reconnect = true;
   }
   const tasks = [{ entity: 'agent', message: 'modify-device', params: messageParams }];
-  const job = await queueJob(org, user, tasks, device, removedTunnels);
+  const job = await queueJob(org, user.username, tasks, device, removedTunnels);
   return [job];
 };
 
@@ -213,47 +229,60 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
  * sending a modify-device message to a device.
  * @param  {Array}   removedTunnels an array of ids of the removed tunnels
  * @param  {string}  org            the organization to which the tunnels belong
- * @param  {string}  user           the user that requested the device change
+ * @param  {string}  username       name of the user that requested the device change
  * @return {Promise}                a promise for reconstructing tunnels
  */
-const reconstructTunnels = async (removedTunnels, org, user) => {
-  const tunnels = await tunnelsModel
-    .find({ _id: { $in: removedTunnels }, isActive: true })
-    .populate('deviceA')
-    .populate('deviceB');
+const reconstructTunnels = async (removedTunnels, org, username) => {
+  try {
+    const tunnels = await tunnelsModel
+      .find({ _id: { $in: removedTunnels }, isActive: true })
+      .populate('deviceA')
+      .populate('deviceB');
 
-  for (const tunnel of tunnels) {
-    const { deviceA, deviceB, pathlabel } = tunnel;
-    const ifcA = deviceA.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceA.toString();
-    });
-    const ifcB = deviceB.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceB.toString();
-    });
+    for (const tunnel of tunnels) {
+      const { deviceA, deviceB, pathlabel } = tunnel;
+      const ifcA = deviceA.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceA.toString();
+      });
+      const ifcB = deviceB.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceB.toString();
+      });
 
-    const { agent } = deviceB.versions;
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
-      tunnel.num,
-      ifcA,
-      ifcB,
-      agent,
-      pathlabel
-    );
-    await queueTunnel(
-      true,
-      // eslint-disable-next-line max-len
-      `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
-      tasksDeviceA,
-      tasksDeviceB,
-      user,
-      org,
-      deviceA.machineId,
-      deviceB.machineId,
-      deviceA._id,
-      deviceB._id,
-      tunnel.num,
-      pathlabel
-    );
+      const { agent } = deviceB.versions;
+      const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
+        tunnel.num,
+        ifcA,
+        ifcB,
+        agent,
+        pathlabel
+      );
+      await queueTunnel(
+        true,
+        // eslint-disable-next-line max-len
+        `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
+        tasksDeviceA,
+        tasksDeviceB,
+        username,
+        org,
+        deviceA.machineId,
+        deviceB.machineId,
+        deviceA._id,
+        deviceB._id,
+        tunnel.num,
+        pathlabel
+      );
+    }
+  } catch (err) {
+    logger.error('Failed to queue Add tunnel jobs', {
+      params: { err: err.message, removedTunnels }
+    });
+  };
+  try {
+    await setTunnelsPendingInDB(removedTunnels, org, false);
+  } catch (err) {
+    logger.error('Failed to set tunnel pending flag in db', {
+      params: { err: err.message, removedTunnels }
+    });
   }
 };
 /**
@@ -273,6 +302,22 @@ const setJobPendingInDB = (deviceID, org, flag) => {
   );
 };
 /**
+ * Sets the tunnel rebuilding process pending flag value. This flag is used to indicate
+ * there are pending delete-tunnel/add-tunnel jobs in the queue to prevent
+ * duplication of jobs.
+ * @param  {array}  tunnelIDs array of ids of tunnels
+ * @param  {string}  org      the organization the tunnel belongs to
+ * @param  {boolean} flag     the value of the flag
+ * @return {Promise}          a promise for updating the flab in the database
+ */
+const setTunnelsPendingInDB = (tunnelIDs, org, flag) => {
+  return tunnelsModel.updateMany(
+    { _id: { $in: tunnelIDs }, org: org },
+    { $set: { pendingTunnelModification: flag } },
+    { upsert: false }
+  );
+};
+/**
  * Reverts the device changes in the database. Since
  * modify-device jobs are sent after the changes had
  * already been updated in the database, the changes
@@ -287,7 +332,6 @@ const rollBackDeviceChanges = async (origDevice) => {
     { _id: _id, org: org },
     {
       $set: {
-        defaultRoute: origDevice.defaultRoute,
         interfaces: origDevice.interfaces
       }
     },
@@ -330,17 +374,20 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
  * @return {None}
  */
 const apply = async (device, user, data) => {
-  const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const modifyParams = {};
 
   // Create the default route modification parameters
-  if (device[0].defaultRoute !== data.newDevice.defaultRoute) {
+  // for old agent version compatibility
+  const oldDefaultGW = getDefaultGateway(device[0]);
+  const newDefaultGW = getDefaultGateway(data.newDevice);
+
+  if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
     modifyParams.modify_routes = {
       routes: [{
         addr: 'default',
-        old_route: device[0].defaultRoute,
-        new_route: data.newDevice.defaultRoute
+        old_route: oldDefaultGW,
+        new_route: newDefaultGW
       }]
     };
   }
@@ -354,10 +401,12 @@ const apply = async (device, user, data) => {
       return ({
         _id: ifc._id,
         pci: ifc.pciaddr,
+        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
         gateway: ifc.gateway,
+        metric: ifc.metric,
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,
@@ -378,10 +427,12 @@ const apply = async (device, user, data) => {
       return ({
         _id: ifc._id,
         pci: ifc.pciaddr,
+        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
         gateway: ifc.gateway,
+        metric: ifc.metric,
         routing: ifc.routing,
         type: ifc.type,
         isAssigned: ifc.isAssigned,
@@ -397,7 +448,6 @@ const apply = async (device, user, data) => {
       });
     })
   ];
-
   // Handle changes in the 'assigned' field. assignedDiff will contain
   // all the interfaces that have changed their 'isAssigned' field
   const assignedDiff = differenceWith(
@@ -481,12 +531,16 @@ const apply = async (device, user, data) => {
         throw (new Error(dhcpValidation.err));
       }
       await setJobPendingInDB(device[0]._id, org, true);
-      const jobs = await queueModifyDeviceJob(device[0], modifyParams, userName, org);
+      const jobs = await queueModifyDeviceJob(device[0], modifyParams, user, org);
       return {
         ids: jobs.flat().map(job => job.id),
         status: 'completed',
         message: ''
       };
+    } else {
+      logger.warn('The device was not modified, nothing to apply', {
+        params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
+      });
     }
   } catch (err) {
     logger.error('Failed to queue modify device job', {

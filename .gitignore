@@ -17,7 +17,7 @@ build
 debian/fleximanage
 
 # IDE files
-.vscode*
+.vscode/launch.json
 
 # Jest coverage report
 coverage/

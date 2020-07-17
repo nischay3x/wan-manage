@@ -89,7 +89,7 @@ const applyTunnelAdd = async (devices, user, data) => {
         // Add a set of the interface's path labels
         const deviceAIntfs = [];
         deviceA.interfaces.forEach(intf => {
-          if (intf.isAssigned === true && intf.type === 'WAN') {
+          if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
             const labelsSet = new Set(intf.pathlabels.map(label => {
               // DIA interfaces cannot be used in tunnels
               return label.type !== 'DIA' ? label._id : null;
@@ -103,7 +103,7 @@ const applyTunnelAdd = async (devices, user, data) => {
 
         const deviceBIntfs = [];
         deviceB.interfaces.forEach(intf => {
-          if (intf.isAssigned === true && intf.type === 'WAN') {
+          if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
             const labelsSet = new Set(intf.pathlabels.map(label => {
               // DIA interfaces cannot be used in tunnels
               return label.type !== 'DIA' ? label._id : null;
@@ -231,79 +231,11 @@ const completeTunnelAdd = (jobId, res) => {
  * @return {void}
  */
 const errorTunnelAdd = async (jobId, res) => {
-  logger.info('Tunnel add error. rollback tunnel',
+  logger.info('Tunnel add error.',
     { params: { result: res, jobId: jobId } });
   if (!res || !res.deviceA || !res.deviceB || !res.target || !res.username || !res.org) {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
-    return;
   }
-  const { deviceA, deviceB, org, tunnelId } = res;
-  tunnelsModel
-    .findOne({
-      num: tunnelId,
-      org: org,
-      isActive: true
-    })
-    .then(
-      async tunnel => {
-        if (tunnel != null) {
-          const jobs = await oneTunnelDel(
-            tunnel._id,
-            res.username,
-            res.org,
-            msg => {
-              logger.info('One tunnel del', { params: { message: msg } });
-            },
-            () => {
-              logger.info('Tunnel deleted', {
-                params: {
-                  org: res.org,
-                  tunnelId: tunnel._id,
-                  tunnelNum: tunnel.num
-                }
-              });
-            }
-          );
-          return jobs;
-        } else {
-          logger.error('errorTunnelAdd no tunnel found', {
-            params: {
-              tunnelId: tunnelId,
-              deviceA: res.deviceA,
-              deviceB: res.deviceB,
-              org: res.org,
-              isActive: true
-            }
-          });
-          return [];
-        }
-      },
-      err => {
-        logger.error('errorTunnelAdd error', {
-          params: {
-            tunnelId: tunnelId,
-            deviceA: deviceA,
-            deviceB: deviceB,
-            org: org,
-            isActive: true,
-            message: err.message
-          }
-        });
-        return [];
-      }
-    )
-    .catch(err => {
-      logger.error('errorTunnelAdd error', {
-        params: {
-          deviceA: deviceA,
-          deviceB: deviceB,
-          org: org,
-          isActive: true,
-          message: err.message
-        }
-      });
-      return [];
-    });
 };
 
 /**
@@ -602,7 +534,6 @@ const prepareTunnelAddJob = (tunnelnum, deviceAIntf, deviceBIntf, devBagentVer, 
     'crypto-alg': 'aes-cbc-128',
     'integr-alg': 'sha-256-128'
   };
-
   paramsDeviceA.src = deviceAIntf.IPv4;
   paramsDeviceA.dst = ((deviceBIntf.PublicIP === '') ? deviceBIntf.IPv4 : deviceBIntf.PublicIP);
   paramsDeviceA['tunnel-id'] = tunnelnum;

@@ -36,12 +36,14 @@ describe('validateDevice', () => {
         pciaddr: '00:02.00',
         driver: 'igb-1000',
         MAC: 'ab:45:90:ed:89:16',
+        dhcp: 'no',
         IPv4: '192.168.100.1',
         IPv4Mask: '24',
         IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7348',
         IPv6Mask: '64',
         PublicIP: '72.168.10.30',
         gateway: '',
+        metric: '',
         isAssigned: true,
         routing: 'OSPF',
         type: 'LAN',
@@ -52,18 +54,19 @@ describe('validateDevice', () => {
         pciaddr: '00:02.01',
         driver: 'igb-1000',
         MAC: 'ab:45:90:ed:89:17',
+        dhcp: 'no',
         IPv4: '172.23.100.1',
         IPv4Mask: '24',
         IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7346',
         IPv6Mask: '64',
         PublicIP: '172.23.100.1',
         gateway: '172.23.100.10',
+        metric: '0',
         isAssigned: true,
         routing: 'None',
         type: 'WAN',
         pathlabels: [ObjectId('5e65290fbe66a2335718e081')]
-      }],
-      defaultRoute: '172.23.100.10'
+      }]
     };
   });
 
@@ -79,6 +82,7 @@ describe('validateDevice', () => {
       pciaddr: '00:02.01',
       driver: 'igb-1000',
       MAC: 'ab:45:90:ed:89:17',
+      dhcp: 'invalid-dhcp',
       IPv4: 'invalid-IPv4',
       IPv4Mask: 'invalid-mask',
       IPv6: 'invalid-IPv6',

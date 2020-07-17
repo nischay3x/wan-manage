@@ -2405,6 +2405,12 @@ paths:
         name: filter
         required: false
         schema:
+          enum:
+          - fwagent
+          - syslog
+          - dhcp
+          - vpp
+          - ospf
           type: string
         style: form
       responses:
@@ -2414,6 +2420,92 @@ paths:
               schema:
                 $ref: '#/components/schemas/DeviceLog'
           description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve device logs information
+      tags:
+      - Logs
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/traces:
+    get:
+      operationId: devicesIdPacketTracesGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The number of packets to capture
+        explode: true
+        in: query
+        name: packets
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The wait time (sec) for packets to capture
+        explode: true
+        in: query
+        name: timeout
+        required: false
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevicePacketTraces'
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
         "401":
           content:
             application/json:
@@ -5965,8 +6057,11 @@ components:
         - IPv6: IPv6
           PublicIP: PublicIP
           IPv4: IPv4
+          gateway: gateway
+          metric: 0
           type: WAN
           MAC: MAC
+          dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
@@ -5980,6 +6075,7 @@ components:
           IPv4: IPv4
           type: WAN
           MAC: MAC
+          dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
@@ -5995,7 +6091,6 @@ components:
           _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
-        defaultRoute: defaultRoute
         deviceStatus: deviceStatus
         deviceToken: deviceToken
         labels:
@@ -6030,8 +6125,6 @@ components:
         description:
           type: string
         site:
-          type: string
-        defaultRoute:
           type: string
         isApproved:
           type: boolean
@@ -6082,7 +6175,9 @@ components:
           IPv4: IPv4
           type: WAN
           gateway: gateway
+          metric: 0
           MAC: MAC
+          dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
@@ -6097,7 +6192,9 @@ components:
           IPv4: IPv4
           type: WAN
           gateway: gateway
+          metric: 0
           MAC: MAC
+          dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
           isAssigned: true
@@ -6114,7 +6211,6 @@ components:
           _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
-        defaultRoute: defaultRoute
         deviceStatus: deviceStatus
         deviceToken: deviceToken
         labels:
@@ -6158,8 +6254,6 @@ components:
         description:
           type: string
         site:
-          type: string
-        defaultRoute:
           type: string
         isApproved:
           type: boolean
@@ -6226,6 +6320,8 @@ components:
         type: WAN
         MAC: MAC
         gateway: gateway
+        metric: 0
+        dhcp: "no"
         routing: OSPF
         IPv6Mask: "64"
         isAssigned: true
@@ -6244,6 +6340,11 @@ components:
           type: string
         driver:
           type: string
+        dhcp:
+          enum:
+          - yes
+          - no
+          type: string
         IPv4:
           type: string
         IPv6:
@@ -6251,6 +6352,8 @@ components:
         PublicIP:
           type: string
         gateway:
+          type: string
+        metric:
           type: string
         isAssigned:
           type: boolean
@@ -6481,6 +6584,20 @@ components:
           type: object
       type: object
     DeviceLog:
+      example:
+        logs:
+        - logs
+        - logs
+        status: connected
+      properties:
+        status:
+          $ref: '#/components/schemas/DeviceStatus'
+        logs:
+          items:
+            type: string
+          type: array
+      type: object
+    DevicePacketTraces:
       example:
         logs:
         - logs
@@ -7196,6 +7313,14 @@ components:
         code:
           type: string
         message:
+          type: string
+      required:
+      - code
+      - message
+      type: object
+    BadRequestError:
+      properties:
+        error:
           type: string
       required:
       - code

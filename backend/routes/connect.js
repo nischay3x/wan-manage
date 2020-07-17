@@ -76,19 +76,34 @@ connectRouter.route('/register')
 
               // Try to auto populate interfaces parameters
               const ifs = JSON.parse(req.body.interfaces);
+              // Is there gateway on any of interfaces
+              const hasGW = ifs.some(intf => intf.gateway);
+              let autoAssignedMetric = 100;
               ifs.forEach((intf) => {
-                if (intf.name === req.body.default_dev) {
+                if (!hasGW && intf.name === req.body.default_dev) {
+                  // old version agent
                   intf.isAssigned = true;
                   intf.PublicIP = sourceIP;
                   intf.type = 'WAN';
+                  intf.dhcp = intf.dhcp || 'no';
                   intf.gateway = req.body.default_route;
+                  intf.metric = '0';
+                } else if (intf.gateway) {
+                  intf.isAssigned = true;
+                  intf.type = 'WAN';
+                  intf.dhcp = intf.dhcp || 'no';
+                  intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
+                    ? '0' : intf.metric || (autoAssignedMetric++).toString();
+                  intf.PublicIP = intf.metric === '0' ? sourceIP : '';
                 } else {
                   intf.type = 'LAN';
+                  intf.dhcp = 'no';
                   intf.routing = 'OSPF';
-                  intf.gateway = '';
                   if (ifs.length === 2) {
                     intf.isAssigned = true;
                   }
+                  intf.gateway = '';
+                  intf.metric = '';
                 }
               });
 
@@ -130,7 +145,6 @@ connectRouter.route('/register')
                     hostname: req.body.machine_name,
                     ipList: req.body.ip_list,
                     machineId: req.body.machine_id,
-                    defaultRoute: req.body.default_route,
                     fromToken: resp[0].name,
                     interfaces: ifs,
                     deviceToken: deviceToken,

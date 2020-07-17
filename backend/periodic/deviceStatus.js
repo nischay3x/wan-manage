@@ -77,7 +77,8 @@ class DeviceStatus {
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().required(),
-      stats: Joi.object().pattern(/^[a-z0-9_/-]{1,64}$/i, Joi.object({
+      reconfig: Joi.string().allow('').optional(),
+      stats: Joi.object().pattern(/^[a-z0-9:._/-]{1,64}$/i, Joi.object({
         rx_bytes: Joi.number().required(),
         rx_pkts: Joi.number().required(),
         tx_bytes: Joi.number().required(),
@@ -138,6 +139,12 @@ class DeviceStatus {
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
             this.generateDevStatsNotifications();
+
+            // Check if config was modified on the device
+            if (lastUpdateEntry.reconfig && lastUpdateEntry.reconfig !== deviceInfo.reconfig) {
+              // Call get-device-info and reconfig
+              connections.sendDeviceInfoMsg(deviceID);
+            }
           } else {
             this.setDeviceStatsField(deviceID, 'state', 'stopped');
           }
@@ -184,7 +191,7 @@ class DeviceStatus {
         const intfStats = stats[intf];
         for (const stat in intfStats) {
           if (!intfStats.hasOwnProperty(stat) || !this.statsFieldsMap.get(stat)) continue;
-          const key = 'stats.' + intf + '.' + this.statsFieldsMap.get(stat);
+          const key = 'stats.' + intf.replace('.', ':') + '.' + this.statsFieldsMap.get(stat);
           dbStats[key] = intfStats[stat] / statsEntry.period;
           shouldUpdate = true;
         }
