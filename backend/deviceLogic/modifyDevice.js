@@ -328,30 +328,6 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
     logger.error('Failed to set tunnel pending flag in db', {
       params: { err: err.message, removedTunnels }
     });
-
-    const { agent } = deviceB.versions;
-    const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
-      tunnel.num,
-      ifcA,
-      ifcB,
-      agent,
-      pathlabel
-    );
-    await queueTunnel(
-      true,
-      // eslint-disable-next-line max-len
-      `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
-      tasksDeviceA,
-      tasksDeviceB,
-      username,
-      org,
-      deviceA.machineId,
-      deviceB.machineId,
-      deviceA._id,
-      deviceB._id,
-      tunnel.num,
-      pathlabel
-    );
   }
 };
 
