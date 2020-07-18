@@ -100,6 +100,11 @@ const tunnelSchema = new Schema({
   pathlabel: {
     type: Schema.Types.ObjectId,
     ref: 'PathLabels'
+  },
+  // is modification in progress flag
+  pendingTunnelModification: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

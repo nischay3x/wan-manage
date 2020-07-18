@@ -170,7 +170,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
 
   // Checks if all interfaces metrics are different
   const metricsArray = device.interfaces
-    .filter(i => i.type === 'WAN' && i.gateway)
+    .filter(i => i.type === 'WAN')
     .map(i => Number(i.metric));
   const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
   if (hasDuplicates) {

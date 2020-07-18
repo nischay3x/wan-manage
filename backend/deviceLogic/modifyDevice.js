@@ -163,7 +163,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
-      const pathlabels = modifiedIfcsMap[ifc._id]
+      const pathlabels = modifiedIfcsMap[ifc._id] && modifiedIfcsMap[ifc._id].pathlabels
         ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
         : [];
       const pathLabelRemoved = pathlabel && !pathlabels.includes(pathlabel.toString());
@@ -181,6 +181,12 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         if (waitingDhcpInfo) {
           continue;
         }
+        // this could happen if both interfaces are modified at the same time
+        // we need to skip adding duplicated jobs
+        if (tunnel.pendingTunnelModification) {
+          continue;
+        }
+        await setTunnelsPendingInDB([tunnel._id], org, true);
         await queueTunnel(
           false,
           // eslint-disable-next-line max-len
@@ -272,18 +278,55 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
  * @return {Promise}                a promise for reconstructing tunnels
  */
 const reconstructTunnels = async (removedTunnels, org, username) => {
-  const tunnels = await tunnelsModel
-    .find({ _id: { $in: removedTunnels }, isActive: true })
-    .populate('deviceA')
-    .populate('deviceB');
+  try {
+    const tunnels = await tunnelsModel
+      .find({ _id: { $in: removedTunnels }, isActive: true })
+      .populate('deviceA')
+      .populate('deviceB');
 
-  for (const tunnel of tunnels) {
-    const { deviceA, deviceB, pathlabel } = tunnel;
-    const ifcA = deviceA.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceA.toString();
+    for (const tunnel of tunnels) {
+      const { deviceA, deviceB, pathlabel } = tunnel;
+      const ifcA = deviceA.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceA.toString();
+      });
+      const ifcB = deviceB.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceB.toString();
+      });
+
+      const { agent } = deviceB.versions;
+      const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
+        tunnel.num,
+        ifcA,
+        ifcB,
+        agent,
+        pathlabel
+      );
+      await queueTunnel(
+        true,
+        // eslint-disable-next-line max-len
+        `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
+        tasksDeviceA,
+        tasksDeviceB,
+        username,
+        org,
+        deviceA.machineId,
+        deviceB.machineId,
+        deviceA._id,
+        deviceB._id,
+        tunnel.num,
+        pathlabel
+      );
+    }
+  } catch (err) {
+    logger.error('Failed to queue Add tunnel jobs', {
+      params: { err: err.message, removedTunnels }
     });
-    const ifcB = deviceB.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceB.toString();
+  };
+  try {
+    await setTunnelsPendingInDB(removedTunnels, org, false);
+  } catch (err) {
+    logger.error('Failed to set tunnel pending flag in db', {
+      params: { err: err.message, removedTunnels }
     });
 
     const { agent } = deviceB.versions;
@@ -325,6 +368,23 @@ const setJobPendingInDB = (deviceID, org, flag) => {
   return devices.update(
     { _id: deviceID, org: org },
     { $set: { pendingDevModification: flag } },
+    { upsert: false }
+  );
+};
+
+/**
+ * Sets the tunnel rebuilding process pending flag value. This flag is used to indicate
+ * there are pending delete-tunnel/add-tunnel jobs in the queue to prevent
+ * duplication of jobs.
+ * @param  {array}  tunnelIDs array of ids of tunnels
+ * @param  {string}  org      the organization the tunnel belongs to
+ * @param  {boolean} flag     the value of the flag
+ * @return {Promise}          a promise for updating the flab in the database
+ */
+const setTunnelsPendingInDB = (tunnelIDs, org, flag) => {
+  return tunnelsModel.updateMany(
+    { _id: { $in: tunnelIDs }, org: org },
+    { $set: { pendingTunnelModification: flag } },
     { upsert: false }
   );
 };
