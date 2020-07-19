@@ -16,14 +16,15 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const ObjectId = require('mongoose').Types.ObjectId;
-const cidrTools = require('cidr-tools');
+// const cidrTools = require('cidr-tools');
+const cidrSplit = require('cidr-split');
 const applications = require('../models/applications');
 const { devices } = require('../models/devices');
 const diffieHellmans = require('../models/diffieHellmans');
 
 const {
-  getAvailableIps,
-  getSubnetMask
+  getAvailableIps
+  // getSubnetMask
 } = require('../utils/networks');
 
 const {
@@ -75,27 +76,26 @@ const isVpn = applicationName => {
 const validateVpnConfiguration = async (configurationRequest, applicationId, orgList) => {
   // check if subdomain already taken
   const organization = configurationRequest.organization;
+  const regex = new RegExp(`\\b${organization}\\b`, 'i');
   const organizationExists = await applications.findOne(
     {
       _id: { $ne: applicationId },
       configuration: { $exists: 1 },
-      'configuration.organization': organization
+      'configuration.organization': { $regex: regex, $options: 'i' }
     }
   );
 
   if (organizationExists) {
+    const err = 'This Organization name is already in use by another account. ' +
+    'Please choose another Organization name';
     return {
       valid: false,
-      err: 'This organization already taken. please choose other'
+      err: err
     };
   }
 
   // validate subnets
   if (configurationRequest.remoteClientIp && configurationRequest.connectionsPerDevice) {
-    const subnetsCount = getTotalSubnets(
-      configurationRequest.remoteClientIp, configurationRequest.connectionsPerDevice
-    ).length;
-
     const installedDevices = await devices.find({
       org: { $in: orgList },
       'applications.applicationInfo': applicationId,
@@ -104,6 +104,12 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
         { 'applications.status': 'installing' }
       ]
     });
+
+    const subnetsCount = getTotalSubnets(
+      configurationRequest.remoteClientIp,
+      configurationRequest.connectionsPerDevice,
+      installedDevices.length
+    ).length;
 
     if (installedDevices.length > subnetsCount) {
       return {
@@ -117,16 +123,13 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
 };
 
 /**
- * Calculate the entire subnets configure by the user
+ * split subnet and return the subnets count
  * @param {string} remoteClientIp
  * @param {string} connectionsPerDevice
- * @return {[string]}  array of all subnets
+ * @return {number}  number of splitted subnets
  */
-const getTotalSubnets = (remoteClientIp, connectionsPerDevice) => {
+const getSplittedSubnetsCount = (remoteClientIp, connectionsPerDevice) => {
   const mask = remoteClientIp.split('/').pop();
-
-  // get the new subnets mask for splitted subnets
-  const deviceMask = getSubnetMask(connectionsPerDevice);
 
   // get ip range for this mask
   const availableIpsCount = getAvailableIps(mask);
@@ -134,12 +137,39 @@ const getTotalSubnets = (remoteClientIp, connectionsPerDevice) => {
   // get subnets count for this org
   const subnetsCount = availableIpsCount / connectionsPerDevice;
 
-  const ips = cidrTools.expand(remoteClientIp);
+  return subnetsCount;
+};
 
-  const subnets = [];
-  for (let i = 0; i < subnetsCount; i++) {
-    subnets.push(`${ips[i * connectionsPerDevice]}/${deviceMask}`);
-  };
+const splitNet = net => {
+  return cidrSplit.fromString(net).split().map(s => s.toString());
+};
+
+/**
+ * Calculate the entire subnets configure by the user
+ * @param {string} remoteClientIp
+ * @param {string} connectionsPerDevice
+ * @return {[string]}  array of all subnets
+ */
+const getTotalSubnets = (remoteClientIp, connectionsPerDevice, max = null) => {
+  const subnetsCount = getSplittedSubnetsCount(remoteClientIp, connectionsPerDevice);
+
+  // Option A
+  // // get the new subnets mask for splitted subnets
+  // const deviceMask = getSubnetMask(connectionsPerDevice);
+
+  // const ips = cidrTools.expand(remoteClientIp);
+
+  // const subnets = [];
+  // for (let i = 0; i < subnetsCount; i++) {
+  //   subnets.push(`${ips[i * connectionsPerDevice]}/${deviceMask}`);
+  // };
+
+  // Option B
+  let subnets = [remoteClientIp];
+  while (subnets.length < subnetsCount) {
+    subnets = subnets.map(s => splitNet(s.toString())).flat();
+    if (max != null && max < subnets.length) break;
+  }
 
   return subnets;
 };
@@ -222,7 +252,7 @@ const validateVpnApplication = (app, op, deviceIds) => {
     if (!app.configuration.remoteClientIp || !app.configuration.connectionsPerDevice) {
       return {
         valid: false,
-        err: 'Required configurations is missing, please check again the configurations'
+        err: 'Required configurations is missing. Please check again the configurations'
       };
     }
 
@@ -367,6 +397,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     params.version = version;
     params.routeAllOverVpn = config.routeAllOverVpn || false;
     params.remoteClientIp = deviceSubnet.subnet;
+    params.port = config.serverPort ? config.serverPort : '';
     params.deviceWANIp = wanIp;
     params.caKey = caPrivateKey;
     params.caCrt = caPublicKey;
