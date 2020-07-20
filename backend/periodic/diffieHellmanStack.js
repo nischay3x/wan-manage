@@ -63,8 +63,9 @@ class DiffieHellmanStack {
 
       if (keys < 50) {
         const newKey = await generateDHKey();
-        await diffieHellmans.create({
-          key: newKey
+        await diffieHellmans.insertOne({
+          key: newKey,
+          created_at: new Date()
         });
 
         logger.debug('Generated a Diffie-Hellman key', {

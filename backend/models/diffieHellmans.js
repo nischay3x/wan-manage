@@ -17,19 +17,6 @@
 
 const mongoose = require('mongoose');
 const mongoConns = require('../mongoConns.js')();
-const Schema = mongoose.Schema;
 
-/**
- * Diffie-Hellman Schema
- */
-
-const diffieHellmanSchema = new Schema({
-  key: {
-    type: String,
-    required: true
-  }
-}, {
-  timestamps: true
-});
-
-module.exports = mongoConns.getMainDB().model('DiffieHellmans', diffieHellmanSchema);
+// this collection stored on flexivpn db.
+module.exports = mongoConns.getMainDB().useDb("flexivpn").collection('diffiehellmans');

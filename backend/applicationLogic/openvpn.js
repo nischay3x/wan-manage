@@ -58,12 +58,12 @@ const getOpenVpnInitialConfiguration = () => {
 };
 
 /**
- * Indicate if application is open vpn
+ * Indicate if application is remote vpn
  * @param {string} applicationName
  * @return {boolean}
  */
 const isVpn = applicationName => {
-  return applicationName === 'Open VPN';
+  return applicationName === 'Remote VPN';
 };
 
 /**
@@ -313,9 +313,16 @@ const getDeviceKeys = async application => {
     serverKey = server.privateKey;
     serverCrt = server.publicKey;
 
-    const dhKeyDoc = await diffieHellmans.findOneAndRemove();
-    if (!dhKeyDoc) dhKey = generateDhKeys();
-    else dhKey = dhKeyDoc.key;
+    // check if there is DH key on stack
+    const dhKeyDoc = await diffieHellmans.findOne();    
+    
+    if (!dhKeyDoc) {
+      dhKey = generateDhKeys()
+    } else {
+      dhKey = dhKeyDoc.key;
+      await diffieHellmans.remove({_id: dhKeyDoc._id});
+    }
+
   } else {
     caPrivateKey = application.configuration.keys.caKey;
     caPublicKey = application.configuration.keys.caCrt;
@@ -352,7 +359,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
   const config = application.configuration;
 
   if (op === 'deploy' || op === 'config' || op === 'upgrade') {
-    // get the WanIp to be used by open vpn server to listen
+    // get the WanIp to be used by remote vpn server to listen
     const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 
     // get new subnet only if there is no subnet connect with current device
