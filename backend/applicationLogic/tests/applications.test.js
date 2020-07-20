@@ -34,7 +34,7 @@ describe('validate vpn configuration', () => {
   beforeEach(() => {
     app = {
       libraryApp: {
-        name: 'Open VPN'
+        name: 'Remote VPN'
       },
       configuration: {
         remoteClientIp: '192.168.0.0/24',
@@ -187,12 +187,12 @@ describe('validate vpn configuration', () => {
 
 describe('validate vpn name', () => {
   it('Should be a valid vpn name', () => {
-    const res = isVpn('Open VPN');
+    const res = isVpn('Remote VPN');
     expect(res).toBe(true);
   });
 
   it('Should be an invalid vpn name', () => {
-    const res = isVpn('Open vpn');
+    const res = isVpn('Remote vpn');
     expect(res).toBe(false);
   });
 });

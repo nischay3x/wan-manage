@@ -4,7 +4,7 @@
   },
   "applications": [
     {
-      "name": "Open VPN",
+      "name": "Remote VPN",
       "description": "Allow remote VPN access",
       "latestVersion": "4.1.2",
       "createdDate": 1590392115232,
