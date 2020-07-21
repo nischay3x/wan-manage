@@ -1,6 +1,7 @@
-const { createDiffieHellman, randomBytes } = require('crypto');
+const { randomBytes } = require('crypto');
+const configs = require('../configs')();
 const forge = require('node-forge');
-const asn = require('asn1.js');
+const axios = require('axios');
 const pki = forge.pki;
 
 const generateCA = () => {
@@ -99,28 +100,21 @@ const splitLineEveryNChars = (str, regex) => {
   return finalString;
 };
 
-// this function is called from a worker (/workers/diffie_hellman.js)
-// because this is an heavy function and running about a minute to create a key
-const generateDhKeys = () => {
-  const diffieHellman = createDiffieHellman(2048);
-
-  diffieHellman.generateKeys();
-
-  const defined = asn.define('', function () {
-    return this.seq().obj(this.key('p').int(), this.key('g').int());
+const generateDhKey = () => {
+  return new Promise((resolve, reject) => {
+    axios.get(configs.get('createDiffieHellmanApi'))
+      .then(res => {
+        resolve(res.data);
+      })
+      .catch(err => {
+        resolve(null);
+      });
   });
-
-  const params = defined.encode({
-    p: diffieHellman.getPrime(),
-    g: 2
-  }, 'pem', { label: 'DH PARAMETERS' });
-
-  return params;
 };
 
 module.exports = {
   generateKeys,
   generateCA,
-  generateDhKeys,
+  generateDhKey,
   generateTlsKey
 };

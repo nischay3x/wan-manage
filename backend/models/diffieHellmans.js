@@ -15,8 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const mongoose = require('mongoose');
 const mongoConns = require('../mongoConns.js')();
 
 // this collection stored on flexivpn db.
-module.exports = mongoConns.getMainDB().useDb("flexivpn").collection('diffiehellmans');
+module.exports = mongoConns.getMainDB().useDb('flexivpn').collection('diffiehellmans');

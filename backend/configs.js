@@ -134,7 +134,9 @@ const configEnv = {
     // Global app identification rules file location
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
     // Global applications file locations
-    applicationsUrl: './applications.json'
+    applicationsUrl: './applications.json',
+    // Endpoint in our flexivpn server that create a dh key
+    createDiffieHellmanApi: 'http://localhost:5001/diffieHellman/create'
   },
   // Override for development environment, default environment if not specified
   development: {

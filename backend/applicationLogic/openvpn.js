@@ -30,7 +30,7 @@ const {
   generateKeys,
   generateCA,
   generateTlsKey,
-  generateDhKeys
+  generateDhKey
 } = require('../utils/certificates');
 
 /**
@@ -291,7 +291,7 @@ const getDeviceKeys = async application => {
     const dhKeyDoc = await diffieHellmans.findOne();
 
     if (!dhKeyDoc) {
-      dhKey = generateDhKeys();
+      dhKey = await generateDhKey();
     } else {
       dhKey = dhKeyDoc.key;
       await diffieHellmans.remove({ _id: dhKeyDoc._id });
