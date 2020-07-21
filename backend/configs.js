@@ -226,7 +226,7 @@ const configEnv = {
     userIpReqRateLimit: 3000,
     unreadNotificationPeriod: 300000,
     userRefreshTokenExpiration: 86400,
-    agentBroker: 'appqa01.flexiwan.com:443',
+    agentBroker: 'appqa02.flexiwan.com:443',
     clientStaticDir: 'client/build',
     logFilePath: '/var/log/flexiwan/flexiwan.log',
     reqLogFilePath: '/var/log/flexiwan/flexiwanReq.log',
