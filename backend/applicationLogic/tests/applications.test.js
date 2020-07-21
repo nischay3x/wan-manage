@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { ObjectId } = require('mongoose').Types;
-const { isVpn, getFreeSubnet } = require('../openvpn');
+const { isVpn, getSubnetForDevice } = require('../openvpn');
 const { validateApplication } = require('../applications');
 
 describe('validate vpn configuration', () => {
@@ -49,7 +49,7 @@ describe('validate vpn configuration', () => {
   it('Should be an invalid configuration', () => {
     app.configuration = {};
     const result = validateApplication(app, 'deploy', devicesIds);
-    failureObject.err = 'Required configurations is missing, please check again the configurations';
+    failureObject.err = 'Required configurations is missing. Please check again the configurations';
     expect(result).toMatchObject(failureObject);
   });
 
@@ -60,7 +60,7 @@ describe('validate vpn configuration', () => {
       ObjectId('5e65290fbe66a2335718e083')
     ];
     const result = validateApplication(app, 'deploy', devicesIds);
-    failureObject.err = 'There is no subnets remaining. Please check again the configurations';
+    failureObject.err = 'There are no remained subnets. Please check the configurations';
     expect(result).toMatchObject(failureObject);
   });
 
@@ -79,7 +79,7 @@ describe('validate vpn configuration', () => {
     ];
 
     const result = validateApplication(app, 'deploy', devicesIds);
-    failureObject.err = 'There is no subnets remaining. Please check again the configurations';
+    failureObject.err = 'There are no remained subnets. Please check the configurations';
     expect(result).toMatchObject(failureObject);
   });
 
@@ -167,8 +167,8 @@ describe('validate vpn configuration', () => {
       }
     ];
 
-    const subnet = getFreeSubnet(app.configuration, deviceId.toString());
-    expect(subnet).toMatchObject(app.configuration.subnets[0]);
+    const result = getSubnetForDevice(app.configuration, deviceId.toString());
+    expect(result).toMatchObject([app.configuration.subnets[0], 'exists']);
   });
 
   it('Should return the next free subnet', () => {
@@ -180,8 +180,25 @@ describe('validate vpn configuration', () => {
       }
     ];
 
-    const subnet = getFreeSubnet(app.configuration, deviceId.toString());
-    expect(subnet).toMatchObject({ device: deviceId, subnet: '192.168.0.128/25' });
+    const result = getSubnetForDevice(app.configuration, deviceId.toString());
+    expect(result).toMatchObject([{ device: deviceId, subnet: '192.168.0.128/25' }, 'new']);
+  });
+
+  it('Should return the exists free subnet', () => {
+    const deviceId = ObjectId('5e65290fbe66a2335718e081');
+    app.configuration.subnets = [
+      {
+        device: ObjectId('5e65290fbe66a2335718e082'),
+        subnet: '192.168.0.0/25'
+      },
+      {
+        device: null,
+        subnet: '192.168.0.128/25'
+      }
+    ];
+
+    const result = getSubnetForDevice(app.configuration, deviceId.toString());
+    expect(result).toMatchObject([{ device: deviceId, subnet: '192.168.0.128/25' }, 'update']);
   });
 });
 

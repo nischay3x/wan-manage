@@ -37,11 +37,36 @@ function getSubnetMaskByRangeCount (ips) {
     count++;
   }
 
-  var mask = 32 - count + 1;
+  const mask = 32 - count + 1;
   return mask;
 }
 
+/**
+ * Find the start and end IPv4 from ip + mask
+ * @param {String} ip     IPv4 address
+ * @param {String} mask   Number of bit masks
+ * @param {String} shift  Number of IPs to shift from start
+ */
+const getStartIp = (ipString, mask, shift = 0) => {
+  function u (n) { return n >>> 0; } // convert to unsigned
+  function ip (n) {
+    return [
+      (n >>> 24) & 0xFF,
+      (n >>> 16) & 0xFF,
+      (n >>> 8) & 0xFF,
+      (n >>> 0) & 0xFF
+    ].join('.');
+  }
+  const m = ipString.split('.');
+  const addr32 = m.reduce((a, o) => {
+    return u(+a << 8) + +o;
+  });
+  const maskNum = u(~0 << (32 - +mask));
+  return ip(u(addr32 & maskNum) + shift);
+};
+
 module.exports = {
   getSubnetMask: getSubnetMaskByRangeCount,
-  getAvailableIps
+  getAvailableIps,
+  getStartIp
 };

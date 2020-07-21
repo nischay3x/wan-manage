@@ -16,15 +16,14 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const ObjectId = require('mongoose').Types.ObjectId;
-// const cidrTools = require('cidr-tools');
-const cidrSplit = require('cidr-split');
 const applications = require('../models/applications');
 const { devices } = require('../models/devices');
 const diffieHellmans = require('../models/diffieHellmans');
 
 const {
-  getAvailableIps
-  // getSubnetMask
+  getAvailableIps,
+  getSubnetMask,
+  getStartIp
 } = require('../utils/networks');
 
 const {
@@ -105,16 +104,15 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
       ]
     });
 
-    const subnetsCount = getTotalSubnets(
+    const updatedSubnetsCount = calculateNumberOfSubnets(
       configurationRequest.remoteClientIp,
-      configurationRequest.connectionsPerDevice,
-      installedDevices.length
-    ).length;
+      configurationRequest.connectionsPerDevice
+    );
 
-    if (installedDevices.length > subnetsCount) {
+    if (installedDevices.length > updatedSubnetsCount) {
       return {
         valid: false,
-        err: 'There is more installed devices then subnets. Please increase your subnets'
+        err: 'There are more installed devices then subnets. Please increase the number of subnets'
       };
     }
   }
@@ -123,84 +121,52 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
 };
 
 /**
- * split subnet and return the subnets count
+ * divide network and return the subnets count
  * @param {string} remoteClientIp
  * @param {string} connectionsPerDevice
  * @return {number}  number of splitted subnets
  */
-const getSplittedSubnetsCount = (remoteClientIp, connectionsPerDevice) => {
+const calculateNumberOfSubnets = (remoteClientIp, connectionsPerDevice) => {
   const mask = remoteClientIp.split('/').pop();
 
-  // get ip range for this mask
-  const availableIpsCount = getAvailableIps(mask);
+  const deviceMask = getSubnetMask(connectionsPerDevice);
 
-  // get subnets count for this org
-  const subnetsCount = availableIpsCount / connectionsPerDevice;
+  const subnetsCount = Math.pow(2, deviceMask - parseInt(mask));
 
   return subnetsCount;
-};
-
-const splitNet = net => {
-  return cidrSplit.fromString(net).split().map(s => s.toString());
-};
-
-/**
- * Calculate the entire subnets configure by the user
- * @param {string} remoteClientIp
- * @param {string} connectionsPerDevice
- * @return {[string]}  array of all subnets
- */
-const getTotalSubnets = (remoteClientIp, connectionsPerDevice, max = null) => {
-  const subnetsCount = getSplittedSubnetsCount(remoteClientIp, connectionsPerDevice);
-
-  // Option A
-  // // get the new subnets mask for splitted subnets
-  // const deviceMask = getSubnetMask(connectionsPerDevice);
-
-  // const ips = cidrTools.expand(remoteClientIp);
-
-  // const subnets = [];
-  // for (let i = 0; i < subnetsCount; i++) {
-  //   subnets.push(`${ips[i * connectionsPerDevice]}/${deviceMask}`);
-  // };
-
-  // Option B
-  let subnets = [remoteClientIp];
-  while (subnets.length < subnetsCount) {
-    subnets = subnets.map(s => splitNet(s.toString())).flat();
-    if (max != null && max < subnets.length) break;
-  }
-
-  return subnets;
 };
 
 /**
  * Get the subnet that will be assigned to the device
  * @param {object} config configuration object
  * @param {ObjectID} deviceId the if of the device to be assigned
- * @return {{device: ObjectID, subnet: string}}  object of subnet to be assigned
+ * @return {[{device: ObjectID, subnet: string}, status]} object of subnet to be assigned
  */
-const getFreeSubnet = (config, deviceId = '') => {
-  // check if has available subnet to assign
-  const totalSubnets = getTotalSubnets(config.remoteClientIp, config.connectionsPerDevice);
-
-  const assignedSubnets = config.subnets || [];
-
+const getSubnetForDevice = (config, deviceId = '') => {
   // if subnet already assigned to this device, return the subnet
+  const assignedSubnets = config.subnets || [];
   const exists = assignedSubnets.find(
     s => s.device && (s.device.toString() === deviceId)
   );
-  if (exists) return exists;
+  if (exists) return [exists, 'exists'];
 
-  // get the first subnet that not exists in assignedSubnets
-  const freeSubnet = totalSubnets.find(s => {
-    return assignedSubnets.findIndex(as => as.subnet === s) === -1;
+  // check if there is free subnet on db, return the subnet
+  const freeSubnetOnDb = assignedSubnets.find(s => {
+    return s.device === null;
   });
+  if (freeSubnetOnDb) return [{ ...freeSubnetOnDb, device: ObjectId(deviceId) }, 'update'];
 
-  return {
+  // allocate the next subnet
+  const [ip, mask] = config.remoteClientIp.split('/');
+  const deviceMask = getSubnetMask(config.connectionsPerDevice);
+  const range = getAvailableIps(deviceMask);
+  const deviceNumber = config.subnets ? config.subnets.length : 0;
+  const startIp = getStartIp(ip, parseInt(mask), range * deviceNumber);
+
+  return [{
     device: ObjectId(deviceId),
-    subnet: freeSubnet
-  };
+    subnet: `${startIp}/${deviceMask}`
+  }, 'new'];
 };
 
 const onVpnJobComplete = async (org, app, op, deviceId) => {
@@ -233,9 +199,13 @@ const onVpnJobFailed = async (org, app, op, deviceId) => {
  * @return {void}
  */
 const releaseSubnetForDevice = async (org, appId, deviceId) => {
+  // await applications.updateOne(
+  //   { org: org, _id: appId },
+  //   { $pull: { 'configuration.subnets': { device: ObjectId(deviceId) } } }
+  // );
   await applications.updateOne(
-    { org: org, _id: appId },
-    { $pull: { 'configuration.subnets': { device: ObjectId(deviceId) } } }
+    { org: org, _id: appId, 'configuration.subnets.device': ObjectId(deviceId) },
+    { $set: { 'configuration.subnets.$.device': null } }
   );
 };
 
@@ -257,23 +227,27 @@ const validateVpnApplication = (app, op, deviceIds) => {
     }
 
     // prevent installation if selected more devices then subnets
-    const takenSubnets = app.configuration.subnets ? app.configuration.subnets.length : 0;
-    const freeSubnets = getTotalSubnets(
+    const subnets = app.configuration.subnets;
+    const takenSubnets = subnets ? subnets.filter(s => s.device != null).length : 0;
+
+    const totalNumberOfSubnets = calculateNumberOfSubnets(
       app.configuration.remoteClientIp,
       app.configuration.connectionsPerDevice
-    ).length - takenSubnets;
+    );
 
-    // create a new devicesIds array without subnet
-    const deviceWithoutSubnets = deviceIds.filter(d => {
-      return app.configuration.subnets.findIndex(s => s.device.toString() === d.toString()) === -1;
-    });
+    const freeSubnets = totalNumberOfSubnets - takenSubnets;
 
-    const isMoreDevicesThenSubnets = freeSubnets < deviceWithoutSubnets.length;
+    // create a new devicesIds array contains the devices without assigned subnet
+    const devicesWithoutSubnets = takenSubnets ? deviceIds.filter(d => {
+      return subnets.findIndex(s => s.device && s.device.toString() === d.toString()) === -1;
+    }) : [...deviceIds];
+
+    const isMoreDevicesThenSubnets = freeSubnets < devicesWithoutSubnets.length;
 
     if (isMoreDevicesThenSubnets) {
       return {
         valid: false,
-        err: 'There is no subnets remaining. Please check again the configurations'
+        err: 'There are no remained subnets. Please check the configurations'
       };
     }
   }
@@ -314,15 +288,14 @@ const getDeviceKeys = async application => {
     serverCrt = server.publicKey;
 
     // check if there is DH key on stack
-    const dhKeyDoc = await diffieHellmans.findOne();    
-    
+    const dhKeyDoc = await diffieHellmans.findOne();
+
     if (!dhKeyDoc) {
-      dhKey = generateDhKeys()
+      dhKey = generateDhKeys();
     } else {
       dhKey = dhKeyDoc.key;
-      await diffieHellmans.remove({_id: dhKeyDoc._id});
+      await diffieHellmans.remove({ _id: dhKeyDoc._id });
     }
-
   } else {
     caPrivateKey = application.configuration.keys.caKey;
     caPublicKey = application.configuration.keys.caCrt;
@@ -362,15 +335,22 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     // get the WanIp to be used by remote vpn server to listen
     const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 
-    // get new subnet only if there is no subnet connect with current device
-    const deviceSubnet = getFreeSubnet(config, _id.toString());
+    // get new subnet if there is no subnet already assigned to current device
+    const [deviceSubnet, status] = getSubnetForDevice(config, _id.toString());
 
+    const query = { _id: application._id };
     const update = {
-      $set: {},
-      $addToSet: {
-        'configuration.subnets': deviceSubnet
-      }
+      $set: {}
     };
+
+    if (status === 'update') {
+      query['configuration.subnets.subnet'] = deviceSubnet.subnet;
+      update.$set['configuration.subnets.$.device'] = deviceSubnet.device;
+    } else if (status === 'new') {
+      update.$push = {
+        'configuration.subnets': deviceSubnet
+      };
+    }
 
     const {
       isNew, caPrivateKey, caPublicKey,
@@ -388,7 +368,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     }
 
     // set subnet to device to prevent same subnet on multiple devices
-    await applications.updateOne({ _id: application._id }, update);
+    await applications.updateOne(query, update);
 
     let version = application.installedVersion;
     if (op === 'upgrade') {
@@ -423,7 +403,7 @@ module.exports = {
   isVpn,
   getOpenVpnInitialConfiguration,
   validateVpnConfiguration,
-  getFreeSubnet,
+  getSubnetForDevice,
   onVpnJobComplete,
   onVpnJobRemoved,
   onVpnJobFailed,
