@@ -87,7 +87,7 @@ class DeviceStatus {
     });
 
     for (const updateEntry of msg) {
-      const result = Joi.validate(updateEntry, devStatsSchema);
+      const result = devStatsSchema.validate(updateEntry);
       if (result.error) {
         return {
           valid: false,
