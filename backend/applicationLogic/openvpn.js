@@ -84,7 +84,7 @@ const pickOnlyVpnAllowedFields = configurationRequest => {
 const domainRegex = new RegExp(/(^[A-Za-z0-9]+$)|(^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$)/, 'i');
 const vpnConfigSchema = Joi.object().keys({
   organization: Joi.string().pattern(domainRegex).min(3).max(20).required(),
-  serverPort: Joi.number().port().optional(),
+  serverPort: Joi.number().port().optional().allow(''),
   remoteClientIp: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
   connectionsPerDevice: Joi.number().min(8)
     .custom((val, helpers) => {
@@ -96,8 +96,8 @@ const vpnConfigSchema = Joi.object().keys({
       return val.toString();
     })
     .required(),
-  dnsIp: Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' }).optional(),
-  dnsDomain: Joi.string().min(3).max(50).optional(),
+  dnsIp: Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' }).allow('').optional(),
+  dnsDomain: Joi.string().min(3).max(50).allow('').optional(),
   authentications: Joi.array().length(2).items(
     Joi.object().keys({
       type: Joi.string().valid('G-Suite').required(),
