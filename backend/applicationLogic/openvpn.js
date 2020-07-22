@@ -90,9 +90,10 @@ const vpnConfigSchema = Joi.object().keys({
     .custom((val, helpers) => {
       const isPowerOfTwo = (Math.log(val) / Math.log(2)) % 1 === 0;
       if (!isPowerOfTwo) {
-        return helpers.message('connectionsPerDevice should be a power of 2');
+        return helpers.message('connections per device should be a power of 2');
       };
-      return val;
+
+      return val.toString();
     })
     .required(),
   dnsIp: Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' }).optional(),
@@ -121,9 +122,15 @@ const vpnConfigSchema = Joi.object().keys({
   const { remoteClientIp, connectionsPerDevice } = obj;
   const mask = remoteClientIp.split('/').pop();
   const range = getAvailableIps(mask);
-  if (range < connectionsPerDevice) {
-    return helpers.message('connectionsPerDevice is larger then network');
+
+  if (typeof helpers.original.connectionsPerDevice === 'number') {
+    return helpers.message('connectionsPerDevice should be a number within a string');
   }
+
+  if (range < connectionsPerDevice) {
+    return helpers.message('connections per device is larger then network size');
+  }
+
   return obj;
 });
 
