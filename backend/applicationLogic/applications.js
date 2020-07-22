@@ -23,7 +23,8 @@ const {
   onVpnJobRemoved,
   onVpnJobFailed,
   validateVpnApplication,
-  getOpenVpnParams
+  getOpenVpnParams,
+  pickOnlyVpnAllowedFields
 } = require('./openvpn');
 
 const getInitialConfigObject = libraryApp => {
@@ -32,6 +33,14 @@ const getInitialConfigObject = libraryApp => {
   } else {
     return {};
   };
+};
+
+const pickAllowedFieldsOnly = (configurationRequest, app) => {
+  if (isVpn(app.libraryApp.name)) {
+    return pickOnlyVpnAllowedFields(configurationRequest, app);
+  } else {
+    return configurationRequest;
+  }
 };
 
 const validateConfiguration = async (configurationRequest, app, orgList) => {
@@ -101,6 +110,7 @@ const getJobParams = async (device, application, op) => {
 module.exports = {
   getInitialConfigObject,
   validateConfiguration,
+  pickAllowedFieldsOnly,
   validateApplication,
   onJobComplete,
   onJobFailed,

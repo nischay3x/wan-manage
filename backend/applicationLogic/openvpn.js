@@ -15,7 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const Joi = require('@hapi/joi');
 const ObjectId = require('mongoose').Types.ObjectId;
+const pick = require('lodash/pick');
 const applications = require('../models/applications');
 const { devices } = require('../models/devices');
 const diffieHellmans = require('../models/diffieHellmans');
@@ -65,6 +67,66 @@ const isVpn = applicationName => {
   return applicationName === 'Remote VPN';
 };
 
+const allowedFields = [
+  'organization',
+  'serverPort',
+  'remoteClientIp',
+  'connectionsPerDevice',
+  'dnsIp',
+  'dnsDomain',
+  'authentications'
+];
+
+const pickOnlyVpnAllowedFields = configurationRequest => {
+  return pick(configurationRequest, allowedFields);
+};
+
+const domainRegex = new RegExp(/(^[A-Za-z0-9]+$)|(^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$)/, 'i');
+const vpnConfigSchema = Joi.object().keys({
+  organization: Joi.string().pattern(domainRegex).min(3).max(20).required(),
+  serverPort: Joi.number().port().optional(),
+  remoteClientIp: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
+  connectionsPerDevice: Joi.number().min(8)
+    .custom((val, helpers) => {
+      const isPowerOfTwo = (Math.log(val) / Math.log(2)) % 1 === 0;
+      if (!isPowerOfTwo) {
+        return helpers.message('connectionsPerDevice should be a power of 2');
+      };
+      return val;
+    })
+    .required(),
+  dnsIp: Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' }).optional(),
+  dnsDomain: Joi.string().min(3).max(50).optional(),
+  authentications: Joi.array().length(2).items(
+    Joi.object().keys({
+      type: Joi.string().valid('G-Suite').required(),
+      enabled: Joi.boolean().required(),
+      domainName: Joi.string().pattern(domainRegex).when('enabled', {
+        is: true,
+        then: Joi.invalid(''),
+        otherwise: Joi.allow('')
+      }).required()
+    }).required(),
+    Joi.object().keys({
+      type: Joi.string().valid('Office365').required(),
+      enabled: Joi.boolean().required(),
+      domainName: Joi.string().pattern(domainRegex).when('enabled', {
+        is: true,
+        then: Joi.invalid(''),
+        otherwise: Joi.allow('')
+      }).required()
+    }).required()
+  ).optional()
+}).custom((obj, helpers) => {
+  const { remoteClientIp, connectionsPerDevice } = obj;
+  const mask = remoteClientIp.split('/').pop();
+  const range = getAvailableIps(mask);
+  if (range < connectionsPerDevice) {
+    return helpers.message('connectionsPerDevice is larger then network');
+  }
+  return obj;
+});
+
 /**
  * Validate vpn configurations. called when a user update the configurations
  * @param {object} configurationRequest
@@ -73,6 +135,12 @@ const isVpn = applicationName => {
  * @return {{valid: boolean, err: string}}  test result + error if message is invalid
  */
 const validateVpnConfiguration = async (configurationRequest, applicationId, orgList) => {
+  // validate user inputs
+  const result = vpnConfigSchema.validate(configurationRequest);
+  if (result.error) {
+    return { valid: false, err: `${result.error.details[0].message}` };
+  }
+
   // check if subdomain already taken
   const organization = configurationRequest.organization;
   const regex = new RegExp(`\\b${organization}\\b`, 'i');
@@ -87,10 +155,7 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
   if (organizationExists) {
     const err = 'This Organization name is already in use by another account. ' +
     'Please choose another Organization name';
-    return {
-      valid: false,
-      err: err
-    };
+    return { valid: false, err: err };
   }
 
   // validate subnets
@@ -408,5 +473,6 @@ module.exports = {
   onVpnJobRemoved,
   onVpnJobFailed,
   validateVpnApplication,
+  pickOnlyVpnAllowedFields,
   getOpenVpnParams
 };

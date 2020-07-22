@@ -26,7 +26,8 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 
 const {
   getInitialConfigObject,
-  validateConfiguration
+  validateConfiguration,
+  pickAllowedFieldsOnly
 } = require('../applicationLogic/applications');
 
 class ApplicationsService {
@@ -281,10 +282,10 @@ class ApplicationsService {
    */
   static async applicationsConfigurationPUT ({ id, configurationRequest, org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      const orgList = await getAccessTokenOrgList(user, org, false);
 
       // check if user didn't pass request body or if app id is invalid
-      if (!ObjectId.isValid(id)) {
+      if (!ObjectId.isValid(id) || Object.keys(configurationRequest).length === 0) {
         return Service.rejectResponse('Invalid request', 500);
       }
 
@@ -293,6 +294,10 @@ class ApplicationsService {
         .populate('libraryApp').populate('org').lean();
 
       if (!app) return Service.rejectResponse('Invalid application id', 500);
+
+      // this configuration object is dynamically.
+      // we need to pick only allowed fields for given application
+      configurationRequest = pickAllowedFieldsOnly(configurationRequest, app);
 
       const { valid, err } = await validateConfiguration(configurationRequest, app, orgList);
 
