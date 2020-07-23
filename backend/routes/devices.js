@@ -425,7 +425,8 @@ const verifyLogsRequest = (req, res, next) => {
     lines: Joi.number().integer().max(10000),
     filter: Joi.string().valid('all', 'fwagent')
   });
-  const result = Joi.validate(req.query, schema);
+  // const result = Joi.validate(req.query, schema);
+  const result = schema.validate(req.query);
   if (result.error) {
     return next(createError(400, result.error.details[0].message));
   }

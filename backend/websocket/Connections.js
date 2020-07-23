@@ -449,61 +449,95 @@ class Connections {
    */
   async sendDeviceInfoMsg (machineId) {
     const validateDevInfoMessage = msg => {
-      const devInfoMsgObj = Joi.extend(joi => ({
-        base: joi.object().keys({
-          device: joi
-            .string()
-            .regex(/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/)
+      const devInfoSchema = Joi.object().keys({
+        device: Joi
+          .string()
+          .pattern(/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/)
+          .required(),
+        components: Joi.object({
+          agent: Joi.object()
+            .keys({ version: Joi.string().required() })
             .required(),
-          components: Joi.object({
-            agent: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .required(),
-            router: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .required(),
-            vpp: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .required(),
-            frr: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .required()
-          }),
-          network: joi.object().optional(),
-          reconfig: joi.string().allow('').optional()
+          router: Joi.object()
+            .keys({ version: Joi.string().required() })
+            .required(),
+          vpp: Joi.object()
+            .keys({ version: Joi.string().required() })
+            .required(),
+          frr: Joi.object()
+            .keys({ version: Joi.string().required() })
+            .required()
         }),
-        name: 'versions',
-        language: {
-          err: 'invalid {{component}} version ({{version}})'
-        },
-        rules: [
-          {
-            name: 'format',
-            validate (params, value, state, options) {
-              for (const [component, info] of Object.entries(
-                value.components
-              )) {
-                const ver = info.version;
-                if (!(isSemVer(ver) || isVppVersion(ver))) {
-                  return this.createError(
-                    'versions.err',
-                    { component: component, version: ver },
-                    state,
-                    options
-                  );
-                }
-              }
-              return true;
-            }
+        network: Joi.object().optional(),
+        reconfig: Joi.string().allow('').optional()
+      }).custom((obj, helpers) => {
+        for (const [component, info] of Object.entries(
+          obj.components
+        )) {
+          const ver = info.version + '.3';
+          if (!(isSemVer(ver) || isVppVersion(ver))) {
+            return helpers.message(`invalid ${component} version ${ver}`);
           }
-        ]
-      }));
-      const devInfoSchema = devInfoMsgObj.versions().format();
-      const result = Joi.validate(msg, devInfoSchema);
+        }
+        return obj;
+      });
+
+      // const devInfoMsgObj = Joi.extend(joi => ({
+      //   base: joi.object().keys({
+      //     device: joi
+      //       .string()
+      //       .regex(/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/)
+      //       .required(),
+      //     components: Joi.object({
+      //       agent: Joi.object()
+      //         .keys({ version: Joi.string().required() })
+      //         .required(),
+      //       router: Joi.object()
+      //         .keys({ version: Joi.string().required() })
+      //         .required(),
+      //       vpp: Joi.object()
+      //         .keys({ version: Joi.string().required() })
+      //         .required(),
+      //       frr: Joi.object()
+      //         .keys({ version: Joi.string().required() })
+      //         .required()
+      //     }),
+      //     network: joi.object().optional(),
+      //     reconfig: joi.string().allow('').optional()
+      //   }),
+      //   name: 'versions',
+      //   language: {
+      //     err: 'invalid {{component}} version ({{version}})'
+      //   },
+      //   rules: [
+      //     {
+      //       name: 'format',
+      //       validate (params, value, state, options) {
+      //         for (const [component, info] of Object.entries(
+      //           value.components
+      //         )) {
+      //           const ver = info.version;
+      //           if (!(isSemVer(ver) || isVppVersion(ver))) {
+      //             return this.createError(
+      //               'versions.err',
+      //               { component: component, version: ver },
+      //               state,
+      //               options
+      //             );
+      //           }
+      //         }
+      //         return true;
+      //       }
+      //     }
+      //   ]
+      // }));
+      // const devInfoSchema = devInfoMsgObj.versions().format();
+      const result = devInfoSchema.validate(msg);
       if (result.error) {
         return {
           valid: false,
-          err: `${result.error.name}: ${result.error.details[0].message}`
+          err: result.error.details[0].message
+          // err: `${result.error.name}: ${result.error.details[0].message}`
         };
       }
 
