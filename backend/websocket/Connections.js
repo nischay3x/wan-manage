@@ -474,7 +474,7 @@ class Connections {
         for (const [component, info] of Object.entries(
           obj.components
         )) {
-          const ver = info.version + '.3';
+          const ver = info.version;
           if (!(isSemVer(ver) || isVppVersion(ver))) {
             return helpers.message(`invalid ${component} version ${ver}`);
           }
@@ -482,63 +482,9 @@ class Connections {
         return obj;
       });
 
-      // const devInfoMsgObj = Joi.extend(joi => ({
-      //   base: joi.object().keys({
-      //     device: joi
-      //       .string()
-      //       .regex(/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/)
-      //       .required(),
-      //     components: Joi.object({
-      //       agent: Joi.object()
-      //         .keys({ version: Joi.string().required() })
-      //         .required(),
-      //       router: Joi.object()
-      //         .keys({ version: Joi.string().required() })
-      //         .required(),
-      //       vpp: Joi.object()
-      //         .keys({ version: Joi.string().required() })
-      //         .required(),
-      //       frr: Joi.object()
-      //         .keys({ version: Joi.string().required() })
-      //         .required()
-      //     }),
-      //     network: joi.object().optional(),
-      //     reconfig: joi.string().allow('').optional()
-      //   }),
-      //   name: 'versions',
-      //   language: {
-      //     err: 'invalid {{component}} version ({{version}})'
-      //   },
-      //   rules: [
-      //     {
-      //       name: 'format',
-      //       validate (params, value, state, options) {
-      //         for (const [component, info] of Object.entries(
-      //           value.components
-      //         )) {
-      //           const ver = info.version;
-      //           if (!(isSemVer(ver) || isVppVersion(ver))) {
-      //             return this.createError(
-      //               'versions.err',
-      //               { component: component, version: ver },
-      //               state,
-      //               options
-      //             );
-      //           }
-      //         }
-      //         return true;
-      //       }
-      //     }
-      //   ]
-      // }));
-      // const devInfoSchema = devInfoMsgObj.versions().format();
       const result = devInfoSchema.validate(msg);
       if (result.error) {
-        return {
-          valid: false,
-          err: result.error.details[0].message
-          // err: `${result.error.name}: ${result.error.details[0].message}`
-        };
+        return { valid: false, err: result.error.details[0].message };
       }
 
       return { valid: true, err: '' };

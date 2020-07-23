@@ -101,6 +101,7 @@ const apply = async (deviceList, user, data) => {
       if (op === 'deploy') {
         for (let i = 0; i < deviceList.length; i++) {
           const device = deviceList[i];
+          const query = { _id: device._id };
 
           const appExists = device.applications && device.applications.find(
             a => a.applicationInfo && a.applicationInfo.toString() === app._id.toString());
@@ -124,15 +125,11 @@ const apply = async (deviceList, user, data) => {
                 }
               }
             };
-
-            // this updated should be for each device separately
-            // because some of them already have this application and some of them haven't
-            await devices.updateOne(
-              { _id: device._id },
-              update,
-              { upsert: false }
-            ).session(session);
           }
+
+          // this updated should be for each device separately
+          // because some of them already have this application and some of them haven't
+          await devices.updateOne(query, update, { upsert: false }).session(session);
         }
 
         // set update to null because we are already updated in this case

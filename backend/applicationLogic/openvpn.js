@@ -106,7 +106,8 @@ const vpnConfigSchema = Joi.object().keys({
         is: true,
         then: Joi.invalid(''),
         otherwise: Joi.allow('')
-      }).required()
+      }).required(),
+      group: Joi.string().allow('').optional()
     }).required(),
     Joi.object().keys({
       type: Joi.string().valid('Office365').required(),
@@ -115,7 +116,8 @@ const vpnConfigSchema = Joi.object().keys({
         is: true,
         then: Joi.invalid(''),
         otherwise: Joi.allow('')
-      }).required()
+      }).required(),
+      group: Joi.string().allow('').optional()
     }).required()
   ).optional()
 }).custom((obj, helpers) => {
