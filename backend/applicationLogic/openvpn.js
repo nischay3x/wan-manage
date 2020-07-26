@@ -68,7 +68,7 @@ const isVpn = applicationName => {
 };
 
 const allowedFields = [
-  'organization',
+  'networkId',
   'serverPort',
   'remoteClientIp',
   'connectionsPerDevice',
@@ -81,9 +81,9 @@ const pickOnlyVpnAllowedFields = configurationRequest => {
   return pick(configurationRequest, allowedFields);
 };
 
-const domainRegex = new RegExp(/(^[A-Za-z0-9]+$)|(^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$)/, 'i');
+const domainRegex = new RegExp(/(^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$)/);
 const vpnConfigSchema = Joi.object().keys({
-  organization: Joi.string().pattern(domainRegex).min(3).max(20).required(),
+  networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
   serverPort: Joi.number().port().optional().allow(''),
   remoteClientIp: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
   connectionsPerDevice: Joi.number().min(8)
@@ -150,20 +150,20 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
     return { valid: false, err: `${result.error.details[0].message}` };
   }
 
-  // check if subdomain already taken
-  const organization = configurationRequest.organization;
-  const regex = new RegExp(`\\b${organization}\\b`, 'i');
-  const organizationExists = await applications.findOne(
+  // check if unique networkId already taken
+  const networkId = configurationRequest.networkId;
+  const regex = new RegExp(`\\b${networkId}\\b`, 'i');
+  const existsNetworkId = await applications.findOne(
     {
       _id: { $ne: applicationId },
       configuration: { $exists: 1 },
-      'configuration.organization': { $regex: regex, $options: 'i' }
+      'configuration.networkId': { $regex: regex, $options: 'i' }
     }
   );
 
-  if (organizationExists) {
-    const err = 'This Organization name is already in use by another account. ' +
-    'Please choose another Organization name';
+  if (existsNetworkId) {
+    const err = 'This Network ID is already in use by another account. ' +
+    'Please choose another Unique Network ID';
     return { valid: false, err: err };
   }
 

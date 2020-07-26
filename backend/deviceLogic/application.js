@@ -76,12 +76,8 @@ const apply = async (deviceList, user, data) => {
       deviceIds = deviceList.map(d => d._id);
 
       if (op === 'deploy') {
-        if (!app) {
-          throw createError(500, `application ${id} does not purchased`);
-        }
-
-        if (app.removed) {
-          throw createError(500, 'cannot deploy removed application');
+        if (!app || app.removed) {
+          throw createError(500, `Application ${id} does not purchased`);
         }
       }
 
