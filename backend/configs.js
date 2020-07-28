@@ -37,7 +37,7 @@ const configEnv = {
     // to remove unneeded fields from the response, use validateOpenAPIResponse = { removeAdditional: 'failing' }
     validateOpenAPIResponse: true,
     // Number of REST requests allowed in 5 min per IP address, more requests will be rate limited
-    userIpReqRateLimit: '300',
+    userIpReqRateLimit: 300,
     // Unread notification email period (in msec), a mail is sent once a period
     unreadNotificationPeriod: 86400000,
     // The duration of the user JWT token in seconds
