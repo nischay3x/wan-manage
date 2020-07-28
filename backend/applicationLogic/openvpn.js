@@ -82,6 +82,26 @@ const pickOnlyVpnAllowedFields = configurationRequest => {
 };
 
 const domainRegex = new RegExp(/(^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$)/);
+const getAuthValidator = type => {
+  return Joi.object().keys({
+    type: Joi.string().valid(type).required(),
+    enabled: Joi.boolean().required(),
+    domainName: Joi.string().required().when('enabled', {
+      is: true,
+      then: Joi.invalid(''),
+      otherwise: Joi.allow('')
+    }).custom((val, helpers) => {
+      const domains = val.split(',');
+      const invalid = domains.filter(d => !d.trim().match(domainRegex));
+      if (invalid.length) {
+        return helpers.error(`Invalid domain name: ${invalid[0]}`);
+      }
+      return val.toString();
+    }),
+    group: Joi.string().allow('').optional()
+  }).required();
+};
+
 const vpnConfigSchema = Joi.object().keys({
   networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
   serverPort: Joi.number().port().optional().allow(''),
@@ -99,26 +119,8 @@ const vpnConfigSchema = Joi.object().keys({
   dnsIp: Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' }).allow('').optional(),
   dnsDomain: Joi.string().min(3).max(50).allow('').optional(),
   authentications: Joi.array().length(2).items(
-    Joi.object().keys({
-      type: Joi.string().valid('G-Suite').required(),
-      enabled: Joi.boolean().required(),
-      domainName: Joi.string().pattern(domainRegex).when('enabled', {
-        is: true,
-        then: Joi.invalid(''),
-        otherwise: Joi.allow('')
-      }).required(),
-      group: Joi.string().allow('').optional()
-    }).required(),
-    Joi.object().keys({
-      type: Joi.string().valid('Office365').required(),
-      enabled: Joi.boolean().required(),
-      domainName: Joi.string().pattern(domainRegex).when('enabled', {
-        is: true,
-        then: Joi.invalid(''),
-        otherwise: Joi.allow('')
-      }).required(),
-      group: Joi.string().allow('').optional()
-    }).required()
+    getAuthValidator('G-Suite'),
+    getAuthValidator('Office365')
   ).optional()
 }).custom((obj, helpers) => {
   const { remoteClientIp, connectionsPerDevice } = obj;
@@ -473,6 +475,15 @@ const getOpenVpnParams = async (device, applicationId, op) => {
   return params;
 };
 
+const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
+  if (oldConfig.remoteClientIp !== updatedConfig.remoteClientIp) return true;
+  if (oldConfig.connectionsPerDevice !== updatedConfig.connectionsPerDevice) return true;
+  if (oldConfig.serverPort !== updatedConfig.serverPort) return true;
+  if (oldConfig.dnsIp !== updatedConfig.dnsIp) return true;
+  if (oldConfig.dnsDomain !== updatedConfig.dnsDomain) return true;
+  return false;
+};
+
 module.exports = {
   isVpn,
   getOpenVpnInitialConfiguration,
@@ -483,5 +494,6 @@ module.exports = {
   onVpnJobFailed,
   validateVpnApplication,
   pickOnlyVpnAllowedFields,
-  getOpenVpnParams
+  getOpenVpnParams,
+  needToUpdatedVpnServers
 };

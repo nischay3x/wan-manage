@@ -27,7 +27,9 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const {
   getInitialConfigObject,
   validateConfiguration,
-  pickAllowedFieldsOnly
+  pickAllowedFieldsOnly,
+  saveConfiguration,
+  needToUpdatedDevices
 } = require('../applicationLogic/applications');
 
 class ApplicationsService {
@@ -309,31 +311,25 @@ class ApplicationsService {
         return Service.rejectResponse(err, 500);
       }
 
-      // reset the subnets array
-      // in the jobs logic, new subnets will allocated
-      configurationRequest.subnets = [];
-
       // update old configuration object with new one
       const combinedConfig = { ...app.configuration, ...configurationRequest };
 
-      const updated = await applications.findOneAndUpdate(
-        { _id: id },
-        { $set: { configuration: combinedConfig } },
-        { new: true, upsert: false }
-      );
+      const isNeedToUpdatedDevices = needToUpdatedDevices(app, app.configuration, combinedConfig);
 
-      await updated.populate('libraryApp').populate('org').execPopulate();
+      const updated = await saveConfiguration(app, combinedConfig);
 
-      // Update devices
-      const opDevices = await devices.find({
-        org: { $in: orgList },
-        'applications.applicationInfo': id,
-        'applications.status': { $in: ['installed', 'installing'] }
-      });
+      // Update devices if needed
+      if (isNeedToUpdatedDevices) {
+        const opDevices = await devices.find({
+          org: { $in: orgList },
+          'applications.applicationInfo': id,
+          'applications.status': { $in: ['installed', 'installing'] }
+        });
 
-      if (opDevices.length) {
-        await dispatcher.apply(opDevices, 'application',
-          user, { org: orgList[0], meta: { op: 'config', id: id } });
+        if (opDevices.length) {
+          await dispatcher.apply(opDevices, 'application',
+            user, { org: orgList[0], meta: { op: 'config', id: id } });
+        }
       }
 
       return Service.successResponse({ application: updated });

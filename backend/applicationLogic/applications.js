@@ -15,6 +15,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const applications = require('../models/applications');
+
 const {
   isVpn,
   getOpenVpnInitialConfiguration,
@@ -24,7 +26,8 @@ const {
   onVpnJobFailed,
   validateVpnApplication,
   getOpenVpnParams,
-  pickOnlyVpnAllowedFields
+  pickOnlyVpnAllowedFields,
+  needToUpdatedVpnServers
 } = require('./openvpn');
 
 const getInitialConfigObject = libraryApp => {
@@ -107,6 +110,33 @@ const getJobParams = async (device, application, op) => {
   return {};
 };
 
+const saveConfiguration = async (application, updatedConfig) => {
+  const appName = application.libraryApp.name;
+  if (isVpn(appName)) {
+    // reset the subnets array
+    // in the jobs logic, new subnets will allocated
+    updatedConfig.subnets = [];
+  }
+
+  const updatedApp = await applications.findOneAndUpdate(
+    { _id: application._id },
+    { $set: { configuration: updatedConfig } },
+    { new: true, upsert: false }
+  );
+
+  await updatedApp.populate('libraryApp').populate('org').execPopulate();
+
+  return updatedApp;
+};
+const needToUpdatedDevices = (application, oldConfig, newConfig) => {
+  const appName = application.libraryApp.name;
+  if (isVpn(appName)) {
+    return needToUpdatedVpnServers(oldConfig, newConfig);
+  } else {
+    return true;
+  };
+};
+
 module.exports = {
   getInitialConfigObject,
   validateConfiguration,
@@ -115,5 +145,7 @@ module.exports = {
   onJobComplete,
   onJobFailed,
   onJobRemoved,
-  getJobParams
+  getJobParams,
+  saveConfiguration,
+  needToUpdatedDevices
 };
