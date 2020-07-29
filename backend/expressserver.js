@@ -145,7 +145,7 @@ class ExpressServer {
     const inMemoryStore = new RateLimitStore(5 * 60 * 1000);
     const rateLimiter = rateLimit({
       store: inMemoryStore,
-      max: configs.get('userIpReqRateLimit'), // Rate limit for requests in 5 min per IP address
+      max: +configs.get('userIpReqRateLimit'), // Rate limit for requests in 5 min per IP address
       message: 'Request rate limit exceeded',
       onLimitReached: (req, res, options) => {
         logger.error(
