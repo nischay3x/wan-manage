@@ -26,18 +26,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Version'
           description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
         "500":
           content:
             application/json:
@@ -50,15 +38,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
       summary: Get version of the management
       tags:
       - Version
       x-swagger-router-controller: Version
-      x-openapi-router-controller: VersionController
-      x-openapi-router-service: VersionService
   /tokens:
     get:
       operationId: tokensGET
