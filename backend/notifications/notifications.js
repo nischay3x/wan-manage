@@ -144,7 +144,7 @@ class NotificationsManager {
             configs.get('mailerFromAddress'),
             emailAddresses,
             'Pending unread notifications',
-            `<h2>flexiWAN Notification Reminder</h2>
+            `<h2>${configs.get('companyName')} Notification Reminder</h2>
             <p style="font-size:16px">This email was sent to you since you have pending
              unread notifications.
             <br>To view the notifications, please check the
@@ -159,7 +159,7 @@ class NotificationsManager {
                or billing information are always sent, regardless of the notifications settings.
                More about notifications
                <a href="https://docs.flexiwan.com/troubleshoot/notifications.html">here</a>.</p>
-            <p style="font-size:16px">Your friends @ flexiWAN</p>`
+            <p style="font-size:16px">Your friends @ ${configs.get('companyName')}</p>`
           );
 
           logger.info('User notifications reminder email sent', {
