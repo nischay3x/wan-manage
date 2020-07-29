@@ -17,7 +17,6 @@ servers:
 paths:
   /version:
     get:
-      operationId: versionGET
 
       responses:
         "200":

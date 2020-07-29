@@ -297,7 +297,6 @@ exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
   switch (openapi.schema.operationId) {
     case 'accountsSelectPOST':
     case 'accountsGET':
-    case 'versionGET':
       return true;
   }
 
