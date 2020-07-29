@@ -247,6 +247,8 @@ class Configs {
       combinedConfig.webHookRegisterDeviceUrl;
     combinedConfig.webHookRegisterDeviceSecret = process.env.WEBHOOK_REGISTER_DEVICE_KEY ||
       combinedConfig.webHookRegisterDeviceSecret;
+    combinedConfig.mailerFromAddress = process.env.MAILER_FROM_ADDRESS ||
+      combinedConfig.mailerFromAddress;
 
     this.config_values = combinedConfig;
     console.log('Configuration used:\n' + JSON.stringify(this.config_values, null, 2));
