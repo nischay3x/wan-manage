@@ -286,9 +286,9 @@ membersRouter.route('/')
         const p = mailer.sendMailHTML(
           configs.get('mailerFromAddress'),
           req.body.email,
-          'You are invited to a flexiWAN Account',
-          (`<h2>flexiWAN Account Invitation</h2>
-          <b>You have been invited to a flexiWAN
+          `You are invited to a ${configs.get('companyName')} Account`,
+          (`<h2>${configs.get('companyName')} Account Invitation</h2>
+          <b>You have been invited to a ${configs.get('companyName')}
           ${req.body.userPermissionTo}. </b>`) + ((registerUser)
             ? `<b>Click below to set your password</b>
           <p><a href="${configs.get('uiServerUrl')}/reset-password?email=${
@@ -301,7 +301,7 @@ membersRouter.route('/')
             line-height:1.5;border-radius:.25rem;
             cursor:pointer">Set Password</button></a></p>`
             : '<b>You can use your current account credentials to access it</b>') +
-        ('<p>Your friends @ flexiWAN</p>'));
+        (`<p>Your friends @ ${configs.get('companyName')}</p>`));
         return p;
       })
       .then(() => {
