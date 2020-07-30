@@ -379,7 +379,7 @@ const queueApplicationJob = async (
   let message = '';
   if (op === 'deploy') {
     jobTitle = `Install ${application.libraryApp.name} application`;
-    message = 'add-service';
+    message = 'install-service';
   } else if (op === 'upgrade') {
     jobTitle = `Upgrade ${application.libraryApp.name} application`;
     message = 'upgrade-service';
@@ -388,7 +388,7 @@ const queueApplicationJob = async (
     message = 'modify-service';
   } else if (op === 'uninstall') {
     jobTitle = `Uninstall ${application.libraryApp.name} application`;
-    message = 'remove-service';
+    message = 'uninstall-service';
   } else {
     return jobs;
   }

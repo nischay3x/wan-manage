@@ -72,6 +72,7 @@ const allowedFields = [
   'serverPort',
   'remoteClientIp',
   'connectionsPerDevice',
+  'routeAllOverVpn',
   'dnsIp',
   'dnsDomain',
   'authentications'
@@ -106,6 +107,7 @@ const vpnConfigSchema = Joi.object().keys({
   networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
   serverPort: Joi.number().port().optional().allow(''),
   remoteClientIp: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
+  routeAllOverVpn: Joi.boolean().optional(),
   connectionsPerDevice: Joi.number().min(8)
     .custom((val, helpers) => {
       const isPowerOfTwo = (Math.log(val) / Math.log(2)) % 1 === 0;

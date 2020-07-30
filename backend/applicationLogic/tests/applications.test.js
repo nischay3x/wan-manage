@@ -19,7 +19,7 @@ const { ObjectId } = require('mongoose').Types;
 const { isVpn, getSubnetForDevice } = require('../openvpn');
 const { validateApplication } = require('../applications');
 
-describe('validate vpn configuration', () => {
+describe('Validate vpn configuration', () => {
   const successObject = {
     valid: true,
     err: ''
@@ -202,7 +202,7 @@ describe('validate vpn configuration', () => {
   });
 });
 
-describe('validate vpn name', () => {
+describe('Validate vpn name', () => {
   it('Should be a valid vpn name', () => {
     const res = isVpn('Remote VPN');
     expect(res).toBe(true);
