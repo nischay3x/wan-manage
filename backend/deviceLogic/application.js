@@ -251,7 +251,7 @@ const complete = async (jobId, res) => {
       // update version on db
       await applications.updateOne(
         { org: org, _id: app._id },
-        { $set: { installedVersion: app.app.latestVersion, pendingToUpgrade: false } }
+        { $set: { installedVersion: app.libraryApp.latestVersion, pendingToUpgrade: false } }
       );
     }
 

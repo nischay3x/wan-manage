@@ -450,7 +450,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
 
     let version = application.installedVersion;
     if (op === 'upgrade') {
-      version = application.app.latestVersion;
+      version = application.libraryApp.latestVersion;
     }
 
     const dnsIp = config.dnsIp && config.dnsIp !== ''

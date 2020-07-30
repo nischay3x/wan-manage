@@ -323,7 +323,7 @@ class ApplicationsService {
         const opDevices = await devices.find({
           org: { $in: orgList },
           'applications.applicationInfo': id,
-          'applications.status': { $in: ['installed', 'installing'] }
+          'applications.status': { $in: ['installed', 'installing', 'configuration failed'] }
         });
 
         if (opDevices.length) {
@@ -359,12 +359,10 @@ class ApplicationsService {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      const app = await applications.findOne(
-        { _id: id }
-      ).populate('libraryApp').lean();
+      const app = await applications.findOne({ _id: id }).populate('libraryApp').lean();
 
       const currentVersion = app.installedVersion;
-      const newVersion = app.app.latestVersion;
+      const newVersion = app.libraryApp.latestVersion;
 
       if (currentVersion === newVersion) {
         return Service.rejectResponse(
