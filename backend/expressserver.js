@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const { version } = require('./package.json');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -201,6 +202,8 @@ class ExpressServer {
     this.app.use('/spec', express.static(path.join(__dirname, 'api', 'openapi.yaml')));
     this.app.get('/hello', (req, res) => res.send('Hello World'));
 
+    this.app.get('/api/version', (req, res) => res.json({ version }));
+
     this.app.use(cors.corsWithOptions);
     this.app.use(auth.verifyUserJWT);
     // this.app.use(auth.verifyPermission);
@@ -293,11 +296,9 @@ class ExpressServer {
         case 'EACCES':
           console.error(bind + ' requires elevated privileges');
           process.exit(1);
-          break;
         case 'EADDRINUSE':
           console.error(bind + ' is already in use');
           process.exit(1);
-          break;
         default:
           throw error;
       }

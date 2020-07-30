@@ -118,6 +118,8 @@ const configEnv = {
     mailerBypassCert: false,
     // From address used when sending emails
     mailerFromAddress: 'noreply@flexiwan.com',
+    // Name of the company, is used in email templates
+    companyName: 'flexiWAN',
     // Software version query link
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     // Software version update email link. ${version} is replaced in run time
