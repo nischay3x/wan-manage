@@ -79,8 +79,8 @@ class UsersService {
         await mailer.sendMailHTML(
           configs.get('mailerFromAddress'),
           resetPasswordRequest.email,
-          'Reset Password for Your flexiWAN Account',
-          `<h2>Reset Password for your flexiWAN Account</h2>
+          `Reset Password for Your ${configs.get('companyName')} Account`,
+          `<h2>Reset Password for your ${configs.get('companyName')} Account</h2>
                 <b>It has been requested to reset your account password.
                    If it is asked by yourself,
                    click below to reset your password. If you do not know who this is,
@@ -96,7 +96,7 @@ class UsersService {
           padding:.375rem .75rem;font-size:1rem;line-height:1.5;
           border-radius:.25rem;
                 cursor:pointer">Reset Password</button></a></p>
-                <p>Your friends @ flexiWAN</p>`
+                <p>Your friends @ ${configs.get('companyName')}</p>`
         );
       }
 

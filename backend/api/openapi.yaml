@@ -15,6 +15,32 @@ servers:
 - description: Main server
   url: https://manage.flexiwan.com:443/api
 paths:
+  /version:
+    get:
+
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
+          description: Successful operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      summary: Get version of the management
+      tags:
+      - Version
+      x-swagger-router-controller: Version
   /tokens:
     get:
       operationId: tokensGET
@@ -5705,6 +5731,13 @@ components:
             $ref: '#/components/schemas/Error'
       description: Unauthorized
   schemas:
+    Version:
+      properties:
+        version:
+          type: string
+      required:
+      - version
+      type: object
     AccessToken:
       example:
         isValid: true

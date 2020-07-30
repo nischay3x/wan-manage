@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const { version } = require('./package.json');
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
@@ -143,7 +144,7 @@ class ExpressServer {
     const inMemoryStore = new RateLimitStore(5 * 60 * 1000);
     const rateLimiter = rateLimit({
       store: inMemoryStore,
-      max: configs.get('userIpReqRateLimit'), // Rate limit for requests in 5 min per IP address
+      max: +configs.get('userIpReqRateLimit'), // Rate limit for requests in 5 min per IP address
       message: 'Request rate limit exceeded',
       onLimitReached: (req, res, options) => {
         logger.error(
@@ -198,6 +199,8 @@ class ExpressServer {
     this.app.use('/ok', express.static(path.join(__dirname, 'public', 'ok.html')));
     this.app.use('/spec', express.static(path.join(__dirname, 'api', 'openapi.yaml')));
     this.app.get('/hello', (req, res) => res.send('Hello World'));
+
+    this.app.get('/api/version', (req, res) => res.json({ version }));
 
     this.app.use(cors.corsWithOptions);
     this.app.use(auth.verifyUserJWT);
@@ -291,11 +294,9 @@ class ExpressServer {
         case 'EACCES':
           console.error(bind + ' requires elevated privileges');
           process.exit(1);
-          break;
         case 'EADDRINUSE':
           console.error(bind + ' is already in use');
           process.exit(1);
-          break;
         default:
           throw error;
       }

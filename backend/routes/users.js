@@ -161,8 +161,8 @@ router.route('/register')
         const p = mailer.sendMailHTML(
           configs.get('mailerFromAddress'),
           req.body.email,
-          'Verify Your flexiWAN Account',
-          `<h2>Thank you for joining flexiWAN</h2>
+          `Verify Your ${configs.get('companyName')} Account`,
+          `<h2>Thank you for joining ${configs.get('companyName')}</h2>
             <b>Click below to verify your account:</b>
             <p><a href="${configs.get('uiServerUrl')}/verify-account?id=${
               registerUser._id
@@ -174,7 +174,7 @@ router.route('/register')
             padding:.375rem .75rem;font-size:1rem;line-height:1.5;
             border-radius:.25rem;
             cursor:pointer">Verify Account</button></a></p>
-            <p>Your friends @ flexiWAN</p>`
+            <p>Your friends @ ${configs.get('companyName')}</p>`
         );
         return p;
       })
@@ -254,8 +254,8 @@ router.route('/reverify-account')
           const p = mailer.sendMailHTML(
             configs.get('mailerFromAddress'),
             req.body.email,
-            'Re-Verify Your flexiWAN Account',
-            `<h2>Re-Verify Your flexiWAN Account</h2>
+            `Re-Verify Your ${configs.get('companyName')} Account`,
+            `<h2>Re-Verify Your ${configs.get('companyName')} Account</h2>
                 <b>It has been requested to re-verify your account. If it is asked by yourself,
                    click below to re-verify your account. If you do not know who this is,
                    ignore this message.</b>
@@ -269,7 +269,7 @@ router.route('/reverify-account')
                  padding:.375rem .75rem;font-size:1rem;line-height:1.5;
                  border-radius:.25rem;
                 cursor:pointer">Re-Verify Account</button></a></p>
-                <p>Your friends @ flexiWAN</p>`
+                <p>Your friends @ ${configs.get('companyName')}</p>`
           );
           return p;
         }
@@ -340,8 +340,8 @@ const resetPassword = (req, res, next) => {
         const p = mailer.sendMailHTML(
           configs.get('mailerFromAddress'),
           req.body.email,
-          'Reset Password for Your flexiWAN Account',
-          `<h2>Reset Password for your flexiWAN Account</h2>
+          `Reset Password for Your ${configs.get('companyName')} Account`,
+          `<h2>Reset Password for your ${configs.get('companyName')} Account</h2>
                 <b>It has been requested to reset your account password. If it is asked by yourself,
                    click below to reset your password. If you do not know who this is,
                    ignore this message.</b>
@@ -356,7 +356,7 @@ const resetPassword = (req, res, next) => {
           padding:.375rem .75rem;font-size:1rem;line-height:1.5;
           border-radius:.25rem;
                 cursor:pointer">Reset Password</button></a></p>
-                <p>Your friends @ flexiWAN</p>`
+                <p>Your friends @ ${configs.get('companyName')}</p>`
         );
         return p;
       }
