@@ -930,7 +930,7 @@ class DevicesService {
     }
   }
 
-  static async queryDeviceStats ({ id, org, startTime, endTime }) {
+  static async queryDeviceStats ({ id, ifNum, org, startTime, endTime }) {
     const match = { org: mongoose.Types.ObjectId(org) };
 
     if (id) match.device = mongoose.Types.ObjectId(id);
@@ -943,10 +943,11 @@ class DevicesService {
       { $match: match },
       { $project: { time: 1, stats: { $objectToArray: '$stats' } } },
       { $unwind: '$stats' },
+      ...(ifNum ? [{ $match: { 'stats.k': ifNum.replace('.', ':') } }] : []),
       {
         $group:
               {
-                _id: { time: '$time', interface: 'All' },
+                _id: { time: '$time', interface: (ifNum) || 'All' },
                 rx_bps: { $sum: '$stats.v.rx_bps' },
                 tx_bps: { $sum: '$stats.v.tx_bps' },
                 rx_pps: { $sum: '$stats.v.rx_pps' },
@@ -985,6 +986,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
+        ifNum: null, // null to get all interfaces stats
         id: null, // null get all devices stats
         startTime: startTime,
         endTime: endTime
@@ -1004,7 +1006,7 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesIdStatisticsGET ({ id, org }, { user }) {
+  static async devicesIdStatisticsGET ({ id, org, ifnum }, { user }) {
     try {
       const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
       const endTime = null;
@@ -1013,6 +1015,7 @@ class DevicesService {
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
         id: id,
+        ifNum: ifnum,
         startTime: startTime,
         endTime: endTime
       });
