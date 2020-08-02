@@ -45,7 +45,7 @@ test_backend:
 backend_npm_audit:
   stage: test
   variables:
-    BACKEND_PACKAGE_WHITE_LIST: "extend mongodb acorn"
+    BACKEND_PACKAGE_WHITE_LIST: "extend mongodb dot-prop"
   script:
    - cd backend
    - npm ci audit-ci
