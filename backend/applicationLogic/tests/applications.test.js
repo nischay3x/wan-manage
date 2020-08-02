@@ -17,7 +17,10 @@
 
 const { ObjectId } = require('mongoose').Types;
 const { isVpn, getSubnetForDevice } = require('../openvpn');
-const { validateApplication } = require('../applications');
+const {
+  validateApplication,
+  needToUpdatedDevices
+} = require('../applications');
 
 describe('Validate vpn configuration', () => {
   const successObject = {
@@ -211,5 +214,68 @@ describe('Validate vpn name', () => {
   it('Should be an invalid vpn name', () => {
     const res = isVpn('Remote vpn');
     expect(res).toBe(false);
+  });
+});
+
+describe('Validate vpn configuration', () => {
+  const app = {
+    libraryApp: {
+      name: 'Remote VPN'
+    }
+  };
+
+  let oldConfig = null;
+  let newConfig = null;
+
+  beforeEach(() => {
+    oldConfig = {
+      remoteClientIp: '192.168.0.0/24',
+      connectionsPerDevice: 8,
+      serverPort: '1194',
+      dnsIp: '8.8.8.8',
+      dnsDomain: 'local.dns'
+    };
+    newConfig = {
+      remoteClientIp: '192.168.0.0/24',
+      connectionsPerDevice: 8,
+      serverPort: '1194',
+      dnsIp: '8.8.8.8',
+      dnsDomain: 'local.dns'
+    };
+  });
+
+  it('Should return false', () => {
+    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    expect(res).toBe(false);
+  });
+
+  it('Should return true if remoteClientIp is different', () => {
+    newConfig.remoteClientIp = '192.168.0.0/25';
+    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    expect(res).toBe(true);
+  });
+
+  it('Should return true if connectionsPerDevice is different', () => {
+    newConfig.connectionsPerDevice = 128;
+    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    expect(res).toBe(true);
+  });
+
+  it('Should return true if serverPort is different', () => {
+    newConfig.serverPort = '1196';
+    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    expect(res).toBe(true);
+  });
+
+  it('Should return true if dnsIp is different', () => {
+    newConfig.dnsIp = '8.8.4.4';
+    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    expect(res).toBe(true);
+  });
+
+  it('Should return true if dnsDomain is different', () => {
+    newConfig.dnsDomain = 'local2.dns';
+    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    expect(res).toBe(true);
   });
 });
