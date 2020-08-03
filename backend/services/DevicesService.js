@@ -1371,6 +1371,14 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
 
+      const interfaceIsExists = deviceObject.interfaces.find(i => {
+        return i.pciaddr === dhcpRequest.interface;
+      });
+
+      if (!interfaceIsExists) {
+        throw new Error('Unknown interface');
+      }
+
       // Verify that no dhcp has been defined for the interface
       const dhcpObject = deviceObject.dhcp.filter((s) => {
         return (s.interface === dhcpRequest.interface);
