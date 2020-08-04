@@ -287,19 +287,23 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
     // queue a full sync job
     if (!failedJobRetried) {
       const { _state, id, data } = await deviceQueues.getLastJob(machineId);
-      const { message } = Array.isArray(data.message.tasks[0])
-        ? data.message.tasks[0][0] : data.message.tasks[0];
 
-      // Don't retry full sync jobs
-      if (message !== 'sync-device' && _state === 'failed') {
-        logger.debug('Failed job retry before full sync attempt', {
-          params: { deviceId, jobId: id, message }
-        });
-        await deviceQueues.retryJob(id);
+      // if last job exists
+      if (data) {
+        const { message } = Array.isArray(data.message.tasks[0])
+          ? data.message.tasks[0][0] : data.message.tasks[0];
+
+        // Don't retry full sync jobs
+        if (message !== 'sync-device' && _state === 'failed') {
+          logger.debug('Failed job retry before full sync attempt', {
+            params: { deviceId, jobId: id, message }
+          });
+          await deviceQueues.retryJob(id);
+        }
+        // Try the last failed job only once
+        await setFailedJobFlagInDB(deviceId);
+        return;
       }
-      // Try the last failed job only once
-      await setFailedJobFlagInDB(deviceId);
-      return;
     }
 
     // Set auto sync off if auto sync limit is exceeded
