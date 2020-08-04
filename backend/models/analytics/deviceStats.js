@@ -40,7 +40,8 @@ const deviceStatsSchema = new Schema({
     default: 0
   },
   // Free form, not schema based
-  stats: Schema.Types.Mixed
+  stats: Schema.Types.Mixed,
+  tunnels: Schema.Types.Mixed
 }, {
   timestamps: true
 });

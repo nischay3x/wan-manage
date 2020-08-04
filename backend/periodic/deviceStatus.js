@@ -40,6 +40,11 @@ class DeviceStatus {
       ['tx_bytes', 'tx_bps'],
       ['tx_pkts', 'tx_pps']
     ]);
+    this.tunnelFieldMap = new Map([
+      ['status', 'status'],
+      ['rtt', 'rtt'],
+      ['drop_rate', 'drop_rate']
+    ]);
 
     this.start = this.start.bind(this);
     this.periodicPollDevices = this.periodicPollDevices.bind(this);
@@ -194,6 +199,25 @@ class DeviceStatus {
           const key = 'stats.' + intf.replace('.', ':') + '.' + this.statsFieldsMap.get(stat);
           dbStats[key] = intfStats[stat] / statsEntry.period;
           shouldUpdate = true;
+        }
+      }
+      // Add tunnel info
+      const tunnelStats = statsEntry.tunnel_stats;
+      for (const tunnelId in tunnelStats) {
+        if (!tunnelStats.hasOwnProperty(tunnelId)) continue;
+        const tunnelIdStats = tunnelStats[tunnelId];
+        for (const stat in tunnelIdStats) {
+          if (!tunnelIdStats.hasOwnProperty(stat)) continue;
+          if (this.statsFieldsMap.get(stat)) {
+            const key = 'tunnels.' + tunnelId + '.' + this.statsFieldsMap.get(stat);
+            dbStats[key] = tunnelIdStats[stat] / statsEntry.period;
+            shouldUpdate = true;
+          }
+          if (this.tunnelFieldMap.get(stat)) {
+            const key = 'tunnels.' + tunnelId + '.' + this.tunnelFieldMap.get(stat);
+            dbStats[key] = tunnelIdStats[stat];
+            shouldUpdate = true;
+          }
         }
       }
 
