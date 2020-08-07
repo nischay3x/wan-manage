@@ -81,8 +81,13 @@ class DeviceStatus {
       stateReason: Joi.string().allow('').optional(),
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
-      tunnel_stats: Joi.object().required(),
+      tunnel_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
+      health: Joi.object({
+        cpu: Joi.array().items(Joi.string()).min(1).optional(),
+        mem: Joi.string().optional(),
+        disk: Joi.string().optional()
+      }).allow({}).optional(),
       stats: Joi.object().pattern(/^[a-z0-9:._/-]{1,64}$/i, Joi.object({
         rx_bytes: Joi.number().required(),
         rx_pkts: Joi.number().required(),
@@ -219,6 +224,12 @@ class DeviceStatus {
             shouldUpdate = true;
           }
         }
+      }
+      // Update health info
+      const healthStats = statsEntry.health;
+      for (const param in healthStats) {
+        dbStats['health.' + param] = healthStats[param];
+        shouldUpdate = true;
       }
 
       if (!shouldUpdate) return;

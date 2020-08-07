@@ -470,7 +470,8 @@ class Connections {
               .required()
           }),
           network: joi.object().optional(),
-          reconfig: joi.string().allow('').optional()
+          reconfig: joi.string().allow('').optional(),
+          serial: joi.string().optional()
         }),
         name: 'versions',
         language: {
