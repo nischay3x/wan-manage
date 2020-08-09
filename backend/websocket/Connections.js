@@ -437,6 +437,25 @@ class Connections {
         );
       }
     }
+
+    // check wifi interfaces
+    // if (origDevice.interfaces.length !== deviceInfo.message.network.interfaces.length) {
+    const wifiInterface = deviceInfo.message.network.interfaces.find(i => i.wifi === true);
+    const existsWifiInterface = origDevice.interfaces.find(i => i.name === wifiInterface.name);
+    const query = { machineId };
+    const update = {};
+    const options = {};
+
+    if (!existsWifiInterface) {
+      update.$addToSet = { interfaces: wifiInterface };
+    } else {
+      update.$set = { 'interfaces.$[element]': wifiInterface };
+      options.arrayFilters = [{
+        'element.name': wifiInterface.name
+      }];
+    }
+
+    await devices.findOneAndUpdate(query, update, options);
   }
 
   /**
