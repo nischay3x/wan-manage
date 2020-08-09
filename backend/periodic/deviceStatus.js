@@ -84,9 +84,14 @@ class DeviceStatus {
       tunnel_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
       health: Joi.object({
-        cpu: Joi.array().items(Joi.string()).min(1).optional(),
-        mem: Joi.string().optional(),
-        disk: Joi.string().optional()
+        cpu: Joi.array().items(Joi.number()).min(1).optional(),
+        mem: Joi.number().optional(),
+        disk: Joi.number().optional(),
+        temp: Joi.object({
+          value: Joi.number(),
+          high: Joi.number(),
+          critical: Joi.number()
+        }).optional()
       }).allow({}).optional(),
       stats: Joi.object().pattern(/^[a-z0-9:._/-]{1,64}$/i, Joi.object({
         rx_bytes: Joi.number().required(),
