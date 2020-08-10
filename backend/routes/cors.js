@@ -19,7 +19,10 @@ var configs = require('../configs.js')();
 const cors = require('cors');
 
 // Whitelist of origins allowed to access resources
-const whitelist = configs.get('corsWhiteList');
+let whitelist = configs.get('corsWhiteList');
+if (typeof whitelist === 'string') {
+  whitelist = whitelist.split(/,\s*/);
+}
 
 // CORS handler
 var corsOptionsCheck = (req, callback) => {

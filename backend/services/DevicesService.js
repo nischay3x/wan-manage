@@ -944,6 +944,16 @@ class DevicesService {
     }
   }
 
+  /**
+   * Get device statistics from the database
+   * @param {string} id      - device ID in mongodb, if not specified, get all devices stats
+   * @param {string} ifNum   - device interface number (usually a pci address)
+   *                           if not specified, get all device stats
+   * @param {string} org     - organization ID in mongodb
+   * @param {Date} startTime - start time to get stats, if not specified get all previous time
+   * @param {Date} endTime   - end time to get stats, if not specified get to latest time
+   * @return {Array} - Objects with device stats
+   */
   static async queryDeviceStats ({ id, ifNum, org, startTime, endTime }) {
     const match = { org: mongoose.Types.ObjectId(org) };
 
@@ -977,6 +987,99 @@ class DevicesService {
           tx_bps: '$tx_bps',
           rx_pps: '$rx_pps',
           tx_pps: '$tx_pps'
+        }
+      },
+      { $sort: { time: -1 } }
+    ];
+
+    const stats = await deviceStats.aggregate(pipeline).allowDiskUse(true);
+    return stats;
+  }
+
+  /**
+   * Get tunnel statistics from the database
+   * @param {string} id          - device ID in mongodb, if not specified, get all stats
+   * @param {string} tunnelnum   - tunnel number (usually a pci address)
+   *                               if not specified, get all tunnels stats
+   * @param {string} org         - organization ID in mongodb
+   * @param {Date} startTime     - start time to get stats, if not specified get all previous time
+   * @param {Date} endTime       - end time to get stats, if not specified get to latest time
+   * @return {Array} - Objects with tunnel stats
+   */
+  static async queryDeviceTunnelStats ({ id, tunnelnum, org, startTime, endTime }) {
+    const match = { org: mongoose.Types.ObjectId(org) };
+
+    if (id) match.device = mongoose.Types.ObjectId(id);
+    if (startTime && endTime) {
+      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
+    } else if (startTime) match.time = { $gte: startTime };
+    else if (endTime) match.time = { $lte: endTime };
+
+    const pipeline = [
+      { $match: match },
+      { $project: { time: 1, tunnels: { $objectToArray: '$tunnels' } } },
+      { $unwind: '$tunnels' },
+      ...(tunnelnum ? [{ $match: { 'tunnels.k': tunnelnum } }] : []),
+      {
+        $group:
+              {
+                _id: { time: '$time', tunnel: (tunnelnum) || 'All' },
+                rx_bps: { $sum: '$tunnels.v.rx_bps' },
+                tx_bps: { $sum: '$tunnels.v.tx_bps' },
+                rx_pps: { $sum: '$tunnels.v.rx_pps' },
+                tx_pps: { $sum: '$tunnels.v.tx_pps' },
+                drop_rate: { $max: '$tunnels.v.drop_rate' },
+                rtt: { $max: '$tunnels.v.rtt' },
+                status: { $min: '$tunnels.v.status' }
+              }
+      },
+      {
+        $project: {
+          _id: 0,
+          time: '$_id.time',
+          interface: '$_id.tunnel',
+          rx_bps: '$rx_bps',
+          tx_bps: '$tx_bps',
+          rx_pps: '$rx_pps',
+          tx_pps: '$tx_pps',
+          drop_rate: '$drop_rate',
+          rtt: '$rtt',
+          status: '$status'
+        }
+      },
+      { $sort: { time: -1 } }
+    ];
+
+    const stats = await deviceStats.aggregate(pipeline).allowDiskUse(true);
+    return stats;
+  }
+
+  /**
+   * Get device health from the database
+   * @param {string} id      - device ID in mongodb, if not specified, get all devices stats
+   * @param {string} org     - organization ID in mongodb
+   * @param {Date} startTime - start time to get stats, if not specified get all previous time
+   * @param {Date} endTime   - end time to get stats, if not specified get to latest time
+   * @return {Array} - Objects with device stats
+   */
+  static async queryDeviceHealth ({ id, org, startTime, endTime }) {
+    const match = { org: mongoose.Types.ObjectId(org) };
+    if (id) match.device = mongoose.Types.ObjectId(id);
+    if (startTime && endTime) {
+      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
+    } else if (startTime) match.time = { $gte: startTime };
+    else if (endTime) match.time = { $lte: endTime };
+
+    const pipeline = [
+      { $match: match },
+      {
+        $project: {
+          _id: 0,
+          time: 1,
+          cpu: '$health.cpu',
+          disk: '$health.disk',
+          mem: '$health.mem',
+          temp: '$health.temp'
         }
       },
       { $sort: { time: -1 } }
@@ -1030,6 +1133,61 @@ class DevicesService {
         org: orgList[0].toString(),
         id: id,
         ifNum: ifnum,
+        startTime: startTime,
+        endTime: endTime
+      });
+      return Service.successResponse(stats);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Retrieve device tunnel statistics information
+   *
+   * id Object Numeric ID of the Device to fetch information about
+   * returns DeviceTunnelStatistics
+   **/
+  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum }, { user }) {
+    try {
+      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
+      const endTime = null;
+
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const stats = await DevicesService.queryDeviceTunnelStats({
+        org: orgList[0].toString(),
+        id: id,
+        tunnelnum: tunnelnum,
+        startTime: startTime,
+        endTime: endTime
+      });
+      return Service.successResponse(stats);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Retrieve device health information
+   *
+   * id Object Numeric ID of the Device to fetch information about
+   * returns DeviceHealth
+   **/
+  static async devicesIdHealthGET ({ id, org }, { user }) {
+    try {
+      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
+      const endTime = null;
+
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const stats = await DevicesService.queryDeviceHealth({
+        org: orgList[0].toString(),
+        id: id,
         startTime: startTime,
         endTime: endTime
       });
@@ -1346,6 +1504,9 @@ class DevicesService {
    * @throw error, if not valid
    */
   static validateDhcpRequest (dhcpRequest) {
+    if (!dhcpRequest.interface || dhcpRequest.interface === '') {
+      throw new Error('Interface is required');
+    };
     // Check that no repeated mac, host or IP
     const macLen = dhcpRequest.macAssign.length;
     const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
@@ -1380,6 +1541,14 @@ class DevicesService {
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
+      }
+
+      const interfaceIsExists = deviceObject.interfaces.find(i => {
+        return i.pciaddr === dhcpRequest.interface;
+      });
+
+      if (!interfaceIsExists) {
+        throw new Error('Unknown interface');
       }
 
       // Verify that no dhcp has been defined for the interface

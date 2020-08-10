@@ -174,6 +174,26 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80']
   },
+  hosted: {
+    // modify next params for hosted server
+    restServerUrl: 'https://hosted.server.com:443',
+    uiServerUrl: 'https://hosted.server.com:443',
+    agentBroker: 'hosted.server.com:443',
+    corsWhiteList: 'https://hosted.server.com:443, http://hosted.server.com:80',
+    billingRedirectOkUrl: 'https://hosted.server.com/ok.html',
+    shouldRedirectHttps: false,
+    redirectHttpsPort: 443,
+    validateOpenAPIResponse: false,
+    clientStaticDir: 'client/build',
+    billingConfigSite: 'flexiwan',
+    billingDefaultPlan: 'enterprise',
+    useFlexiBilling: true,
+    logFilePath: '/var/log/flexiwan/flexiwan.log',
+    reqLogFilePath: '/var/log/flexiwan/flexiwanReq.log',
+    SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
+    logLevel: 'info',
+    logUserName: true
+  },
   // Override for manage environment for production
   manage: {
     restServerUrl: 'https://manage.flexiwan.com:443',
