@@ -111,6 +111,14 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdStatisticsGET);
   }
 
+  async devicesIdTunnelStatisticsGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdTunnelStatisticsGET);
+  }
+
+  async devicesIdHealthGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdHealthGET);
+  }
+
   async devicesIdDhcpDhcpIdDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdDhcpDhcpIdDELETE);
   }
