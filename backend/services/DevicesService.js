@@ -1490,6 +1490,9 @@ class DevicesService {
    * @throw error, if not valid
    */
   static validateDhcpRequest (dhcpRequest) {
+    if (!dhcpRequest.interface || dhcpRequest.interface === '') {
+      throw new Error('Interface is required');
+    };
     // Check that no repeated mac, host or IP
     const macLen = dhcpRequest.macAssign.length;
     const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
@@ -1524,6 +1527,14 @@ class DevicesService {
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
+      }
+
+      const interfaceIsExists = deviceObject.interfaces.find(i => {
+        return i.pciaddr === dhcpRequest.interface;
+      });
+
+      if (!interfaceIsExists) {
+        throw new Error('Unknown interface');
       }
 
       // Verify that no dhcp has been defined for the interface
