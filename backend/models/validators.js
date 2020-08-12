@@ -123,6 +123,7 @@ const validatePortRange = (range) => {
   return isPort(portLow) && isPort(portHigh);
 };
 const validateMachineID = (id) => { return /^[a-f0-9-]{1,50}$/i.test(id || ''); };
+const validateSerial = (id) => { return /^[a-f0-9-]{1,50}$/i.test(id || ''); };
 const validateTokenName = (name) => { return /^[a-z0-9-_ .!#%():@[\]]{3,15}$/i.test(name || ''); };
 
 const validateURL = (url) => { return !isEmpty(url) && isValidURL(url); };
@@ -164,6 +165,7 @@ module.exports = {
   validateHostName,
   validateIpList,
   validateMachineID,
+  validateSerial,
   validateTokenName,
   validateURL,
   validateFileName,

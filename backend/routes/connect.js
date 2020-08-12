@@ -109,8 +109,9 @@ connectRouter.route('/register')
 
               // Prepare device versions array
               const versions = {
-                agent: req.body.fwagent_version,
-                router: req.body.router_version
+                agent: req.body.fwagent_version || '',
+                router: req.body.router_version || '',
+                device: req.body.device_version || ''
               };
 
               // Check that account didn't cross its device limit
@@ -145,6 +146,7 @@ connectRouter.route('/register')
                     hostname: req.body.machine_name,
                     ipList: req.body.ip_list,
                     machineId: req.body.machine_id,
+                    serial: req.body.serial,
                     fromToken: resp[0].name,
                     interfaces: ifs,
                     deviceToken: deviceToken,

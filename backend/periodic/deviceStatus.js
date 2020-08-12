@@ -40,6 +40,11 @@ class DeviceStatus {
       ['tx_bytes', 'tx_bps'],
       ['tx_pkts', 'tx_pps']
     ]);
+    this.tunnelFieldMap = new Map([
+      ['status', 'status'],
+      ['rtt', 'rtt'],
+      ['drop_rate', 'drop_rate']
+    ]);
 
     this.start = this.start.bind(this);
     this.periodicPollDevices = this.periodicPollDevices.bind(this);
@@ -82,8 +87,18 @@ class DeviceStatus {
       stateReason: Joi.string().allow('').optional(),
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
-      tunnel_stats: Joi.object().required(),
+      tunnel_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
+      health: Joi.object({
+        cpu: Joi.array().items(Joi.number()).min(1).optional(),
+        mem: Joi.number().optional(),
+        disk: Joi.number().optional(),
+        temp: Joi.object({
+          value: Joi.number(),
+          high: Joi.number(),
+          critical: Joi.number()
+        }).optional()
+      }).allow({}).optional(),
       stats: Joi.object().pattern(/^[a-z0-9:._/-]{1,64}$/i, Joi.object({
         rx_bytes: Joi.number().required(),
         rx_pkts: Joi.number().required(),
@@ -218,6 +233,31 @@ class DeviceStatus {
           dbStats[key] = intfStats[stat] / statsEntry.period;
           shouldUpdate = true;
         }
+      }
+      // Add tunnel info
+      const tunnelStats = statsEntry.tunnel_stats;
+      for (const tunnelId in tunnelStats) {
+        if (!tunnelStats.hasOwnProperty(tunnelId)) continue;
+        const tunnelIdStats = tunnelStats[tunnelId];
+        for (const stat in tunnelIdStats) {
+          if (!tunnelIdStats.hasOwnProperty(stat)) continue;
+          if (this.statsFieldsMap.get(stat)) {
+            const key = 'tunnels.' + tunnelId + '.' + this.statsFieldsMap.get(stat);
+            dbStats[key] = tunnelIdStats[stat] / statsEntry.period;
+            shouldUpdate = true;
+          }
+          if (this.tunnelFieldMap.get(stat)) {
+            const key = 'tunnels.' + tunnelId + '.' + this.tunnelFieldMap.get(stat);
+            dbStats[key] = tunnelIdStats[stat];
+            shouldUpdate = true;
+          }
+        }
+      }
+      // Update health info
+      const healthStats = statsEntry.health;
+      for (const param in healthStats) {
+        dbStats['health.' + param] = healthStats[param];
+        shouldUpdate = true;
       }
 
       if (!shouldUpdate) return;
