@@ -120,6 +120,8 @@ const configEnv = {
     mailerFromAddress: 'noreply@flexiwan.com',
     // Name of the company, is used in email templates
     companyName: 'flexiWAN',
+    // Allow users registration, otherwise by invitation only
+    allowUsersRegistration: true,
     // Software version query link
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     // Software version update email link. ${version} is replaced in run time
@@ -270,6 +272,8 @@ class Configs {
       // get upper case snake case variable
       const uSnakeCase = k.split(/(?=[A-Z])/).join('_').toUpperCase();
       combinedConfig[k] = process.env[uSnakeCase] || combinedConfig[k];
+      combinedConfig[k] = typeof combinedConfig[k] === 'string' &&
+        combinedConfig[k].toLowerCase() === 'false' ? false : combinedConfig[k];
     });
 
     // Override with predefined special environment variables
