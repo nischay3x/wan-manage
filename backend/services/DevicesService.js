@@ -138,7 +138,8 @@ class DevicesService {
         'name',
         'pciaddr',
         '_id',
-        'pathlabels'
+        'pathlabels',
+        'internet_source'
       ]);
       retIf._id = retIf._id.toString();
       return retIf;

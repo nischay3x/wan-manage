@@ -170,7 +170,12 @@ const interfacesSchema = new Schema({
   pathlabels: [{
     type: Schema.Types.ObjectId,
     ref: 'PathLabels'
-  }]
+  }],
+  // internet source - wifi, lte
+  internet_source: {
+    type: String,
+    default: 'NONE'
+  }
 }, {
   timestamps: true
 });
