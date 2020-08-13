@@ -458,16 +458,16 @@ class Connections {
       }];
     }
 
-    if (incomingInterfaces.length !== currentInterfaces.length) {
-      for (let i = 0; i < currentInterfaces.length; i++) {
-        const exists = incomingInterfaces.find(infc => infc.name === currentInterfaces[i].name);
-        if (!exists) {
-          await devices.findOneAndUpdate(query, {
-            $pull: { interfaces: { name: currentInterfaces[i].name } }
-          });
-        }
-      }
-    }
+    // if (incomingInterfaces.length !== currentInterfaces.length) {
+    //   for (let i = 0; i < currentInterfaces.length; i++) {
+    //     const exists = incomingInterfaces.find(infc => infc.name === currentInterfaces[i].name);
+    //     if (!exists) {
+    //       await devices.findOneAndUpdate(query, {
+    //         $pull: { interfaces: { name: currentInterfaces[i].name } }
+    //       });
+    //     }
+    //   }
+    // }
 
     if (Object.keys(update).length) {
       await devices.findOneAndUpdate(query, update, options);

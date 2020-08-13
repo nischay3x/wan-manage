@@ -142,6 +142,12 @@ class DevicesController {
   async devicesIdDhcpPOST (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdDhcpPOST);
   }
+
+  async devicesIdWifiAvailableNetworksGET (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdWifiAvailableNetworksGET
+    );
+  }
 }
 
 module.exports = DevicesController;

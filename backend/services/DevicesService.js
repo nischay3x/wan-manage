@@ -381,6 +381,59 @@ class DevicesService {
     }
   }
 
+  static async devicesIdWifiAvailableNetworksGET ({ id, interfaceName, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+
+      if (!device) {
+        return Service.rejectResponse('Device not found');
+      }
+
+      if (!connections.isConnected(device.machineId)) {
+        return Service.successResponse({
+          status: 'disconnected',
+          accessPoints: []
+        });
+      }
+
+      const accessPoints = await connections.deviceSendMessage(
+        null,
+        device.machineId,
+        {
+          entity: 'agent',
+          message: 'get-wifi-available-access-points',
+          params: {
+            interfaceName: interfaceName
+          }
+        }
+      );
+
+      if (!accessPoints.ok) {
+        logger.error('Failed to get available access points', {
+          params: {
+            deviceId: id,
+            response: accessPoints.message
+          }
+        });
+        return Service.rejectResponse('Failed to get available access points', 500);
+      }
+
+      return Service.successResponse({
+        status: 'connected',
+        accessPoints: accessPoints.message
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
   /**
    * Retrieve device logs information
    *
