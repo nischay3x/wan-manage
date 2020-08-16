@@ -38,6 +38,7 @@ const differenceWith = require('lodash/differenceWith');
 const pullAllWith = require('lodash/pullAllWith');
 const isEqual = require('lodash/isEqual');
 const pick = require('lodash/pick');
+const { getMajorVersion } = require('../versioning');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
@@ -60,6 +61,186 @@ const prepareIfcParams = (interfaces) => {
     return newIfc;
   });
 };
+
+/**
+ * Composes aggregated device modification message (agent version 1)
+ *
+ * @param {*} messageParams
+ * @returns object of the following format:
+ * {
+ *   entity: 'agent',
+ *   message: 'modify-device',
+ *   params: {
+ *     {}
+ *   }
+ * }
+ * where 'params' is an object containing individual device modification
+ * commands.
+ */
+const prepareModificationMessageV1 = (messageParams) => {
+  const modificationMessage = {};
+  if (has(messageParams, 'modify_routes')) {
+    modificationMessage.modify_routes = messageParams.modify_routes;
+  }
+  if (has(messageParams, 'modify_router.assign')) {
+    modificationMessage.modify_router = {};
+    modificationMessage.modify_router.assign = prepareIfcParams(
+      messageParams.modify_router.assign
+    );
+    modificationMessage.reconnect = true;
+  }
+  if (has(messageParams, 'modify_router.unassign')) {
+    if (!modificationMessage.modify_router) {
+      modificationMessage.modify_router = {};
+    }
+    modificationMessage.modify_router.unassign = prepareIfcParams(
+      messageParams.modify_router.unassign
+    );
+    modificationMessage.reconnect = true;
+  }
+  if (has(messageParams, 'modify_interfaces')) {
+    modificationMessage.modify_interfaces = {};
+    modificationMessage.modify_interfaces.interfaces = prepareIfcParams(
+      messageParams.modify_interfaces.interfaces
+    );
+    modificationMessage.reconnect = true;
+  }
+
+  const tasks = [[]];
+  if (Object.keys(modificationMessage).length !== 0) {
+    tasks[0].push(
+      {
+        entity: 'agent',
+        message: 'modify-device',
+        params: modificationMessage
+      }
+    );
+  }
+
+  if (has(messageParams, 'modify_dhcp_config')) {
+    const { dhcpRemove, dhcpAdd } = messageParams.modify_dhcp_config;
+
+    if (dhcpRemove.length !== 0) {
+      tasks[0].push({
+        entity: 'agent',
+        message: 'remove-dhcp-config',
+        params: dhcpRemove
+      });
+    }
+
+    if (dhcpAdd.length !== 0) {
+      tasks[0].push({
+        entity: 'agent',
+        message: 'add-dhcp-config',
+        params: dhcpAdd
+      });
+    }
+  }
+
+  return tasks;
+};
+
+/**
+ * Composes aggregated device modification message (agent version 2 and above)
+ *
+ * @param {*} messageParams input device modification params
+ * @returns object of the following format:
+ * {
+ *   message: 'aggregated',
+ *   params: { requests: [] }
+ * }
+ * where 'requests' is an array of individual device modification
+ * commands.
+ */
+const prepareModificationMessageV2 = (messageParams) => {
+  const requests = [];
+
+  if (has(messageParams, 'modify_routes')) {
+    requests.push(...messageParams.modify_routes.routes.map(item => {
+      if (item.new_route !== '' && item.old_route === '') {
+        return {
+          entity: 'agent',
+          message: 'add-route',
+          params: {
+            addr: item.addr,
+            via: item.new_route,
+            pci: item.pci,
+            metric: item.metric
+          }
+        };
+      }
+
+      if (item.new_route === '' && item.old_route !== '') {
+        return {
+          entity: 'agent',
+          message: 'remove-route',
+          params: {
+            addr: item.addr,
+            via: item.old_route
+          }
+        };
+      }
+    }));
+  }
+
+  if (has(messageParams, 'modify_router.assign')) {
+    const ifcParams = prepareIfcParams(messageParams.modify_router.assign);
+    requests.push(...ifcParams.map(item => {
+      return {
+        entity: 'agent',
+        message: 'add-interface',
+        params: item
+      };
+    }));
+  }
+  if (has(messageParams, 'modify_router.unassign')) {
+    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign);
+    requests.push(...ifcParams.map(item => {
+      return {
+        entity: 'agent',
+        message: 'remove-interface',
+        params: item
+      };
+    }));
+  }
+
+  if (has(messageParams, 'modify_dhcp_config')) {
+    const { dhcpRemove, dhcpAdd } = messageParams.modify_dhcp_config;
+
+    if (dhcpRemove.length !== 0) {
+      requests.push(...dhcpRemove.map(item => {
+        return {
+          entity: 'agent',
+          message: 'remove-dhcp-config',
+          params: item
+        };
+      }));
+    }
+
+    if (dhcpAdd.length !== 0) {
+      requests.push(...dhcpAdd.map(item => {
+        return {
+          entity: 'agent',
+          message: 'add-dhcp-config',
+          params: item
+        };
+      }));
+    }
+  }
+
+  const tasks = [];
+  if (requests.length !== 0) {
+    tasks.push(
+      {
+        message: 'aggregated',
+        params: { requests: requests }
+      }
+    );
+  }
+
+  return tasks;
+};
+
 /**
  * Queues a modify-device job to the device queue.
  * @param  {string}  org                   the organization to which the user belongs
@@ -206,65 +387,19 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       }
     }
   }
+
   // Prepare and queue device modification job
-  const modificationMessage = {};
-  if (has(messageParams, 'modify_routes')) {
-    modificationMessage.modify_routes = messageParams.modify_routes;
-  }
-  if (has(messageParams, 'modify_router.assign')) {
-    modificationMessage.modify_router = {};
-    modificationMessage.modify_router.assign = prepareIfcParams(
-      messageParams.modify_router.assign
-    );
-    modificationMessage.reconnect = true;
-  }
-  if (has(messageParams, 'modify_router.unassign')) {
-    if (!modificationMessage.modify_router) {
-      modificationMessage.modify_router = {};
-    }
-    modificationMessage.modify_router.unassign = prepareIfcParams(
-      messageParams.modify_router.unassign
-    );
-    modificationMessage.reconnect = true;
-  }
-  if (has(messageParams, 'modify_interfaces')) {
-    modificationMessage.modify_interfaces = {};
-    modificationMessage.modify_interfaces.interfaces = prepareIfcParams(
-      messageParams.modify_interfaces.interfaces
-    );
-    modificationMessage.reconnect = true;
+  const version = getMajorVersion(device.versions.agent);
+  let tasks;
+
+  switch (version) {
+    case 1:
+      tasks = prepareModificationMessageV1(messageParams);
+      break;
+    case 2:
+      tasks = prepareModificationMessageV2(messageParams);
   }
 
-  const tasks = [[]];
-  if (Object.keys(modificationMessage).length !== 0) {
-    tasks[0].push(
-      {
-        entity: 'agent',
-        message: 'modify-device',
-        params: modificationMessage
-      }
-    );
-  }
-
-  if (has(messageParams, 'modify_dhcp_config')) {
-    const { dhcpRemove, dhcpAdd } = messageParams.modify_dhcp_config;
-
-    if (dhcpRemove.length !== 0) {
-      tasks[0].push({
-        entity: 'agent',
-        message: 'remove-dhcp-config',
-        params: dhcpRemove
-      });
-    }
-
-    if (dhcpAdd.length !== 0) {
-      tasks[0].push({
-        entity: 'agent',
-        message: 'add-dhcp-config',
-        params: dhcpAdd
-      });
-    }
-  }
   const job = await queueJob(org, user.username, tasks, device, removedTunnels);
   return [job];
 };
@@ -706,7 +841,8 @@ const apply = async (device, user, data) => {
   const modified =
   has(modifyParams, 'modify_routes') ||
   has(modifyParams, 'modify_router') ||
-  has(modifyParams, 'modify_interfaces');
+  has(modifyParams, 'modify_interfaces') ||
+  has(modifyParams, 'modify_dhcp_config');
 
   try {
     // Queue job only if the device has changed
