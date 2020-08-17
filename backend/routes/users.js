@@ -80,7 +80,7 @@ router.route('/register')
     });
 
     // check if registration is allowed
-    if (!configs.get('allowUsersRegistration')) {
+    if (!configs.get('allowUsersRegistration', 'boolean')) {
       return next(createError(500, 'Users registration is not allowed'));
     }
 

@@ -272,8 +272,6 @@ class Configs {
       // get upper case snake case variable
       const uSnakeCase = k.split(/(?=[A-Z])/).join('_').toUpperCase();
       combinedConfig[k] = process.env[uSnakeCase] || combinedConfig[k];
-      combinedConfig[k] = typeof combinedConfig[k] === 'string' &&
-        combinedConfig[k].toLowerCase() === 'false' ? false : combinedConfig[k];
     });
 
     // Override with predefined special environment variables
@@ -301,7 +299,30 @@ class Configs {
     return process.argv[2] || 'development';
   }
 
-  get (key) {
+  // Get the config parameter and convert it from string to the desired type
+  // If the value is not string, its value is returned with no conversion
+  get (key, type = 'string') {
+    if (typeof this.config_values[key] === 'string') {
+      try {
+        switch (type) {
+          case 'string':
+            return this.config_values[key];
+          case 'number':
+            return +this.config_values[key];
+          case 'list':
+            return this.config_values[key].split(/,\s*/);
+          case 'boolean':
+            if (this.config_values[key].toLowerCase() === 'true') return true;
+            else if (this.config_values[key].toLowerCase() === 'false') return false;
+            else throw new Error('Not a boolean value');
+        }
+      } catch (err) {
+        // the configs module is used by logger, so just console error
+        console.error('Could not convert config param', {
+          params: { key: key, value: this.config_values[key], message: err.message }
+        });
+      }
+    }
     return this.config_values[key];
   }
 
