@@ -2554,7 +2554,84 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{interfaceName}/AvailableAccessPoints:
+  /devices/{id}/interfaces/{interfaceName}/connectToWifi:
+    post:
+      operationId: devicesIdConnectToWifiPOST
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The wifi interface name to get available networks for
+        explode: false
+        in: path
+        name: interfaceName
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/connectRequest'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/connectToWifi'
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Try Connect to wifi access point
+      tags:
+      - Interface
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/interfaces/{interfaceName}/availableAccessPoints:
     get: 
       operationId: devicesIdWifiAvailableNetworksGET
       parameters:
@@ -6870,6 +6947,23 @@ components:
           type: string
         params:
           type: object
+      type: object
+    connectRequest:
+      example:
+        essid: Access point ssid
+        password: somepassword      
+      properties:
+        essid: 
+          type: string
+        password:
+          type: string
+      type: object
+    connectToWifi:
+      example:
+        success: true
+      properties:
+        success: 
+          type: boolean
       type: object
     InterfaceAccessPoints:
       example:

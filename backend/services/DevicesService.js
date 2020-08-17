@@ -406,9 +406,7 @@ class DevicesService {
         {
           entity: 'agent',
           message: 'get-wifi-available-access-points',
-          params: {
-            interfaceName: interfaceName
-          }
+          params: { interfaceName }
         }
       );
 
@@ -425,6 +423,60 @@ class DevicesService {
       return Service.successResponse({
         status: 'connected',
         accessPoints: accessPoints.message
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async devicesIdConnectToWifiPOST ({ id, interfaceName, org, connectRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+
+      if (!device) {
+        return Service.rejectResponse('Device not found');
+      }
+
+      if (!connections.isConnected(device.machineId)) {
+        return Service.successResponse({
+          status: 'disconnected',
+          accessPoints: []
+        });
+      }
+
+      const response = await connections.deviceSendMessage(
+        null,
+        device.machineId,
+        {
+          entity: 'agent',
+          message: 'connect-to-wifi',
+          params: {
+            interfaceName,
+            essid: connectRequest.essid,
+            password: connectRequest.password
+          }
+        }
+      );
+
+      if (!response.ok) {
+        logger.error('Failed to connect to wifi', {
+          params: {
+            deviceId: id,
+            response: response.message
+          }
+        });
+        return Service.rejectResponse('Failed to connect to wifi', 500);
+      }
+
+      return Service.successResponse({
+        success: response.message
       });
     } catch (e) {
       return Service.rejectResponse(

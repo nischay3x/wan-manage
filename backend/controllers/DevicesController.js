@@ -148,6 +148,12 @@ class DevicesController {
       request, response, this.service.devicesIdWifiAvailableNetworksGET
     );
   }
+
+  async devicesIdConnectToWifiPOST (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdConnectToWifiPOST
+    );
+  }
 }
 
 module.exports = DevicesController;
