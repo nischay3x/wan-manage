@@ -80,8 +80,7 @@ connectRouter.route('/register')
               // Get an interface with gateway and the lowest metric
               const defaultIntf = ifs.reduce((res, intf) =>
                 intf.gateway && (!res || +res.metric > +intf.metric)
-                  ? intf : res
-              );
+                  ? intf : res, undefined);
               const lowestMetric = defaultIntf && defaultIntf.metric
                 ? defaultIntf.metric : '0';
 
