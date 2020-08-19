@@ -504,6 +504,15 @@ const deviceSchema = new Schema({
     },
     unique: true
   },
+  serial: {
+    type: String,
+    maxlength: [50, 'Serial number length must be at most 50'],
+    validate: {
+      validator: validators.validateSerial,
+      message: 'Not a valid serial number'
+    },
+    default: '0'
+  },
   // token
   fromToken: {
     type: String,

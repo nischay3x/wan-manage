@@ -76,11 +76,18 @@ connectRouter.route('/register')
 
               // Try to auto populate interfaces parameters
               const ifs = JSON.parse(req.body.interfaces);
-              // Is there gateway on any of interfaces
-              const hasGW = ifs.some(intf => intf.gateway);
+
+              // Get an interface with gateway and the lowest metric
+              const defaultIntf = ifs.reduce((res, intf) =>
+                intf.gateway && (!res || +res.metric > +intf.metric)
+                  ? intf : res
+              );
+              const lowestMetric = defaultIntf && defaultIntf.metric
+                ? defaultIntf.metric : '0';
+
               let autoAssignedMetric = 100;
               ifs.forEach((intf) => {
-                if (!hasGW && intf.name === req.body.default_dev) {
+                if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent
                   intf.isAssigned = true;
                   intf.PublicIP = sourceIP;
@@ -94,7 +101,7 @@ connectRouter.route('/register')
                   intf.dhcp = intf.dhcp || 'no';
                   intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
                     ? '0' : intf.metric || (autoAssignedMetric++).toString();
-                  intf.PublicIP = intf.metric === '0' ? sourceIP : '';
+                  intf.PublicIP = intf.metric === lowestMetric ? sourceIP : '';
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
@@ -109,8 +116,9 @@ connectRouter.route('/register')
 
               // Prepare device versions array
               const versions = {
-                agent: req.body.fwagent_version,
-                router: req.body.router_version
+                agent: req.body.fwagent_version || '',
+                router: req.body.router_version || '',
+                device: req.body.device_version || ''
               };
 
               // Check that account didn't cross its device limit
@@ -145,6 +153,7 @@ connectRouter.route('/register')
                     hostname: req.body.machine_name,
                     ipList: req.body.ip_list,
                     machineId: req.body.machine_id,
+                    serial: req.body.serial,
                     fromToken: resp[0].name,
                     interfaces: ifs,
                     deviceToken: deviceToken,
