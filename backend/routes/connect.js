@@ -76,11 +76,17 @@ connectRouter.route('/register')
 
               // Try to auto populate interfaces parameters
               const ifs = JSON.parse(req.body.interfaces);
-              // Is there gateway on any of interfaces
-              const hasGW = ifs.some(intf => intf.gateway);
+
+              // Get an interface with gateway and the lowest metric
+              const defaultIntf = ifs.reduce((res, intf) =>
+                intf.gateway && (!res || +res.metric > +intf.metric)
+                  ? intf : res, undefined);
+              const lowestMetric = defaultIntf && defaultIntf.metric
+                ? defaultIntf.metric : '0';
+
               let autoAssignedMetric = 100;
               ifs.forEach((intf) => {
-                if (!hasGW && intf.name === req.body.default_dev) {
+                if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent
                   intf.isAssigned = true;
                   intf.PublicIP = sourceIP;
@@ -94,7 +100,7 @@ connectRouter.route('/register')
                   intf.dhcp = intf.dhcp || 'no';
                   intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
                     ? '0' : intf.metric || (autoAssignedMetric++).toString();
-                  intf.PublicIP = intf.metric === '0' ? sourceIP : '';
+                  intf.PublicIP = intf.metric === lowestMetric ? sourceIP : '';
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
