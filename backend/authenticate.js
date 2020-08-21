@@ -208,6 +208,14 @@ exports.verifyUserJWT = function (req, res, next) {
             // since the refresh token has been issued.
             if (!userDetails) return next(createError(401));
 
+            // If user has no permission for organization set to null
+            if (userDetails.defaultOrg) {
+              const org = await getUserOrgByID(userDetails, userDetails.defaultOrg._id);
+              if (org.length === 0) {
+                userDetails.defaultOrg = null;
+              }
+            }
+
             // Attach the token to the headers and let
             // the request continue to the next middleware.
             req.user = userDetails;
