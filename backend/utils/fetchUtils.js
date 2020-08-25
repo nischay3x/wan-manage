@@ -20,7 +20,8 @@
  * device logic classes.
  */
 
-const fetch = require('node-fetch');
+// const fetch = require('node-fetch');
+const request = require('request');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 
 /**
@@ -30,15 +31,32 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'p
     * @param  {number}   numOfTrials the max number of trials
     * @return {Promise}              the response from the uri
     */
+
+const requestPromise = uri => {
+  return new Promise((resolve, reject) => {
+    request(uri, function (error, response, body) {
+      if (error) {
+        return reject(error);
+      } else {
+        return resolve(body);
+      }
+    });
+  });
+};
+
 const fetchWithRetry = async (uri, numOfTrials) => {
   logger.debug('Fetching uri', {
     params: { uri, numOfTrials }
   });
   let res;
+
   for (let trial = 0; trial < numOfTrials; trial++) {
-    res = await fetch(uri);
-    if (res.ok) return res;
-    throw (new Error(res.statusText));
+    try {
+      res = await requestPromise(uri);
+      return JSON.parse(res);
+    } catch (e) {
+      throw (new Error(e));
+    }
   }
 };
 
