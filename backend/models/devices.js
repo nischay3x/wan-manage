@@ -123,6 +123,16 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // external NAT traversal (STUN) port
+  PublicPort: {
+    type: String,
+    maxlength: [5, 'Public Port length must be at most 5'],
+    validate: {
+      validator: validators.validatePort,
+      message: 'Public Port should be a valid Port value'
+    },
+    default: ''
+  },
   // WAN interface default GW
   gateway: {
     type: String,

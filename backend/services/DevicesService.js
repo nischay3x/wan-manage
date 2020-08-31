@@ -124,6 +124,7 @@ class DevicesService {
       const retIf = pick(i, [
         'IPv6',
         'PublicIP',
+        'PublicPort',
         'gateway',
         'metric',
         'dhcp',

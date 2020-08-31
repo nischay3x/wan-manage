@@ -104,7 +104,7 @@ const configEnv = {
     // Client static root directory
     clientStaticDir: 'public',
     // Mgmt-Agent protocol version
-    agentApiVersion: '1.0.0',
+    agentApiVersion: '2.0.0',
     // Mgmt log files
     logFilePath: './logs/app.log',
     reqLogFilePath: './logs/req.log',
@@ -134,7 +134,9 @@ const configEnv = {
     // Web hooks register device secret, send in addition to the message for filtering
     webHookRegisterDeviceSecret: 'ABC',
     // Global app identification rules file location
-    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json'
+    appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
+    // Default port for tunnels
+    tunnelPort: 4789
   },
   // Override for development environment, default environment if not specified
   development: {

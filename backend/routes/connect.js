@@ -83,7 +83,8 @@ connectRouter.route('/register')
                 if (!hasGW && intf.name === req.body.default_dev) {
                   // old version agent
                   intf.isAssigned = true;
-                  intf.PublicIP = sourceIP;
+                  intf.PublicIP = intf.public_ip || sourceIP;
+                  intf.PublicPort = intf.public_port || '';
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   intf.gateway = req.body.default_route;
@@ -94,7 +95,8 @@ connectRouter.route('/register')
                   intf.dhcp = intf.dhcp || 'no';
                   intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
                     ? '0' : intf.metric || (autoAssignedMetric++).toString();
-                  intf.PublicIP = intf.metric === '0' ? sourceIP : '';
+                  intf.PublicIP = intf.public_ip || (intf.metric === '0' ? sourceIP : '');
+                  intf.PublicPort = intf.public_port || '';
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';

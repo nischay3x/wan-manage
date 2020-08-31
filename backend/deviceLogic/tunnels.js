@@ -535,8 +535,6 @@ const prepareTunnelAddJob = async (
   const tunnel = await tunnelsModel.findOne({ num: tunnelnum });
   if (!tunnel) throw new Error(`Tunnel ${tunnelnum} not found`);
 
-  const tunnelParams = generateTunnelParams(tunnelnum);
-
   const tunnelKeys = {
     key1: tunnel.tunnelKeys.key1,
     key2: tunnel.tunnelKeys.key2,
@@ -546,11 +544,13 @@ const prepareTunnelAddJob = async (
 
   const tasksDeviceA = [];
   const tasksDeviceB = [];
-  const paramsDeviceA = {};
-  const paramsDeviceB = {};
   const paramsIpsecDeviceA = {};
   const paramsIpsecDeviceB = {};
-
+  const {
+    paramsDeviceA,
+    paramsDeviceB,
+    tunnelParams
+  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
   const paramsSaAB = {
     spi: tunnelParams.sa1,
     'crypto-key': tunnelKeys.key1,
@@ -565,10 +565,6 @@ const prepareTunnelAddJob = async (
     'crypto-alg': 'aes-cbc-128',
     'integr-alg': 'sha-256-128'
   };
-  paramsDeviceA.src = deviceAIntf.IPv4;
-  paramsDeviceA.dst =
-    deviceBIntf.PublicIP === '' ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
-  paramsDeviceA['tunnel-id'] = tunnelnum;
   paramsIpsecDeviceA['local-sa'] = paramsSaAB;
   paramsIpsecDeviceA['remote-sa'] = paramsSaBA;
   paramsDeviceA.ipsec = paramsIpsecDeviceA;
@@ -581,11 +577,6 @@ const prepareTunnelAddJob = async (
       labels: pathLabel ? [pathLabel] : []
     }
   };
-
-  paramsDeviceB.src = deviceBIntf.IPv4;
-  paramsDeviceB.dst =
-    deviceAIntf.PublicIP === '' ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
-  paramsDeviceB['tunnel-id'] = tunnelnum;
 
   // const majorAgentVersion = getMajorVersion(devBagentVer);
   // if (majorAgentVersion === 0) {    // version 0.X.X
@@ -896,29 +887,12 @@ const completeTunnelDel = (jobId, res) => {
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelRemoveJob = (tunnelnum, deviceAIntf, deviceBIntf) => {
-  // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
-  const tunnelParams = generateTunnelParams(tunnelnum);
-
   const tasksDeviceA = [];
   const tasksDeviceB = [];
-  const paramsDeviceA = {};
-  const paramsDeviceB = {};
-
-  paramsDeviceA.src = deviceAIntf.IPv4;
-  paramsDeviceA.dst = ((deviceBIntf.PublicIP === '') ? deviceBIntf.IPv4 : deviceBIntf.PublicIP);
-  paramsDeviceA['tunnel-id'] = tunnelnum;
-  paramsDeviceA['loopback-iface'] = {
-    addr: tunnelParams.ip1 + '/31',
-    mac: tunnelParams.mac1
-  };
-
-  paramsDeviceB.src = deviceBIntf.IPv4;
-  paramsDeviceB.dst = ((deviceAIntf.PublicIP === '') ? deviceAIntf.IPv4 : deviceAIntf.PublicIP);
-  paramsDeviceB['tunnel-id'] = tunnelnum;
-  paramsDeviceB['loopback-iface'] = {
-    addr: tunnelParams.ip2 + '/31',
-    mac: tunnelParams.mac2
-  };
+  const {
+    paramsDeviceA,
+    paramsDeviceB
+  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceA });
@@ -1069,6 +1043,44 @@ const sync = async (deviceId, org) => {
     completeCbData,
     callComplete
   };
+};
+
+/*
+ * Prepares common parameters for add/remove tunnel jobs
+ * @param  {number} tunnelnum    tunnel id
+ * @param  {Object} deviceAIntf device A tunnel interface
+ * @param  {Object} deviceBIntf device B tunnel interface
+*/
+const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
+  // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
+  const tunnelParams = generateTunnelParams(tunnelnum);
+
+  const paramsDeviceA = {};
+  const paramsDeviceB = {};
+
+  const isLocal = !deviceAIntf.PublicIP || !deviceBIntf.PublicIP ||
+      deviceAIntf.PublicIP === deviceBIntf.PublicIP;
+
+  paramsDeviceA.src = deviceAIntf.IPv4;
+  paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
+  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort)
+    ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
+  paramsDeviceA['tunnel-id'] = tunnelnum;
+  paramsDeviceA['loopback-iface'] = {
+    addr: tunnelParams.ip1 + '/31',
+    mac: tunnelParams.mac1
+  };
+  paramsDeviceB.src = deviceBIntf.IPv4;
+  paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
+  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort)
+    ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
+  paramsDeviceB['tunnel-id'] = tunnelnum;
+  paramsDeviceB['loopback-iface'] = {
+    addr: tunnelParams.ip2 + '/31',
+    mac: tunnelParams.mac2
+  };
+
+  return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };
 
 /**

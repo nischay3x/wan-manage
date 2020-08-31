@@ -46,7 +46,7 @@ const { getMajorVersion } = require('../versioning');
  */
 const prepareIfcParams = (interfaces) => {
   return interfaces.map(ifc => {
-    const newIfc = omit(ifc, ['_id', 'PublicIP', 'isAssigned', 'pathlabels']);
+    const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
     // Device should only be aware of DIA labels.
     const labels = [];
@@ -57,7 +57,6 @@ const prepareIfcParams = (interfaces) => {
 
     // Don't send interface default GW for LAN interfaces
     if (ifc.type !== 'WAN' && ifc.isAssigned) delete newIfc.gateway;
-
     return newIfc;
   });
 };
@@ -391,7 +390,6 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   // Prepare and queue device modification job
   const version = getMajorVersion(device.versions.agent);
   let tasks;
-
   switch (version) {
     case 1:
       tasks = prepareModificationMessageV1(messageParams);
@@ -726,6 +724,7 @@ const apply = async (device, user, data) => {
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
+        PublicPort: ifc.PublicPort,
         gateway: ifc.gateway,
         metric: ifc.metric,
         routing: ifc.routing,
@@ -752,6 +751,7 @@ const apply = async (device, user, data) => {
         addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
         addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
         PublicIP: ifc.PublicIP,
+        PublicPort: ifc.PublicPort,
         gateway: ifc.gateway,
         metric: ifc.metric,
         routing: ifc.routing,
@@ -956,6 +956,8 @@ const sync = async (deviceId, org) => {
       IPv6,
       IPv4Mask,
       IPv6Mask,
+      PublicIP,
+      PublicPort,
       routing,
       type,
       pathlabels,
@@ -987,6 +989,8 @@ const sync = async (deviceId, org) => {
       dhcp: dhcp || 'no',
       addr: `${IPv4}/${IPv4Mask}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
+      PublicIP: PublicIP,
+      PublicPort: PublicPort,
       routing,
       type,
       metric,

@@ -6318,6 +6318,7 @@ components:
         interfaces:
         - IPv6: IPv6
           PublicIP: PublicIP
+          PublicPort: PublicPort
           IPv4: IPv4
           gateway: gateway
           metric: 0
@@ -6334,6 +6335,7 @@ components:
           _id: _id
         - IPv6: IPv6
           PublicIP: PublicIP
+          PublicPort: PublicPort
           IPv4: IPv4
           type: WAN
           MAC: MAC
@@ -6431,6 +6433,7 @@ components:
         interfaces:
         - IPv6: IPv6
           PublicIP: PublicIP
+          PublicPort: PublicPort
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6448,6 +6451,7 @@ components:
           pathlabels: path labels list
         - IPv6: IPv6
           PublicIP: PublicIP
+          PublicPort: PublicPort
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6575,6 +6579,7 @@ components:
       example:
         IPv6: IPv6
         PublicIP: PublicIP
+        PublicPort: PublicPort
         IPv4: IPv4
         type: WAN
         MAC: MAC
@@ -6609,6 +6614,8 @@ components:
         IPv6:
           type: string
         PublicIP:
+          type: string
+        PublicPort:
           type: string
         gateway:
           type: string

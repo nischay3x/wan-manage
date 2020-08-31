@@ -428,11 +428,14 @@ class Connections {
   async reconfigCheck (origDevice, deviceInfo) {
     const machineId = origDevice.machineId;
     const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
+    // Check if reconfig was changed
     if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
-      // Check if dhcp client is defined on any of interfaces
-      if (origDevice.interfaces && deviceInfo.message.network.interfaces &&
-        deviceInfo.message.network.interfaces.length > 0 &&
-        origDevice.interfaces.filter(i => i.dhcp === 'yes').length > 0) {
+      // Check if dhcp client or public IP is defined on any of interfaces
+      const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
+         deviceInfo.message.network.interfaces.length > 0 &&
+        (origDevice.interfaces.filter(i => i.dhcp === 'yes').length > 0 ||
+        deviceInfo.message.network.interfaces.filter(i => i.PublicIP).length > 0);
+      if (needReconfig) {
         // Currently we allow only one change at a time to the device,
         // to prevent inconsistencies between the device and the MGMT database.
         // Therefore, we block the request if there's a pending change in the queue.
@@ -441,31 +444,47 @@ class Connections {
           throw new Error('Failed to apply new config, only one device change is allowed');
         }
         const interfaces = origDevice.interfaces.map(i => {
-          if (i.dhcp === 'yes') {
-            const updatedConfig = deviceInfo.message.network.interfaces
-              .find(u => u.pciaddr === i.pciaddr);
-            // ignore if IPv4 or gateway is not assigned by DHCP server
-            if (updatedConfig && updatedConfig.IPv4 && updatedConfig.gateway) {
-              return {
-                ...i.toJSON(),
-                IPv4: updatedConfig.IPv4,
-                IPv4Mask: updatedConfig.IPv4Mask,
-                IPv6: updatedConfig.IPv6,
-                IPv6Mask: updatedConfig.IPv6Mask,
-                gateway: updatedConfig.gateway
-              };
-            } else {
-              // Missing some DHCP parameters
-              logger.warn('Missing some DHCP parameters, the config will not be applied', {
-                params: {
-                  reconfig: deviceInfo.message.reconfig,
-                  machineId: machineId,
-                  updatedConfig: JSON.stringify(updatedConfig)
-                }
-              });
-            }
+          const updatedConfig = deviceInfo.message.network.interfaces
+            .find(u => u.pciaddr === i.pciaddr);
+          if (!updatedConfig) {
+            logger.warn('Missing interface configuration in the get-device-info message', {
+              params: {
+                reconfig: deviceInfo.message.reconfig,
+                machineId: machineId,
+                interface: i.toJSON()
+              }
+            });
+            return i;
           }
-          return i;
+          if (i.dhcp === 'yes' && (!updatedConfig.IPv4 || !updatedConfig.gateway)) {
+            // ignore if IPv4 or gateway is not assigned by DHCP server
+            logger.warn('Missing some DHCP parameters, the config will not be applied', {
+              params: {
+                reconfig: deviceInfo.message.reconfig,
+                machineId: machineId,
+                updatedConfig: JSON.stringify(updatedConfig)
+              }
+            });
+            return i;
+          }
+          if (i.dhcp === 'yes') {
+            return {
+              ...i.toJSON(),
+              IPv4: updatedConfig.IPv4,
+              IPv4Mask: updatedConfig.IPv4Mask,
+              IPv6: updatedConfig.IPv6,
+              IPv6Mask: updatedConfig.IPv6Mask,
+              gateway: updatedConfig.gateway,
+              PublicIP: updatedConfig.PublicIP || i.PublicIP,
+              PublicPort: updatedConfig.PublicPort || i.PublicPort
+            };
+          } else {
+            return {
+              ...i.toJSON(),
+              PublicIP: updatedConfig.PublicIP || i.PublicIP,
+              PublicPort: updatedConfig.PublicPort || i.PublicPort
+            };
+          }
         });
         // Update interfaces in DB
         const updDevice = await devices.findOneAndUpdate(
