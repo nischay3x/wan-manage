@@ -87,7 +87,7 @@ const getUserOrgByID = async (user, orgId) => {
   try {
     // Find org with the correct ID
     const orgs = await getUserOrganizations(user);
-    const resultOrg = [orgs[orgId]] || [];
+    const resultOrg = (orgs[orgId]) ? [orgs[orgId]] : [];
     return resultOrg;
   } catch (err) {
     logger.error('Error getting organization', { params: { reason: err.message } });

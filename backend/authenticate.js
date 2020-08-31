@@ -24,7 +24,7 @@ const Accounts = require('./models/accounts');
 const Accesstoken = require('./models/accesstokens');
 const { verifyToken, getToken } = require('./tokens');
 const { permissionMasks } = require('./models/membership');
-const { orgUpdateFromNull } = require('./utils/membershipUtils');
+const { orgUpdateFromNull, getUserOrgByID } = require('./utils/membershipUtils');
 var configs = require('./configs')();
 const createError = require('http-errors');
 const reCaptcha = require('./utils/recaptcha')(configs.get('captchaKey'));
@@ -154,6 +154,13 @@ exports.verifyUserLocal = async function (req, res, next) {
       } else {
         try {
           await user.populate('defaultOrg').populate('defaultAccount').execPopulate();
+          // If user has no permission for organization set to null
+          if (user.defaultOrg) {
+            const org = await getUserOrgByID(user, user.defaultOrg._id);
+            if (org.length === 0) {
+              user.defaultOrg = null;
+            }
+          }
         } catch (err) {
           logger.error('Could not get user info', {
             params: { user: req.body.username, message: err.message },
@@ -200,6 +207,14 @@ exports.verifyUserJWT = function (req, res, next) {
             // Don't return a token if user was deleted
             // since the refresh token has been issued.
             if (!userDetails) return next(createError(401));
+
+            // If user has no permission for organization set to null
+            if (userDetails.defaultOrg) {
+              const org = await getUserOrgByID(userDetails, userDetails.defaultOrg._id);
+              if (org.length === 0) {
+                userDetails.defaultOrg = null;
+              }
+            }
 
             // Attach the token to the headers and let
             // the request continue to the next middleware.
@@ -297,6 +312,7 @@ exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
   switch (openapi.schema.operationId) {
     case 'accountsSelectPOST':
     case 'accountsGET':
+    case 'organizationsSelectPOST':
       return true;
   }
 

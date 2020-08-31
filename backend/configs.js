@@ -120,6 +120,8 @@ const configEnv = {
     mailerFromAddress: 'noreply@flexiwan.com',
     // Name of the company, is used in email templates
     companyName: 'flexiWAN',
+    // Allow users registration, otherwise by invitation only
+    allowUsersRegistration: true,
     // Software version query link
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     // Software version update email link. ${version} is replaced in run time
@@ -299,7 +301,30 @@ class Configs {
     return process.argv[2] || 'development';
   }
 
-  get (key) {
+  // Get the config parameter and convert it from string to the desired type
+  // If the value is not string, its value is returned with no conversion
+  get (key, type = 'string') {
+    if (typeof this.config_values[key] === 'string') {
+      try {
+        switch (type) {
+          case 'string':
+            return this.config_values[key];
+          case 'number':
+            return +this.config_values[key];
+          case 'list':
+            return this.config_values[key].split(/,\s*/);
+          case 'boolean':
+            if (this.config_values[key].toLowerCase() === 'true') return true;
+            else if (this.config_values[key].toLowerCase() === 'false') return false;
+            else throw new Error('Not a boolean value');
+        }
+      } catch (err) {
+        // the configs module is used by logger, so just console error
+        console.error('Could not convert config param', {
+          params: { key: key, value: this.config_values[key], message: err.message }
+        });
+      }
+    }
     return this.config_values[key];
   }
 
