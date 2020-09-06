@@ -155,6 +155,16 @@ const prepareModificationMessageV1 = (messageParams) => {
 const prepareModificationMessageV2 = (messageParams) => {
   const requests = [];
 
+  if (has(messageParams, 'modify_interfaces')) {
+    requests.push(...prepareIfcParams(messageParams.modify_interfaces.interfaces).map(item => {
+      return {
+        entity: 'agent',
+        message: 'modify-interface',
+        params: item
+      };
+    }));
+  }
+
   if (has(messageParams, 'modify_routes')) {
     requests.push(...messageParams.modify_routes.routes.map(item => {
       if (item.new_route !== '' && item.old_route === '') {
@@ -232,6 +242,7 @@ const prepareModificationMessageV2 = (messageParams) => {
   if (requests.length !== 0) {
     tasks.push(
       {
+        entity: 'agent',
         message: 'aggregated',
         params: { requests: requests }
       }
