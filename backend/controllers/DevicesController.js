@@ -154,6 +154,12 @@ class DevicesController {
       request, response, this.service.devicesIdConnectToWifiPOST
     );
   }
+
+  async devicesIdConnectToLtePOST (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdConnectToLtePOST
+    );
+  }
 }
 
 module.exports = DevicesController;

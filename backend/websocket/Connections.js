@@ -438,39 +438,31 @@ class Connections {
       }
     }
 
-    // check wifi interfaces
+    // TODO: Fix the code below, is not smart code
     const incomingInterfaces = deviceInfo.message.network.interfaces;
     const currentInterfaces = origDevice.interfaces;
-    const wifiInterface = incomingInterfaces.find(i => i.internet_source === 'wifi');
-    const existsWifiInterface = currentInterfaces.find(i => {
-      return wifiInterface && i.name === wifiInterface.name;
+
+    const nonDpdkInterfaces = incomingInterfaces.filter(i => {
+      return ['wifi', 'lte'].includes(i.internet_source);
     });
-    const query = { machineId };
-    const update = {};
-    const options = {};
 
-    if (!existsWifiInterface && wifiInterface) {
-      update.$addToSet = { interfaces: wifiInterface };
-    } else if (existsWifiInterface && wifiInterface) {
-      update.$set = { 'interfaces.$[element]': wifiInterface };
-      options.arrayFilters = [{
-        'element.name': wifiInterface.name
-      }];
-    }
+    for (let i = 0; i < nonDpdkInterfaces.length; i++) {
+      const int = nonDpdkInterfaces[i];
+      const update = {};
+      const options = {};
 
-    // if (incomingInterfaces.length !== currentInterfaces.length) {
-    //   for (let i = 0; i < currentInterfaces.length; i++) {
-    //     const exists = incomingInterfaces.find(infc => infc.name === currentInterfaces[i].name);
-    //     if (!exists) {
-    //       await devices.findOneAndUpdate(query, {
-    //         $pull: { interfaces: { name: currentInterfaces[i].name } }
-    //       });
-    //     }
-    //   }
-    // }
+      const exists = currentInterfaces.find(i => i.name === int.name);
 
-    if (Object.keys(update).length) {
-      await devices.findOneAndUpdate(query, update, options);
+      if (!exists) {
+        update.$addToSet = { interfaces: int };
+      } else {
+        update.$set = { 'interfaces.$[element]': int };
+        options.arrayFilters = [{
+          'element.name': int.name
+        }];
+      }
+
+      await devices.updateOne({ machineId }, update, options);
     }
   }
 

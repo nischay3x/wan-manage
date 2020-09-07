@@ -432,7 +432,59 @@ class DevicesService {
     }
   }
 
-  static async devicesIdConnectToWifiPOST ({ id, interfaceName, org, connectRequest }, { user }) {
+  static async devicesIdConnectToLtePOST ({ id, interfaceName, org, lteConnectRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+
+      if (!device) {
+        return Service.rejectResponse('Device not found');
+      }
+
+      if (!connections.isConnected(device.machineId)) {
+        return Service.rejectResponse('Failed to connect to lte', 500);
+      }
+
+      const response = await connections.deviceSendMessage(
+        null,
+        device.machineId,
+        {
+          entity: 'agent',
+          message: 'connect-to-lte',
+          params: {
+            interfaceName,
+            apn: lteConnectRequest.apn
+          }
+        }
+      );
+
+      if (!response.ok) {
+        logger.error('Failed to connect to lte', {
+          params: {
+            deviceId: id,
+            response: response.message
+          }
+        });
+        return Service.rejectResponse('Failed to connect to lte', 500);
+      }
+
+      return Service.successResponse({
+        success: response.message
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async devicesIdConnectToWifiPOST (
+    { id, interfaceName, org, WifiConnectRequest }, { user }
+  ) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.findOne({
@@ -459,8 +511,8 @@ class DevicesService {
           message: 'connect-to-wifi',
           params: {
             interfaceName,
-            essid: connectRequest.essid,
-            password: connectRequest.password
+            essid: WifiConnectRequest.essid,
+            password: WifiConnectRequest.password
           }
         }
       );
