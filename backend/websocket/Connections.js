@@ -443,7 +443,7 @@ class Connections {
     const currentInterfaces = origDevice.interfaces;
 
     const nonDpdkInterfaces = incomingInterfaces.filter(i => {
-      return ['wifi', 'lte'].includes(i.internet_source);
+      return ['wifi', 'lte'].includes(i.connectivity_type);
     });
 
     for (let i = 0; i < nonDpdkInterfaces.length; i++) {

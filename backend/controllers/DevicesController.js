@@ -160,6 +160,12 @@ class DevicesController {
       request, response, this.service.devicesIdConnectToLtePOST
     );
   }
+
+  async devicesIdInterfaceStatusGET (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdInterfaceStatusGET
+    );
+  }
 }
 
 module.exports = DevicesController;

@@ -139,7 +139,7 @@ class DevicesService {
         'pciaddr',
         '_id',
         'pathlabels',
-        'internet_source'
+        'connectivity_type'
       ]);
       retIf._id = retIf._id.toString();
       return retIf;
@@ -395,7 +395,7 @@ class DevicesService {
 
       if (!connections.isConnected(device.machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
+          deviceStatus: 'disconnected',
           accessPoints: []
         });
       }
@@ -421,7 +421,7 @@ class DevicesService {
       }
 
       return Service.successResponse({
-        status: 'connected',
+        deviceStatus: 'connected',
         accessPoints: accessPoints.message
       });
     } catch (e) {
@@ -482,8 +482,59 @@ class DevicesService {
     }
   }
 
+  static async devicesIdInterfaceStatusGET ({ id, interfaceName, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+
+      if (!device) {
+        return Service.rejectResponse('Device not found');
+      }
+
+      if (!connections.isConnected(device.machineId)) {
+        return Service.successResponse({
+          deviceStatus: 'disconnected',
+          status: {}
+        });
+      }
+
+      const statusResponse = await connections.deviceSendMessage(
+        null,
+        device.machineId,
+        {
+          entity: 'agent',
+          message: 'get-interface-status',
+          params: { interfaceName }
+        }
+      );
+
+      if (!statusResponse.ok) {
+        logger.error('Failed to get interface status', {
+          params: {
+            deviceId: id,
+            response: statusResponse.message
+          }
+        });
+        return Service.rejectResponse('Failed to get interface status', 500);
+      }
+
+      return Service.successResponse({
+        deviceStatus: 'connected',
+        status: statusResponse.message
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
   static async devicesIdConnectToWifiPOST (
-    { id, interfaceName, org, WifiConnectRequest }, { user }
+    { id, interfaceName, org, wifiConnectRequest }, { user }
   ) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
@@ -511,8 +562,8 @@ class DevicesService {
           message: 'connect-to-wifi',
           params: {
             interfaceName,
-            essid: WifiConnectRequest.essid,
-            password: WifiConnectRequest.password
+            essid: wifiConnectRequest.essid,
+            password: wifiConnectRequest.password
           }
         }
       );

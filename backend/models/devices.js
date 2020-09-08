@@ -171,8 +171,8 @@ const interfacesSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'PathLabels'
   }],
-  // internet source - wifi, lte
-  internet_source: {
+  // connectivity_type - wifi, lte
+  connectivity_type: {
     type: String,
     default: 'NONE'
   }

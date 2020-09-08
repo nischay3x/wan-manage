@@ -2708,6 +2708,78 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/{id}/interfaces/{interfaceName}/status:
+    get: 
+      operationId: devicesIdInterfaceStatusGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The wifi interface name to get available networks for
+        explode: false
+        in: path
+        name: interfaceName
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterfaceAccessPoints'
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get available access points for wifi interface
+      tags:
+      - Interface
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/{id}/interfaces/{interfaceName}/availableAccessPoints:
     get: 
       operationId: devicesIdWifiAvailableNetworksGET
@@ -7054,12 +7126,24 @@ components:
         accessPointes: 
         - access point
         - access point
-        status: connected
+        deviceStatus: connected
       properties:
         accessPointes:
           items:
             type: string
           type: array
+      type: object
+    InterfaceStatus:
+      example:
+        status: 
+          key: value
+          key: value
+        deviceStatus: connected
+      properties:
+        status:
+          type: object
+        deviceStatus:
+          type: string
       type: object
     DeviceLog:
       example:
