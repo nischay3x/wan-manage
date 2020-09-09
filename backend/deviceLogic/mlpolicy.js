@@ -41,7 +41,7 @@ const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) 
     await getDevicesAppIdentificationJobInfo(
       org,
       'multilink',
-      deviceList,
+      deviceList.map((d) => d._id),
       op === 'install'
     );
 

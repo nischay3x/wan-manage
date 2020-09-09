@@ -104,7 +104,7 @@ const configEnv = {
     // Client static root directory
     clientStaticDir: 'public',
     // Mgmt-Agent protocol version
-    agentApiVersion: '1.0.0',
+    agentApiVersion: '2.0.0',
     // Mgmt log files
     logFilePath: './logs/app.log',
     reqLogFilePath: './logs/req.log',
