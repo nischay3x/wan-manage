@@ -629,6 +629,7 @@ class Connections {
       });
 
       this.devices.updateDeviceInfo(machineId, 'ready', true);
+      this.devices.updateDeviceInfo(machineId, 'versions', versions);
       this.callRegisteredCallbacks(this.connectCallbacks, machineId);
     } catch (err) {
       logger.error('Failed to receive info from device', {

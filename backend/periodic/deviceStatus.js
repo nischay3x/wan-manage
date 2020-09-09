@@ -21,6 +21,7 @@ const { deviceStats, deviceAggregateStats } = require('../models/analytics/devic
 const Joi = require('@hapi/joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const notificationsMgr = require('../notifications/notifications')();
+const { getMajorVersion } = require('../versioning');
 
 /***
  * This class gets periodic status from all connected devices
@@ -160,13 +161,19 @@ class DeviceStatus {
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
             this.generateDevStatsNotifications();
-            this.updateDeviceSyncStatus(
-              deviceInfo.org,
-              deviceInfo.deviceObj,
-              deviceID,
-              msg['router-cfg-hash']
-            );
-
+            if (getMajorVersion(deviceInfo.versions.agent) >= 2) {
+              this.updateDeviceSyncStatus(
+                deviceInfo.org,
+                deviceInfo.deviceObj,
+                deviceID,
+                msg['router-cfg-hash']
+              );
+            } else {
+              logger.warn('Skipping periodic sync', {
+                params: { deviceID: deviceID, message: msg },
+                periodic: { task: this.taskInfo }
+              });
+            }
             // Check if config was modified on the device
             if (lastUpdateEntry.reconfig && lastUpdateEntry.reconfig !== deviceInfo.reconfig) {
               // Call get-device-info and reconfig
