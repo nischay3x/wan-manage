@@ -434,7 +434,8 @@ class Connections {
       const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
          deviceInfo.message.network.interfaces.length > 0 &&
         (origDevice.interfaces.filter(i => i.dhcp === 'yes').length > 0 ||
-        deviceInfo.message.network.interfaces.filter(i => i.PublicIP).length > 0);
+        deviceInfo.message.network.interfaces.filter(i => i.public_ip).length > 0);
+
       if (needReconfig) {
         // Currently we allow only one change at a time to the device,
         // to prevent inconsistencies between the device and the MGMT database.
@@ -475,14 +476,14 @@ class Connections {
               IPv6: updatedConfig.IPv6,
               IPv6Mask: updatedConfig.IPv6Mask,
               gateway: updatedConfig.gateway,
-              PublicIP: updatedConfig.PublicIP || i.PublicIP,
-              PublicPort: updatedConfig.PublicPort || i.PublicPort
+              PublicIP: updatedConfig.public_ip || i.PublicIP,
+              PublicPort: updatedConfig.public_port || i.PublicPort
             };
           } else {
             return {
               ...i.toJSON(),
-              PublicIP: updatedConfig.PublicIP || i.PublicIP,
-              PublicPort: updatedConfig.PublicPort || i.PublicPort
+              PublicIP: updatedConfig.public_ip || i.PublicIP,
+              PublicPort: updatedConfig.public_port || i.PublicPort
             };
           }
         });

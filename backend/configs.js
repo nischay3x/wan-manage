@@ -138,7 +138,7 @@ const configEnv = {
     // Global app identification rules file location
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
     // Default port for tunnels
-    tunnelPort: 4789
+    tunnelPort: '4789'
   },
   // Override for development environment, default environment if not specified
   development: {
