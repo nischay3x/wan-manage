@@ -25,7 +25,7 @@ const devUtils = require('./utils');
 const async = require('async');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const dispatcher = require('../deviceLogic/dispatcher');
-const { updateSyncStatus } = require('../deviceLogic/sync');
+const { updateSyncStatus, updateSyncStatusBasedOnJobResult } = require('../deviceLogic/sync');
 const connections = require('../websocket/Connections')();
 const omit = require('lodash/omit');
 
@@ -109,6 +109,9 @@ const deviceProcessor = async (job) => {
           job.error(error.message);
           job.failed();
         }
+        const { deviceObj } = connections.getDeviceInfo(mId);
+        // This call takes care of setting the legacy device sync status to not-synced
+        await updateSyncStatusBasedOnJobResult(org, deviceObj, mId, false);
         reject(error.message);
       } else {
         logger.info('Job completed', {
@@ -119,6 +122,8 @@ const deviceProcessor = async (job) => {
         // response. Use it to update the device's sync status
         try {
           const { deviceObj } = connections.getDeviceInfo(mId);
+          // This call takes care of setting the legacy device sync status to synced
+          await updateSyncStatusBasedOnJobResult(org, deviceObj, mId, true);
           await updateSyncStatus(org, deviceObj, mId, results['router-cfg-hash']);
         } catch (err) {
           logger.error('Device sync status update failed', {
