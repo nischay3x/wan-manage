@@ -6678,6 +6678,7 @@ components:
           - synced
           - syncing
           - not-synced
+          - unknown
           type: string
         autoSync:
           enum:

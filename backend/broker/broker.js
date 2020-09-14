@@ -110,7 +110,7 @@ const deviceProcessor = async (job) => {
           job.failed();
         }
         const { deviceObj } = connections.getDeviceInfo(mId);
-        // This call takes care of setting the legacy device sync status to not-synced
+        // This call takes care of setting the legacy device sync status to not-synced.
         await updateSyncStatusBasedOnJobResult(org, deviceObj, mId, false);
         reject(error.message);
       } else {
@@ -122,8 +122,6 @@ const deviceProcessor = async (job) => {
         // response. Use it to update the device's sync status
         try {
           const { deviceObj } = connections.getDeviceInfo(mId);
-          // This call takes care of setting the legacy device sync status to synced
-          await updateSyncStatusBasedOnJobResult(org, deviceObj, mId, true);
           await updateSyncStatus(org, deviceObj, mId, results['router-cfg-hash']);
         } catch (err) {
           logger.error('Device sync status update failed', {

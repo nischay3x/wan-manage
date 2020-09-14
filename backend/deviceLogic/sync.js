@@ -92,7 +92,7 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
   const majorAgentVersion = getMajorVersion(versions.agent);
   if (majorAgentVersion < 2) {
     logger.debug('No update sync status on job queue for this device', {
-      params: { machineId, agentVersion: majorAgentVersion }
+      params: { machineId, agentVersion: versions.agent }
     });
     return;
   }
@@ -294,13 +294,15 @@ const updateSyncStatusBasedOnJobResult = async (org, deviceId, machineId, isJobS
 
     const majorAgentVersion = getMajorVersion(versions.agent);
     if (majorAgentVersion >= 2) {
-      logger.error('No job update sync status for this device', {
-        params: { machineId, agentVersion: majorAgentVersion }
+      logger.debug('No job update sync status for this device', {
+        params: { machineId, agentVersion: versions.agent }
       });
       return;
     }
 
-    const newState = isJobSucceeded ? 'synced' : 'not-synced';
+    // only devices version <2 will have the unknown status. This is
+    // needed for backward compatibility.
+    const newState = isJobSucceeded ? 'synced' : 'unknown';
     await updateSyncState(org, deviceId, newState);
     logger.info('Device sync state updated', {
       params: {
