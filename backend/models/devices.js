@@ -439,7 +439,8 @@ const deviceSyncSchema = new Schema({
     enum: [
       'synced',
       'syncing',
-      'not-synced'
+      'not-synced',
+      'unknown'
     ],
     default: 'synced'
   },

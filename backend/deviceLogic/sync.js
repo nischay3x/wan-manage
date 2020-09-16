@@ -34,6 +34,7 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
+const { getMajorVersion } = require('../versioning');
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -55,18 +56,47 @@ const syncHandlers = {
   }
 };
 
+/**
+ * Calculates new hash value based on existing hash and delta
+ * which consists of the new device message.
+ *
+ * @param {*} currHash Exising hash value stored in management database
+ * @param {*} message Device message to be used in hash calculation
+ * @returns SHA1 hash
+ */
 const calcChangeHash = (currHash, message) => {
   const contents = message.tasks[0];
-  return SHA1(currHash + stringify(contents)).toString();
+  const delta = stringify(contents);
+  logger.info('Calculating new hash based on', {
+    params: { currHash, delta }
+  });
+  return SHA1(currHash + delta).toString();
 };
 
+/**
+ * Modifies sync state based on the queued job.
+ * Gets called whenever job gets saved in the device queue.
+ *
+ * @param {*} machineId Device machine Id
+ * @param {*} message Device message to be used in hash calculation
+ * @returns
+ */
 const setSyncStateOnJobQueue = async (machineId, message) => {
   // Calculate the new configuration hash
-  const { sync } = await devices.findOne(
+  const { sync, versions } = await devices.findOne(
     { machineId: machineId },
-    { 'sync.hash': 1, 'sync.state': 1 }
+    { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
   )
     .lean();
+
+  const majorAgentVersion = getMajorVersion(versions.agent);
+  if (majorAgentVersion < 2) {
+    logger.debug('No update sync status on job queue for this device', {
+      params: { machineId, agentVersion: versions.agent }
+    });
+    return;
+  }
+
   const { hash } = sync || {};
   if (hash === null || hash === undefined) {
     throw new Error('Failed to get device hash value');
@@ -81,16 +111,15 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
 
   const { state } = sync;
   const newState = state !== 'not-synced' ? 'syncing' : 'not-synced';
+  logger.info('New sync state calculated, updating database', {
+    params: { state, newState, hash, newHash }
+  });
   return devices.updateOne(
     { machineId: machineId },
     { 'sync.state': newState, 'sync.hash': newHash },
     { upsert: false }
   );
 };
-
-// Register a method that updates the sync
-// state upon queuing a job to the device queue
-deviceQueues.registerUpdateSyncMethod(setSyncStateOnJobQueue);
 
 const updateSyncState = (org, deviceId, state) => {
   // When moving to "synced" state we have to
@@ -110,7 +139,7 @@ const updateSyncState = (org, deviceId, state) => {
   );
 };
 
-const calculateNewSyncState = (mgmtHash, deviceHash, autoSyncState) => {
+const calculateNewSyncState = (mgmtHash, deviceHash, autoSync) => {
   // Calculate the next state in the state machine.
   // If hash values are equal, we assume MGMT
   // and device are synced. Otherwise, if auto
@@ -118,7 +147,7 @@ const calculateNewSyncState = (mgmtHash, deviceHash, autoSyncState) => {
   // syncing phase, and if not - it should be
   // marked as "not-synced"
   if (mgmtHash === deviceHash) return 'synced';
-  return autoSyncState === 'on' ? 'syncing' : 'not-synced';
+  return autoSync === 'on' ? 'syncing' : 'not-synced';
 };
 
 const setFailedJobFlagInDB = (deviceId) => {
@@ -242,27 +271,98 @@ const error = async (jobId, res) => {
   });
 };
 
-const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
+/**
+ * Updates sync state based on the last job status. This function
+ * is needed for legacy devices (agent version <2) and needs to be
+ * removed later. For devices with agent version >= 2 the sync state
+ * is based on the configuration hash responses coming from the device.
+ *
+ * @param {*} org Organization
+ * @param {*} deviceId Device Id
+ * @param {*} machineId Device Machine Id
+ * @param {*} isJobSucceeded Successful Job Completion Flag
+ * @returns
+ */
+const updateSyncStatusBasedOnJobResult = async (org, deviceId, machineId, isJobSucceeded) => {
   try {
-    // Get current device sync status
-    const { sync, hostname } = await devices.findOne(
+    // Get device version
+    const { versions } = await devices.findOne(
       { org, _id: deviceId },
-      { sync: 1, hostname: 1 }
+      { versions: 1 }
     )
       .lean();
 
+    const majorAgentVersion = getMajorVersion(versions.agent);
+    if (majorAgentVersion >= 2) {
+      logger.debug('No job update sync status for this device', {
+        params: { machineId, agentVersion: versions.agent }
+      });
+      return;
+    }
+
+    // only devices version <2 will have the unknown status. This is
+    // needed for backward compatibility.
+    const newState = isJobSucceeded ? 'synced' : 'unknown';
+    await updateSyncState(org, deviceId, newState);
+    logger.info('Device sync state updated', {
+      params: {
+        deviceId,
+        newState
+      }
+    });
+  } catch (err) {
+    logger.error('Device sync state update failed', {
+      params: { deviceId, error: err.message }
+    });
+  }
+};
+
+/**
+ * Periodically checks and updated device status based on the status
+ * report from the device. Triggered from deviceStatus.
+ *
+ * @param {*} org Device organization
+ * @param {*} deviceId Device id
+ * @param {*} machineId Machine id
+ * @param {*} deviceHash Reported current device hash value
+ * @returns
+ */
+const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
+  try {
+    // Get current device sync status
+    const { sync, hostname, versions } = await devices.findOne(
+      { org, _id: deviceId },
+      { sync: 1, hostname: 1, versions: 1 }
+    )
+      .lean();
+
+    const majorAgentVersion = getMajorVersion(versions.agent);
+    if (majorAgentVersion < 2) {
+      logger.debug('No periodic update sync status for this device', {
+        params: { machineId, agentVersion: majorAgentVersion }
+      });
+      return;
+    }
+
     // Calculate the new sync state based on the hash
     // value received from the agent and the current state
-    const { state, hash, autoSync, failedJobRetried } = sync;
+    const { state, hash, autoSync, failedJobRetried, trials } = sync;
     const newState = calculateNewSyncState(hash, deviceHash, autoSync);
+    logger.debug('updateSyncStatus calculateNewSyncState', {
+      params: { state, newState, hash, deviceHash, autoSync, failedJobRetried, trials }
+    });
 
     // Update the device sync state if it has changed
     if (state !== newState) {
       await updateSyncState(org, deviceId, newState);
       logger.info('Device sync state updated', {
-        deviceId,
-        formerState: state,
-        newState
+        params: {
+          deviceId,
+          formerState: state,
+          newState,
+          hash,
+          deviceHash
+        }
       });
     }
 
@@ -276,8 +376,8 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
     // the jobs are completed
     const pendingJobs = await deviceQueues.getOPendingJobsCount(machineId);
     if (pendingJobs > 0) {
-      logger.debug('Full sync skipped due to pending jobs', {
-        params: { deviceId, pendingJobs }
+      logger.error('Full sync skipped due to pending jobs', {
+        params: { deviceId, pendingJobs, newState, trials }
       });
       return;
     }
@@ -295,7 +395,7 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
 
         // Don't retry full sync jobs
         if (message !== 'sync-device' && _state === 'failed') {
-          logger.debug('Failed job retry before full sync attempt', {
+          logger.error('Failed job retry before full sync attempt', {
             params: { deviceId, jobId: id, message }
           });
           await deviceQueues.retryJob(id);
@@ -307,11 +407,13 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
     }
 
     // Set auto sync off if auto sync limit is exceeded
-    const { trials } = sync;
     if (trials >= 3) {
       await setAutoSyncOff(deviceId);
       return;
     }
+    logger.info('Queuing full-sync job', {
+      params: { deviceId, state, newState, hash }
+    });
     await queueFullSyncJob({ deviceId, machineId, hostname }, hash, org);
   } catch (err) {
     logger.error('Device sync state update failed', {
@@ -321,7 +423,12 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
 };
 
 const apply = async (device, user, data) => {
-  const { _id, machineId, hostname, org } = device[0];
+  const { _id, machineId, hostname, org, versions } = device[0];
+
+  if (getMajorVersion(versions.agent) < 2) {
+    return;
+  }
+
   // Get device current configuration hash
   const { sync } = await devices.findOne(
     { org, _id },
@@ -360,8 +467,13 @@ const apply = async (device, user, data) => {
 // from periodic status message flow
 deviceStatus.registerSyncUpdateFunc(updateSyncStatus);
 
+// Register a method that updates the sync
+// state upon queuing a job to the device queue
+deviceQueues.registerUpdateSyncMethod(setSyncStateOnJobQueue);
+
 module.exports = {
   updateSyncStatus,
+  updateSyncStatusBasedOnJobResult,
   apply,
   complete,
   error

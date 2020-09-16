@@ -62,9 +62,36 @@ const prepareIfcParams = (interfaces) => {
 };
 
 /**
- * Composes aggregated device modification message (agent version 1)
+ * Transforms mongoose array of interfaces into array of objects
+ *
+ * @param {*} interfaces
+ * @returns array of interfaces
+ */
+const transformInterfaces = (interfaces) => {
+  return interfaces.map(ifc => {
+    return ({
+      _id: ifc._id,
+      pci: ifc.pciaddr,
+      dhcp: ifc.dhcp ? ifc.dhcp : 'no',
+      addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
+      addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
+      PublicIP: ifc.PublicIP,
+      PublicPort: ifc.PublicPort,
+      gateway: ifc.gateway,
+      metric: ifc.metric,
+      routing: ifc.routing,
+      type: ifc.type,
+      isAssigned: ifc.isAssigned,
+      pathlabels: ifc.pathlabels
+    });
+  });
+};
+
+/**
+ * Composes aggregated device modification message (agent version < 2)
  *
  * @param {*} messageParams
+ * @param {Object}  device the device to which the job should be queued
  * @returns object of the following format:
  * {
  *   entity: 'agent',
@@ -76,7 +103,7 @@ const prepareIfcParams = (interfaces) => {
  * where 'params' is an object containing individual device modification
  * commands.
  */
-const prepareModificationMessageV1 = (messageParams) => {
+const prepareModificationMessageV1 = (messageParams, device) => {
   const modificationMessage = {};
   if (has(messageParams, 'modify_routes')) {
     modificationMessage.modify_routes = messageParams.modify_routes;
@@ -97,12 +124,26 @@ const prepareModificationMessageV1 = (messageParams) => {
     );
     modificationMessage.reconnect = true;
   }
+  // Check against the old configured interfaces.
+  // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
-    modificationMessage.modify_interfaces = {};
-    modificationMessage.modify_interfaces.interfaces = prepareIfcParams(
+    const oldInterfaces = prepareIfcParams(
+      transformInterfaces(device.interfaces.toObject()));
+    const newInterfaces = prepareIfcParams(
       messageParams.modify_interfaces.interfaces
     );
-    modificationMessage.reconnect = true;
+    const diffInterfaces = differenceWith(
+      newInterfaces,
+      oldInterfaces,
+      (origIfc, newIfc) => {
+        return isEqual(origIfc, newIfc);
+      }
+    );
+    if (diffInterfaces.length > 0) {
+      modificationMessage.modify_interfaces = {};
+      modificationMessage.modify_interfaces.interfaces = diffInterfaces;
+      modificationMessage.reconnect = true;
+    }
   }
 
   const tasks = [[]];
@@ -140,9 +181,10 @@ const prepareModificationMessageV1 = (messageParams) => {
 };
 
 /**
- * Composes aggregated device modification message (agent version 2 and above)
+ * Composes aggregated device modification message (agent version >= 2)
  *
  * @param {*} messageParams input device modification params
+ * @param {Object}  device the device to which the job should be queued
  * @returns object of the following format:
  * {
  *   message: 'aggregated',
@@ -151,17 +193,33 @@ const prepareModificationMessageV1 = (messageParams) => {
  * where 'requests' is an array of individual device modification
  * commands.
  */
-const prepareModificationMessageV2 = (messageParams) => {
+const prepareModificationMessageV2 = (messageParams, device) => {
   const requests = [];
 
+  // Check against the old configured interfaces.
+  // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
-    requests.push(...prepareIfcParams(messageParams.modify_interfaces.interfaces).map(item => {
-      return {
-        entity: 'agent',
-        message: 'modify-interface',
-        params: item
-      };
-    }));
+    const oldInterfaces = prepareIfcParams(
+      transformInterfaces(device.interfaces.toObject()));
+    const newInterfaces = prepareIfcParams(
+      messageParams.modify_interfaces.interfaces
+    );
+    const diffInterfaces = differenceWith(
+      newInterfaces,
+      oldInterfaces,
+      (origIfc, newIfc) => {
+        return isEqual(origIfc, newIfc);
+      }
+    );
+    if (diffInterfaces.length > 0) {
+      requests.push(...diffInterfaces.map(item => {
+        return {
+          entity: 'agent',
+          message: 'modify-interface',
+          params: item
+        };
+      }));
+    }
   }
 
   if (has(messageParams, 'modify_routes')) {
@@ -403,10 +461,14 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   let tasks;
   switch (version) {
     case 1:
-      tasks = prepareModificationMessageV1(messageParams);
+      tasks = prepareModificationMessageV1(messageParams, device);
       break;
     case 2:
-      tasks = prepareModificationMessageV2(messageParams);
+      tasks = prepareModificationMessageV2(messageParams, device);
+  }
+
+  if (tasks.length === 0 || tasks[0].length === 0) {
+    return [];
   }
 
   const job = await queueJob(org, user.username, tasks, device, removedTunnels);
@@ -727,23 +789,7 @@ const apply = async (device, user, data) => {
   // an array of the interfaces that have changed
   // First, extract only the relevant interface fields
   const [origInterfaces, origIsAssigned] = [
-    device[0].interfaces.map(ifc => {
-      return ({
-        _id: ifc._id,
-        pci: ifc.pciaddr,
-        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
-        addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
-        addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
-        PublicIP: ifc.PublicIP,
-        PublicPort: ifc.PublicPort,
-        gateway: ifc.gateway,
-        metric: ifc.metric,
-        routing: ifc.routing,
-        type: ifc.type,
-        isAssigned: ifc.isAssigned,
-        pathlabels: ifc.pathlabels
-      });
-    }),
+    transformInterfaces(device[0].interfaces),
     device[0].interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -754,24 +800,7 @@ const apply = async (device, user, data) => {
   ];
 
   const [newInterfaces, newIsAssigned] = [
-    data.newDevice.interfaces.map(ifc => {
-      return ({
-        _id: ifc._id,
-        pci: ifc.pciaddr,
-        dhcp: ifc.dhcp ? ifc.dhcp : 'no',
-        addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
-        addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
-        PublicIP: ifc.PublicIP,
-        PublicPort: ifc.PublicPort,
-        gateway: ifc.gateway,
-        metric: ifc.metric,
-        routing: ifc.routing,
-        type: ifc.type,
-        isAssigned: ifc.isAssigned,
-        pathlabels: ifc.pathlabels
-      });
-    }),
-
+    transformInterfaces(data.newDevice.interfaces),
     data.newDevice.interfaces.map(ifc => {
       return ({
         _id: ifc._id,
