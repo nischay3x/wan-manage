@@ -133,6 +133,12 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // Nat Type
+  NatType: {
+    type: String,
+    maxlength: [30, 'NAT Type length must be at most 30'],
+    default: ''
+  },
   // WAN interface default GW
   gateway: {
     type: String,

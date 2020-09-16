@@ -419,7 +419,7 @@ class Connections {
 
   /**
    * Checks if reconfig hash is changed on the device.
-   * and applies new parameters in case of dhcp client is used
+   * and applies new parameters if need
    * @async
    * @param  {Object} origDevice instance of the device from db
    * @param  {Object} deviceInfo data received on get-device-info message
@@ -430,10 +430,10 @@ class Connections {
     const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
     // Check if reconfig was changed
     if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
-      // Check if dhcp client or public IP is defined on any of interfaces
+      // Check if dhcp client or public IP is defined on any of interfaces or it is unassigned
       const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
-         deviceInfo.message.network.interfaces.length > 0 &&
-        (origDevice.interfaces.filter(i => i.dhcp === 'yes').length > 0 ||
+        deviceInfo.message.network.interfaces.length > 0 &&
+        (origDevice.interfaces.filter(i => i.dhcp === 'yes' || !i.isAssigned).length > 0 ||
         deviceInfo.message.network.interfaces.filter(i => i.public_ip).length > 0);
 
       if (needReconfig) {
@@ -468,7 +468,7 @@ class Connections {
             });
             return i;
           }
-          if (i.dhcp === 'yes') {
+          if (i.dhcp === 'yes' || !i.isAssigned) {
             return {
               ...i.toJSON(),
               IPv4: updatedConfig.IPv4,
@@ -477,13 +477,15 @@ class Connections {
               IPv6Mask: updatedConfig.IPv6Mask,
               gateway: updatedConfig.gateway,
               PublicIP: updatedConfig.public_ip || i.PublicIP,
-              PublicPort: updatedConfig.public_port || i.PublicPort
+              PublicPort: updatedConfig.public_port || i.PublicPort,
+              NatType: updatedConfig.nat_type || i.NatType
             };
           } else {
             return {
               ...i.toJSON(),
               PublicIP: updatedConfig.public_ip || i.PublicIP,
-              PublicPort: updatedConfig.public_port || i.PublicPort
+              PublicPort: updatedConfig.public_port || i.PublicPort,
+              NatType: updatedConfig.nat_type || i.NatType
             };
           }
         });

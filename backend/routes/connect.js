@@ -78,9 +78,9 @@ connectRouter.route('/register')
               const ifs = JSON.parse(req.body.interfaces);
 
               // Get an interface with gateway and the lowest metric
-              const defaultIntf = ifs.reduce((res, intf) =>
+              const defaultIntf = ifs ? ifs.reduce((res, intf) =>
                 intf.gateway && (!res || +res.metric > +intf.metric)
-                  ? intf : res, undefined);
+                  ? intf : res, undefined) : undefined;
               const lowestMetric = defaultIntf && defaultIntf.metric
                 ? defaultIntf.metric : '0';
 
@@ -91,6 +91,7 @@ connectRouter.route('/register')
                   intf.isAssigned = true;
                   intf.PublicIP = intf.public_ip || sourceIP;
                   intf.PublicPort = intf.public_port || '';
+                  intf.NatType = intf.nat_type || '';
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   intf.gateway = req.body.default_route;
@@ -103,11 +104,12 @@ connectRouter.route('/register')
                     ? '0' : intf.metric || (autoAssignedMetric++).toString();
                   intf.PublicIP = intf.public_ip || (intf.metric === lowestMetric ? sourceIP : '');
                   intf.PublicPort = intf.public_port || '';
+                  intf.NatType = intf.nat_type || '';
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
                   intf.routing = 'OSPF';
-                  if (ifs.length === 2) {
+                  if (ifs.length > 1) {
                     intf.isAssigned = true;
                   }
                   intf.gateway = '';

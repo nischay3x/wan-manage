@@ -6319,6 +6319,7 @@ components:
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
+          NatType: NatType
           IPv4: IPv4
           gateway: gateway
           metric: 0
@@ -6336,6 +6337,7 @@ components:
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
+          NatType: NatType
           IPv4: IPv4
           type: WAN
           MAC: MAC
@@ -6434,6 +6436,7 @@ components:
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
+          NatType: NatType
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6452,6 +6455,7 @@ components:
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
+          NatType: NatType
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6580,6 +6584,7 @@ components:
         IPv6: IPv6
         PublicIP: PublicIP
         PublicPort: PublicPort
+        NatType: NatType
         IPv4: IPv4
         type: WAN
         MAC: MAC
@@ -6616,6 +6621,8 @@ components:
         PublicIP:
           type: string
         PublicPort:
+          type: string
+        NatType:
           type: string
         gateway:
           type: string

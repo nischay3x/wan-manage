@@ -125,6 +125,7 @@ class DevicesService {
         'IPv6',
         'PublicIP',
         'PublicPort',
+        'NatType',
         'gateway',
         'metric',
         'dhcp',
@@ -369,9 +370,13 @@ class DevicesService {
         return Service.rejectResponse('Failed to get device configuration');
       }
 
+      // Skip items with empty params
+      const configuration = !Array.isArray(deviceConf.message) ? []
+        : deviceConf.message.filter(item => item.params);
+
       return Service.successResponse({
         status: 'connected',
-        configuration: deviceConf.message
+        configuration
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -650,9 +655,34 @@ class DevicesService {
       delete deviceRequest.defaultOrg;
       delete deviceRequest.sync;
 
+      const interfaces = deviceRequest.interfaces && deviceRequest.interfaces.map(intf => {
+        const origIntf = origDevice.interfaces &&
+          origDevice.interfaces.find(oif => oif._id === intf._id);
+        if (origIntf) {
+          if (!intf.isAssigned || intf.dhcp === 'yes') {
+            return {
+              ...intf,
+              IPv4: origIntf.IPv4,
+              IPv4Mask: origIntf.IPv4Mask,
+              gateway: origIntf.gateway,
+              PublicIP: origIntf.PublicIP,
+              PublicPort: origIntf.PublicPort,
+              NatType: origIntf.NatType
+            };
+          } else {
+            return {
+              ...intf,
+              PublicIP: origIntf.PublicIP,
+              PublicPort: origIntf.PublicPort,
+              NatType: origIntf.NatType
+            };
+          }
+        }
+        return intf;
+      });
       const updDevice = await devices.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
-        deviceRequest,
+        { ...deviceRequest, interfaces },
         { new: true, upsert: false, runValidators: true }
       )
         .session(session)
