@@ -86,9 +86,9 @@ connectRouter.route('/register')
 
               let autoAssignedMetric = 100;
               ifs.forEach((intf) => {
+                intf.isAssigned = false;
                 if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent
-                  intf.isAssigned = true;
                   intf.PublicIP = intf.public_ip || sourceIP;
                   intf.PublicPort = intf.public_port || '';
                   intf.NatType = intf.nat_type || '';
@@ -97,7 +97,6 @@ connectRouter.route('/register')
                   intf.gateway = req.body.default_route;
                   intf.metric = '0';
                 } else if (intf.gateway) {
-                  intf.isAssigned = true;
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
@@ -109,9 +108,6 @@ connectRouter.route('/register')
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
                   intf.routing = 'OSPF';
-                  if (ifs.length > 1) {
-                    intf.isAssigned = true;
-                  }
                   intf.gateway = '';
                   intf.metric = '';
                 }
