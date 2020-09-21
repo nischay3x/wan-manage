@@ -597,6 +597,7 @@ class Connections {
         null,
         machineId,
         message,
+        '',
         validateDevInfoMessage
       );
 
@@ -717,6 +718,7 @@ class Connections {
     org,
     device,
     msg,
+    jobid = '',
     responseValidator = () => {
       return { valid: true, err: '' };
     }
@@ -739,7 +741,7 @@ class Connections {
           tohandle: tohandle,
           validator: responseValidator
         };
-        info.socket.send(JSON.stringify({ seq: seq, msg: msg }));
+        info.socket.send(JSON.stringify({ seq: seq, msg: msg, jobid: jobid }));
       } else reject(new Error('Send General Error'));
     });
     return p;
