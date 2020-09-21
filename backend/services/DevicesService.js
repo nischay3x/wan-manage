@@ -665,14 +665,12 @@ class DevicesService {
               IPv4: origIntf.IPv4,
               IPv4Mask: origIntf.IPv4Mask,
               gateway: origIntf.gateway,
-              PublicIP: origIntf.PublicIP,
               PublicPort: origIntf.PublicPort,
               NatType: origIntf.NatType
             };
           } else {
             return {
               ...intf,
-              PublicIP: origIntf.PublicIP,
               PublicPort: origIntf.PublicPort,
               NatType: origIntf.NatType
             };
