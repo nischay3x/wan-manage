@@ -459,10 +459,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
 
   // Prepare and queue device modification job
-  const version = getMajorVersion(device.versions.agent);
+  const agentVersion = getMajorVersion(device.versions.agent);
   let tasks;
 
-  switch (version) {
+  switch (agentVersion) {
     case 1:
       tasks = prepareModificationMessageV1(messageParams, device);
       break;
@@ -639,8 +639,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       addr: route.destination,
       old_route: route.gateway,
       new_route: '',
-      pci: route.ifname ? route.ifname : undefined,
-      metric: parseInt(route.metric, 10)
+      pci: route.ifname || undefined,
+      metric: route.metric || undefined
     });
   });
   routesToAdd.forEach(route => {
@@ -648,8 +648,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       addr: route.destination,
       new_route: route.gateway,
       old_route: '',
-      pci: route.ifname ? route.ifname : undefined,
-      metric: parseInt(route.metric, 10)
+      pci: route.ifname || undefined,
+      metric: route.metric || undefined
     });
   });
 
