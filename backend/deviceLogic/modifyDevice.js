@@ -105,6 +105,7 @@ const transformInterfaces = (interfaces) => {
  */
 const prepareModificationMessageV1 = (messageParams, device) => {
   const modificationMessage = {};
+  modificationMessage.reconnect = false;
   if (has(messageParams, 'modify_routes')) {
     modificationMessage.modify_routes = messageParams.modify_routes;
   }
@@ -231,8 +232,8 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           params: {
             addr: item.addr,
             via: item.new_route,
-            pci: item.pci,
-            metric: item.metric
+            pci: item.pci || undefined,
+            metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
         };
       }
@@ -243,7 +244,9 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           message: 'remove-route',
           params: {
             addr: item.addr,
-            via: item.old_route
+            via: item.old_route,
+            pci: item.pci || undefined,
+            metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
         };
       }
@@ -358,7 +361,6 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   const removedTunnels = [];
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
-  messageParams.reconnect = false;
 
   // Changes in the interfaces require reconstruction of all tunnels
   // connected to these interfaces (since the tunnels parameters change).
@@ -638,7 +640,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       old_route: route.gateway,
       new_route: '',
       pci: route.ifname ? route.ifname : undefined,
-      metric: route.metric
+      metric: parseInt(route.metric, 10)
     });
   });
   routesToAdd.forEach(route => {
@@ -647,7 +649,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       new_route: route.gateway,
       old_route: '',
       pci: route.ifname ? route.ifname : undefined,
-      metric: route.metric
+      metric: parseInt(route.metric, 10)
     });
   });
 
@@ -1051,8 +1053,8 @@ const sync = async (deviceId, org) => {
       params: {
         addr: destination,
         via: gateway,
-        pci: ifname,
-        metric
+        pci: ifname || undefined,
+        metric: metric ? parseInt(metric, 10) : undefined
       }
     });
   });
