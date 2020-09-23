@@ -855,6 +855,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
       isActive: false,
       deviceAconf: false,
       deviceBconf: false,
+      pendingTunnelModification: false,
       tunnelKeys: null
     },
     // Options

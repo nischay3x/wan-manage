@@ -38,6 +38,7 @@ const differenceWith = require('lodash/differenceWith');
 const pullAllWith = require('lodash/pullAllWith');
 const isEqual = require('lodash/isEqual');
 const pick = require('lodash/pick');
+const isObject = require('lodash/isObject');
 const { getMajorVersion } = require('../versioning');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
@@ -425,8 +426,8 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
         const modifiedIfcB = modifiedIfcsMap[tunnel.interfaceB.toString()];
         const waitingDhcpInfo =
-          (modifiedIfcA && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes') ||
-          (modifiedIfcB && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
+          (isObject(modifiedIfcA) && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes') ||
+          (isObject(modifiedIfcB) && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
         if (waitingDhcpInfo) {
           continue;
         }
@@ -435,6 +436,22 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         if (tunnel.pendingTunnelModification) {
           continue;
         }
+
+        // no need to recreate the tunnel with local direct connection
+        const isLocal = (ifcA, ifcB) => {
+          return !ifcA.PublicIP || !ifcB.PublicIP ||
+            ifcA.PublicIP === ifcB.PublicIP;
+        };
+        const skipLocal =
+          (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
+          isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
+          (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
+          isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
+
+        if (skipLocal) {
+          continue;
+        }
+
         await setTunnelsPendingInDB([tunnel._id], org, true);
         await queueTunnel(
           false,
@@ -500,7 +517,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
       });
 
       const { agent } = deviceB.versions;
-      const [tasksDeviceA, tasksDeviceB] = prepareTunnelAddJob(
+      const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
         tunnel.num,
         ifcA,
         ifcB,
