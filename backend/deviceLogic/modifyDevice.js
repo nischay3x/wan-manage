@@ -105,6 +105,7 @@ const transformInterfaces = (interfaces) => {
  */
 const prepareModificationMessageV1 = (messageParams, device) => {
   const modificationMessage = {};
+  modificationMessage.reconnect = false;
   if (has(messageParams, 'modify_routes')) {
     modificationMessage.modify_routes = messageParams.modify_routes;
   }
@@ -231,8 +232,8 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           params: {
             addr: item.addr,
             via: item.new_route,
-            pci: item.pci,
-            metric: item.metric
+            pci: item.pci || undefined,
+            metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
         };
       }
@@ -243,7 +244,9 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           message: 'remove-route',
           params: {
             addr: item.addr,
-            via: item.old_route
+            via: item.old_route,
+            pci: item.pci || undefined,
+            metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
         };
       }
@@ -358,7 +361,6 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   const removedTunnels = [];
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
-  messageParams.reconnect = false;
 
   // Changes in the interfaces require reconstruction of all tunnels
   // connected to these interfaces (since the tunnels parameters change).
@@ -457,9 +459,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
 
   // Prepare and queue device modification job
-  const version = getMajorVersion(device.versions.agent);
+  const agentVersion = getMajorVersion(device.versions.agent);
   let tasks;
-  switch (version) {
+
+  switch (agentVersion) {
     case 1:
       tasks = prepareModificationMessageV1(messageParams, device);
       break;
@@ -636,8 +639,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       addr: route.destination,
       old_route: route.gateway,
       new_route: '',
-      pci: route.ifname ? route.ifname : undefined,
-      metric: route.metric
+      pci: route.ifname || undefined,
+      metric: route.metric || undefined
     });
   });
   routesToAdd.forEach(route => {
@@ -645,8 +648,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       addr: route.destination,
       new_route: route.gateway,
       old_route: '',
-      pci: route.ifname ? route.ifname : undefined,
-      metric: route.metric
+      pci: route.ifname || undefined,
+      metric: route.metric || undefined
     });
   });
 
@@ -1054,8 +1057,8 @@ const sync = async (deviceId, org) => {
       params: {
         addr: destination,
         via: gateway,
-        pci: ifname,
-        metric
+        pci: ifname || undefined,
+        metric: metric ? parseInt(metric, 10) : undefined
       }
     });
   });
