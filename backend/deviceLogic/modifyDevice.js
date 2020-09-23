@@ -30,7 +30,6 @@ const { validateModifyDeviceMsg } = require('./validators');
 const { getDefaultGateway } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
-const { isIPv4Address } = require('./validators');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const has = require('lodash/has');
 const omit = require('lodash/omit');
@@ -39,6 +38,7 @@ const pullAllWith = require('lodash/pullAllWith');
 const isEqual = require('lodash/isEqual');
 const pick = require('lodash/pick');
 const { getMajorVersion } = require('../versioning');
+const { buildInterfaces } = require('./interfaces');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
@@ -988,35 +988,19 @@ const sync = async (deviceId, org) => {
   // Prepare add-interface message
   const deviceConfRequests = [];
   let defaultRouteIfcInfo;
-  for (const ifc of interfaces) {
-    // Skip unassigned/un-typed interfaces, as they
-    // cannot be part of the device configuration
-    if (!ifc.isAssigned || ifc.type.toLowerCase() === 'none') continue;
+  // build interfaces
+  const deviceInterfaces = buildInterfaces(interfaces);
+  deviceInterfaces.forEach(item => {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-interface',
+      params: item
+    });
+  });
 
-    const {
-      pciaddr,
-      IPv4,
-      IPv6,
-      IPv4Mask,
-      IPv6Mask,
-      PublicIP,
-      PublicPort,
-      routing,
-      type,
-      pathlabels,
-      gateway,
-      metric,
-      dhcp
-    } = ifc;
-    // Non-DIA interfaces should not be
-    // sent to the device
-    const labels = pathlabels.filter(
-      (label) => label.type === 'DIA'
-    );
-    // Skip interfaces with invalid IPv4 addresses.
-    // Currently we allow empty IPv6 address
-    if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask)) continue;
-
+  // build routes
+  deviceInterfaces.forEach(item => {
+    const { metric, pciaddr, gateway } = item;
     // If found an interface with gateway metric of "0"
     // we have to add it's gateway to the static routes
     // sync requests
@@ -1026,27 +1010,7 @@ const sync = async (deviceId, org) => {
         gateway
       };
     }
-
-    const ifcInfo = {
-      pci: pciaddr,
-      dhcp: dhcp || 'no',
-      addr: `${IPv4}/${IPv4Mask}`,
-      addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
-      PublicIP: PublicIP,
-      PublicPort: PublicPort,
-      routing,
-      type,
-      metric,
-      multilink: { labels: labels.map((label) => label._id.toString()) }
-    };
-    if (ifc.type === 'WAN') ifcInfo.gateway = gateway;
-
-    deviceConfRequests.push({
-      entity: 'agent',
-      message: 'add-interface',
-      params: ifcInfo
-    });
-  }
+  });
 
   // Prepare add-route message
   staticroutes.forEach(route => {
