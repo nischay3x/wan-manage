@@ -180,13 +180,8 @@ const queueFullSyncJob = async (device, hash, org) => {
   // use it to check if it is already synced
   const { machineId, hostname, deviceId } = device;
 
-  // Reset device command might change IP address of the
-  // interface connected to the MGMT. Tell the agent to
-  // reconnect to the MGMT after processing this command.
   const params = {
-    type: 'full-sync',
     'router-cfg-hash': hash,
-    reconnect: true,
     requests: []
   };
 
