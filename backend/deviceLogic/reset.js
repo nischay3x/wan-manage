@@ -40,11 +40,7 @@ const apply = async (device, user, data) => {
   const org = user.defaultOrg._id.toString();
   const { machineId, hostname, _id } = device[0];
 
-  // Reset device command might change IP address of the
-  // interface connected to the MGMT. Tell the agent to
-  // reconnect to the MGMT after processing this command.
-  const params = { reconnect: true };
-  const tasks = [{ entity: 'agent', message: 'reset-device', params }];
+  const tasks = [{ entity: 'agent', message: 'reset-device' }];
 
   try {
     const job = await deviceQueues.addJob(
