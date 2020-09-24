@@ -123,6 +123,22 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // external NAT traversal (STUN) port
+  PublicPort: {
+    type: String,
+    maxlength: [5, 'Public Port length must be at most 5'],
+    validate: {
+      validator: validators.validatePort,
+      message: 'Public Port should be a valid Port value'
+    },
+    default: ''
+  },
+  // Nat Type
+  NatType: {
+    type: String,
+    maxlength: [30, 'NAT Type length must be at most 30'],
+    default: ''
+  },
   // WAN interface default GW
   gateway: {
     type: String,
@@ -212,11 +228,6 @@ const staticroutesSchema = new Schema({
       validator: validators.validateIsNumber,
       message: 'Metric should be a number'
     }
-  },
-  // status
-  status: {
-    type: String,
-    default: 'failed'
   }
 }, {
   timestamps: true
@@ -262,8 +273,8 @@ const DHCPSchema = new Schema({
     maxlength: [50, 'Interface length must be at most 50'],
     required: [true, 'Interface must be set'],
     validate: {
-      validator: validators.validateIfcName,
-      message: 'Interface should be a vaild interface name'
+      validator: validators.validatePciAddress,
+      message: 'Interface should be a vaild interface pci address'
     }
   },
   rangeStart: {
@@ -424,6 +435,40 @@ const versionUpgradeSchema = new Schema({
 });
 
 /**
+ * Device sync Database Schema
+ */
+const deviceSyncSchema = new Schema({
+  _id: false,
+  state: {
+    type: String,
+    enum: [
+      'synced',
+      'syncing',
+      'not-synced',
+      'unknown'
+    ],
+    default: 'synced'
+  },
+  hash: {
+    type: String,
+    default: ''
+  },
+  trials: {
+    type: Number,
+    default: 0
+  },
+  autoSync: {
+    type: String,
+    enum: ['on', 'off'],
+    default: 'on'
+  },
+  failedJobRetried: {
+    type: Boolean,
+    default: false
+  }
+});
+
+/**
  * Device Database Schema
  */
 const deviceSchema = new Schema({
@@ -565,16 +610,15 @@ const deviceSchema = new Schema({
   interfaces: [interfacesSchema],
   // labels
   labels: [String],
-  // is modification in progress flag
-  pendingDevModification: {
-    type: Boolean,
-    default: false
-  },
   policies: {
     multilink: {
       type: devicePolicySchema,
       default: devicePolicySchema
     }
+  },
+  sync: {
+    type: deviceSyncSchema,
+    default: deviceSyncSchema
   }
 },
 {

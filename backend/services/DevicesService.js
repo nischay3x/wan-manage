@@ -108,7 +108,6 @@ class DevicesService {
       'hostname',
       'name',
       '_id',
-      'pendingDevModification',
       'isApproved',
       'fromToken',
       'account',
@@ -116,7 +115,8 @@ class DevicesService {
       'policies',
       // Internal array, objects
       'labels',
-      'upgradeSchedule']);
+      'upgradeSchedule',
+      'sync']);
     retDevice.deviceStatus = (retDevice.deviceStatus === '1');
 
     // pick interfaces
@@ -124,6 +124,8 @@ class DevicesService {
       const retIf = pick(i, [
         'IPv6',
         'PublicIP',
+        'PublicPort',
+        'NatType',
         'gateway',
         'metric',
         'dhcp',
@@ -150,7 +152,8 @@ class DevicesService {
         '_id',
         'destination',
         'gateway',
-        'interface'
+        'ifname',
+        'metric'
       ]);
       retRoute._id = retRoute._id.toString();
       return retRoute;
@@ -193,7 +196,6 @@ class DevicesService {
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
       ? deviceStatus.getDeviceStatus(retDevice.machineId) || {} : {};
-
     return retDevice;
   }
 
@@ -369,9 +371,13 @@ class DevicesService {
         return Service.rejectResponse('Failed to get device configuration');
       }
 
+      // Skip items with empty params
+      const configuration = !Array.isArray(deviceConf.message) ? []
+        : deviceConf.message.filter(item => item.params);
+
       return Service.successResponse({
         status: 'connected',
-        configuration: deviceConf.message
+        configuration
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -795,7 +801,7 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user }) {
+  static async devicesIdPUT ({ id, org, deviceRequest }, { user }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -856,35 +862,56 @@ class DevicesService {
       delete deviceRequest.emailTokens;
       delete deviceRequest.defaultAccount;
       delete deviceRequest.defaultOrg;
+      delete deviceRequest.sync;
 
-      // Currently we allow only one change at a time to the device,
-      // to prevent inconsistencies between the device and the MGMT database.
-      // Therefore, we block the request if there's a pending change in the queue.
-      if (origDevice.pendingDevModification) {
-        throw new Error('Only one device change is allowed at any time');
-      }
-
+      const interfaces = deviceRequest.interfaces && deviceRequest.interfaces.map(intf => {
+        const origIntf = origDevice.interfaces &&
+          origDevice.interfaces.find(oif => oif._id === intf._id);
+        if (origIntf) {
+          if (!intf.isAssigned || intf.dhcp === 'yes') {
+            return {
+              ...intf,
+              IPv4: origIntf.IPv4,
+              IPv4Mask: origIntf.IPv4Mask,
+              gateway: origIntf.gateway,
+              PublicPort: origIntf.PublicPort,
+              NatType: origIntf.NatType
+            };
+          } else {
+            return {
+              ...intf,
+              PublicPort: origIntf.PublicPort,
+              NatType: origIntf.NatType
+            };
+          }
+        }
+        return intf;
+      });
       const updDevice = await devices.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
-        deviceRequest,
+        { ...deviceRequest, interfaces },
         { new: true, upsert: false, runValidators: true }
       )
         .session(session)
         .populate('interfaces.pathlabels', '_id name description color type');
-
       await session.commitTransaction();
       session = null;
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
+      let modifyDevResult = [];
       if (origDevice) {
-        await dispatcher.apply([origDevice], 'modify', user, {
+        modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
           org: orgList[0],
           newDevice: updDevice
         });
       }
 
-      return DevicesService.selectDeviceParams(updDevice);
+      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
+      const ids = [modifyDevResult.ids[0]];
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      const deviceObj = DevicesService.selectDeviceParams(updDevice);
+      return Service.successResponse(deviceObj, status);
     } catch (e) {
       if (session) session.abortTransaction();
 
@@ -1527,8 +1554,7 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
       // Currently we allow only one change at a time to the device
-      if (deviceObject.pendingDevModification ||
-              deviceObject.dhcp.some(d => d.status.includes('wait'))) {
+      if (deviceObject.dhcp.some(d => d.status.includes('wait'))) {
         throw new Error('Only one device change is allowed at any time');
       }
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
@@ -1604,8 +1630,7 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
       // Currently we allow only one change at a time to the device
-      if (deviceObject.pendingDevModification ||
-        deviceObject.dhcp.some(d => d.status.includes('wait'))) {
+      if (deviceObject.dhcp.some(d => d.status.includes('wait'))) {
         throw new Error('Only one device change is allowed at any time');
       }
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
@@ -1792,6 +1817,35 @@ class DevicesService {
       if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get Device Status Information
+   *
+   * id String Numeric ID of the Device to retrieve configuration
+   * org String Organization to be filtered by (optional)
+   * returns DeviceStatus
+   **/
+  static async devicesIdStatusGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const { sync, machineId, isApproved } = await devices.findOne(
+        { _id: id, org: { $in: orgList } },
+        'sync machineId isApproved'
+      ).lean();
+
+      const isConnected = connections.isConnected(machineId);
+      return Service.successResponse({
+        sync,
+        isApproved,
+        connection: `${isConnected ? '' : 'dis'}connected`
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
         e.status || 500
       );
     }

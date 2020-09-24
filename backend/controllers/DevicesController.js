@@ -166,6 +166,10 @@ class DevicesController {
       request, response, this.service.devicesIdInterfaceStatusGET
     );
   }
+
+  async devicesIdStatusGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdStatusGET);
+  }
 }
 
 module.exports = DevicesController;

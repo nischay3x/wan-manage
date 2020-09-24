@@ -983,6 +983,12 @@ paths:
              schema:
                $ref: '#/components/schemas/Device'
          description: Successful operation
+       "202":
+         content:
+           application/json:
+             schema:
+               $ref: '#/components/schemas/Device'
+         description: Operation queued for processing
        "401":
          content:
            application/json:
@@ -1156,6 +1162,71 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Get Device
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/status:
+    get:
+      operationId: devicesIdStatusGET
+      parameters:
+      - description: Numeric ID of the Device to retrieve configuration
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceStatus'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get Device Status Information
       tags:
       - Devices
       x-swagger-router-controller: Devices
@@ -6545,6 +6616,8 @@ components:
         interfaces:
         - IPv6: IPv6
           PublicIP: PublicIP
+          PublicPort: PublicPort
+          NatType: NatType
           IPv4: IPv4
           gateway: gateway
           metric: 0
@@ -6561,6 +6634,8 @@ components:
           _id: _id
         - IPv6: IPv6
           PublicIP: PublicIP
+          PublicPort: PublicPort
+          NatType: NatType
           IPv4: IPv4
           type: WAN
           MAC: MAC
@@ -6593,7 +6668,6 @@ components:
           router: router
           device: device
         name: name
-        pendingDevModification: true
         isApproved: true
         staticroutes:
         - destination: destination
@@ -6619,8 +6693,6 @@ components:
           type: boolean
         isConnected:
           type: boolean
-        pendingDevModification:
-          type: boolean
         hostname:
           type: string
         deviceStatus:
@@ -6641,7 +6713,7 @@ components:
           type: array
         dhcp:
           items:
-            $ref: '#/components/schemas/Dhcp'
+            $ref: '#/components/schemas/DhcpRequest'
           type: array
         upgradeSchedule:
           $ref: '#/components/schemas/UpgradeSchedule'
@@ -6661,6 +6733,8 @@ components:
         interfaces:
         - IPv6: IPv6
           PublicIP: PublicIP
+          PublicPort: PublicPort
+          NatType: NatType
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6678,6 +6752,8 @@ components:
           pathlabels: path labels list
         - IPv6: IPv6
           PublicIP: PublicIP
+          PublicPort: PublicPort
+          NatType: NatType
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6716,7 +6792,6 @@ components:
           frr: frr
         name: name
         _id: _id
-        pendingDevModification: true
         isApproved: true
         staticroutes:
         - id: 1
@@ -6731,6 +6806,7 @@ components:
         account: account
         ipList: ipList
         dhcp: dhcp list
+        sync: device sync status
       properties:
         _id:
           maxLength: 24
@@ -6747,8 +6823,6 @@ components:
         isApproved:
           type: boolean
         isConnected:
-          type: boolean
-        pendingDevModification:
           type: boolean
         hostname:
           type: string
@@ -6784,6 +6858,8 @@ components:
           type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
+        sync:
+          $ref: '#/components/schemas/DeviceSyncStatus'
       type: object
     UpgradeSchedule:
       example:
@@ -6805,6 +6881,8 @@ components:
       example:
         IPv6: IPv6
         PublicIP: PublicIP
+        PublicPort: PublicPort
+        NatType: NatType
         IPv4: IPv4
         type: WAN
         MAC: MAC
@@ -6839,6 +6917,10 @@ components:
         IPv6:
           type: string
         PublicIP:
+          type: string
+        PublicPort:
+          type: string
+        NatType:
           type: string
         gateway:
           type: string
@@ -6897,6 +6979,32 @@ components:
           $ref: '#/components/schemas/DeviceVersion'
         versionDeadLite:
           type: string
+    DeviceSyncStatus:
+      example:
+        state: sync state
+        trials: remaining automatic sync trials
+        autoSync: auto sync state
+      properties:
+        state:
+          enum:
+          - synced
+          - syncing
+          - not-synced
+          - unknown
+          type: string
+        autoSync:
+          enum:
+          - on
+          - off
+          type: string
+        trials:
+          type: number
+          minimum: 0
+          maximum: 3
+      required:
+        - state
+        - autoSync
+        - trials
     Role:
       enum:
       - owner
@@ -6969,11 +7077,27 @@ components:
         username:
           type: string
       type: object
-    DeviceStatus:
+    DeviceConnectionStatus:
       enum:
       - connected
       - disconnected
       type: string
+    DeviceStatus:
+      example:
+        sync: sync status
+        connection: connection status
+        isApproved: true
+      properties:
+        sync:
+          $ref: '#/components/schemas/DeviceSyncStatus'
+        connection:
+          $ref: '#/components/schemas/DeviceConnectionStatus'
+        isApproved:
+          type: boolean
+      required:
+        - sync
+        - connection
+        - isApproved
     DeviceRouteInformation:
       example:
         osRoutes:
@@ -6994,7 +7118,7 @@ components:
         - metric: 6
       properties:
         status:
-          $ref: '#/components/schemas/DeviceStatus'
+          $ref: '#/components/schemas/DeviceConnectionStatus'
         osRoutes:
           items:
             $ref: '#/components/schemas/DeviceRouteOs'
@@ -7079,7 +7203,7 @@ components:
         status: connected
       properties:
         status:
-          $ref: '#/components/schemas/DeviceStatus'
+          $ref: '#/components/schemas/DeviceConnectionStatus'
         configuration:
           items:
             $ref: '#/components/schemas/DeviceConfigurationItem'
@@ -7153,7 +7277,7 @@ components:
         status: connected
       properties:
         status:
-          $ref: '#/components/schemas/DeviceStatus'
+          $ref: '#/components/schemas/DeviceConnectionStatus'
         logs:
           items:
             type: string
