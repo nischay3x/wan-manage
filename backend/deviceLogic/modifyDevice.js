@@ -519,12 +519,10 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
         return ifc._id.toString() === tunnel.interfaceB.toString();
       });
 
-      const { agent } = deviceB.versions;
       const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
-        tunnel.num,
+        tunnel,
         ifcA,
         ifcB,
-        agent,
         pathlabel
       );
       await queueTunnel(

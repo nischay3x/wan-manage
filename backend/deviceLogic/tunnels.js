@@ -518,22 +518,20 @@ const queueTunnel = async (
  * Prepares tunnel add jobs by creating an array that contains
  * the jobs that should be queued for each of the devices connected
  * by the tunnel.
- * @param  {number} tunnelnum    tunnel id
+ * @param  {Object} tunnel    tunnel object
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
- * @param  {string} devBagentVer device B version
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
-  tunnelnum,
+  tunnel,
   deviceAIntf,
   deviceBIntf,
-  devBagentVer,
   pathLabel
 ) => {
   // Extract tunnel keys from the database
-  const tunnel = await tunnelsModel.findOne({ num: tunnelnum });
-  if (!tunnel) throw new Error(`Tunnel ${tunnelnum} not found`);
+  if (!tunnel) throw new Error('Tunnel not found');
+  if (!tunnel.tunnelKeys) throw new Error(`Tunnel ${tunnel.num} has no keys`);
 
   const tunnelKeys = {
     key1: tunnel.tunnelKeys.key1,
@@ -550,7 +548,7 @@ const prepareTunnelAddJob = async (
     paramsDeviceA,
     paramsDeviceB,
     tunnelParams
-  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
+  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf);
   const paramsSaAB = {
     spi: tunnelParams.sa1,
     'crypto-key': tunnelKeys.key1,
@@ -655,7 +653,7 @@ const addTunnel = async (
   // Generate IPsec Keys and store them in the database
   const { key1, key2, key3, key4 } = generateRandomKeys();
 
-  await tunnelsModel.findOneAndUpdate(
+  const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
     {
       org: org,
@@ -679,15 +677,13 @@ const addTunnel = async (
       }
     },
     // Options
-    { upsert: true }
+    { upsert: true, new: true }
   );
 
-  const { agent } = deviceB.versions;
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
-    tunnelnum,
+    tunnel,
     deviceAIntf,
     deviceBIntf,
-    agent,
     pathLabel
   );
 
@@ -884,7 +880,6 @@ const completeTunnelDel = (jobId, res) => {
  * @param  {number} tunnelnum    tunnel id
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
- * @param  {string} devBagentVer device B version
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelRemoveJob = (tunnelnum, deviceAIntf, deviceBIntf) => {
@@ -982,6 +977,7 @@ const sync = async (deviceId, org) => {
       deviceB: 1,
       interfaceA: 1,
       interfaceB: 1,
+      tunnelKeys: 1,
       pathlabel: 1
     }
   )
@@ -1010,10 +1006,9 @@ const sync = async (deviceId, org) => {
       (ifc) => ifc._id.toString() === interfaceB.toString()
     );
     const [tasksA, tasksB] = await prepareTunnelAddJob(
-      num,
+      tunnel,
       ifcA,
       ifcB,
-      '',
       pathlabel
     );
     // Add the tunnel only for the device that is being synced
