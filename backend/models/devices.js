@@ -139,6 +139,11 @@ const interfacesSchema = new Schema({
     maxlength: [30, 'NAT Type length must be at most 30'],
     default: ''
   },
+  // use STUN to define public IP address and port
+  useStun: {
+    type: Boolean,
+    default: true
+  },
   // WAN interface default GW
   gateway: {
     type: String,

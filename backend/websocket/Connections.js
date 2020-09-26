@@ -476,14 +476,16 @@ class Connections {
               IPv6: updatedConfig.IPv6,
               IPv6Mask: updatedConfig.IPv6Mask,
               gateway: updatedConfig.gateway,
-              PublicIP: updatedConfig.public_ip || i.PublicIP,
+              PublicIP: updatedConfig.public_ip && i.useStun
+                ? updatedConfig.public_ip : i.PublicIP,
               PublicPort: updatedConfig.public_port || i.PublicPort,
               NatType: updatedConfig.nat_type || i.NatType
             };
           } else {
             return {
               ...i.toJSON(),
-              PublicIP: updatedConfig.public_ip || i.PublicIP,
+              PublicIP: updatedConfig.public_ip && i.useStun
+                ? updatedConfig.public_ip : i.PublicIP,
               PublicPort: updatedConfig.public_port || i.PublicPort,
               NatType: updatedConfig.nat_type || i.NatType
             };

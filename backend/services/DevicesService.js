@@ -126,6 +126,7 @@ class DevicesService {
         'PublicIP',
         'PublicPort',
         'NatType',
+        'useStun',
         'gateway',
         'metric',
         'dhcp',
