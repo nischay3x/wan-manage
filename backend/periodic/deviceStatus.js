@@ -365,10 +365,10 @@ class DeviceStatus {
           });
         }
         // Generate a notification only if RTT has changed,
-        // and the new RTT is higher than 100 milliseconds
+        // and the new RTT is higher than 300 milliseconds
         if ((firstTunnelUpdate ||
                     tunnelState.rtt !== this.status[deviceID].tunnelStatus[tunnelID].rtt) &&
-                    tunnelState.rtt > 100) {
+                    tunnelState.rtt > 300) {
           this.events.push({
             org: org,
             title: 'Tunnel latency',
