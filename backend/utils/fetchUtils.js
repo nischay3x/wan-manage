@@ -21,7 +21,8 @@
  */
 
 // const fetch = require('node-fetch');
-const request = require('request');
+const fetch = require('isomorphic-fetch');
+// const request = require('request');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 
 /**
@@ -32,28 +33,27 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'p
     * @return {Promise}              the response from the uri
     */
 
-const requestPromise = uri => {
-  return new Promise((resolve, reject) => {
-    request(uri, function (error, response, body) {
-      if (error) {
-        return reject(error);
-      } else {
-        return resolve(body);
-      }
-    });
-  });
-};
+// const requestPromise = uri => {
+//   return new Promise((resolve, reject) => {
+//     request(uri, function (error, response, body) {
+//       if (error) {
+//         return reject(error);
+//       } else {
+//         return resolve(body);
+//       }
+//     });
+//   });
+// };
 
 const fetchWithRetry = async (uri, numOfTrials) => {
   logger.debug('Fetching uri', {
     params: { uri, numOfTrials }
   });
-  let res;
 
   for (let trial = 0; trial < numOfTrials; trial++) {
     try {
-      res = await requestPromise(uri);
-      return JSON.parse(res);
+      const res = await fetch(uri);
+      return await res.json();
     } catch (e) {
       throw (new Error(e));
     }
