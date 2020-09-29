@@ -69,7 +69,7 @@ const applyTunnelAdd = async (devices, user, data) => {
   if (devicesLen >= 2) {
     const dbTasks = [];
     const userName = user.username;
-    const org = user.defaultOrg._id.toString();
+    const org = data.org;
 
     // reasons of not created tunnels for some devices
     // used to build a response message
@@ -823,7 +823,7 @@ const applyTunnelDel = async (devices, user, data) => {
   logger.info('Delete tunnels ', { params: { tunnels: selectedTunnels } });
 
   if (devices && tunnelIds.length > 0) {
-    const org = user.defaultOrg._id.toString();
+    const org = data.org;
     const userName = user.username;
 
     const delPromises = [];

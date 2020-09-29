@@ -37,7 +37,7 @@ const apply = async (device, user, data) => {
   deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
 
   const { username } = user;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const { machineId, hostname, _id } = device[0];
 
   const tasks = [{ entity: 'agent', message: 'reset-device' }];
