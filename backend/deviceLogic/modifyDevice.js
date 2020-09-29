@@ -69,8 +69,18 @@ const prepareIfcParams = (interfaces) => {
  * @returns array of interfaces
  */
 const transformInterfaces = (interfaces) => {
-  return interfaces.map(ifc => {
-    return ({
+  return interfaces.map(ifc =>
+    ifc.type === 'LAN' ? {
+      _id: ifc._id,
+      pci: ifc.pciaddr,
+      dhcp: 'no',
+      addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
+      addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
+      routing: ifc.routing,
+      type: ifc.type,
+      isAssigned: ifc.isAssigned,
+      pathlabels: ifc.pathlabels
+    } : {
       _id: ifc._id,
       pci: ifc.pciaddr,
       dhcp: ifc.dhcp ? ifc.dhcp : 'no',
@@ -84,8 +94,8 @@ const transformInterfaces = (interfaces) => {
       type: ifc.type,
       isAssigned: ifc.isAssigned,
       pathlabels: ifc.pathlabels
-    });
-  });
+    }
+  );
 };
 
 /**
