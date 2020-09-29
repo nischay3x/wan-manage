@@ -228,17 +228,19 @@ const applyTunnelAdd = async (devices, user, data) => {
     } else {
       message = `${ids.length} ${message}`;
     }
-    if (reasons.withLabels) {
-      message += ' No Path Labels specified but some devices have interfaces with Path Labels.';
-    }
-    if (reasons.noSpecifiedLabelsMatched) {
-      message += ' Some devices have interfaces without specified Path Labels.';
-    }
-    if (reasons.noValidWanInterfaces) {
-      message += ' Some devices have no valid WAN interfaces.';
-    }
-    if (reasons.foundTunnels) {
-      message += ' Some tunnels exist already.';
+    if (desired.length === 0 || ids.length < desired.length) {
+      if (reasons.withLabels) {
+        message += ' No Path Labels specified but some devices have interfaces with Path Labels.';
+      }
+      if (reasons.noSpecifiedLabelsMatched) {
+        message += ' Some devices have interfaces without specified Path Labels.';
+      }
+      if (reasons.noValidWanInterfaces) {
+        message += ' Some devices have no valid WAN interfaces.';
+      }
+      if (reasons.foundTunnels) {
+        message += ' Some tunnels exist already.';
+      }
     }
     return { ids, status, message };
   } else {
