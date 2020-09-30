@@ -87,6 +87,7 @@ connectRouter.route('/register')
               let autoAssignedMetric = 100;
               ifs.forEach((intf) => {
                 intf.isAssigned = false;
+                intf.useStun = true;
                 if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent
                   intf.PublicIP = intf.public_ip || sourceIP;

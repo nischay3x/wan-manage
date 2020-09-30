@@ -41,7 +41,7 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
 /**
  * This function is called when adding new tunnels
  * @async
- * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Array}    devices   an array of the devices to be modified
  * @param  {Object}   user      User object
  * @param  {Object}   data      Additional data used by caller
  * @return {None}
@@ -69,7 +69,11 @@ const applyTunnelAdd = async (devices, user, data) => {
   if (devicesLen >= 2) {
     const dbTasks = [];
     const userName = user.username;
-    const org = user.defaultOrg._id.toString();
+    const org = data.org;
+
+    // reasons of not created tunnels for some devices
+    // used to build a response message
+    const reasons = {};
 
     for (let idxA = 0; idxA < devicesLen - 1; idxA++) {
       for (let idxB = idxA + 1; idxB < devicesLen; idxB++) {
@@ -130,8 +134,10 @@ const applyTunnelAdd = async (devices, user, data) => {
         const specifiedLabels = new Set(data.meta.pathLabels);
         const createForAllLabels = specifiedLabels.has('FFFFFF');
         if (deviceAIntfs.length && deviceBIntfs.length) {
-          deviceAIntfs.forEach(wanIfcA => {
-            deviceBIntfs.forEach(wanIfcB => {
+          for (let idxA = 0; idxA < deviceAIntfs.length; idxA++) {
+            for (let idxB = 0; idxB < deviceBIntfs.length; idxB++) {
+              const wanIfcA = deviceAIntfs[idxA];
+              const wanIfcB = deviceBIntfs[idxB];
               const ifcALabels = wanIfcA.labelsSet;
               const ifcBLabels = wanIfcB.labelsSet;
 
@@ -139,9 +145,20 @@ const applyTunnelAdd = async (devices, user, data) => {
               // only if both interfaces aren't assigned with labels
               if (specifiedLabels.size === 0) {
                 if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
-                  dbTasks.push(getTunnelPromise(userName, org, null,
-                    { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA }, { ...wanIfcB }));
+                  // If a tunnel already exists, skip the configuration
+                  const tunnelFound = await getTunnel(org, null, wanIfcA, wanIfcB);
+                  if (tunnelFound.length > 0) {
+                    logger.debug('Found tunnel', {
+                      params: { tunnel: tunnelFound }
+                    });
+                    reasons.foundTunnels = true;
+                  } else {
+                    dbTasks.push(generateTunnelPromise(userName, org, null,
+                      { ...deviceA.toObject() }, { ...deviceB.toObject() },
+                      { ...wanIfcA }, { ...wanIfcB }));
+                  }
+                } else {
+                  reasons.withLabels = true;
                 }
               } else {
                 // Create a list of path labels that are common to both interfaces.
@@ -152,16 +169,27 @@ const applyTunnelAdd = async (devices, user, data) => {
                   const shouldSkipTunnel =
                     !createForAllLabels &&
                     !specifiedLabels.has(label);
-                  if (shouldSkipTunnel) continue;
+                  if (shouldSkipTunnel) {
+                    reasons.noSpecifiedLabelsMatched = true;
+                    continue;
+                  }
                   // If a tunnel already exists, skip the configuration
+                  const tunnelFound = await getTunnel(org, label, wanIfcA, wanIfcB);
+                  if (tunnelFound.length > 0) {
+                    logger.debug('Found tunnel', {
+                      params: { tunnel: tunnelFound }
+                    });
+                    reasons.foundTunnels = true;
+                    continue;
+                  }
                   // Use a copy of devices objects as promise runs later
-                  dbTasks.push(getTunnelPromise(userName, org, label,
+                  dbTasks.push(generateTunnelPromise(userName, org, label,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
                     { ...wanIfcA }, { ...wanIfcB }));
                 }
               }
-            });
-          });
+            };
+          };
         } else {
           logger.info('Failed to connect tunnel between devices', {
             params: {
@@ -170,6 +198,7 @@ const applyTunnelAdd = async (devices, user, data) => {
               reason: 'no valid WAN interfaces'
             }
           });
+          reasons.noValidWanInterfaces = true;
         }
       }
     }
@@ -188,9 +217,32 @@ const applyTunnelAdd = async (devices, user, data) => {
 
     const status = fulfilled.length < dbTasks.length
       ? 'partially completed' : 'completed';
-    const message = fulfilled.length < dbTasks.length
-      ? `${fulfilled.length} of ${dbTasks.length} tunnels creation jobs added` : '';
-    return { ids: fulfilled.flat().map(job => job.id), status, message };
+
+    const desired = dbTasks.flat().map(job => job.id);
+    const ids = fulfilled.flat().map(job => job.id);
+    let message = 'tunnels creation jobs added.';
+    if (desired.length === 0) {
+      message = 'No ' + message;
+    } else if (ids.length < desired.length) {
+      message = `${ids.length} of ${desired.length} ${message}`;
+    } else {
+      message = `${ids.length} ${message}`;
+    }
+    if (desired.length === 0 || ids.length < desired.length) {
+      if (reasons.withLabels) {
+        message += ' No Path Labels specified but some devices have interfaces with Path Labels.';
+      }
+      if (reasons.noSpecifiedLabelsMatched) {
+        message += ' Some devices have interfaces without specified Path Labels.';
+      }
+      if (reasons.noValidWanInterfaces) {
+        message += ' Some devices have no valid WAN interfaces.';
+      }
+      if (reasons.foundTunnels) {
+        message += ' Some tunnels exist already.';
+      }
+    }
+    return { ids, status, message };
   } else {
     logger.error('At least 2 devices must be selected to create tunnels', { params: {} });
     throw new Error('At least 2 devices must be selected to create tunnels');
@@ -255,6 +307,25 @@ const errorTunnelAdd = async (jobId, res) => {
 };
 
 /**
+ * Returns an active tunnel object promise from DB
+ * @param  {string}   org         organization id the user belongs to
+ * @param  {string}   pathLabel   path label id
+ * @param  {Object}   wanIfcA     device A tunnel interface
+ * @param  {Object}   wanIfcB     device B tunnel interface
+ */
+const getTunnel = (org, pathLabel, wanIfcA, wanIfcB) => {
+  return tunnelsModel.find({
+    $or: [
+      { interfaceA: wanIfcA._id, interfaceB: wanIfcB._id },
+      { interfaceB: wanIfcA._id, interfaceA: wanIfcB._id }
+    ],
+    isActive: true,
+    pathlabel: pathLabel,
+    org: org
+  });
+};
+
+/**
  * This function generates one tunnel promise including
  * all configurations for the tunnel into the device
  * @param  {string}   user         user id of the requesting user
@@ -264,7 +335,7 @@ const errorTunnelAdd = async (jobId, res) => {
  * @param  {Object}   deviceAIntf device A tunnel interface
  * @param  {Object}   deviceBIntf device B tunnel interface
  */
-const getTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
+const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
   deviceAIntf, deviceBIntf) => {
   logger.debug('Adding tunnel between devices', {
     params: {
@@ -279,130 +350,105 @@ const getTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
   });
 
   var tPromise = new Promise(function (resolve, reject) {
-    tunnelsModel.find({
-      $or: [
-        { interfaceA: deviceAIntf._id, interfaceB: deviceBIntf._id },
-        { interfaceB: deviceAIntf._id, interfaceA: deviceBIntf._id }
-      ],
-      isActive: true,
-      pathlabel: pathLabel,
-      org: org
-    })
-      .then((tunnelFound) => {
-        logger.debug('Found tunnels', { params: { tunnels: tunnelFound } });
+    // Get a unique tunnel number
+    // Search first in deleted tunnels
+    tunnelsModel.findOneAndUpdate(
+      // Query
+      { isActive: false, org: org },
+      // Update, make sure other query doesn't find the same number
+      { isActive: true },
+      // Options
+      { upsert: false }
+    )
+      .then(async (tunnelResp) => {
+        logger.debug('Found a tunnel', { params: { tunnel: tunnelResp } });
 
-        if (tunnelFound.length === 0) { // Tunnel does not exist, need to create it
-          // Get a unique tunnel number
-          // Search first in deleted tunnels
-          tunnelsModel.findOneAndUpdate(
-            // Query
-            { isActive: false, org: org },
-            // Update, make sure other query doesn't find the same number
-            { isActive: true },
+        if (tunnelResp !== null) { // deleted tunnel found, use it
+          const tunnelnum = tunnelResp.num;
+          logger.info('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
+
+          // Configure tunnel using this num
+          const tunnelJobs = await addTunnel(user, org, tunnelnum,
+            deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
+
+          return resolve(tunnelJobs);
+        } else { // No deleted tunnel found, get a new one
+          tunnelIDsModel.findOneAndUpdate(
+            // Query, allow only 15000 tunnels per organization
+            {
+              org: org,
+              nextAvailID: { $gte: 0, $lt: 15000 }
+            },
+            // Update
+            { $inc: { nextAvailID: 1 } },
             // Options
-            { upsert: false }
-          )
-            .then(async (tunnelResp) => {
-              logger.debug('Found a tunnel', { params: { tunnel: tunnelResp } });
+            { new: true, upsert: true }
+          ).then(async (idResp) => {
+            const tunnelnum = idResp.nextAvailID;
+            logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
 
-              if (tunnelResp !== null) { // deleted tunnel found, use it
-                const tunnelnum = tunnelResp.num;
-                logger.info('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
+            // Configure tunnel using this num
+            const tunnelJobs = await addTunnel(user, org, tunnelnum,
+              deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
 
+            return resolve(tunnelJobs);
+          }, (err) => {
+            // org is a key value in the collection, upsert sometimes creates a new doc
+            // (if two upserts done at once)
+            // In this case we need to check the error and try again if such occurred
+            // See more info in:
+            // eslint-disable-next-line max-len
+            // https://stackoverflow.com/questions/37295648/mongoose-duplicate-key-error-with-upsert
+            if (err.code === 11000) {
+              logger.debug('2nd try to find tunnel ID', { params: {} });
+              tunnelIDsModel.findOneAndUpdate(
+                // Query, allow only 15000 tunnels per organization
+                {
+                  org: org,
+                  nextAvailID: { $gte: 0, $lt: 15000 }
+                },
+                // Update
+                { $inc: { nextAvailID: 1 } },
+                // Options
+                { new: true, upsert: true }
+              ).then(async (idResp) => {
+                const tunnelnum = idResp.nextAvailID;
+                logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
                 // Configure tunnel using this num
                 const tunnelJobs = await addTunnel(user, org, tunnelnum,
                   deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
 
                 return resolve(tunnelJobs);
-              } else { // No deleted tunnel found, get a new one
-                tunnelIDsModel.findOneAndUpdate(
-                  // Query, allow only 15000 tunnels per organization
-                  {
-                    org: org,
-                    nextAvailID: { $gte: 0, $lt: 15000 }
-                  },
-                  // Update
-                  { $inc: { nextAvailID: 1 } },
-                  // Options
-                  { new: true, upsert: true }
-                ).then(async (idResp) => {
-                  const tunnelnum = idResp.nextAvailID;
-                  logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
-
-                  // Configure tunnel using this num
-                  const tunnelJobs = await addTunnel(user, org, tunnelnum,
-                    deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
-
-                  return resolve(tunnelJobs);
-                }, (err) => {
-                  // org is a key value in the collection, upsert sometimes creates a new doc
-                  // (if two upserts done at once)
-                  // In this case we need to check the error and try again if such occurred
-                  // See more info in:
-                  // eslint-disable-next-line max-len
-                  // https://stackoverflow.com/questions/37295648/mongoose-duplicate-key-error-with-upsert
-                  if (err.code === 11000) {
-                    logger.debug('2nd try to find tunnel ID', { params: {} });
-                    tunnelIDsModel.findOneAndUpdate(
-                      // Query, allow only 15000 tunnels per organization
-                      {
-                        org: org,
-                        nextAvailID: { $gte: 0, $lt: 15000 }
-                      },
-                      // Update
-                      { $inc: { nextAvailID: 1 } },
-                      // Options
-                      { new: true, upsert: true }
-                    ).then(async (idResp) => {
-                      const tunnelnum = idResp.nextAvailID;
-                      logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
-                      // Configure tunnel using this num
-                      const tunnelJobs = await addTunnel(user, org, tunnelnum,
-                        deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
-
-                      return resolve(tunnelJobs);
-                    }, (err) => {
-                      logger.error('Tunnel ID not found (not found twice)', {
-                        params: { reason: err.message }
-                      });
-                      reject(new Error('Tunnel ID not found'));
-                    });
-                  } else {
-                    // Another error
-                    logger.error('Tunnel ID not found (other error)', {
-                      params: { reason: err.message }
-                    });
-                    reject(new Error('Tunnel ID not found'));
-                  }
-                })
-                  .catch((err) => {
-                    logger.error('Tunnel ID not found (general error)', {
-                      params: { reason: err.message }
-                    });
-                    reject(new Error('Tunnel ID not found'));
-                  });
-              }
-            }, (err) => {
-              logger.error('Tunnels search error', { params: { reason: err.message } });
-              reject(new Error('Tunnels search error'));
-            })
+              }, (err) => {
+                logger.error('Tunnel ID not found (not found twice)', {
+                  params: { reason: err.message }
+                });
+                reject(new Error('Tunnel ID not found'));
+              });
+            } else {
+              // Another error
+              logger.error('Tunnel ID not found (other error)', {
+                params: { reason: err.message }
+              });
+              reject(new Error('Tunnel ID not found'));
+            }
+          })
             .catch((err) => {
-              logger.error('Tunnels search error (general error)', {
+              logger.error('Tunnel ID not found (general error)', {
                 params: { reason: err.message }
               });
               reject(new Error('Tunnel ID not found'));
             });
-        } else {
-          logger.info('Tunnel found, will be checked via periodic task');
-          resolve([]);
         }
       }, (err) => {
-        logger.error('Tunnels find error', { params: { reason: err.message } });
-        reject(new Error('Tunnels find error'));
+        logger.error('Tunnels search error', { params: { reason: err.message } });
+        reject(new Error('Tunnels search error'));
       })
       .catch((err) => {
-        logger.error('Tunnels find error (general error)', { params: { reason: err.message } });
-        reject(new Error('Tunnel find error'));
+        logger.error('Tunnels search error (general error)', {
+          params: { reason: err.message }
+        });
+        reject(new Error('Tunnel ID not found'));
       });
   });
   return tPromise;
@@ -518,22 +564,20 @@ const queueTunnel = async (
  * Prepares tunnel add jobs by creating an array that contains
  * the jobs that should be queued for each of the devices connected
  * by the tunnel.
- * @param  {number} tunnelnum    tunnel id
+ * @param  {Object} tunnel    tunnel object
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
- * @param  {string} devBagentVer device B version
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
-  tunnelnum,
+  tunnel,
   deviceAIntf,
   deviceBIntf,
-  devBagentVer,
   pathLabel
 ) => {
   // Extract tunnel keys from the database
-  const tunnel = await tunnelsModel.findOne({ num: tunnelnum });
-  if (!tunnel) throw new Error(`Tunnel ${tunnelnum} not found`);
+  if (!tunnel) throw new Error('Tunnel not found');
+  if (!tunnel.tunnelKeys) throw new Error(`Tunnel ${tunnel.num} has no keys`);
 
   const tunnelKeys = {
     key1: tunnel.tunnelKeys.key1,
@@ -550,7 +594,7 @@ const prepareTunnelAddJob = async (
     paramsDeviceA,
     paramsDeviceB,
     tunnelParams
-  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
+  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf);
   const paramsSaAB = {
     spi: tunnelParams.sa1,
     'crypto-key': tunnelKeys.key1,
@@ -655,7 +699,7 @@ const addTunnel = async (
   // Generate IPsec Keys and store them in the database
   const { key1, key2, key3, key4 } = generateRandomKeys();
 
-  await tunnelsModel.findOneAndUpdate(
+  const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
     {
       org: org,
@@ -679,15 +723,13 @@ const addTunnel = async (
       }
     },
     // Options
-    { upsert: true }
+    { upsert: true, new: true }
   );
 
-  const { agent } = deviceB.versions;
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
-    tunnelnum,
+    tunnel,
     deviceAIntf,
     deviceBIntf,
-    agent,
     pathLabel
   );
 
@@ -783,7 +825,7 @@ const applyTunnelDel = async (devices, user, data) => {
   logger.info('Delete tunnels ', { params: { tunnels: selectedTunnels } });
 
   if (devices && tunnelIds.length > 0) {
-    const org = user.defaultOrg._id.toString();
+    const org = data.org;
     const userName = user.username;
 
     const delPromises = [];
@@ -884,7 +926,6 @@ const completeTunnelDel = (jobId, res) => {
  * @param  {number} tunnelnum    tunnel id
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
- * @param  {string} devBagentVer device B version
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelRemoveJob = (tunnelnum, deviceAIntf, deviceBIntf) => {
@@ -982,6 +1023,7 @@ const sync = async (deviceId, org) => {
       deviceB: 1,
       interfaceA: 1,
       interfaceB: 1,
+      tunnelKeys: 1,
       pathlabel: 1
     }
   )
@@ -1010,10 +1052,9 @@ const sync = async (deviceId, org) => {
       (ifc) => ifc._id.toString() === interfaceB.toString()
     );
     const [tasksA, tasksB] = await prepareTunnelAddJob(
-      num,
+      tunnel,
       ifcA,
       ifcB,
-      '',
       pathlabel
     );
     // Add the tunnel only for the device that is being synced

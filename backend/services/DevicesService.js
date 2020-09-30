@@ -126,6 +126,7 @@ class DevicesService {
         'PublicIP',
         'PublicPort',
         'NatType',
+        'useStun',
         'gateway',
         'metric',
         'dhcp',
@@ -1052,6 +1053,7 @@ class DevicesService {
 
       if (deleteRoute.length !== 1) throw new Error('Static route not found');
       const copy = Object.assign({}, deleteRoute[0].toObject());
+      copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy._id = route;
       copy.action = 'del';
@@ -1107,7 +1109,7 @@ class DevicesService {
       );
 
       const copy = Object.assign({}, staticRouteRequest);
-
+      copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy._id = route.id;
       await dispatcher.apply(device, copy.method, user, copy);
@@ -1153,7 +1155,7 @@ class DevicesService {
 
       const device = deviceObject[0];
       const copy = Object.assign({}, staticRouteRequest);
-
+      copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
       await dispatcher.apply(device, copy.method, user, copy);
@@ -1458,6 +1460,7 @@ class DevicesService {
       // If previous status was del-wait, no need to resend the job
       if (deleteDhcpObj.status !== 'del-wait') {
         const copy = Object.assign({}, deleteDhcpObj);
+        copy.org = orgList[0];
         copy.method = 'dhcp';
         copy._id = dhcpId;
         copy.action = 'del';
@@ -1645,6 +1648,7 @@ class DevicesService {
       }
 
       const copy = Object.assign({}, dhcpObject);
+      copy.org = orgList[0];
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
@@ -1805,6 +1809,7 @@ class DevicesService {
       copy.method = 'dhcp';
       copy._id = dhcp.id;
       copy.action = 'add';
+      copy.org = orgList[0];
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
       response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));

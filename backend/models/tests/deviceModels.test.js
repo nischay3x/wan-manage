@@ -63,6 +63,7 @@ beforeEach(() => {
     PublicIP: '72.168.10.30',
     PublicPort: '',
     NatType: '',
+    useStun: true,
     isAssigned: false,
     routing: 'None',
     type: 'None'
