@@ -106,6 +106,7 @@ class DevicesService {
       'machineId',
       'site',
       'hostname',
+      'serial',
       'name',
       '_id',
       'isApproved',
