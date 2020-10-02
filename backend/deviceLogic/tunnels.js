@@ -163,6 +163,9 @@ const applyTunnelAdd = async (devices, user, data) => {
               } else {
                 // Create a list of path labels that are common to both interfaces.
                 const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
+                if (labelsIntersection.length === 0) {
+                  reasons.noSpecifiedLabelsMatched = true;
+                }
                 for (const label of labelsIntersection) {
                   // Skip tunnel if the label is not included in
                   // the list of labels specified by the user
