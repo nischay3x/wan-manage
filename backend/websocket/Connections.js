@@ -736,7 +736,7 @@ class Connections {
           reject(new Error('Error: Send Timeout'));
           // delete queue for this seq
           delete msgQ[seq];
-        }, 120000);
+        }, 180000);
         msgQ[seq] = {
           resolver: resolve,
           rejecter: reject,
