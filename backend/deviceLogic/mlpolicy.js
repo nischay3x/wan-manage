@@ -77,13 +77,17 @@ const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) 
     };
 
     // If the device's appIdentification database is outdated
-    // we add an "add-application" message as well.
+    // we add an add-application/remove-application message as well.
+    // add-application comes before add-multilink-policy when installing.
+    // remove-application comes after remove-multilink-policy when uninstalling.
     if (installIds[_id] === true) {
-      tasks[0].unshift({
+      const task = {
         entity: 'agent',
         message: message,
         params: params
-      });
+      };
+      op === 'install' ? tasks[0].unshift(task) : tasks[0].push(task);
+
       data.appIdentification = {
         deviceId: _id,
         ...deviceJobResp
