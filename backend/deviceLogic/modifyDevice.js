@@ -88,6 +88,7 @@ const transformInterfaces = (interfaces) => {
       addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
       PublicIP: ifc.PublicIP,
       PublicPort: ifc.PublicPort,
+      useStun: ifc.useStun,
       gateway: ifc.gateway,
       metric: ifc.metric,
       routing: ifc.routing,
