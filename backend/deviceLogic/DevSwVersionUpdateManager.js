@@ -244,7 +244,6 @@ class SwVersionUpdateManager {
   async pollDevSwRepo () {
     try {
       const body = await fetchUtils.fetchWithRetry(this.swRepoUri, 3);
-      // const body = await res.json();
       const versions = this.createVersionsObject(body);
       const deadline = new Date(body.distributionDueDate);
 
