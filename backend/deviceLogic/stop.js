@@ -41,7 +41,7 @@ const apply = async (device, user, data) => {
   deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
 
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const machineID = device[0].machineId;
   const majorAgentVersion = getMajorVersion(device[0].versions.agent);
 

@@ -115,6 +115,7 @@ const validateIpList = (list) => {
 const isPort = (val) => {
   return !isEmpty(val) && !(val === '') && validateIsNumber(val) && val >= 0 && val <= 65535;
 };
+const validatePort = port => port === '' || isPort(port);
 const validatePortRange = (range) => {
   if (range === '') return true;
   if (!(range || '').includes('-')) return isPort(range);
@@ -158,6 +159,7 @@ module.exports = {
   validateIfcName,
   validateIPv4Mask,
   validateIPv6Mask,
+  validatePort,
   validatePortRange,
   validateDriverName,
   validateMacAddress,

@@ -78,36 +78,37 @@ connectRouter.route('/register')
               const ifs = JSON.parse(req.body.interfaces);
 
               // Get an interface with gateway and the lowest metric
-              const defaultIntf = ifs.reduce((res, intf) =>
+              const defaultIntf = ifs ? ifs.reduce((res, intf) =>
                 intf.gateway && (!res || +res.metric > +intf.metric)
-                  ? intf : res, undefined);
+                  ? intf : res, undefined) : undefined;
               const lowestMetric = defaultIntf && defaultIntf.metric
                 ? defaultIntf.metric : '0';
 
               let autoAssignedMetric = 100;
               ifs.forEach((intf) => {
+                intf.isAssigned = false;
+                intf.useStun = true;
                 if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent
-                  intf.isAssigned = true;
-                  intf.PublicIP = sourceIP;
+                  intf.PublicIP = intf.public_ip || sourceIP;
+                  intf.PublicPort = intf.public_port || '';
+                  intf.NatType = intf.nat_type || '';
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   intf.gateway = req.body.default_route;
                   intf.metric = '0';
                 } else if (intf.gateway) {
-                  intf.isAssigned = true;
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
                     ? '0' : intf.metric || (autoAssignedMetric++).toString();
-                  intf.PublicIP = intf.metric === lowestMetric ? sourceIP : '';
+                  intf.PublicIP = intf.public_ip || (intf.metric === lowestMetric ? sourceIP : '');
+                  intf.PublicPort = intf.public_port || '';
+                  intf.NatType = intf.nat_type || '';
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
                   intf.routing = 'OSPF';
-                  if (ifs.length === 2) {
-                    intf.isAssigned = true;
-                  }
                   intf.gateway = '';
                   intf.metric = '';
                 }

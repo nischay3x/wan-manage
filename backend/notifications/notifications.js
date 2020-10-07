@@ -74,6 +74,8 @@ class NotificationsManager {
       });
 
       await notificationsDb.insertMany(notifications);
+      // Log notification for logging systems
+      logger.info('New notifications', { params: { notifications: notifications } });
     } catch (err) {
       logger.warn('Failed to store notifications in database', {
         params: { notifications: notifications, err: err.message }
