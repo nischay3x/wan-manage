@@ -121,65 +121,77 @@ class DevicesService {
     retDevice.deviceStatus = (retDevice.deviceStatus === '1');
 
     // pick interfaces
-    const retInterfaces = item.interfaces.map(i => {
-      const retIf = pick(i, [
-        'IPv6',
-        'PublicIP',
-        'PublicPort',
-        'NatType',
-        'useStun',
-        'gateway',
-        'metric',
-        'dhcp',
-        'IPv4',
-        'type',
-        'MAC',
-        'routing',
-        'IPv6Mask',
-        'isAssigned',
-        'driver',
-        'IPv4Mask',
-        'name',
-        'pciaddr',
-        '_id',
-        'pathlabels'
-      ]);
-      retIf._id = retIf._id.toString();
-      return retIf;
-    });
-
-    const retStaticRoutes = item.staticroutes.map(r => {
-      const retRoute = pick(r, [
-        '_id',
-        'destination',
-        'gateway',
-        'ifname',
-        'metric'
-      ]);
-      retRoute._id = retRoute._id.toString();
-      return retRoute;
-    });
-
-    const retDhcpList = item.dhcp.map(d => {
-      const retDhcp = pick(d, [
-        '_id',
-        'interface',
-        'rangeStart',
-        'rangeEnd',
-        'dns',
-        'status'
-      ]);
-
-      const macAssignList = d.macAssign.map(m => {
-        return pick(m, [
-          'host', 'mac', 'ipv4'
+    let retInterfaces;
+    if (item.interfaces) {
+      retInterfaces = item.interfaces.map(i => {
+        const retIf = pick(i, [
+          'IPv6',
+          'PublicIP',
+          'PublicPort',
+          'NatType',
+          'useStun',
+          'gateway',
+          'metric',
+          'dhcp',
+          'IPv4',
+          'type',
+          'MAC',
+          'routing',
+          'IPv6Mask',
+          'isAssigned',
+          'driver',
+          'IPv4Mask',
+          'name',
+          'pciaddr',
+          '_id',
+          'pathlabels'
         ]);
+        retIf._id = retIf._id.toString();
+        return retIf;
       });
+    } else retInterfaces = [];
 
-      retDhcp.macAssign = macAssignList;
-      retDhcp._id = retDhcp._id.toString();
-      return retDhcp;
-    });
+    let retStaticRoutes;
+    if (item.staticroutes) {
+      retStaticRoutes = item.staticroutes.map(r => {
+        const retRoute = pick(r, [
+          '_id',
+          'destination',
+          'gateway',
+          'ifname',
+          'metric'
+        ]);
+        retRoute._id = retRoute._id.toString();
+        return retRoute;
+      });
+    } else retStaticRoutes = [];
+
+    let retDhcpList;
+    if (item.dhcp) {
+      retDhcpList = item.dhcp.map(d => {
+        const retDhcp = pick(d, [
+          '_id',
+          'interface',
+          'rangeStart',
+          'rangeEnd',
+          'dns',
+          'status'
+        ]);
+
+        let macAssignList;
+        if (d.macAssign) {
+          macAssignList = d.macAssign.map(m => {
+            return pick(m, [
+              'host', 'mac', 'ipv4'
+            ]);
+          });
+        } else macAssignList = [];
+
+        retDhcp.macAssign = macAssignList;
+        retDhcp._id = retDhcp._id.toString();
+        return retDhcp;
+      });
+    } else retDhcpList = [];
 
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
