@@ -90,10 +90,12 @@ const apply = async (device, user, data) => {
     startParams.routes = routes;
   }
 
-  // Start router command might change IP address of the
-  // interface connected to the MGMT. Tell the agent to
-  // reconnect to the MGMT after processing this command.
-  startParams.reconnect = true;
+  if (majorAgentVersion < 2) {
+    // Start router command might change IP address of the
+    // interface connected to the MGMT. Tell the agent to
+    // reconnect to the MGMT after processing this command.
+    startParams.reconnect = true;
+  }
 
   const tasks = [];
   const userName = user.username;
