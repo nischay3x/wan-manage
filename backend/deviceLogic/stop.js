@@ -44,11 +44,15 @@ const apply = async (device, user, data) => {
   const org = data.org;
   const machineID = device[0].machineId;
   const majorAgentVersion = getMajorVersion(device[0].versions.agent);
+  const stopParams = {};
 
-  // Stop router command might change IP address of the
-  // interface connected to the MGMT. Tell the agent to
-  // reconnect to the MGMT after processing this command.
-  const stopParams = { reconnect: true };
+  if (majorAgentVersion < 2) {
+    // Stop router command might change IP address of the
+    // interface connected to the MGMT. Tell the agent to
+    // reconnect to the MGMT after processing this command.
+    stopParams.reconnect = true;
+  }
+
   const tasks = [{ entity: 'agent', message: 'stop-router', params: stopParams }];
 
   try {
