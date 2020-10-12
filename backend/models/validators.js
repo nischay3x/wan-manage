@@ -70,9 +70,8 @@ const validateIPaddr = (ip) => { return validateIPv4(ip) || validateIPv6(ip); };
 const validatePciAddress = pci => {
   return (
     pci === '' ||
-    /^([A-F0-9]{2,4}:)?([A-F0-9]{2}|[A-F0-9]{4}):[A-F0-9]{2}\.[A-F0-9]{2}$/i.test(
-      pci
-    )
+    /^([A-F0-9]{2,4}:)?([A-F0-9]{2}|[A-F0-9]{4}):[A-F0-9]{2}\.[A-F0-9]{2}$/i.test(pci) ||
+    /^usb[0-9]\/([0-9]-[0-9])\/?([0-9]-[0-9]):[0-9].[0-9]$/i.test(pci)
   );
 };
 const validateIfcName = (name) => { return /^[a-zA-Z0-9_]{1,15}$/i.test(name || ''); };
