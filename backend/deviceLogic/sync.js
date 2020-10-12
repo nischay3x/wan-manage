@@ -159,7 +159,7 @@ const setAutoSyncOff = (deviceId) => {
 
 const incAutoSyncTrials = (deviceId) => {
   return devices.updateOne(
-    { _id: deviceId },
+    { _id: deviceId, 'sync.trials': { $lt: 3 } },
     { $inc: { 'sync.trials': 1 } },
     { upsert: false }
   );
@@ -303,6 +303,33 @@ const updateSyncStatusBasedOnJobResult = async (org, deviceId, machineId, isJobS
   }
 };
 
+let locked = false;
+
+/**
+ * Lets only one update call be executed at the time, until
+ * finished. Others are discarded. This may happen when
+ * device reconnects after some period of disconnect and
+ * sends many status responses at once thus triggering
+ * simultaneous update sync status calls.
+ * This needs some optimization, as it will be better to
+ * use only the last update response. Currently the first is
+ * executed instead.
+ *
+ * @param {*} org
+ * @param {*} deviceId
+ * @param {*} machineId
+ * @param {*} deviceHash
+ * @returns
+ */
+const exclusiveUpdateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
+  if (locked) {
+    return;
+  }
+  locked = true;
+  await updateSyncStatus(org, deviceId, machineId, deviceHash);
+  locked = false;
+};
+
 /**
  * Periodically checks and updated device status based on the status
  * report from the device. Triggered from deviceStatus.
@@ -374,7 +401,7 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       return;
     }
     logger.info('Queuing full-sync job', {
-      params: { deviceId, state, newState, hash }
+      params: { deviceId, state, newState, hash, trials }
     });
     await queueFullSyncJob({ deviceId, machineId, hostname }, hash, org);
   } catch (err) {
@@ -426,7 +453,7 @@ const apply = async (device, user, data) => {
 
 // Register a method that updates sync state
 // from periodic status message flow
-deviceStatus.registerSyncUpdateFunc(updateSyncStatus);
+deviceStatus.registerSyncUpdateFunc(exclusiveUpdateSyncStatus);
 
 // Register a method that updates the sync
 // state upon queuing a job to the device queue
