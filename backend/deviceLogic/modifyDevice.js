@@ -236,22 +236,10 @@ const prepareModificationMessageV2 = (messageParams, device) => {
   }
 
   if (has(messageParams, 'modify_routes')) {
-    requests.push(...messageParams.modify_routes.routes.map(item => {
-      if (item.new_route !== '' && item.old_route === '') {
-        return {
-          entity: 'agent',
-          message: 'add-route',
-          params: {
-            addr: item.addr,
-            via: item.new_route,
-            pci: item.pci || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
-          }
-        };
-      }
-
-      if (item.new_route === '' && item.old_route !== '') {
-        return {
+    const routeRequests = messageParams.modify_routes.routes.flatMap(item => {
+      const items = [];
+      if (item.old_route !== '') {
+        items.push({
           entity: 'agent',
           message: 'remove-route',
           params: {
@@ -260,9 +248,26 @@ const prepareModificationMessageV2 = (messageParams, device) => {
             pci: item.pci || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
-        };
+        });
       }
-    }));
+      if (item.new_route !== '') {
+        items.push({
+          entity: 'agent',
+          message: 'add-route',
+          params: {
+            addr: item.addr,
+            via: item.new_route,
+            pci: item.pci || undefined,
+            metric: item.metric ? parseInt(item.metric, 10) : undefined
+          }
+        });
+      }
+      return items;
+    });
+
+    if (routeRequests) {
+      requests.push(...routeRequests);
+    }
   }
 
   if (has(messageParams, 'modify_router.assign')) {
@@ -802,15 +807,19 @@ const apply = async (device, user, data) => {
   // for old agent version compatibility
   const oldDefaultGW = getDefaultGateway(device[0]);
   const newDefaultGW = getDefaultGateway(data.newDevice);
-
   if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
-    modifyParams.modify_routes = {
-      routes: [{
-        addr: 'default',
-        old_route: oldDefaultGW,
-        new_route: newDefaultGW
-      }]
+    const defaultRoute = {
+      addr: 'default',
+      old_route: oldDefaultGW,
+      new_route: newDefaultGW
     };
+    if (modifyParams.modify_routes) {
+      modifyParams.modify_routes.routes.push(defaultRoute);
+    } else {
+      modifyParams.modify_routes = {
+        routes: [defaultRoute]
+      };
+    }
   }
 
   // Create interfaces modification parameters
