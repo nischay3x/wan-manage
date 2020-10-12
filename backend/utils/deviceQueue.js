@@ -538,23 +538,6 @@ class DeviceQueues {
   }
 
   /**
-     * Retries a failed job
-     * @param  {string}  jobId Job id of the retried job
-     * @return {Promise}       A promise for requeuing the job
-     */
-  async retryJob (jobId) {
-    const job = await this.getJobById(jobId);
-    if (!job) return;
-
-    return new Promise((resolve, reject) => {
-      job.state('inactive').save((err) => {
-        if (err) return reject(err);
-        return resolve(job);
-      });
-    });
-  }
-
-  /**
      * Registers a callback to be called when a job is removed from the queue.
      * @param  {string}   name      the name of the module that registered the callback.
      * @param  {Callback} callback  the callback method to be called

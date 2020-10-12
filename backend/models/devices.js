@@ -461,10 +461,6 @@ const deviceSyncSchema = new Schema({
     type: String,
     enum: ['on', 'off'],
     default: 'on'
-  },
-  failedJobRetried: {
-    type: Boolean,
-    default: false
   }
 });
 
