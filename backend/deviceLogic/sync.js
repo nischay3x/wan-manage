@@ -159,7 +159,7 @@ const setAutoSyncOff = (deviceId) => {
 
 const incAutoSyncTrials = (deviceId) => {
   return devices.updateOne(
-    { _id: deviceId },
+    { _id: deviceId, 'sync.trials': { $lt: 3 } },
     { $inc: { 'sync.trials': 1 } },
     { upsert: false }
   );
@@ -196,6 +196,19 @@ const queueFullSyncJob = async (device, hash, org) => {
     if (callComplete) completeHandlers[module] = completeCbData;
   }
 
+  // Increment auto sync trials
+  var res = await incAutoSyncTrials(deviceId);
+  // when no trials were incremented, this means that the maximum
+  // limit of retries has been reached.
+  if (res.nModified === 0) {
+    // Set auto sync off if auto sync limit is exceeded
+    logger.info('Auto sync limit is exceeded, setting autosync off', {
+      params: { deviceId }
+    });
+    await setAutoSyncOff(deviceId);
+    return;
+  }
+
   const job = await deviceQueues.addJob(
     machineId,
     'system',
@@ -214,9 +227,6 @@ const queueFullSyncJob = async (device, hash, org) => {
     // Complete callback
     null
   );
-
-  // Increment auto sync trials
-  await incAutoSyncTrials(deviceId);
 
   logger.info('Sync device job queued', {
     params: { deviceId, jobId: job.id }
@@ -368,13 +378,8 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       return;
     }
 
-    // Set auto sync off if auto sync limit is exceeded
-    if (trials >= 3) {
-      await setAutoSyncOff(deviceId);
-      return;
-    }
     logger.info('Queuing full-sync job', {
-      params: { deviceId, state, newState, hash }
+      params: { deviceId, state, newState, hash, trials }
     });
     await queueFullSyncJob({ deviceId, machineId, hostname }, hash, org);
   } catch (err) {

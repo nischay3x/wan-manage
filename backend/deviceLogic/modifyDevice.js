@@ -236,22 +236,10 @@ const prepareModificationMessageV2 = (messageParams, device) => {
   }
 
   if (has(messageParams, 'modify_routes')) {
-    requests.push(...messageParams.modify_routes.routes.map(item => {
-      if (item.new_route !== '' && item.old_route === '') {
-        return {
-          entity: 'agent',
-          message: 'add-route',
-          params: {
-            addr: item.addr,
-            via: item.new_route,
-            pci: item.pci || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
-          }
-        };
-      }
-
-      if (item.new_route === '' && item.old_route !== '') {
-        return {
+    const routeRequests = messageParams.modify_routes.routes.flatMap(item => {
+      const items = [];
+      if (item.old_route !== '') {
+        items.push({
           entity: 'agent',
           message: 'remove-route',
           params: {
@@ -260,9 +248,26 @@ const prepareModificationMessageV2 = (messageParams, device) => {
             pci: item.pci || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
-        };
+        });
       }
-    }));
+      if (item.new_route !== '') {
+        items.push({
+          entity: 'agent',
+          message: 'add-route',
+          params: {
+            addr: item.addr,
+            via: item.new_route,
+            pci: item.pci || undefined,
+            metric: item.metric ? parseInt(item.metric, 10) : undefined
+          }
+        });
+      }
+      return items;
+    });
+
+    if (routeRequests) {
+      requests.push(...routeRequests);
+    }
   }
 
   if (has(messageParams, 'modify_router.assign')) {
@@ -487,16 +492,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
 
   // Prepare and queue device modification job
-  const agentVersion = getMajorVersion(device.versions.agent);
-  let tasks;
-
-  switch (agentVersion) {
-    case 1:
-      tasks = prepareModificationMessageV1(messageParams, device);
-      break;
-    case 2:
-      tasks = prepareModificationMessageV2(messageParams, device);
-  }
+  const majorAgentVersion = getMajorVersion(device.versions.agent);
+  const tasks = majorAgentVersion < 2
+    ? prepareModificationMessageV1(messageParams, device)
+    : prepareModificationMessageV2(messageParams, device);
 
   if (tasks.length === 0 || tasks[0].length === 0) {
     return [];
@@ -798,19 +797,26 @@ const apply = async (device, user, data) => {
     modifyParams.modify_dhcp_config = modifyDHCP;
   }
 
-  // Create the default route modification parameters
-  // for old agent version compatibility
-  const oldDefaultGW = getDefaultGateway(device[0]);
-  const newDefaultGW = getDefaultGateway(data.newDevice);
-
-  if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
-    modifyParams.modify_routes = {
-      routes: [{
+  const majorAgentVersion = getMajorVersion(device[0].versions.agent);
+  if (majorAgentVersion < 2) {
+    // Create the default route modification parameters
+    // for old agent version compatibility
+    const oldDefaultGW = getDefaultGateway(device[0]);
+    const newDefaultGW = getDefaultGateway(data.newDevice);
+    if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
+      const defaultRoute = {
         addr: 'default',
         old_route: oldDefaultGW,
         new_route: newDefaultGW
-      }]
-    };
+      };
+      if (modifyParams.modify_routes) {
+        modifyParams.modify_routes.routes.push(defaultRoute);
+      } else {
+        modifyParams.modify_routes = {
+          routes: [defaultRoute]
+        };
+      }
+    }
   }
 
   // Create interfaces modification parameters
