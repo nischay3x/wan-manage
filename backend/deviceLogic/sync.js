@@ -196,6 +196,19 @@ const queueFullSyncJob = async (device, hash, org) => {
     if (callComplete) completeHandlers[module] = completeCbData;
   }
 
+  // Increment auto sync trials
+  var res = await incAutoSyncTrials(deviceId);
+  // when no trials were incremented, this means that the maximum
+  // limit of retries has been reached.
+  if (res.nModified === 0) {
+    // Set auto sync off if auto sync limit is exceeded
+    logger.info('Auto sync limit is exceeded, setting autosync off', {
+      params: { deviceId }
+    });
+    await setAutoSyncOff(deviceId);
+    return;
+  }
+
   const job = await deviceQueues.addJob(
     machineId,
     'system',
@@ -214,9 +227,6 @@ const queueFullSyncJob = async (device, hash, org) => {
     // Complete callback
     null
   );
-
-  // Increment auto sync trials
-  await incAutoSyncTrials(deviceId);
 
   logger.info('Sync device job queued', {
     params: { deviceId, jobId: job.id }
@@ -303,33 +313,6 @@ const updateSyncStatusBasedOnJobResult = async (org, deviceId, machineId, isJobS
   }
 };
 
-let locked = false;
-
-/**
- * Lets only one update call be executed at the time, until
- * finished. Others are discarded. This may happen when
- * device reconnects after some period of disconnect and
- * sends many status responses at once thus triggering
- * simultaneous update sync status calls.
- * This needs some optimization, as it will be better to
- * use only the last update response. Currently the first is
- * executed instead.
- *
- * @param {*} org
- * @param {*} deviceId
- * @param {*} machineId
- * @param {*} deviceHash
- * @returns
- */
-const exclusiveUpdateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
-  if (locked) {
-    return;
-  }
-  locked = true;
-  await updateSyncStatus(org, deviceId, machineId, deviceHash);
-  locked = false;
-};
-
 /**
  * Periodically checks and updated device status based on the status
  * report from the device. Triggered from deviceStatus.
@@ -395,11 +378,6 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       return;
     }
 
-    // Set auto sync off if auto sync limit is exceeded
-    if (trials >= 3) {
-      await setAutoSyncOff(deviceId);
-      return;
-    }
     logger.info('Queuing full-sync job', {
       params: { deviceId, state, newState, hash, trials }
     });
@@ -453,7 +431,7 @@ const apply = async (device, user, data) => {
 
 // Register a method that updates sync state
 // from periodic status message flow
-deviceStatus.registerSyncUpdateFunc(exclusiveUpdateSyncStatus);
+deviceStatus.registerSyncUpdateFunc(updateSyncStatus);
 
 // Register a method that updates the sync
 // state upon queuing a job to the device queue
