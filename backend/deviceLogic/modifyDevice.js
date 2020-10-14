@@ -356,7 +356,7 @@ const queueJob = async (org, username, tasks, device, removedTunnelsList = []) =
       }
     },
     // Metadata
-    { priority: 'medium', attempts: 1, removeOnComplete: false },
+    { priority: 'normal', attempts: 1, removeOnComplete: false },
     // Complete callback
     null
   );

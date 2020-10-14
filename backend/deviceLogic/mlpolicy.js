@@ -110,7 +110,7 @@ const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) 
           data: data
         },
         // Metadata
-        { priority: 'high', attempts: 1, removeOnComplete: false },
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null
       )
