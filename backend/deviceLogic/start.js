@@ -79,7 +79,7 @@ const apply = async (device, user, data) => {
     const deviceInterfaces = buildInterfaces(device[0].interfaces);
     // Send route for backward compatibility (agent version < 1.2.15)
     const routes = [];
-    if (defaultGateway) {
+    if (defaultGateway && majorAgentVersion < 2) {
       routes.push({
         addr: 'default',
         via: defaultGateway
@@ -87,7 +87,9 @@ const apply = async (device, user, data) => {
     }
 
     startParams.interfaces = deviceInterfaces;
-    startParams.routes = routes;
+    if (routes.length > 0) {
+      startParams.routes = routes;
+    }
   }
 
   if (majorAgentVersion < 2) {
