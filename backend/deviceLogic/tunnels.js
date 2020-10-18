@@ -21,6 +21,7 @@ const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
+const { getMajorVersion } = require('../versioning');
 
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -625,18 +626,16 @@ const prepareTunnelAddJob = async (
     }
   };
 
-  // const majorAgentVersion = getMajorVersion(devBagentVer);
-  // if (majorAgentVersion === 0) {    // version 0.X.X
-  // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
-  // spi isn't configured properly for SA
-  // This is also the case for version 1.X.X since we revert to ipsec-gre interface
-  // Kept the comments to be fixed in later releases
-  paramsIpsecDeviceB['local-sa'] = { ...paramsSaAB, spi: tunnelParams.sa2 };
-  paramsIpsecDeviceB['remote-sa'] = { ...paramsSaBA, spi: tunnelParams.sa1 };
-  // } else if (majorAgentVersion >= 1) {    // version 1.X.X+
-  //    paramsIpsecDeviceB['local-sa'] = {...paramsSaBA};
-  //    paramsIpsecDeviceB['remote-sa'] = {...paramsSaAB};
-  // }
+  const majorAgentVersion = getMajorVersion(devBagentVer);
+  if (majorAgentVersion < 3) { // version 1-2.X.X
+    // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
+    // spi isn't configured properly for SA
+    paramsIpsecDeviceB['local-sa'] = { ...paramsSaAB, spi: tunnelParams.sa2 };
+    paramsIpsecDeviceB['remote-sa'] = { ...paramsSaBA, spi: tunnelParams.sa1 };
+  } else if (majorAgentVersion >= 3) { // version 3.X.X+
+    paramsIpsecDeviceB['local-sa'] = { ...paramsSaBA };
+    paramsIpsecDeviceB['remote-sa'] = { ...paramsSaAB };
+  }
 
   paramsDeviceB.ipsec = paramsIpsecDeviceB;
   paramsDeviceB['loopback-iface'] = {
