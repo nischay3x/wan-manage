@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
@@ -41,6 +42,8 @@ const setPermission = (get, post, put, del) => {
         ((put << permissionShifts.put) & permissionMasks.put) +
         ((del << permissionShifts.del) & permissionMasks.del);
 };
+
+const managerDelPermission = () => configs.get('allowManagerToDel') ? 1 : 0;
 
 // Permissions
 // Each number is a bitmask of permissions for Del (MSB), Put, Post, Get (LSB)
@@ -97,16 +100,16 @@ const preDefinedPermissions = {
     jobs: setPermission(1, 1, 1, 1),
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(1, 0, 0, 0),
-    organizations: setPermission(1, 1, 1, 1),
-    devices: setPermission(1, 1, 1, 1),
-    tokens: setPermission(1, 1, 1, 1),
-    appidentifications: setPermission(1, 1, 1, 1),
-    members: setPermission(1, 1, 1, 1),
-    tunnels: setPermission(1, 1, 1, 1),
+    organizations: setPermission(1, 1, 1, managerDelPermission()),
+    devices: setPermission(1, 1, 1, managerDelPermission()),
+    tokens: setPermission(1, 1, 1, managerDelPermission()),
+    appidentifications: setPermission(1, 1, 1, managerDelPermission()),
+    members: setPermission(1, 1, 1, managerDelPermission()),
+    tunnels: setPermission(1, 1, 1, managerDelPermission()),
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 1, 1, 1),
-    pathlabels: setPermission(1, 1, 1, 1),
-    mlpolicies: setPermission(1, 1, 1, 1)
+    pathlabels: setPermission(1, 1, 1, managerDelPermission()),
+    mlpolicies: setPermission(1, 1, 1, managerDelPermission())
   },
   account_viewer: {
     jobs: setPermission(1, 0, 0, 0),
@@ -128,15 +131,15 @@ const preDefinedPermissions = {
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(0, 0, 0, 0),
     organizations: setPermission(1, 0, 1, 0),
-    devices: setPermission(1, 1, 1, 1),
-    tokens: setPermission(1, 1, 1, 1),
-    appidentifications: setPermission(1, 1, 1, 1),
-    members: setPermission(1, 1, 1, 1),
-    tunnels: setPermission(1, 1, 1, 1),
+    devices: setPermission(1, 1, 1, managerDelPermission()),
+    tokens: setPermission(1, 1, 1, managerDelPermission()),
+    appidentifications: setPermission(1, 1, 1, managerDelPermission()),
+    members: setPermission(1, 1, 1, managerDelPermission()),
+    tunnels: setPermission(1, 1, 1, managerDelPermission()),
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 1, 1, 1),
-    pathlabels: setPermission(1, 1, 1, 1),
-    mlpolicies: setPermission(1, 1, 1, 1)
+    pathlabels: setPermission(1, 1, 1, managerDelPermission()),
+    mlpolicies: setPermission(1, 1, 1, managerDelPermission())
   },
   group_viewer: {
     jobs: setPermission(1, 0, 0, 0),
@@ -158,15 +161,15 @@ const preDefinedPermissions = {
     billing: setPermission(0, 0, 0, 0),
     accounts: setPermission(0, 0, 0, 0),
     organizations: setPermission(1, 0, 1, 0),
-    devices: setPermission(1, 1, 1, 1),
-    tokens: setPermission(1, 1, 1, 1),
-    appidentifications: setPermission(1, 1, 1, 1),
-    members: setPermission(1, 1, 1, 1),
-    tunnels: setPermission(1, 1, 1, 1),
+    devices: setPermission(1, 1, 1, managerDelPermission()),
+    tokens: setPermission(1, 1, 1, managerDelPermission()),
+    appidentifications: setPermission(1, 1, 1, managerDelPermission()),
+    members: setPermission(1, 1, 1, managerDelPermission()),
+    tunnels: setPermission(1, 1, 1, managerDelPermission()),
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 1, 1, 1),
-    pathlabels: setPermission(1, 1, 1, 1),
-    mlpolicies: setPermission(1, 1, 1, 1)
+    pathlabels: setPermission(1, 1, 1, managerDelPermission()),
+    mlpolicies: setPermission(1, 1, 1, managerDelPermission())
   },
   organization_viewer: {
     jobs: setPermission(1, 0, 0, 0),

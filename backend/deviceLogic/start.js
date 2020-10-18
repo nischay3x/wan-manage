@@ -28,6 +28,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { getMajorVersion } = require('../versioning');
+const { buildInterfaces } = require('./interfaces');
 
 /**
  * Creates and queues the start-router job.
@@ -75,48 +76,32 @@ const apply = async (device, user, data) => {
     }
     startParams['default-route'] = defaultGateway || '';
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
-    const interfaces = [];
-    for (let idx = 0; idx < device[0].interfaces.length; idx++) {
-      const intf = device[0].interfaces[idx];
-      const ifParams = {};
-      if (intf.isAssigned === true) {
-        ifParams.pci = intf.pciaddr;
-        ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
-        ifParams.addr = intf.IPv4 ? `${intf.IPv4}/${intf.IPv4Mask}` : '';
-        ifParams.type = intf.type;
-        // Device should only be aware of DIA labels.
-        const labels = [];
-        intf.pathlabels.forEach(label => {
-          if (label.type === 'DIA') labels.push(label._id);
-        });
-        ifParams.multilink = { labels };
-        if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        ifParams.gateway = intf.gateway ? intf.gateway : '';
-        ifParams.metric = intf.metric;
-        interfaces.push(ifParams);
-      }
-    }
+    const deviceInterfaces = buildInterfaces(device[0].interfaces);
     // Send route for backward compatibility (agent version < 1.2.15)
     const routes = [];
-    if (defaultGateway) {
+    if (defaultGateway && majorAgentVersion < 2) {
       routes.push({
         addr: 'default',
         via: defaultGateway
       });
     }
 
-    startParams.interfaces = interfaces;
-    startParams.routes = routes;
+    startParams.interfaces = deviceInterfaces;
+    if (routes.length > 0) {
+      startParams.routes = routes;
+    }
   }
 
-  // Start router command might change IP address of the
-  // interface connected to the MGMT. Tell the agent to
-  // reconnect to the MGMT after processing this command.
-  startParams.reconnect = true;
+  if (majorAgentVersion < 2) {
+    // Start router command might change IP address of the
+    // interface connected to the MGMT. Tell the agent to
+    // reconnect to the MGMT after processing this command.
+    startParams.reconnect = true;
+  }
 
   const tasks = [];
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const { machineId } = device[0];
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });

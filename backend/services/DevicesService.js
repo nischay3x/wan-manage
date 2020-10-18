@@ -106,9 +106,9 @@ class DevicesService {
       'machineId',
       'site',
       'hostname',
+      'serial',
       'name',
       '_id',
-      'pendingDevModification',
       'isApproved',
       'fromToken',
       'account',
@@ -116,65 +116,82 @@ class DevicesService {
       'policies',
       // Internal array, objects
       'labels',
-      'upgradeSchedule']);
+      'upgradeSchedule',
+      'sync']);
     retDevice.deviceStatus = (retDevice.deviceStatus === '1');
 
     // pick interfaces
-    const retInterfaces = item.interfaces.map(i => {
-      const retIf = pick(i, [
-        'IPv6',
-        'PublicIP',
-        'gateway',
-        'metric',
-        'dhcp',
-        'IPv4',
-        'type',
-        'MAC',
-        'routing',
-        'IPv6Mask',
-        'isAssigned',
-        'driver',
-        'IPv4Mask',
-        'name',
-        'pciaddr',
-        '_id',
-        'pathlabels'
-      ]);
-      retIf._id = retIf._id.toString();
-      return retIf;
-    });
-
-    const retStaticRoutes = item.staticroutes.map(r => {
-      const retRoute = pick(r, [
-        '_id',
-        'destination',
-        'gateway',
-        'interface'
-      ]);
-      retRoute._id = retRoute._id.toString();
-      return retRoute;
-    });
-
-    const retDhcpList = item.dhcp.map(d => {
-      const retDhcp = pick(d, [
-        '_id',
-        'interface',
-        'rangeStart',
-        'rangeEnd',
-        'dns',
-        'status'
-      ]);
-
-      const macAssignList = d.macAssign.map(m => {
-        return pick(m, [
-          'host', 'mac', 'ipv4'
+    let retInterfaces;
+    if (item.interfaces) {
+      retInterfaces = item.interfaces.map(i => {
+        const retIf = pick(i, [
+          'IPv6',
+          'PublicIP',
+          'PublicPort',
+          'NatType',
+          'useStun',
+          'gateway',
+          'metric',
+          'dhcp',
+          'IPv4',
+          'type',
+          'MAC',
+          'routing',
+          'IPv6Mask',
+          'isAssigned',
+          'driver',
+          'IPv4Mask',
+          'name',
+          'pciaddr',
+          '_id',
+          'pathlabels'
         ]);
+        retIf._id = retIf._id.toString();
+        return retIf;
       });
+    } else retInterfaces = [];
 
-      retDhcp.macAssign = macAssignList;
-      retDhcp._id = retDhcp._id.toString();
-      return retDhcp;
-    });
+    let retStaticRoutes;
+    if (item.staticroutes) {
+      retStaticRoutes = item.staticroutes.map(r => {
+        const retRoute = pick(r, [
+          '_id',
+          'destination',
+          'gateway',
+          'ifname',
+          'metric'
+        ]);
+        retRoute._id = retRoute._id.toString();
+        return retRoute;
+      });
+    } else retStaticRoutes = [];
+
+    let retDhcpList;
+    if (item.dhcp) {
+      retDhcpList = item.dhcp.map(d => {
+        const retDhcp = pick(d, [
+          '_id',
+          'interface',
+          'rangeStart',
+          'rangeEnd',
+          'dns',
+          'status'
+        ]);
+
+        let macAssignList;
+        if (d.macAssign) {
+          macAssignList = d.macAssign.map(m => {
+            return pick(m, [
+              'host', 'mac', 'ipv4'
+            ]);
+          });
+        } else macAssignList = [];
+
+        retDhcp.macAssign = macAssignList;
+        retDhcp._id = retDhcp._id.toString();
+        return retDhcp;
+      });
+    } else retDhcpList = [];
 
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
@@ -192,7 +209,6 @@ class DevicesService {
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
       ? deviceStatus.getDeviceStatus(retDevice.machineId) || {} : {};
-
     return retDevice;
   }
 
@@ -368,9 +384,13 @@ class DevicesService {
         return Service.rejectResponse('Failed to get device configuration');
       }
 
+      // Skip items with empty params
+      const configuration = !Array.isArray(deviceConf.message) ? []
+        : deviceConf.message.filter(item => item.params);
+
       return Service.successResponse({
         status: 'connected',
-        configuration: deviceConf.message
+        configuration
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -586,7 +606,7 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user }) {
+  static async devicesIdPUT ({ id, org, deviceRequest }, { user }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -647,35 +667,56 @@ class DevicesService {
       delete deviceRequest.emailTokens;
       delete deviceRequest.defaultAccount;
       delete deviceRequest.defaultOrg;
+      delete deviceRequest.sync;
 
-      // Currently we allow only one change at a time to the device,
-      // to prevent inconsistencies between the device and the MGMT database.
-      // Therefore, we block the request if there's a pending change in the queue.
-      if (origDevice.pendingDevModification) {
-        throw new Error('Only one device change is allowed at any time');
-      }
-
+      const interfaces = deviceRequest.interfaces && deviceRequest.interfaces.map(intf => {
+        const origIntf = origDevice.interfaces &&
+          origDevice.interfaces.find(oif => oif._id === intf._id);
+        if (origIntf) {
+          if (!intf.isAssigned || intf.dhcp === 'yes') {
+            return {
+              ...intf,
+              IPv4: origIntf.IPv4,
+              IPv4Mask: origIntf.IPv4Mask,
+              gateway: origIntf.gateway,
+              PublicPort: origIntf.PublicPort,
+              NatType: origIntf.NatType
+            };
+          } else {
+            return {
+              ...intf,
+              PublicPort: origIntf.PublicPort,
+              NatType: origIntf.NatType
+            };
+          }
+        }
+        return intf;
+      });
       const updDevice = await devices.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
-        deviceRequest,
+        { ...deviceRequest, interfaces },
         { new: true, upsert: false, runValidators: true }
       )
         .session(session)
         .populate('interfaces.pathlabels', '_id name description color type');
-
       await session.commitTransaction();
       session = null;
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
+      let modifyDevResult = [];
       if (origDevice) {
-        await dispatcher.apply([origDevice], 'modify', user, {
+        modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
           org: orgList[0],
           newDevice: updDevice
         });
       }
 
-      return DevicesService.selectDeviceParams(updDevice);
+      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
+      const ids = [modifyDevResult.ids[0]];
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      const deviceObj = DevicesService.selectDeviceParams(updDevice);
+      return Service.successResponse(deviceObj, status);
     } catch (e) {
       if (session) session.abortTransaction();
 
@@ -816,6 +857,7 @@ class DevicesService {
 
       if (deleteRoute.length !== 1) throw new Error('Static route not found');
       const copy = Object.assign({}, deleteRoute[0].toObject());
+      copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy._id = route;
       copy.action = 'del';
@@ -871,7 +913,7 @@ class DevicesService {
       );
 
       const copy = Object.assign({}, staticRouteRequest);
-
+      copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy._id = route.id;
       await dispatcher.apply(device, copy.method, user, copy);
@@ -917,7 +959,7 @@ class DevicesService {
 
       const device = deviceObject[0];
       const copy = Object.assign({}, staticRouteRequest);
-
+      copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
       await dispatcher.apply(device, copy.method, user, copy);
@@ -1222,6 +1264,7 @@ class DevicesService {
       // If previous status was del-wait, no need to resend the job
       if (deleteDhcpObj.status !== 'del-wait') {
         const copy = Object.assign({}, deleteDhcpObj);
+        copy.org = orgList[0];
         copy.method = 'dhcp';
         copy._id = dhcpId;
         copy.action = 'del';
@@ -1318,8 +1361,7 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
       // Currently we allow only one change at a time to the device
-      if (deviceObject.pendingDevModification ||
-              deviceObject.dhcp.some(d => d.status.includes('wait'))) {
+      if (deviceObject.dhcp.some(d => d.status.includes('wait'))) {
         throw new Error('Only one device change is allowed at any time');
       }
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
@@ -1395,8 +1437,7 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
       // Currently we allow only one change at a time to the device
-      if (deviceObject.pendingDevModification ||
-        deviceObject.dhcp.some(d => d.status.includes('wait'))) {
+      if (deviceObject.dhcp.some(d => d.status.includes('wait'))) {
         throw new Error('Only one device change is allowed at any time');
       }
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
@@ -1411,6 +1452,7 @@ class DevicesService {
       }
 
       const copy = Object.assign({}, dhcpObject);
+      copy.org = orgList[0];
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
@@ -1571,6 +1613,7 @@ class DevicesService {
       copy.method = 'dhcp';
       copy._id = dhcp.id;
       copy.action = 'add';
+      copy.org = orgList[0];
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
       response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
@@ -1583,6 +1626,35 @@ class DevicesService {
       if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get Device Status Information
+   *
+   * id String Numeric ID of the Device to retrieve configuration
+   * org String Organization to be filtered by (optional)
+   * returns DeviceStatus
+   **/
+  static async devicesIdStatusGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const { sync, machineId, isApproved } = await devices.findOne(
+        { _id: id, org: { $in: orgList } },
+        'sync machineId isApproved'
+      ).lean();
+
+      const isConnected = connections.isConnected(machineId);
+      return Service.successResponse({
+        sync,
+        isApproved,
+        connection: `${isConnected ? '' : 'dis'}connected`
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
         e.status || 500
       );
     }

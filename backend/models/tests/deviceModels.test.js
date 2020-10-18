@@ -61,6 +61,9 @@ beforeEach(() => {
     IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7348',
     IPv6Mask: '64',
     PublicIP: '72.168.10.30',
+    PublicPort: '',
+    NatType: '',
+    useStun: true,
     isAssigned: false,
     routing: 'None',
     type: 'None'

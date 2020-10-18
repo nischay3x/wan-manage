@@ -115,6 +115,7 @@ const validateIpList = (list) => {
 const isPort = (val) => {
   return !isEmpty(val) && !(val === '') && validateIsNumber(val) && val >= 0 && val <= 65535;
 };
+const validatePort = port => port === '' || isPort(port);
 const validatePortRange = (range) => {
   if (range === '') return true;
   if (!(range || '').includes('-')) return isPort(range);
@@ -123,7 +124,11 @@ const validatePortRange = (range) => {
   return isPort(portLow) && isPort(portHigh);
 };
 const validateMachineID = (id) => { return /^[a-f0-9-]{1,50}$/i.test(id || ''); };
-const validateSerial = (id) => { return /^[a-f0-9-]{1,50}$/i.test(id || ''); };
+const validateSerial = (id) => {
+  return (id !== null) &&
+  (id !== undefined) &&
+  /^[a-z0-9-_ .#%/():[\]]{0,250}$/i.test(id || '');
+};
 const validateTokenName = (name) => { return /^[a-z0-9-_ .!#%():@[\]]{3,15}$/i.test(name || ''); };
 
 const validateURL = (url) => { return !isEmpty(url) && isValidURL(url); };
@@ -154,6 +159,7 @@ module.exports = {
   validateIfcName,
   validateIPv4Mask,
   validateIPv6Mask,
+  validatePort,
   validatePortRange,
   validateDriverName,
   validateMacAddress,
