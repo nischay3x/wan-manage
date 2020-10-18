@@ -138,7 +138,10 @@ const configEnv = {
     // Global app identification rules file location
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
     // Default port for tunnels
-    tunnelPort: '4789'
+    tunnelPort: '4789',
+    // If to allow manager role to delete organizations, devices, tokens, tunnels, appIdentifications,
+    //  users, path labels, policies. Default = true
+    allowManagerToDel: true
   },
   // Override for development environment, default environment if not specified
   development: {
