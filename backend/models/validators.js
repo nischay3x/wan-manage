@@ -70,7 +70,12 @@ const validateIPaddr = (ip) => { return validateIPv4(ip) || validateIPv6(ip); };
 const validatePciAddress = pci => {
   return (
     pci === '' ||
-    /^([A-F0-9]{2,4}:)?([A-F0-9]{2}|[A-F0-9]{4}):[A-F0-9]{2}\.[A-F0-9]{2}$/i.test(pci) ||
+    /^([A-F0-9]{2,4}:)?([A-F0-9]{2}|[A-F0-9]{4}):[A-F0-9]{2}\.[A-F0-9]{2}$/i.test(pci)
+  );
+};
+const validateUsbAddress = pci => {
+  return (
+    pci === '' ||
     /^usb[0-9]\/([0-9]-[0-9])\/?([0-9]-[0-9]):[0-9].[0-9]$/i.test(pci)
   );
 };
@@ -155,6 +160,7 @@ module.exports = {
   validateIPv6,
   validateIPaddr,
   validatePciAddress,
+  validateUsbAddress,
   validateIfcName,
   validateIPv4Mask,
   validateIPv6Mask,
