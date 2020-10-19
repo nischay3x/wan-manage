@@ -2357,6 +2357,20 @@ paths:
         required: false
         schema:
           type: string
+      - description: Start time to get statistics for
+        explode: true
+        in: query
+        name: startTime
+        required: false
+        schema:
+          type: integer
+      - description: End time to get statistics for
+        explode: true
+        in: query
+        name: endTime
+        required: false
+        schema:
+          type: integer
       responses:
         "200":
           content:
@@ -2432,6 +2446,20 @@ paths:
         required: false
         schema:
           type: string
+      - description: Start time to get statistics for
+        explode: true
+        in: query
+        name: startTime
+        required: false
+        schema:
+          type: integer
+      - description: End time to get statistics for
+        explode: true
+        in: query
+        name: endTime
+        required: false
+        schema:
+          type: integer
       responses:
         "200":
           content:
@@ -2508,6 +2536,20 @@ paths:
         schema:
           type: string
           pattern: "^[0-9]*$"
+      - description: Start time to get statistics for
+        explode: true
+        in: query
+        name: startTime
+        required: false
+        schema:
+          type: integer
+      - description: End time to get statistics for
+        explode: true
+        in: query
+        name: endTime
+        required: false
+        schema:
+          type: integer
       responses:
         "200":
           content:
@@ -2576,6 +2618,20 @@ paths:
         required: false
         schema:
           type: string
+      - description: Start time to get statistics for
+        explode: true
+        in: query
+        name: startTime
+        required: false
+        schema:
+          type: integer
+      - description: End time to get statistics for
+        explode: true
+        in: query
+        name: endTime
+        required: false
+        schema:
+          type: integer
       responses:
         "200":
           content:

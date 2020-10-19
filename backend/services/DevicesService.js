@@ -1123,10 +1123,10 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesStatisticsGET ({ org }, { user }) {
+  static async devicesStatisticsGET ({ org, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
+      // const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
+      // const endTime = null;
 
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
@@ -1151,10 +1151,10 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesIdStatisticsGET ({ id, org, ifnum }, { user }) {
+  static async devicesIdStatisticsGET ({ id, org, ifnum, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
+      // const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
+      // const endTime = null;
 
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
@@ -1179,10 +1179,10 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceTunnelStatistics
    **/
-  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum }, { user }) {
+  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
+      // const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
+      // const endTime = null;
 
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceTunnelStats({
@@ -1207,10 +1207,10 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceHealth
    **/
-  static async devicesIdHealthGET ({ id, org }, { user }) {
+  static async devicesIdHealthGET ({ id, org, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
+      // const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
+      // const endTime = null;
 
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceHealth({

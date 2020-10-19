@@ -64,7 +64,7 @@ const deviceAggregateStatsSchema = new Schema({
 });
 
 // Remove documents created more than a hour ago
-deviceStatsSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7200 });
+deviceStatsSchema.index({ createdAt: 1 }, { expireAfterSeconds: 1209600 });
 
 const deviceStats = mongoConns.getAnalyticsDB().model('deviceStats', deviceStatsSchema);
 const deviceAggregateStats = mongoConns
