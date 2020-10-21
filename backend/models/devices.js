@@ -271,7 +271,7 @@ const DHCPSchema = new Schema({
     type: String,
     minlength: [1, 'Interface length must be at least 1'],
     maxlength: [50, 'Interface length must be at most 50'],
-    required: [true, 'Interface must be set'],
+    required: [true, 'Interface must be set']
     // validate: {
     //   validator: validators.validatePciAddress,
     //   message: 'Interface should be a vaild interface pci address'
