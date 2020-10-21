@@ -39,10 +39,10 @@ const interfacesSchema = new Schema({
   pciaddr: {
     type: String,
     maxlength: [50, 'PCI address length must be at most 50'],
-    validate: {
-      validator: validators.validatePciAddress,
-      message: 'pciaddr should be a vaild pci address'
-    },
+    // validate: {
+    //   validator: validators.validatePciAddress,
+    //   message: 'pciaddr should be a vaild pci address'
+    // },
     default: ''
   },
   // driver name
@@ -272,10 +272,10 @@ const DHCPSchema = new Schema({
     minlength: [1, 'Interface length must be at least 1'],
     maxlength: [50, 'Interface length must be at most 50'],
     required: [true, 'Interface must be set'],
-    validate: {
-      validator: validators.validatePciAddress,
-      message: 'Interface should be a vaild interface pci address'
-    }
+    // validate: {
+    //   validator: validators.validatePciAddress,
+    //   message: 'Interface should be a vaild interface pci address'
+    // }
   },
   rangeStart: {
     type: String,
