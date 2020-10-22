@@ -52,6 +52,12 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
+  if (!Array.isArray(interfaces)) {
+    return {
+      valid: false,
+      err: 'No interfaces are available'
+    };
+  }
   const assignedIfs = interfaces.filter(ifc => { return ifc.isAssigned; });
   const [wanIfcs, lanIfcs] = [
     assignedIfs.filter(ifc => { return ifc.type === 'WAN'; }),
