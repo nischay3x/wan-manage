@@ -55,7 +55,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
   if (!Array.isArray(interfaces)) {
     return {
       valid: false,
-      err: 'Interfaces must be of the array type'
+      err: 'No interfaces are available'
     };
   }
   const assignedIfs = interfaces.filter(ifc => { return ifc.isAssigned; });

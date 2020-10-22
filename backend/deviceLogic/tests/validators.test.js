@@ -252,7 +252,7 @@ describe('validateDevice', () => {
 
   it('Should be an invalid device if interfaces are not of the array type', () => {
     device.interfaces = null;
-    failureObject.err = 'Interfaces must be of the array type';
+    failureObject.err = 'No interfaces are available';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
