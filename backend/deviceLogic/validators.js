@@ -64,14 +64,11 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
 
-  // Validation for running devices
-  if (isRunning) {
-    if (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0)) {
-      return {
-        valid: false,
-        err: 'There should be at least one LAN and one WAN interfaces'
-      };
-    }
+  if (isRunning && (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0))) {
+    return {
+      valid: false,
+      err: 'There should be at least one LAN and one WAN interfaces'
+    };
   }
 
   for (const ifc of assignedIfs) {
