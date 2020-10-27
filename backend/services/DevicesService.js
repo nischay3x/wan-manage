@@ -644,7 +644,7 @@ class DevicesService {
       if (!valid) {
         logger.warn('Device update failed',
           {
-            params: { device: deviceRequest, err: err }
+            params: { device: deviceRequest, devStatus, err }
           });
         throw new Error(err);
       }
@@ -679,6 +679,8 @@ class DevicesService {
             updatedIntf.IPv4 = origIntf.IPv4;
             updatedIntf.IPv4Mask = origIntf.IPv4Mask;
             updatedIntf.gateway = origIntf.gateway;
+          };
+          if (!intf.isAssigned) {
             updatedIntf.metric = origIntf.metric;
           };
           return updatedIntf;
