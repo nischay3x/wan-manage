@@ -176,9 +176,8 @@ describe('validateDevice', () => {
   it('Should be an invalid device if assigned interfaces are on the same subnet', () => {
     device.interfaces[0].IPv4 = '10.0.0.1';
     device.interfaces[1].IPv4 = '10.0.0.2';
-    const isRunning = true;
     failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
-    const result = validateDevice(device, isRunning);
+    const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
 
@@ -272,9 +271,8 @@ describe('validateDevice', () => {
       type: 'WAN',
       pathlabels: []
     });
-    const isRunning = true;
     failureObject.err = 'Duplicated metrics are not allowed on VPP WAN interfaces';
-    const result = validateDevice(device, isRunning);
+    const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
 

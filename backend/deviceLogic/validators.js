@@ -72,31 +72,6 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
         err: 'There should be at least one LAN and one WAN interfaces'
       };
     }
-
-    // Assigned interfaces must not be on the same subnet
-    for (const ifc1 of assignedIfs) {
-      for (const ifc2 of assignedIfs.filter(i => i.pciaddr !== ifc1.pciaddr)) {
-        const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
-        const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
-        if (cidr.overlap(ifc1Subnet, ifc2Subnet)) {
-          return {
-            valid: false,
-            err: 'IP addresses of the assigned interfaces have an overlap'
-          };
-        }
-      }
-    }
-    // Checks if all interfaces metrics are different
-    const metricsArray = device.interfaces
-      .filter(i => i.type === 'WAN')
-      .map(i => Number(i.metric));
-    const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
-    if (hasDuplicates) {
-      return {
-        valid: false,
-        err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
-      };
-    }
   }
 
   for (const ifc of assignedIfs) {
@@ -158,6 +133,30 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
         };
       }
     }
+  }
+
+  // Assigned interfaces must not be on the same subnet
+  for (const ifc1 of assignedIfs.filter(i => i.dhcp !== 'yes')) {
+    for (const ifc2 of assignedIfs.filter(i => i.pciaddr !== ifc1.pciaddr)) {
+      const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
+      const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
+      if (cidr.overlap(ifc1Subnet, ifc2Subnet)) {
+        return {
+          valid: false,
+          err: 'IP addresses of the assigned interfaces have an overlap'
+        };
+      }
+    }
+  }
+
+  // Checks if all WAN assigned interfaces metrics are different
+  const metricsArray = wanIfcs.map(i => Number(i.metric));
+  const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
+  if (hasDuplicates) {
+    return {
+      valid: false,
+      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
+    };
   }
 
   if (isRunning && organizationLanSubnets.length > 0) {
