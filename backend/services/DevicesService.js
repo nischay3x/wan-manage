@@ -627,11 +627,11 @@ class DevicesService {
 
       // check LAN subnet overlap if updated device is running
       const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
-      const needCheckLanOverlaps = (devStatus && devStatus.state && devStatus.state === 'running');
+      const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
       let orgLanSubnets = [];
 
-      if (needCheckLanOverlaps) {
+      if (isRunning) {
         orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
       }
 
@@ -639,12 +639,12 @@ class DevicesService {
       const { valid, err } = validateDevice({
         ...deviceRequest,
         _id: origDevice._id
-      }, needCheckLanOverlaps, orgLanSubnets);
+      }, isRunning, orgLanSubnets);
 
       if (!valid) {
         logger.warn('Device update failed',
           {
-            params: { device: deviceRequest, err: err }
+            params: { device: deviceRequest, devStatus, err }
           });
         throw new Error(err);
       }
@@ -679,6 +679,8 @@ class DevicesService {
             updatedIntf.IPv4 = origIntf.IPv4;
             updatedIntf.IPv4Mask = origIntf.IPv4Mask;
             updatedIntf.gateway = origIntf.gateway;
+          };
+          if (!intf.isAssigned) {
             updatedIntf.metric = origIntf.metric;
           };
           return updatedIntf;

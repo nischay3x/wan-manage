@@ -44,18 +44,18 @@ const validateIPv4Mask = mask => {
  * Checks whether the device configuration is valid,
  * therefore the device can be started.
  * @param {Object}  device                 the device to check
- * @param {Boolean} checkLanOverlaps           if need to check LAN subnets overlap
+ * @param {Boolean} isRunning              is the device running
  * @param {[_id: objectId, name: string, subnet: string]} organizationLanSubnets to check overlaps
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets = []) => {
+const validateDevice = (device, isRunning = false, organizationLanSubnets = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
-  if (!Array.isArray(interfaces)) {
+  if (!Array.isArray(interfaces) || interfaces.length < 2) {
     return {
       valid: false,
-      err: 'No interfaces are available'
+      err: 'There should be at least two interfaces'
     };
   }
   const assignedIfs = interfaces.filter(ifc => { return ifc.isAssigned; });
@@ -64,7 +64,7 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
 
-  if (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0)) {
+  if (isRunning && (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0))) {
     return {
       valid: false,
       err: 'There should be at least one LAN and one WAN interfaces'
@@ -132,24 +132,32 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     }
   }
 
-  // LAN and WAN interfaces must not be on the same subnet
-  // WAN IP address and default GW IP addresses must be on the same subnet
-  for (const wanIfc of wanIfcs.filter(i => !(i.dhcp === 'yes' && i.IPv4 === ''))) {
-    for (const lanIfc of lanIfcs) {
-      const wanSubnet = `${wanIfc.IPv4}/${wanIfc.IPv4Mask}`;
-      const lanSubnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
-      // const defaultGwSubnet = `${device.defaultRoute}/32`;
-
-      if (cidr.overlap(wanSubnet, lanSubnet)) {
+  // Assigned interfaces must not be on the same subnet
+  const assignedNotEmptyIfs = assignedIfs.filter(i => net.isIPv4(i.IPv4) && i.IPv4Mask !== '');
+  for (const ifc1 of assignedNotEmptyIfs) {
+    for (const ifc2 of assignedNotEmptyIfs.filter(i => i.pciaddr !== ifc1.pciaddr)) {
+      const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
+      const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
+      if (cidr.overlap(ifc1Subnet, ifc2Subnet)) {
         return {
           valid: false,
-          err: 'WAN and LAN IP addresses have an overlap'
+          err: 'IP addresses of the assigned interfaces have an overlap'
         };
       }
     }
   }
 
-  if (checkLanOverlaps && organizationLanSubnets.length > 0) {
+  // Checks if all WAN assigned interfaces metrics are different
+  const metricsArray = wanIfcs.map(i => Number(i.metric));
+  const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
+  if (hasDuplicates) {
+    return {
+      valid: false,
+      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
+    };
+  }
+
+  if (isRunning && organizationLanSubnets.length > 0) {
     // LAN subnet must not be overlap with other devices in this org
     for (const orgDevice of organizationLanSubnets) {
       for (const currentLanIfc of lanIfcs) {
@@ -172,18 +180,6 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
         }
       }
     }
-  }
-
-  // Checks if all interfaces metrics are different
-  const metricsArray = device.interfaces
-    .filter(i => i.type === 'WAN')
-    .map(i => Number(i.metric));
-  const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
-  if (hasDuplicates) {
-    return {
-      valid: false,
-      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
-    };
   }
 
   /*
