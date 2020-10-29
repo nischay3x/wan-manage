@@ -35,7 +35,7 @@ const interfacesSchema = new Schema({
     },
     required: [true, 'Interface name must be set']
   },
-  // Hard ware address
+  // Device bus address
   devId: {
     type: String,
     maxlength: [50, 'devId length must be at most 50'],
