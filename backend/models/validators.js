@@ -169,7 +169,7 @@ module.exports = {
   validateIPv4WithMask,
   validateIPv6,
   validateIPaddr,
-  validatePciAddress,,
+  validatePciAddress,
   validateDevId,
   validateIfcName,
   validateIPv4Mask,
