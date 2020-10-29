@@ -67,7 +67,7 @@ const apply = async (device, user, data) => {
       const ifParams = {};
       if (intf.isAssigned === true) {
         ifnum++;
-        ifParams.pci = intf.pciaddr;
+        ifParams.devId = intf.devId;
         ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
         ifParams.addr = intf.IPv4 ? `${intf.IPv4}/${intf.IPv4Mask}` : '';
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';

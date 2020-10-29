@@ -72,7 +72,7 @@ const transformInterfaces = (interfaces) => {
   return interfaces.map(ifc =>
     ifc.type === 'LAN' ? {
       _id: ifc._id,
-      pci: ifc.pciaddr,
+      devId: ifc.devId,
       dhcp: 'no',
       addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
       addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
@@ -82,7 +82,7 @@ const transformInterfaces = (interfaces) => {
       pathlabels: ifc.pathlabels
     } : {
       _id: ifc._id,
-      pci: ifc.pciaddr,
+      devId: ifc.devId,
       dhcp: ifc.dhcp ? ifc.dhcp : 'no',
       addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
       addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
@@ -245,7 +245,7 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           params: {
             addr: item.addr,
             via: item.old_route,
-            pci: item.pci || undefined,
+            devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
         });
@@ -257,7 +257,7 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           params: {
             addr: item.addr,
             via: item.new_route,
-            pci: item.pci || undefined,
+            devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
         });
@@ -664,7 +664,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       addr: route.destination,
       old_route: route.gateway,
       new_route: '',
-      pci: route.ifname || undefined,
+      devId: route.ifname || undefined,
       metric: route.metric || undefined
     });
   });
@@ -673,7 +673,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       addr: route.destination,
       new_route: route.gateway,
       old_route: '',
-      pci: route.ifname || undefined,
+      devId: route.ifname || undefined,
       metric: route.metric || undefined
     });
   });
@@ -756,10 +756,10 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
  */
 const validateDhcpConfig = (device, modifiedInterfaces) => {
   const assignedDhcps = device.dhcp.map(d => d.interface);
-  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.pci));
+  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.devId));
   if (modifiedDhcp.length > 0) {
     // get first interface from device
-    const firstIf = device.interfaces.filter(i => i.pciaddr === modifiedDhcp[0].pci);
+    const firstIf = device.interfaces.filter(i => i.devId === modifiedDhcp[0].devId);
     const result = {
       valid: false,
       err: `DHCP defined on interface ${
@@ -828,7 +828,7 @@ const apply = async (device, user, data) => {
     device[0].interfaces.map(ifc => {
       return ({
         _id: ifc._id,
-        pci: ifc.pciaddr,
+        devId: ifc.devId,
         isAssigned: ifc.isAssigned
       });
     })
@@ -839,7 +839,7 @@ const apply = async (device, user, data) => {
     data.newDevice.interfaces.map(ifc => {
       return ({
         _id: ifc._id,
-        pci: ifc.pciaddr,
+        devId: ifc.devId,
         isAssigned: ifc.isAssigned
       });
     })
@@ -1032,13 +1032,13 @@ const sync = async (deviceId, org) => {
 
   // build routes
   deviceInterfaces.forEach(item => {
-    const { metric, pciaddr, gateway } = item;
+    const { metric, devId, gateway } = item;
     // If found an interface with gateway metric of "0"
     // we have to add it's gateway to the static routes
     // sync requests
     if (metric === '0') {
       defaultRouteIfcInfo = {
-        pciaddr,
+        devId,
         gateway
       };
     }
@@ -1053,7 +1053,7 @@ const sync = async (deviceId, org) => {
       params: {
         addr: destination,
         via: gateway,
-        pci: ifname || undefined,
+        devId: ifname || undefined,
         metric: metric ? parseInt(metric, 10) : undefined
       }
     });
@@ -1061,14 +1061,14 @@ const sync = async (deviceId, org) => {
 
   // Add default route if needed
   if (defaultRouteIfcInfo) {
-    const { pciaddr, gateway } = defaultRouteIfcInfo;
+    const { devId, gateway } = defaultRouteIfcInfo;
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-route',
       params: {
         addr: 'default',
         via: gateway,
-        pci: pciaddr,
+        devId: devId,
         metric: 0
       }
     });

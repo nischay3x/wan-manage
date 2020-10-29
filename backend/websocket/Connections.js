@@ -446,7 +446,7 @@ class Connections {
         }
         const interfaces = origDevice.interfaces.map(i => {
           const updatedConfig = deviceInfo.message.network.interfaces
-            .find(u => u.pciaddr === i.pciaddr);
+            .find(u => u.devId === i.devId);
           if (!updatedConfig) {
             logger.warn('Missing interface configuration in the get-device-info message', {
               params: {

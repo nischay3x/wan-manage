@@ -135,7 +135,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
   // Assigned interfaces must not be on the same subnet
   const assignedNotEmptyIfs = assignedIfs.filter(i => net.isIPv4(i.IPv4) && i.IPv4Mask !== '');
   for (const ifc1 of assignedNotEmptyIfs) {
-    for (const ifc2 of assignedNotEmptyIfs.filter(i => i.pciaddr !== ifc1.pciaddr)) {
+    for (const ifc2 of assignedNotEmptyIfs.filter(i => i.devId !== ifc1.devId)) {
       const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
       const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
       if (cidr.overlap(ifc1Subnet, ifc2Subnet)) {

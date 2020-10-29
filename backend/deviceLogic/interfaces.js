@@ -31,7 +31,7 @@ const buildInterfaces = (deviceInterfaces) => {
     if (!ifc.isAssigned || ifc.type.toLowerCase() === 'none') continue;
 
     const {
-      pciaddr,
+      devId,
       IPv4,
       IPv6,
       IPv4Mask,
@@ -56,7 +56,7 @@ const buildInterfaces = (deviceInterfaces) => {
     if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask)) continue;
 
     const ifcInfo = {
-      pci: pciaddr,
+      devId: devId,
       dhcp: dhcp || 'no',
       addr: `${(IPv4 && IPv4Mask ? `${IPv4}/${IPv4Mask}` : '')}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,

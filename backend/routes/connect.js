@@ -75,12 +75,7 @@ connectRouter.route('/register')
               });
 
               // Try to auto populate interfaces parameters
-              const ifs = JSON.parse(req.body.interfaces).map(i => {
-                return {
-                  ...i,
-                  pciaddr: i.hw_addr
-                };
-              });
+              const ifs = JSON.parse(req.body.interfaces);
 
               // Get an interface with gateway and the lowest metric
               const defaultIntf = ifs ? ifs.reduce((res, intf) =>

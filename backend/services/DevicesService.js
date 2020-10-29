@@ -142,7 +142,7 @@ class DevicesService {
           'driver',
           'IPv4Mask',
           'name',
-          'pciaddr',
+          'devId',
           '_id',
           'pathlabels'
         ]);
@@ -970,7 +970,7 @@ class DevicesService {
   /**
    * Get device statistics from the database
    * @param {string} id      - device ID in mongodb, if not specified, get all devices stats
-   * @param {string} ifNum   - device interface number (usually a pci address)
+   * @param {string} ifNum   - device interface bus address
    *                           if not specified, get all device stats
    * @param {string} org     - organization ID in mongodb
    * @param {Date} startTime - start time to get stats, if not specified get all previous time
@@ -1567,7 +1567,7 @@ class DevicesService {
       }
 
       const interfaceIsExists = deviceObject.interfaces.find(i => {
-        return i.pciaddr === dhcpRequest.interface;
+        return i.devId === dhcpRequest.interface;
       });
 
       if (!interfaceIsExists) {
