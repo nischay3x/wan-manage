@@ -71,7 +71,7 @@ const validateDevId = (devId) => {
   return (
     validatePciAddress(devId) ||
     validateUsbAddress(devId)
-  )
+  );
 };
 const validatePciAddress = pci => {
   return (
