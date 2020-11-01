@@ -29,8 +29,7 @@ async function up () {
             state: 'synced',
             hash: '',
             trials: 0,
-            autoSync: 'on',
-            failedJobRetried: false
+            autoSync: 'on'
           }
         }
       },

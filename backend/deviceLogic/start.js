@@ -67,7 +67,7 @@ const apply = async (device, user, data) => {
       const ifParams = {};
       if (intf.isAssigned === true) {
         ifnum++;
-        ifParams.pci = intf.pciaddr;
+        ifParams.devId = intf.devId;
         ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
         ifParams.addr = intf.IPv4 ? `${intf.IPv4}/${intf.IPv4Mask}` : '';
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
@@ -79,7 +79,7 @@ const apply = async (device, user, data) => {
     const deviceInterfaces = buildInterfaces(device[0].interfaces);
     // Send route for backward compatibility (agent version < 1.2.15)
     const routes = [];
-    if (defaultGateway) {
+    if (defaultGateway && majorAgentVersion < 2) {
       routes.push({
         addr: 'default',
         via: defaultGateway
@@ -87,7 +87,9 @@ const apply = async (device, user, data) => {
     }
 
     startParams.interfaces = deviceInterfaces;
-    startParams.routes = routes;
+    if (routes.length > 0) {
+      startParams.routes = routes;
+    }
   }
 
   if (majorAgentVersion < 2) {

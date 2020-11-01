@@ -72,7 +72,7 @@ const transformInterfaces = (interfaces) => {
   return interfaces.map(ifc =>
     ifc.type === 'LAN' ? {
       _id: ifc._id,
-      pci: ifc.pciaddr,
+      devId: ifc.devId,
       dhcp: 'no',
       addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
       addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
@@ -82,7 +82,7 @@ const transformInterfaces = (interfaces) => {
       pathlabels: ifc.pathlabels
     } : {
       _id: ifc._id,
-      pci: ifc.pciaddr,
+      devId: ifc.devId,
       dhcp: ifc.dhcp ? ifc.dhcp : 'no',
       addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
       addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
@@ -236,33 +236,38 @@ const prepareModificationMessageV2 = (messageParams, device) => {
   }
 
   if (has(messageParams, 'modify_routes')) {
-    requests.push(...messageParams.modify_routes.routes.map(item => {
-      if (item.new_route !== '' && item.old_route === '') {
-        return {
-          entity: 'agent',
-          message: 'add-route',
-          params: {
-            addr: item.addr,
-            via: item.new_route,
-            pci: item.pci || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
-          }
-        };
-      }
-
-      if (item.new_route === '' && item.old_route !== '') {
-        return {
+    const routeRequests = messageParams.modify_routes.routes.flatMap(item => {
+      const items = [];
+      if (item.old_route !== '') {
+        items.push({
           entity: 'agent',
           message: 'remove-route',
           params: {
             addr: item.addr,
             via: item.old_route,
-            pci: item.pci || undefined,
+            devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined
           }
-        };
+        });
       }
-    }));
+      if (item.new_route !== '') {
+        items.push({
+          entity: 'agent',
+          message: 'add-route',
+          params: {
+            addr: item.addr,
+            via: item.new_route,
+            devId: item.devId || undefined,
+            metric: item.metric ? parseInt(item.metric, 10) : undefined
+          }
+        });
+      }
+      return items;
+    });
+
+    if (routeRequests) {
+      requests.push(...routeRequests);
+    }
   }
 
   if (has(messageParams, 'modify_router.assign')) {
@@ -351,7 +356,7 @@ const queueJob = async (org, username, tasks, device, removedTunnelsList = []) =
       }
     },
     // Metadata
-    { priority: 'medium', attempts: 1, removeOnComplete: false },
+    { priority: 'normal', attempts: 1, removeOnComplete: false },
     // Complete callback
     null
   );
@@ -487,16 +492,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
 
   // Prepare and queue device modification job
-  const agentVersion = getMajorVersion(device.versions.agent);
-  let tasks;
-
-  switch (agentVersion) {
-    case 1:
-      tasks = prepareModificationMessageV1(messageParams, device);
-      break;
-    case 2:
-      tasks = prepareModificationMessageV2(messageParams, device);
-  }
+  const majorAgentVersion = getMajorVersion(device.versions.agent);
+  const tasks = majorAgentVersion < 2
+    ? prepareModificationMessageV1(messageParams, device)
+    : prepareModificationMessageV2(messageParams, device);
 
   if (tasks.length === 0 || tasks[0].length === 0) {
     return [];
@@ -665,7 +664,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       addr: route.destination,
       old_route: route.gateway,
       new_route: '',
-      pci: route.ifname || undefined,
+      devId: route.ifname || undefined,
       metric: route.metric || undefined
     });
   });
@@ -674,7 +673,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       addr: route.destination,
       new_route: route.gateway,
       old_route: '',
-      pci: route.ifname || undefined,
+      devId: route.ifname || undefined,
       metric: route.metric || undefined
     });
   });
@@ -757,10 +756,10 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
  */
 const validateDhcpConfig = (device, modifiedInterfaces) => {
   const assignedDhcps = device.dhcp.map(d => d.interface);
-  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.pci));
+  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.devId));
   if (modifiedDhcp.length > 0) {
     // get first interface from device
-    const firstIf = device.interfaces.filter(i => i.pciaddr === modifiedDhcp[0].pci);
+    const firstIf = device.interfaces.filter(i => i.devId === modifiedDhcp[0].devId);
     const result = {
       valid: false,
       err: `DHCP defined on interface ${
@@ -798,19 +797,26 @@ const apply = async (device, user, data) => {
     modifyParams.modify_dhcp_config = modifyDHCP;
   }
 
-  // Create the default route modification parameters
-  // for old agent version compatibility
-  const oldDefaultGW = getDefaultGateway(device[0]);
-  const newDefaultGW = getDefaultGateway(data.newDevice);
-
-  if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
-    modifyParams.modify_routes = {
-      routes: [{
+  const majorAgentVersion = getMajorVersion(device[0].versions.agent);
+  if (majorAgentVersion < 2) {
+    // Create the default route modification parameters
+    // for old agent version compatibility
+    const oldDefaultGW = getDefaultGateway(device[0]);
+    const newDefaultGW = getDefaultGateway(data.newDevice);
+    if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
+      const defaultRoute = {
         addr: 'default',
         old_route: oldDefaultGW,
         new_route: newDefaultGW
-      }]
-    };
+      };
+      if (modifyParams.modify_routes) {
+        modifyParams.modify_routes.routes.push(defaultRoute);
+      } else {
+        modifyParams.modify_routes = {
+          routes: [defaultRoute]
+        };
+      }
+    }
   }
 
   // Create interfaces modification parameters
@@ -822,7 +828,7 @@ const apply = async (device, user, data) => {
     device[0].interfaces.map(ifc => {
       return ({
         _id: ifc._id,
-        pci: ifc.pciaddr,
+        devId: ifc.devId,
         isAssigned: ifc.isAssigned
       });
     })
@@ -833,7 +839,7 @@ const apply = async (device, user, data) => {
     data.newDevice.interfaces.map(ifc => {
       return ({
         _id: ifc._id,
-        pci: ifc.pciaddr,
+        devId: ifc.devId,
         isAssigned: ifc.isAssigned
       });
     })
@@ -1026,13 +1032,13 @@ const sync = async (deviceId, org) => {
 
   // build routes
   deviceInterfaces.forEach(item => {
-    const { metric, pciaddr, gateway } = item;
+    const { metric, devId, gateway } = item;
     // If found an interface with gateway metric of "0"
     // we have to add it's gateway to the static routes
     // sync requests
     if (metric === '0') {
       defaultRouteIfcInfo = {
-        pciaddr,
+        devId,
         gateway
       };
     }
@@ -1047,7 +1053,7 @@ const sync = async (deviceId, org) => {
       params: {
         addr: destination,
         via: gateway,
-        pci: ifname || undefined,
+        devId: ifname || undefined,
         metric: metric ? parseInt(metric, 10) : undefined
       }
     });
@@ -1055,14 +1061,14 @@ const sync = async (deviceId, org) => {
 
   // Add default route if needed
   if (defaultRouteIfcInfo) {
-    const { pciaddr, gateway } = defaultRouteIfcInfo;
+    const { devId, gateway } = defaultRouteIfcInfo;
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-route',
       params: {
         addr: 'default',
         via: gateway,
-        pci: pciaddr,
+        devId: devId,
         metric: 0
       }
     });

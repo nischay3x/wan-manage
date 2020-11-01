@@ -50,7 +50,7 @@ const apply = async (device, user, data) => {
     const params = { addr: data.destination, via: data.gateway };
 
     if (data.ifname) {
-      params.pci = data.ifname;
+      params.devId = data.ifname;
     }
 
     if (data.metric) {
@@ -71,7 +71,7 @@ const apply = async (device, user, data) => {
         // Response data
         { method: 'staticroutes', data: { deviceId: device.id, routeId: routeId, message } },
         // Metadata
-        { priority: 'low', attempts: 1, removeOnComplete: false },
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null);
       logger.info('Add static route job queued', { params: { job } });

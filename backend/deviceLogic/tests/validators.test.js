@@ -33,7 +33,7 @@ describe('validateDevice', () => {
     device = {
       interfaces: [{
         name: 'eth0',
-        pciaddr: '00:02.00',
+        devId: '00:02.00',
         driver: 'igb-1000',
         MAC: 'ab:45:90:ed:89:16',
         dhcp: 'no',
@@ -54,7 +54,7 @@ describe('validateDevice', () => {
       },
       {
         name: 'eth1',
-        pciaddr: '00:02.01',
+        devId: '00:02.01',
         driver: 'igb-1000',
         MAC: 'ab:45:90:ed:89:17',
         dhcp: 'no',
@@ -85,7 +85,7 @@ describe('validateDevice', () => {
   it('Should ignore unassigned interfaces', () => {
     device.interfaces.push({
       name: 'eth0',
-      pciaddr: '00:02.01',
+      devId: '00:02.01',
       driver: 'igb-1000',
       MAC: 'ab:45:90:ed:89:17',
       dhcp: 'invalid-dhcp',
@@ -104,14 +104,14 @@ describe('validateDevice', () => {
   it('Should be an invalid device if it has zero assigned LAN interfaces', () => {
     device.interfaces[0].type = 'Not-LAN';
     failureObject.err = 'There should be at least one LAN and one WAN interfaces';
-    const result = validateDevice(device);
+    const result = validateDevice(device, true);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid device if it has zero assigned WAN interfaces', () => {
     device.interfaces[1].type = 'Not-WAN';
     failureObject.err = 'There should be at least one LAN and one WAN interfaces';
-    const result = validateDevice(device);
+    const result = validateDevice(device, true);
     expect(result).toMatchObject(failureObject);
   });
 
@@ -173,10 +173,10 @@ describe('validateDevice', () => {
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN and WAN IP addresses are on the same subnet', () => {
+  it('Should be an invalid device if assigned interfaces are on the same subnet', () => {
     device.interfaces[0].IPv4 = '10.0.0.1';
     device.interfaces[1].IPv4 = '10.0.0.2';
-    failureObject.err = 'WAN and LAN IP addresses have an overlap';
+    failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
@@ -246,6 +246,39 @@ describe('validateDevice', () => {
   it('Should be an invalid device if LAN interface has path labels', () => {
     device.interfaces[0].pathlabels = [ObjectId('5e65290fbe66a2335718e081')];
     failureObject.err = 'Path Labels are not allowed on LAN interfaces';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if metric on WAN VPP interfaces is duplicated', () => {
+    device.interfaces[0].pathlabels = [];
+    device.interfaces.push({
+      name: 'eth2',
+      devId: '00:03.01',
+      driver: 'igb-1000',
+      MAC: 'ab:45:90:ed:89:18',
+      dhcp: 'no',
+      IPv4: '172.23.102.1',
+      IPv4Mask: '24',
+      PublicIP: '172.23.102.1',
+      PublicPort: '4789',
+      NatType: '',
+      useStun: true,
+      gateway: '172.23.102.10',
+      metric: '',
+      isAssigned: true,
+      routing: 'None',
+      type: 'WAN',
+      pathlabels: []
+    });
+    failureObject.err = 'Duplicated metrics are not allowed on VPP WAN interfaces';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if interfaces are not of the array type', () => {
+    device.interfaces = null;
+    failureObject.err = 'There should be at least two interfaces';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });

@@ -129,8 +129,7 @@ const updateSyncState = (org, deviceId, state) => {
       ? {
         'sync.state': state,
         'sync.autoSync': 'on',
-        'sync.trials': 0,
-        'sync.failedJobRetried': false
+        'sync.trials': 0
       }
       : { 'sync.state': state };
   return devices.updateOne(
@@ -150,14 +149,6 @@ const calculateNewSyncState = (mgmtHash, deviceHash, autoSync) => {
   return autoSync === 'on' ? 'syncing' : 'not-synced';
 };
 
-const setFailedJobFlagInDB = (deviceId) => {
-  return devices.updateOne(
-    { _id: deviceId },
-    { 'sync.failedJobRetried': true },
-    { upsert: false }
-  );
-};
-
 const setAutoSyncOff = (deviceId) => {
   return devices.updateOne(
     { _id: deviceId },
@@ -168,7 +159,7 @@ const setAutoSyncOff = (deviceId) => {
 
 const incAutoSyncTrials = (deviceId) => {
   return devices.updateOne(
-    { _id: deviceId },
+    { _id: deviceId, 'sync.trials': { $lt: 3 } },
     { $inc: { 'sync.trials': 1 } },
     { upsert: false }
   );
@@ -205,6 +196,19 @@ const queueFullSyncJob = async (device, hash, org) => {
     if (callComplete) completeHandlers[module] = completeCbData;
   }
 
+  // Increment auto sync trials
+  var res = await incAutoSyncTrials(deviceId);
+  // when no trials were incremented, this means that the maximum
+  // limit of retries has been reached.
+  if (res.nModified === 0) {
+    // Set auto sync off if auto sync limit is exceeded
+    logger.info('Auto sync limit is exceeded, setting autosync off', {
+      params: { deviceId }
+    });
+    await setAutoSyncOff(deviceId);
+    return;
+  }
+
   const job = await deviceQueues.addJob(
     machineId,
     'system',
@@ -219,13 +223,10 @@ const queueFullSyncJob = async (device, hash, org) => {
       }
     },
     // Metadata
-    { priority: 'medium', attempts: 1, removeOnComplete: false },
+    { priority: 'low', attempts: 1, removeOnComplete: false },
     // Complete callback
     null
   );
-
-  // Increment auto sync trials
-  await incAutoSyncTrials(deviceId);
 
   logger.info('Sync device job queued', {
     params: { deviceId, jobId: job.id }
@@ -341,10 +342,10 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
 
     // Calculate the new sync state based on the hash
     // value received from the agent and the current state
-    const { state, hash, autoSync, failedJobRetried, trials } = sync;
+    const { state, hash, autoSync, trials } = sync;
     const newState = calculateNewSyncState(hash, deviceHash, autoSync);
     logger.debug('updateSyncStatus calculateNewSyncState', {
-      params: { state, newState, hash, deviceHash, autoSync, failedJobRetried, trials }
+      params: { state, newState, hash, deviceHash, autoSync, trials }
     });
 
     // Update the device sync state if it has changed
@@ -377,37 +378,8 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       return;
     }
 
-    // Attempt to sync the device. First, retry the last
-    // failed job in the queue, if there's one. If not,
-    // queue a full sync job
-    if (!failedJobRetried) {
-      const { _state, id, data } = await deviceQueues.getLastJob(machineId);
-
-      // if last job exists
-      if (data) {
-        const { message } = Array.isArray(data.message.tasks[0])
-          ? data.message.tasks[0][0] : data.message.tasks[0];
-
-        // Don't retry full sync jobs
-        if (message !== 'sync-device' && _state === 'failed') {
-          logger.error('Failed job retry before full sync attempt', {
-            params: { deviceId, jobId: id, message }
-          });
-          await deviceQueues.retryJob(id);
-        }
-        // Try the last failed job only once
-        await setFailedJobFlagInDB(deviceId);
-        return;
-      }
-    }
-
-    // Set auto sync off if auto sync limit is exceeded
-    if (trials >= 3) {
-      await setAutoSyncOff(deviceId);
-      return;
-    }
     logger.info('Queuing full-sync job', {
-      params: { deviceId, state, newState, hash }
+      params: { deviceId, state, newState, hash, trials }
     });
     await queueFullSyncJob({ deviceId, machineId, hostname }, hash, org);
   } catch (err) {
@@ -444,8 +416,7 @@ const apply = async (device, user, data) => {
     {
       'sync.state': 'syncing',
       'sync.autoSync': 'on',
-      'sync.trials': 0,
-      'sync.failedJobRetried': false
+      'sync.trials': 0
     },
     { sync: 1 }
   )

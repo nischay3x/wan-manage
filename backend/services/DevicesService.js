@@ -142,7 +142,7 @@ class DevicesService {
           'driver',
           'IPv4Mask',
           'name',
-          'pciaddr',
+          'devId',
           '_id',
           'pathlabels',
           'connectivity_type'
@@ -834,32 +834,28 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
 
-      // Validate device changes only for approved devices,
-      // and only if the request contains interfaces.
-      if (origDevice.isApproved && deviceRequest.interfaces) {
-        // check LAN subnet overlap if updated device is running
-        const status = deviceStatus.getDeviceStatus(origDevice.machineId);
-        const needCheckLanOverlaps = (status && status.state && status.state === 'running');
+      // check LAN subnet overlap if updated device is running
+      const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
+      const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
-        let orgLanSubnets = [];
+      let orgLanSubnets = [];
 
-        if (needCheckLanOverlaps) {
-          orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
-        }
+      if (isRunning) {
+        orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
+      }
 
-        // add device id to device request
-        const { valid, err } = validateDevice({
-          ...deviceRequest,
-          _id: origDevice._id
-        }, needCheckLanOverlaps, orgLanSubnets);
+      // add device id to device request
+      const { valid, err } = validateDevice({
+        ...deviceRequest,
+        _id: origDevice._id
+      }, isRunning, orgLanSubnets);
 
-        if (!valid) {
-          logger.warn('Device update failed',
-            {
-              params: { device: deviceRequest, err: err }
-            });
-          throw new Error(err);
-        }
+      if (!valid) {
+        logger.warn('Device update failed',
+          {
+            params: { device: deviceRequest, devStatus, err }
+          });
+        throw new Error(err);
       }
 
       // If device changed to not approved disconnect it's socket
@@ -878,26 +874,25 @@ class DevicesService {
       delete deviceRequest.defaultOrg;
       delete deviceRequest.sync;
 
-      const interfaces = deviceRequest.interfaces && deviceRequest.interfaces.map(intf => {
-        const origIntf = origDevice.interfaces &&
-          origDevice.interfaces.find(oif => oif._id === intf._id);
+      const interfaces = deviceRequest.interfaces.map(intf => {
+        const origIntf = origDevice.interfaces.find(oif => oif._id.toString() === intf._id);
         if (origIntf) {
+          // Public port and NAT type is assigned by system only
+          const updatedIntf = {
+            ...intf,
+            PublicPort: intf.useStun ? origIntf.PublicPort : configs.get('tunnelPort'),
+            NatType: intf.useStun ? origIntf.NatType : 'Static'
+          };
+          // For unasigned and non static interfaces we use linux network parameters
           if (!intf.isAssigned || intf.dhcp === 'yes') {
-            return {
-              ...intf,
-              IPv4: origIntf.IPv4,
-              IPv4Mask: origIntf.IPv4Mask,
-              gateway: origIntf.gateway,
-              PublicPort: origIntf.PublicPort,
-              NatType: origIntf.NatType
-            };
-          } else {
-            return {
-              ...intf,
-              PublicPort: origIntf.PublicPort,
-              NatType: origIntf.NatType
-            };
-          }
+            updatedIntf.IPv4 = origIntf.IPv4;
+            updatedIntf.IPv4Mask = origIntf.IPv4Mask;
+            updatedIntf.gateway = origIntf.gateway;
+          };
+          if (!intf.isAssigned) {
+            updatedIntf.metric = origIntf.metric;
+          };
+          return updatedIntf;
         }
         return intf;
       });
@@ -1184,7 +1179,7 @@ class DevicesService {
   /**
    * Get device statistics from the database
    * @param {string} id      - device ID in mongodb, if not specified, get all devices stats
-   * @param {string} ifNum   - device interface number (usually a pci address)
+   * @param {string} ifNum   - device interface bus address
    *                           if not specified, get all device stats
    * @param {string} org     - organization ID in mongodb
    * @param {Date} startTime - start time to get stats, if not specified get all previous time
@@ -1781,7 +1776,7 @@ class DevicesService {
       }
 
       const interfaceIsExists = deviceObject.interfaces.find(i => {
-        return i.pciaddr === dhcpRequest.interface;
+        return i.devId === dhcpRequest.interface;
       });
 
       if (!interfaceIsExists) {

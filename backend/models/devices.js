@@ -35,13 +35,13 @@ const interfacesSchema = new Schema({
     },
     required: [true, 'Interface name must be set']
   },
-  // PCI address
-  pciaddr: {
+  // Device bus address
+  devId: {
     type: String,
-    maxlength: [50, 'PCI address length must be at most 50'],
+    maxlength: [50, 'devId length must be at most 50'],
     validate: {
-      validator: validators.validatePciAddress,
-      message: 'pciaddr should be a vaild pci address'
+      validator: validators.validateDevId,
+      message: 'devId should be a vaild devId address'
     },
     default: ''
   },
@@ -278,8 +278,8 @@ const DHCPSchema = new Schema({
     maxlength: [50, 'Interface length must be at most 50'],
     required: [true, 'Interface must be set'],
     validate: {
-      validator: validators.validatePciAddress,
-      message: 'Interface should be a vaild interface pci address'
+      validator: validators.validateDevId,
+      message: 'Interface should be a vaild interface devId'
     }
   },
   rangeStart: {
@@ -466,10 +466,6 @@ const deviceSyncSchema = new Schema({
     type: String,
     enum: ['on', 'off'],
     default: 'on'
-  },
-  failedJobRetried: {
-    type: Boolean,
-    default: false
   }
 });
 
