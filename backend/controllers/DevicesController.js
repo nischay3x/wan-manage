@@ -161,9 +161,9 @@ class DevicesController {
     );
   }
 
-  async devicesIdInterfaceStatusGET (request, response) {
+  async devicesIdLteInterfaceStatusGET (request, response) {
     await Controller.handleRequest(
-      request, response, this.service.devicesIdInterfaceStatusGET
+      request, response, this.service.devicesIdLteInterfaceStatusGET
     );
   }
 

@@ -2625,7 +2625,79 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{interfaceName}/connectToLte:
+  /devices/{id}/interfaces/{devId}/lte/status:
+    get: 
+      operationId: devicesIdLteInterfaceStatusGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The wifi interface name to get available networks for
+        explode: false
+        in: path
+        name: devId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WifiAvailableNetworks'
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get available access points for wifi interface
+      tags:
+      - Interface
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/interfaces/{devId}/lte/connect:
     post:
       operationId: devicesIdConnectToLtePOST
       parameters:
@@ -2640,7 +2712,7 @@ paths:
       - description: The lte interface name to get connect to
         explode: false
         in: path
-        name: interfaceName
+        name: devId
         required: true
         schema:
           type: string
@@ -2702,7 +2774,7 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{devId}/connectToWifi:
+  /devices/{id}/interfaces/{devId}/wifi/connect:
     post:
       operationId: devicesIdConnectToWifiPOST
       parameters:
@@ -2774,78 +2846,6 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Try Connect to wifi access point
-      tags:
-      - Interface
-      x-swagger-router-controller: Devices
-      x-openapi-router-controller: DevicesController
-      x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{devId}/status:
-    get: 
-      operationId: devicesIdInterfaceStatusGET
-      parameters:
-      - description: Numeric ID of the Device to fetch information about
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: The wifi interface name to get available networks for
-        explode: false
-        in: path
-        name: interfaceName
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WifiAvailableNetworks'
-          description: Successful operation
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BadRequestError'
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Get available access points for wifi interface
       tags:
       - Interface
       x-swagger-router-controller: Devices

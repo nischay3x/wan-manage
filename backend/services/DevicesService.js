@@ -453,7 +453,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdConnectToLtePOST ({ id, interfaceName, org, lteConnectRequest }, { user }) {
+  static async devicesIdConnectToLtePOST ({ id, devId, org, lteConnectRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.findOne({
@@ -476,7 +476,7 @@ class DevicesService {
           entity: 'agent',
           message: 'connect-to-lte',
           params: {
-            interfaceName,
+            devId,
             apn: lteConnectRequest.apn
           }
         }
@@ -503,7 +503,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdInterfaceStatusGET ({ id, interfaceName, org }, { user }) {
+  static async devicesIdLteInterfaceStatusGET ({ id, devId, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.findOne({
@@ -527,19 +527,19 @@ class DevicesService {
         device.machineId,
         {
           entity: 'agent',
-          message: 'get-interface-status',
-          params: { interfaceName }
+          message: 'get-lte-interface-status',
+          params: { devId }
         }
       );
 
       if (!statusResponse.ok) {
-        logger.error('Failed to get interface status', {
+        logger.error('Failed to get lte interface status', {
           params: {
             deviceId: id,
             response: statusResponse.message
           }
         });
-        return Service.rejectResponse('Failed to get interface status', 500);
+        return Service.rejectResponse('Failed to get lte interface status', 500);
       }
 
       return Service.successResponse({
