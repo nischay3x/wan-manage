@@ -665,7 +665,7 @@ class DevicesService {
         _id: origDevice._id
       };
       // unspecified 'interfaces' are allowed for backward compatibility of some integrations
-      if (!deviceToValidate.hasAttribute('interfaces')) {
+      if (typeof deviceToValidate.interfaces === 'undefined') {
         deviceToValidate.interfaces = origDevice.interfaces;
       }
 
