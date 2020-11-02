@@ -2851,7 +2851,7 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{devId}/availableWifiNetworks:
+  /devices/{id}/interfaces/{devId}/wifi/availableNetworks:
     get: 
       operationId: devicesIdWifiAvailableNetworksGET
       parameters:
