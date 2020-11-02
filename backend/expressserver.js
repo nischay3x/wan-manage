@@ -334,6 +334,7 @@ class ExpressServer {
 
       connections.registerConnectCallback('broker', broker.deviceConnectionOpened);
       connections.registerCloseCallback('broker', broker.deviceConnectionClosed);
+      connections.registerCloseCallback('deviceStatus', deviceStatus.deviceConnectionClosed);
 
       this.wss.on('connection', connections.createConnection);
       console.log('Websocket server running');

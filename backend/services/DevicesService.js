@@ -845,11 +845,41 @@ class DevicesService {
         orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
       }
 
+      // Make sure interfaces are not deleted, only modified
+      if (Array.isArray(deviceRequest.interfaces)) {
+        deviceRequest.interfaces = origDevice.interfaces.map(origIntf => {
+          const updIntf = deviceRequest.interfaces.find(rif => origIntf._id.toString() === rif._id);
+          if (updIntf) {
+            // Public port and NAT type is assigned by system only
+            updIntf.PublicPort = updIntf.useStun ? origIntf.PublicPort : configs.get('tunnelPort');
+            updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
+
+            // For unasigned and non static interfaces we use linux network parameters
+            if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
+              updIntf.IPv4 = origIntf.IPv4;
+              updIntf.IPv4Mask = origIntf.IPv4Mask;
+              updIntf.gateway = origIntf.gateway;
+            };
+            if (!updIntf.isAssigned) {
+              updIntf.metric = origIntf.metric;
+            };
+            return updIntf;
+          }
+          return origIntf;
+        });
+      };
+
       // add device id to device request
-      const { valid, err } = validateDevice({
+      const deviceToValidate = {
         ...deviceRequest,
         _id: origDevice._id
-      }, isRunning, orgLanSubnets);
+      };
+      // unspecified 'interfaces' are allowed for backward compatibility of some integrations
+      if (typeof deviceToValidate.interfaces === 'undefined') {
+        deviceToValidate.interfaces = origDevice.interfaces;
+      }
+
+      const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
 
       if (!valid) {
         logger.warn('Device update failed',
@@ -875,31 +905,9 @@ class DevicesService {
       delete deviceRequest.defaultOrg;
       delete deviceRequest.sync;
 
-      const interfaces = deviceRequest.interfaces.map(intf => {
-        const origIntf = origDevice.interfaces.find(oif => oif._id.toString() === intf._id);
-        if (origIntf) {
-          // Public port and NAT type is assigned by system only
-          const updatedIntf = {
-            ...intf,
-            PublicPort: intf.useStun ? origIntf.PublicPort : configs.get('tunnelPort'),
-            NatType: intf.useStun ? origIntf.NatType : 'Static'
-          };
-          // For unasigned and non static interfaces we use linux network parameters
-          if (!intf.isAssigned || intf.dhcp === 'yes') {
-            updatedIntf.IPv4 = origIntf.IPv4;
-            updatedIntf.IPv4Mask = origIntf.IPv4Mask;
-            updatedIntf.gateway = origIntf.gateway;
-          };
-          if (!intf.isAssigned) {
-            updatedIntf.metric = origIntf.metric;
-          };
-          return updatedIntf;
-        }
-        return intf;
-      });
       const updDevice = await devices.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
-        { ...deviceRequest, interfaces },
+        { ...deviceRequest },
         { new: true, upsert: false, runValidators: true }
       )
         .session(session)
