@@ -145,7 +145,7 @@ class DevicesService {
           'devId',
           '_id',
           'pathlabels',
-          'connectivity_type'
+          'deviceType'
         ]);
         retIf._id = retIf._id.toString();
         return retIf;
@@ -401,7 +401,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdWifiAvailableNetworksGET ({ id, interfaceName, org }, { user }) {
+  static async devicesIdWifiAvailableNetworksGET ({ id, devId, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.findOne({
@@ -416,33 +416,34 @@ class DevicesService {
       if (!connections.isConnected(device.machineId)) {
         return Service.successResponse({
           deviceStatus: 'disconnected',
-          accessPoints: []
+          availableNetworks: []
         });
       }
 
-      const accessPoints = await connections.deviceSendMessage(
+      const response = await connections.deviceSendMessage(
         null,
         device.machineId,
         {
           entity: 'agent',
-          message: 'get-wifi-available-access-points',
-          params: { interfaceName }
+          message: 'get-wifi-available-networks',
+          params: { devId }
         }
       );
 
-      if (!accessPoints.ok) {
-        logger.error('Failed to get available access points', {
+      if (!response.ok) {
+        logger.error('Failed to get available networks', {
           params: {
             deviceId: id,
-            response: accessPoints.message
+            devId: devId,
+            response: response.message
           }
         });
-        return Service.rejectResponse('Failed to get available access points', 500);
+        return Service.rejectResponse('Failed to get available networks', 500);
       }
 
       return Service.successResponse({
         deviceStatus: 'connected',
-        accessPoints: accessPoints.message
+        availableNetworks: response.message
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -554,7 +555,7 @@ class DevicesService {
   }
 
   static async devicesIdConnectToWifiPOST (
-    { id, interfaceName, org, wifiConnectRequest }, { user }
+    { id, devId, org, wifiConnectRequest }, { user }
   ) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
@@ -581,7 +582,7 @@ class DevicesService {
           entity: 'agent',
           message: 'connect-to-wifi',
           params: {
-            interfaceName,
+            devId,
             essid: wifiConnectRequest.essid,
             password: wifiConnectRequest.password
           }

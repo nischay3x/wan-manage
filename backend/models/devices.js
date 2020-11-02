@@ -192,10 +192,10 @@ const interfacesSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'PathLabels'
   }],
-  // connectivity_type - wifi, lte
-  connectivity_type: {
+  // device type - wifi, lte
+  deviceType: {
     type: String,
-    default: 'NONE'
+    default: ''
   }
 }, {
   timestamps: true

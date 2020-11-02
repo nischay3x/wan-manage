@@ -522,7 +522,7 @@ class Connections {
     const currentInterfaces = origDevice.interfaces;
 
     const nonDpdkInterfaces = incomingInterfaces.filter(i => {
-      return ['wifi', 'lte'].includes(i.connectivity_type);
+      return ['wifi', 'lte'].includes(i.deviceType);
     });
 
     for (let i = 0; i < nonDpdkInterfaces.length; i++) {

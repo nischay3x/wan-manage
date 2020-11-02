@@ -2702,7 +2702,7 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{interfaceName}/connectToWifi:
+  /devices/{id}/interfaces/{devId}/connectToWifi:
     post:
       operationId: devicesIdConnectToWifiPOST
       parameters:
@@ -2717,7 +2717,7 @@ paths:
       - description: The wifi interface name to get available networks for
         explode: false
         in: path
-        name: interfaceName
+        name: devId
         required: true
         schema:
           type: string
@@ -2779,7 +2779,7 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{interfaceName}/status:
+  /devices/{id}/interfaces/{devId}/status:
     get: 
       operationId: devicesIdInterfaceStatusGET
       parameters:
@@ -2804,7 +2804,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InterfaceAccessPoints'
+                $ref: '#/components/schemas/WifiAvailableNetworks'
           description: Successful operation
         "400":
           content:
@@ -2851,7 +2851,7 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{interfaceName}/availableAccessPoints:
+  /devices/{id}/interfaces/{devId}/availableWifiNetworks:
     get: 
       operationId: devicesIdWifiAvailableNetworksGET
       parameters:
@@ -2866,7 +2866,7 @@ paths:
       - description: The wifi interface name to get available networks for
         explode: false
         in: path
-        name: interfaceName
+        name: devId
         required: true
         schema:
           type: string
@@ -2876,7 +2876,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InterfaceAccessPoints'
+                $ref: '#/components/schemas/WifiAvailableNetworks'
           description: Successful operation
         "400":
           content:
@@ -7252,14 +7252,14 @@ components:
         success: 
           type: boolean
       type: object
-    InterfaceAccessPoints:
+    WifiAvailableNetworks:
       example:
-        accessPointes: 
-        - access point
-        - access point
+        networks: 
+        - network 1
+        - network 2
         deviceStatus: connected
       properties:
-        accessPointes:
+        networks:
           items:
             type: string
           type: array
