@@ -1128,9 +1128,6 @@ class DevicesService {
    **/
   static async devicesStatisticsGET ({ org, startTime, endTime }, { user }) {
     try {
-      // const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      // const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
@@ -1156,9 +1153,6 @@ class DevicesService {
    **/
   static async devicesIdStatisticsGET ({ id, org, ifnum, startTime, endTime }, { user }) {
     try {
-      // const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      // const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
@@ -1184,9 +1178,6 @@ class DevicesService {
    **/
   static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum, startTime, endTime }, { user }) {
     try {
-      // const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      // const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceTunnelStats({
         org: orgList[0].toString(),
@@ -1212,9 +1203,6 @@ class DevicesService {
    **/
   static async devicesIdHealthGET ({ id, org, startTime, endTime }, { user }) {
     try {
-      // const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      // const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceHealth({
         org: orgList[0].toString(),

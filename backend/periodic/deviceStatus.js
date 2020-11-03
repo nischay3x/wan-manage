@@ -21,6 +21,7 @@ const { deviceStats, deviceAggregateStats } = require('../models/analytics/devic
 const Joi = require('@hapi/joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const notificationsMgr = require('../notifications/notifications')();
+const configs = require('../../configs')();
 
 /***
  * This class gets periodic status from all connected devices
@@ -218,7 +219,8 @@ class DeviceStatus {
   updateAnalyticsInterfaceStats (deviceID, deviceInfo, statsList) {
     statsList.forEach((statsEntry) => {
       // Update the database once every 5 minutes
-      const msgTime = Math.floor(statsEntry.utc / 60) * 60;
+      const msgTime = Math.floor(statsEntry.utc / configs.get('analyticsUpdateTime')) *
+        configs.get('analyticsUpdateTime');
       if (this.getDeviceLastUpdateTime(deviceID) === msgTime) return;
 
       // Build DB updates

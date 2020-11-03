@@ -141,7 +141,14 @@ const configEnv = {
     tunnelPort: '4789',
     // If to allow manager role to delete organizations, devices, tokens, tunnels, appIdentifications,
     //  users, path labels, policies. Default = true
-    allowManagerToDel: true
+    allowManagerToDel: true,
+    // How much time to keep stats in the analytics statistics database. 7200 is two hours, 172,800 is two days
+    // It requires to re-index the analytics database whenever this is changed
+    analyticsStatsKeepTime: 7200,
+    // Time interval to keep data in the analytics statistics database
+    // This value is for storing in the database, it's not impacting the interval presented in the UI
+    analyticsUpdateTime: 300
+
   },
   // Override for development environment, default environment if not specified
   development: {
