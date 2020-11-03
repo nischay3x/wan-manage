@@ -142,8 +142,11 @@ const configEnv = {
     // If to allow manager role to delete organizations, devices, tokens, tunnels, appIdentifications,
     //  users, path labels, policies. Default = true
     allowManagerToDel: true,
-    // How much time to keep stats in the analytics statistics database. 7200 is two hours, 172,800 is two days
+    // How much time to keep stats in the analytics statistics database. 7200 is two hours, 172800 is two days
     // It requires to re-index the analytics database whenever this is changed
+    // Re-index for TTL can be done on the fly. Use the following example:
+    // db.devicestats.getIndexes()
+    // db.runCommand({collMod:'devicestats', index:{name: "createdAt_1",expireAfterSeconds:7200}})
     analyticsStatsKeepTime: 7200,
     // Time interval to keep data in the analytics statistics database
     // This value is for storing in the database, it's not impacting the interval presented in the UI
