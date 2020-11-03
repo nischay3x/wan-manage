@@ -239,7 +239,7 @@ class MultiLinkPoliciesService {
           _id: id
         },
         {
-          org: user.defaultOrg._id.toString(),
+          org: orgList[0].toString(),
           name: name,
           description: description,
           rules: rules
