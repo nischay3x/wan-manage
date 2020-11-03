@@ -478,7 +478,8 @@ class Connections {
               gateway: updatedConfig.gateway,
               PublicIP: updatedConfig.public_ip && i.useStun
                 ? updatedConfig.public_ip : i.PublicIP,
-              PublicPort: updatedConfig.public_port || i.PublicPort,
+              PublicPort: updatedConfig.public_port && i.useStun
+                ? updatedConfig.public_port : i.PublicPort,
               NatType: updatedConfig.nat_type || i.NatType
             };
           } else {
@@ -486,7 +487,8 @@ class Connections {
               ...i.toJSON(),
               PublicIP: updatedConfig.public_ip && i.useStun
                 ? updatedConfig.public_ip : i.PublicIP,
-              PublicPort: updatedConfig.public_port || i.PublicPort,
+              PublicPort: updatedConfig.public_port && i.useStun
+                ? updatedConfig.public_port : i.PublicPort,
               NatType: updatedConfig.nat_type || i.NatType
             };
           }

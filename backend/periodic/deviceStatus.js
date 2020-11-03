@@ -53,6 +53,8 @@ class DeviceStatus {
     this.getDeviceStatus = this.getDeviceStatus.bind(this);
     this.setDeviceStatus = this.setDeviceStatus.bind(this);
     this.registerSyncUpdateFunc = this.registerSyncUpdateFunc.bind(this);
+    this.removeDeviceStatus = this.removeDeviceStatus.bind(this);
+    this.deviceConnectionClosed = this.deviceConnectionClosed.bind(this);
 
     // Task information
     this.updateSyncStatus = async () => {};
@@ -420,6 +422,17 @@ class DeviceStatus {
   }
 
   /**
+   * Remove devices status by ID
+   * @param  {string} deviceID device host id
+   * @return {void}
+   */
+  removeDeviceStatus (deviceID) {
+    if (deviceID && this.status[deviceID]) {
+      delete this.status[deviceID];
+    }
+  }
+
+  /**
      * Retrieve the tunnel statistics for the specific device
      * @param {string} deviceID Device Id
      * @param {number} tunnelId Tunnel Id
@@ -524,6 +537,15 @@ class DeviceStatus {
   getDeviceLastUpdateTime (deviceID) {
     return !this.status[deviceID].lastUpdateTime
       ? 0 : this.status[deviceID].lastUpdateTime;
+  }
+
+  /**
+   * A callback that is called when a device disconnects from the MGMT
+   * @param  {string} deviceID device host id
+   * @return {void}
+   */
+  deviceConnectionClosed (deviceID) {
+    this.removeDeviceStatus(deviceID);
   }
 }
 
