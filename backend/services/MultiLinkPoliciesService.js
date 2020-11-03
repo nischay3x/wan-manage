@@ -37,7 +37,8 @@ const emptyApp = {
 };
 
 class MultiLinkPoliciesService {
-  static verifyRequestSchema (rules) {
+  static async verifyRequestSchema (mLPolicyRequest, org) {
+    const { _id, name, rules } = mLPolicyRequest;
     for (const rule of rules) {
       // At least application or prefix
       // should exist in the request
@@ -45,15 +46,41 @@ class MultiLinkPoliciesService {
       if (
         (!application && !prefix) ||
         (application && prefix)
-      ) return false;
+      ) {
+        return {
+          valid: false,
+          message: 'At least application or prefix should exist in the request'
+        };
+      };
 
       // Empty prefix is not allowed
-      if (prefix && isEqual(prefix, emptyPrefix)) return false;
+      if (prefix && isEqual(prefix, emptyPrefix)) {
+        return {
+          valid: false,
+          message: 'Empty prefix is not allowed'
+        };
+      };
 
       // Empty application is not allowed
-      if (application && isEqual(application, emptyApp)) return false;
-    }
-    return true;
+      if (application && isEqual(application, emptyApp)) {
+        return {
+          valid: false,
+          message: 'Empty application is not allowed'
+        };
+      };
+    };
+
+    // Duplicate names are not allowed in the same organization
+    const hasDuplicateName = await MultiLinkPolicies.findOne(
+      { org, name, _id: { $ne: _id } }
+    );
+    if (hasDuplicateName) {
+      return {
+        valid: false,
+        message: 'Duplicate names are not allowed in the same organization'
+      };
+    };
+    return { valid: true, message: '' };
   }
 
   /**
@@ -199,8 +226,11 @@ class MultiLinkPoliciesService {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Verify request schema
-      if (!MultiLinkPoliciesService.verifyRequestSchema(rules)) {
-        throw createError(400, 'Invalid policy schema');
+      const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
+        mLPolicyRequest, orgList[0]
+      );
+      if (!valid) {
+        throw createError(400, message);
       }
 
       const MLPolicy = await MultiLinkPolicies.findOneAndUpdate(
@@ -289,8 +319,11 @@ class MultiLinkPoliciesService {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Verify request schema
-      if (!MultiLinkPoliciesService.verifyRequestSchema(rules)) {
-        throw createError(400, 'Invalid policy schema');
+      const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
+        mLPolicyRequest, orgList[0]
+      );
+      if (!valid) {
+        throw createError(400, message);
       }
 
       let result = await MultiLinkPolicies.create({
