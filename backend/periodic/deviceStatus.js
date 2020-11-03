@@ -21,7 +21,7 @@ const { deviceStats, deviceAggregateStats } = require('../models/analytics/devic
 const Joi = require('@hapi/joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const notificationsMgr = require('../notifications/notifications')();
-const configs = require('../../configs')();
+const configs = require('../configs')();
 
 /***
  * This class gets periodic status from all connected devices
