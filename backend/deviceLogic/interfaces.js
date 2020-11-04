@@ -58,7 +58,7 @@ const buildInterfaces = (deviceInterfaces) => {
     const ifcInfo = {
       pci: pciaddr,
       dhcp: dhcp || 'no',
-      addr: `${IPv4}/${IPv4Mask}`,
+      addr: `${(IPv4 && IPv4Mask ? `${IPv4}/${IPv4Mask}` : '')}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
       PublicIP,
       PublicPort,

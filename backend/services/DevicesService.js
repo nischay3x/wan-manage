@@ -625,32 +625,58 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
 
-      // Validate device changes only for approved devices,
-      // and only if the request contains interfaces.
-      if (origDevice.isApproved && deviceRequest.interfaces) {
-        // check LAN subnet overlap if updated device is running
-        const status = deviceStatus.getDeviceStatus(origDevice.machineId);
-        const needCheckLanOverlaps = (status && status.state && status.state === 'running');
+      // check LAN subnet overlap if updated device is running
+      const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
+      const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
-        let orgLanSubnets = [];
+      let orgLanSubnets = [];
 
-        if (needCheckLanOverlaps) {
-          orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
-        }
+      if (isRunning) {
+        orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
+      }
 
-        // add device id to device request
-        const { valid, err } = validateDevice({
-          ...deviceRequest,
-          _id: origDevice._id
-        }, needCheckLanOverlaps, orgLanSubnets);
+      // Make sure interfaces are not deleted, only modified
+      if (Array.isArray(deviceRequest.interfaces)) {
+        deviceRequest.interfaces = origDevice.interfaces.map(origIntf => {
+          const updIntf = deviceRequest.interfaces.find(rif => origIntf._id.toString() === rif._id);
+          if (updIntf) {
+            // Public port and NAT type is assigned by system only
+            updIntf.PublicPort = updIntf.useStun ? origIntf.PublicPort : configs.get('tunnelPort');
+            updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
 
-        if (!valid) {
-          logger.warn('Device update failed',
-            {
-              params: { device: deviceRequest, err: err }
-            });
-          throw new Error(err);
-        }
+            // For unasigned and non static interfaces we use linux network parameters
+            if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
+              updIntf.IPv4 = origIntf.IPv4;
+              updIntf.IPv4Mask = origIntf.IPv4Mask;
+              updIntf.gateway = origIntf.gateway;
+            };
+            if (!updIntf.isAssigned) {
+              updIntf.metric = origIntf.metric;
+            };
+            return updIntf;
+          }
+          return origIntf;
+        });
+      };
+
+      // add device id to device request
+      const deviceToValidate = {
+        ...deviceRequest,
+        _id: origDevice._id
+      };
+      // unspecified 'interfaces' are allowed for backward compatibility of some integrations
+      if (typeof deviceToValidate.interfaces === 'undefined') {
+        deviceToValidate.interfaces = origDevice.interfaces;
+      }
+
+      const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
+
+      if (!valid) {
+        logger.warn('Device update failed',
+          {
+            params: { device: deviceRequest, devStatus, err }
+          });
+        throw new Error(err);
       }
 
       // If device changed to not approved disconnect it's socket
@@ -669,32 +695,9 @@ class DevicesService {
       delete deviceRequest.defaultOrg;
       delete deviceRequest.sync;
 
-      const interfaces = deviceRequest.interfaces && deviceRequest.interfaces.map(intf => {
-        const origIntf = origDevice.interfaces &&
-          origDevice.interfaces.find(oif => oif._id === intf._id);
-        if (origIntf) {
-          if (!intf.isAssigned || intf.dhcp === 'yes') {
-            return {
-              ...intf,
-              IPv4: origIntf.IPv4,
-              IPv4Mask: origIntf.IPv4Mask,
-              gateway: origIntf.gateway,
-              PublicPort: origIntf.PublicPort,
-              NatType: origIntf.NatType
-            };
-          } else {
-            return {
-              ...intf,
-              PublicPort: origIntf.PublicPort,
-              NatType: origIntf.NatType
-            };
-          }
-        }
-        return intf;
-      });
       const updDevice = await devices.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
-        { ...deviceRequest, interfaces },
+        { ...deviceRequest },
         { new: true, upsert: false, runValidators: true }
       )
         .session(session)
@@ -1123,11 +1126,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesStatisticsGET ({ org }, { user }) {
+  static async devicesStatisticsGET ({ org, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
@@ -1151,11 +1151,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesIdStatisticsGET ({ id, org, ifnum }, { user }) {
+  static async devicesIdStatisticsGET ({ id, org, ifnum, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
@@ -1179,11 +1176,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceTunnelStatistics
    **/
-  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum }, { user }) {
+  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceTunnelStats({
         org: orgList[0].toString(),
@@ -1207,11 +1201,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceHealth
    **/
-  static async devicesIdHealthGET ({ id, org }, { user }) {
+  static async devicesIdHealthGET ({ id, org, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceHealth({
         org: orgList[0].toString(),
@@ -1608,8 +1599,10 @@ class DevicesService {
         { new: true }
       ).session(session);
 
-      const copy = Object.assign({}, dhcpRequest);
+      await session.commitTransaction();
+      session = null;
 
+      const copy = Object.assign({}, dhcpRequest);
       copy.method = 'dhcp';
       copy._id = dhcp.id;
       copy.action = 'add';
@@ -1617,9 +1610,6 @@ class DevicesService {
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
       response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
-      await session.commitTransaction();
-      session = null;
 
       return Service.successResponse(result, 202);
     } catch (e) {
