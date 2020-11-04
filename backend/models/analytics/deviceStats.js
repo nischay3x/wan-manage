@@ -64,7 +64,7 @@ const deviceAggregateStatsSchema = new Schema({
   timestamps: true
 });
 
-// Remove documents created more than a hour ago
+// Remove documents created older than configured in analyticsStatsKeepTime
 deviceStatsSchema.index(
   { createdAt: 1 },
   { expireAfterSeconds: configs.get('analyticsStatsKeepTime') }
