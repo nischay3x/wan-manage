@@ -1126,11 +1126,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesStatisticsGET ({ org }, { user }) {
+  static async devicesStatisticsGET ({ org, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
@@ -1154,11 +1151,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesIdStatisticsGET ({ id, org, ifnum }, { user }) {
+  static async devicesIdStatisticsGET ({ id, org, ifnum, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
@@ -1182,11 +1176,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceTunnelStatistics
    **/
-  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum }, { user }) {
+  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceTunnelStats({
         org: orgList[0].toString(),
@@ -1210,11 +1201,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceHealth
    **/
-  static async devicesIdHealthGET ({ id, org }, { user }) {
+  static async devicesIdHealthGET ({ id, org, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceHealth({
         org: orgList[0].toString(),
@@ -1611,8 +1599,10 @@ class DevicesService {
         { new: true }
       ).session(session);
 
-      const copy = Object.assign({}, dhcpRequest);
+      await session.commitTransaction();
+      session = null;
 
+      const copy = Object.assign({}, dhcpRequest);
       copy.method = 'dhcp';
       copy._id = dhcp.id;
       copy.action = 'add';
@@ -1620,9 +1610,6 @@ class DevicesService {
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
       response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
-      await session.commitTransaction();
-      session = null;
 
       return Service.successResponse(result, 202);
     } catch (e) {
