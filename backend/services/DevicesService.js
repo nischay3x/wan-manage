@@ -1611,8 +1611,10 @@ class DevicesService {
         { new: true }
       ).session(session);
 
-      const copy = Object.assign({}, dhcpRequest);
+      await session.commitTransaction();
+      session = null;
 
+      const copy = Object.assign({}, dhcpRequest);
       copy.method = 'dhcp';
       copy._id = dhcp.id;
       copy.action = 'add';
@@ -1620,9 +1622,6 @@ class DevicesService {
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
       response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
-      await session.commitTransaction();
-      session = null;
 
       return Service.successResponse(result, 202);
     } catch (e) {
