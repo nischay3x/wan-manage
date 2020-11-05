@@ -196,9 +196,14 @@ const interfacesSchema = new Schema({
   deviceType: {
     type: String,
     default: ''
+  },
+  configuration: {
+    type: Object,
+    default: {}
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  minimize: false
 });
 
 /**

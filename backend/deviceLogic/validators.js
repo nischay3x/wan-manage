@@ -80,7 +80,9 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
       };
     }
 
-    if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') && ifc.dhcp !== 'yes') {
+    if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') &&
+      ifc.dhcp !== 'yes' && ifc.deviceType !== 'lte'
+    ) {
       return {
         valid: false,
         err: `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
@@ -123,7 +125,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
         };
       }
       // WAN interfaces must have default GW assigned to them
-      if (ifc.dhcp !== 'yes' && !net.isIPv4(ifc.gateway)) {
+      if (ifc.dhcp !== 'yes' && !net.isIPv4(ifc.gateway) && ifc.deviceType !== 'lte') {
         return {
           valid: false,
           err: 'All WAN interfaces should be assigned a default GW'
@@ -203,7 +205,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
-    if (ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') {
+    if ((ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') || ifc.deviceType === 'lte') {
       // allow empty IP on WAN with dhcp client
       continue;
     }

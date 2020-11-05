@@ -97,7 +97,7 @@ connectRouter.route('/register')
                   intf.dhcp = intf.dhcp || 'no';
                   intf.gateway = req.body.default_route;
                   intf.metric = '0';
-                } else if (intf.gateway) {
+                } else if (intf.gateway || intf.deviceType === 'lte') {
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   intf.metric = (!intf.metric && intf.gateway === req.body.default_route)

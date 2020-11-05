@@ -143,9 +143,9 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdDhcpPOST);
   }
 
-  async devicesIdWifiAvailableNetworksGET (request, response) {
+  async devicesIdWifiInterfaceStatusGET (request, response) {
     await Controller.handleRequest(
-      request, response, this.service.devicesIdWifiAvailableNetworksGET
+      request, response, this.service.devicesIdWifiInterfaceStatusGET
     );
   }
 
@@ -169,6 +169,12 @@ class DevicesController {
 
   async devicesIdStatusGET (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdStatusGET);
+  }
+
+  async devicesIdSaveInterfaceConfigurationPUT (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdSaveInterfaceConfigurationPUT
+    );
   }
 }
 

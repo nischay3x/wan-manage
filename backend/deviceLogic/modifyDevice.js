@@ -79,7 +79,9 @@ const transformInterfaces = (interfaces) => {
       routing: ifc.routing,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
-      pathlabels: ifc.pathlabels
+      pathlabels: ifc.pathlabels,
+      configuration: ifc.configuration,
+      deviceType: ifc.deviceType
     } : {
       _id: ifc._id,
       devId: ifc.devId,
@@ -94,7 +96,9 @@ const transformInterfaces = (interfaces) => {
       routing: ifc.routing,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
-      pathlabels: ifc.pathlabels
+      pathlabels: ifc.pathlabels,
+      configuration: ifc.configuration,
+      deviceType: ifc.deviceType
     }
   );
 };

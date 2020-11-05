@@ -517,32 +517,6 @@ class Connections {
       }
     }
 
-    // TODO: Fix the code below, is not smart code
-    const incomingInterfaces = deviceInfo.message.network.interfaces;
-    const currentInterfaces = origDevice.interfaces;
-
-    const nonDpdkInterfaces = incomingInterfaces.filter(i => {
-      return ['wifi', 'lte'].includes(i.deviceType);
-    });
-
-    for (let i = 0; i < nonDpdkInterfaces.length; i++) {
-      const int = nonDpdkInterfaces[i];
-      const update = {};
-      const options = {};
-
-      const exists = currentInterfaces.find(i => i.name === int.name);
-
-      if (!exists) {
-        update.$addToSet = { interfaces: int };
-      } else {
-        update.$set = { 'interfaces.$[element]': int };
-        options.arrayFilters = [{
-          'element.name': int.name
-        }];
-      }
-
-      await devices.updateOne({ machineId }, update, options);
-    }
   }
 
   /**

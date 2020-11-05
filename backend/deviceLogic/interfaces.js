@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { isIPv4Address } = require('./validators');
+const Joi = require('@hapi/joi');
 
 /**
  * Builds collection of interfaces to be sent to device
@@ -44,7 +45,9 @@ const buildInterfaces = (deviceInterfaces) => {
       pathlabels,
       gateway,
       metric,
-      dhcp
+      dhcp,
+      deviceType,
+      configuration
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -53,7 +56,7 @@ const buildInterfaces = (deviceInterfaces) => {
     );
     // Skip interfaces with invalid IPv4 addresses.
     // Currently we allow empty IPv6 address
-    if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask)) continue;
+    if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'lte') continue;
 
     const ifcInfo = {
       devId: devId,
@@ -66,7 +69,8 @@ const buildInterfaces = (deviceInterfaces) => {
       routing,
       type,
       metric,
-      multilink: { labels: labels.map((label) => label._id.toString()) }
+      multilink: { labels: labels.map((label) => label._id.toString()) },
+      configuration
     };
     if (ifc.type === 'WAN') ifcInfo.gateway = gateway;
 
@@ -76,6 +80,38 @@ const buildInterfaces = (deviceInterfaces) => {
   return interfaces;
 };
 
+const lteConfigurationSchema = Joi.object().keys({
+  apn: Joi.string().required().allow('')
+});
+
+/**
+ * Validate dynamic configuration object for different types of interfaces
+ *
+ * @param {*} deviceInterfaces interfaces stored in db
+ * @param {*} configurationReq configuration request to save
+ * @returns array of interfaces
+ */
+const validateConfiguration = (deviceInterfaces, configurationReq) => {
+  const interfacesTypes = {
+    lte: lteConfigurationSchema
+  };
+
+  const intType = deviceInterfaces.deviceType;
+
+  if (interfacesTypes[intType]) {
+    const result = lteConfigurationSchema.validate(configurationReq);
+
+    if (result.error) {
+      return { valid: false, err: `${result.error.details[0].message}` };
+    }
+
+    return { valid: true, err: '' };
+  }
+
+  return { valid: false, err: 'You can\'t save configuration for this interface' };
+};
+
 module.exports = {
-  buildInterfaces
+  buildInterfaces,
+  validateConfiguration
 };

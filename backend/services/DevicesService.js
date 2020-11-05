@@ -31,6 +31,7 @@ const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
+const { validateConfiguration } = require('../deviceLogic/interfaces');
 const { validateDevice } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -145,7 +146,8 @@ class DevicesService {
           'devId',
           '_id',
           'pathlabels',
-          'deviceType'
+          'deviceType',
+          'configuration'
         ]);
         retIf._id = retIf._id.toString();
         return retIf;
@@ -401,7 +403,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdWifiAvailableNetworksGET ({ id, devId, org }, { user }) {
+  static async devicesIdWifiInterfaceStatusGET ({ id, devId, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.findOne({
@@ -416,7 +418,7 @@ class DevicesService {
       if (!connections.isConnected(device.machineId)) {
         return Service.successResponse({
           deviceStatus: 'disconnected',
-          availableNetworks: []
+          status: {}
         });
       }
 
@@ -425,7 +427,7 @@ class DevicesService {
         device.machineId,
         {
           entity: 'agent',
-          message: 'get-wifi-available-networks',
+          message: 'get-wifi-interface-status',
           params: { devId }
         }
       );
@@ -443,7 +445,7 @@ class DevicesService {
 
       return Service.successResponse({
         deviceStatus: 'connected',
-        availableNetworks: response.message
+        status: response.message
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -583,8 +585,7 @@ class DevicesService {
           message: 'connect-to-wifi',
           params: {
             devId,
-            essid: wifiConnectRequest.essid,
-            password: wifiConnectRequest.password
+            ...wifiConnectRequest.opt
           }
         }
       );
@@ -1839,6 +1840,49 @@ class DevicesService {
       if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async devicesIdSaveInterfaceConfigurationPUT ({
+    org, id, interfaceConfigurationReq, devId
+  }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const deviceObject = await devices.findOne({
+        _id: id,
+        org: { $in: orgList },
+        'interfaces.devId': devId
+      }).lean();
+      if (!deviceObject) {
+        throw new Error('Device or Interface not found');
+      };
+
+      // because of the configuration object is dynamically.
+      // we need to pick only allowed fields
+      const selectedIf = deviceObject.interfaces.find(i => i.devId === devId);
+      const { valid, err } = validateConfiguration(selectedIf, interfaceConfigurationReq);
+      if (!valid) {
+        logger.warn('interface update failed',
+          {
+            params: { config: interfaceConfigurationReq, err: err }
+          });
+        return Service.rejectResponse(err, 500);
+      }
+
+      await devices.updateOne({
+        _id: id,
+        org: { $in: orgList },
+        'interfaces.devId': devId
+      }, {
+        $set: { 'interfaces.$.configuration': interfaceConfigurationReq }
+      });
+
+      return Service.successResponse({}, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
         e.status || 500
       );
     }
