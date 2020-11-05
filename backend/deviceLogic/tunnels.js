@@ -571,13 +571,16 @@ const queueTunnel = async (
  * @param  {Object} tunnel    tunnel object
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
+ * @param  {pathLabel} path label used for this tunnel
+ * @param  {devBAgentVer} agent version of device B
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
   tunnel,
   deviceAIntf,
   deviceBIntf,
-  pathLabel
+  pathLabel,
+  devBAgentVer
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -626,7 +629,7 @@ const prepareTunnelAddJob = async (
     }
   };
 
-  const majorAgentVersion = getMajorVersion(devBagentVer);
+  const majorAgentVersion = getMajorVersion(devBAgentVer);
   if (majorAgentVersion < 3) { // version 1-2.X.X
     // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
     // spi isn't configured properly for SA
@@ -732,7 +735,8 @@ const addTunnel = async (
     tunnel,
     deviceAIntf,
     deviceBIntf,
-    pathLabel
+    pathLabel,
+    deviceB.versions.agent
   );
 
   const tunnelJobs = await queueTunnel(
@@ -1057,7 +1061,8 @@ const sync = async (deviceId, org) => {
       tunnel,
       ifcA,
       ifcB,
-      pathlabel
+      pathlabel,
+      deviceB.versions.agent
     );
     // Add the tunnel only for the device that is being synced
     const deviceTasks =

@@ -533,7 +533,8 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
         tunnel,
         ifcA,
         ifcB,
-        pathlabel
+        pathlabel,
+        deviceB.versions.agent
       );
       await queueTunnel(
         true,
