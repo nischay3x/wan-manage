@@ -1034,7 +1034,7 @@ const sync = async (deviceId, org) => {
     }
   )
     .populate('deviceA', 'interfaces')
-    .populate('deviceB', 'interfaces')
+    .populate('deviceB', 'interfaces versions')
     .lean();
 
   // Create add-tunnel messages
