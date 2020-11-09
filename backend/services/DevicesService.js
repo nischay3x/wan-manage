@@ -660,6 +660,13 @@ class DevicesService {
         });
       };
 
+      // validate DHCP info if it exists
+      if (Array.isArray(deviceRequest.dhcp)) {
+        for (const dhcpRequest of deviceRequest.dhcp) {
+          DevicesService.validateDhcpRequest(dhcpRequest);
+        }
+      }
+
       // add device id to device request
       const deviceToValidate = {
         ...deviceRequest,
@@ -1380,6 +1387,7 @@ class DevicesService {
           const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
           response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
 
+          DevicesService.validateDhcpRequest(dhcpRequest);
           const dhcpData = {
             _id: dhcpId,
             interface: dhcpRequest.interface,
