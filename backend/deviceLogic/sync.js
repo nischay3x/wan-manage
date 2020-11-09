@@ -74,6 +74,18 @@ const calcChangeHash = (currHash, message) => {
 };
 
 /**
+ * Extracts message contents from device message
+ *
+ * @param {*} message
+ * @returns message contents
+ */
+const toMessageContents = (message) => {
+  return Array.isArray(message.tasks[0])
+    ? message.tasks[0][0].message
+    : message.tasks[0].message;
+};
+
+/**
  * Modifies sync state based on the queued job.
  * Gets called whenever job gets saved in the device queue.
  *
@@ -103,9 +115,7 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
   }
 
   // Reset hash value for full-sync messages
-  const messageContents = Array.isArray(message.tasks[0])
-    ? message.tasks[0][0].message
-    : message.tasks[0].message;
+  const messageContents = toMessageContents(message);
   const newHash =
     messageContents !== 'sync-device' ? calcChangeHash(hash, message) : '';
 
@@ -114,9 +124,23 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
   logger.info('New sync state calculated, updating database', {
     params: { state, newState, hash, newHash }
   });
+
+  // Update hash and reset autoSync state only when the added
+  // job is not sync-device. The hash for sync-device job will be
+  // reset after the job is completed. If sync-device job has
+  // failed, the hash will not be changed.
+  const updateFields = messageContents !== 'sync-device'
+    ? {
+      'sync.state': newState,
+      'sync.hash': newHash,
+      'sync.autoSync': 'on',
+      'sync.trials': 0
+    }
+    : { 'sync.state': newState };
+
   return devices.updateOne(
     { machineId: machineId },
-    { 'sync.state': newState, 'sync.hash': newHash },
+    updateFields,
     { upsert: false }
   );
 };
@@ -312,6 +336,57 @@ const updateSyncStatusBasedOnJobResult = async (org, deviceId, machineId, isJobS
     });
   }
 };
+/**
+ * Updates hash value on the device based after sync-device job. When
+ * non-sync-device is applied (e.g. modify-device), the new hash
+ * value gets updated in the database immediately, regardless whether
+ * or not the job succeeds (hash reflects the desired state). However,
+ * when sync-device gets applied, the update of the hash gets deferred
+ * and is updated after the sync job is completed successfully, otherwise
+ * the hash value is unchanged.
+ *
+ * @param {*} org - Organization
+ * @param {*} deviceId - Device Id
+ * @param {*} machineId - Machine Id
+ * @param {*} message - device message (job)
+ * @returns
+ */
+const updateHash = async (org, deviceId, machineId, message) => {
+  // Get current device version
+  const { versions } = await devices.findOne(
+    { org, _id: deviceId },
+    { versions: 1 }
+  )
+    .lean();
+
+  const majorAgentVersion = getMajorVersion(versions.agent);
+  if (majorAgentVersion < 2) {
+    logger.debug('No update hash for this device', {
+      params: { machineId, agentVersion: majorAgentVersion }
+    });
+    return;
+  }
+
+  try {
+    const messageContents = toMessageContents(message);
+    if (messageContents !== 'sync-device') {
+      return;
+    }
+    // Reset hash value for full-sync messages
+    logger.info('Updating hash after full-sync job succeeded', {
+      params: { }
+    });
+    await devices.updateOne(
+      { org, machineId: machineId },
+      { 'sync.hash': '' },
+      { upsert: false }
+    );
+  } catch (err) {
+    logger.error('Device hash update failed', {
+      params: { deviceId, error: err.message }
+    });
+  }
+};
 
 /**
  * Periodically checks and updated device status based on the status
@@ -403,13 +478,6 @@ const apply = async (device, user, data) => {
   )
     .lean();
 
-  const { hash } = sync;
-  const job = await queueFullSyncJob(
-    { deviceId: _id, machineId, hostname },
-    hash,
-    org
-  );
-
   // Reset auto sync in database
   await devices.findOneAndUpdate(
     { org, _id },
@@ -419,8 +487,19 @@ const apply = async (device, user, data) => {
       'sync.trials': 0
     },
     { sync: 1 }
-  )
-    .lean();
+  );
+
+  const { hash } = sync;
+  const job = await queueFullSyncJob(
+    { deviceId: _id, machineId, hostname },
+    hash,
+    org
+  );
+
+  if (!job) {
+    logger.error('Sync device job failed', { params: { machineId } });
+    throw (new Error('Sync device job failed'));
+  }
 
   return {
     ids: [job.id],
@@ -440,6 +519,7 @@ deviceQueues.registerUpdateSyncMethod(setSyncStateOnJobQueue);
 module.exports = {
   updateSyncStatus,
   updateSyncStatusBasedOnJobResult,
+  updateHash,
   apply,
   complete,
   error
