@@ -655,6 +655,7 @@ class DevicesService {
               updIntf.metric = origIntf.metric;
             };
             if (updIntf.isAssigned !== origIntf.isAssigned ||
+              updIntf.type !== origIntf.type ||
               updIntf.dhcp !== origIntf.dhcp ||
               updIntf.IPv4 !== origIntf.IPv4 ||
               updIntf.IPv4Mask !== origIntf.IPv4Mask ||
@@ -1595,17 +1596,16 @@ class DevicesService {
    */
   static validateDhcpRequest (device, dhcpRequest) {
     if (!dhcpRequest.interface || dhcpRequest.interface === '') {
-      throw new Error('Interface is required');
+      throw new Error('Interface is required to define DHCP');
     };
     const interfaceObj = device.interfaces.find(i => {
       return i.pciaddr === dhcpRequest.interface;
     });
     if (!interfaceObj) {
-      throw new Error('Unknown interface');
+      throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
     }
-
-    if (interfaceObj.dhcp === 'yes') {
-      throw new Error('Not allowed to set DHCP server on non-static interface');
+    if (interfaceObj.type !== 'LAN') {
+      throw new Error('DHCP can be defined only for LAN interfaces');
     }
 
     // Check that no repeated mac, host or IP
