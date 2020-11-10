@@ -26,7 +26,7 @@ const {
   queueTunnel,
   oneTunnelDel
 } = require('../deviceLogic/tunnels');
-const { validateModifyDeviceMsg } = require('./validators');
+const { validateModifyDeviceMsg, validateDhcpConfig } = require('./validators');
 const { getDefaultGateway } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
@@ -749,27 +749,6 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
   return { dhcpRemove, dhcpAdd };
 };
 
-/**
- * Validate if any dhcp is assigned on a modified interface
- * @param {Object} device - original device
- * @param {List} modifiedInterfaces - list of modified interfaces
- */
-const validateDhcpConfig = (device, modifiedInterfaces) => {
-  const assignedDhcps = device.dhcp.map(d => d.interface);
-  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.pci));
-  if (modifiedDhcp.length > 0) {
-    // get first interface from device
-    const firstIf = device.interfaces.filter(i => i.pciaddr === modifiedDhcp[0].pci);
-    const result = {
-      valid: false,
-      err: `DHCP defined on interface ${
-        firstIf[0].name
-      }, please remove it before modifying this interface`
-    };
-    return result;
-  }
-  return { valid: true, err: '' };
-};
 /**
  * Creates and queues the modify-device job. It compares
  * the current view of the device in the database with
