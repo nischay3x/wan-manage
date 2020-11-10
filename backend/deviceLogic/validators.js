@@ -184,6 +184,17 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     }
   }
 
+  const lteInterface = assignedIfs.find(i => i.deviceType === 'lte');
+  if (lteInterface) {
+    const apn = lteInterface.configuration && lteInterface.configuration.apn;
+    if (!apn) {
+      return {
+        valid: false,
+        err: 'APN is not configured for LTE interface'
+      };
+    }
+  }
+
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
