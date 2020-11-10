@@ -41,6 +41,30 @@ const validateIPv4Mask = mask => {
 };
 
 /**
+ * Checks whether dhcp server configuration is valid
+ * Validate if any dhcp is assigned on a modified interface
+ * @param {Object} device - the device to validate
+ * @param {List} modifiedInterfaces - list of modified interfaces
+ * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
+ */
+const validateDhcpConfig = (device, modifiedInterfaces) => {
+  const assignedDhcps = device.dhcp.map(d => d.interface);
+  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.pci));
+  if (modifiedDhcp.length > 0) {
+    // get first interface from device
+    const firstIf = device.interfaces.filter(i => i.pciaddr === modifiedDhcp[0].pci);
+    const result = {
+      valid: false,
+      err: `DHCP defined on interface ${
+        firstIf[0].name
+      }, please remove it before modifying this interface`
+    };
+    return result;
+  }
+  return { valid: true, err: '' };
+};
+
+/**
  * Checks whether the device configuration is valid,
  * therefore the device can be started.
  * @param {Object}  device                 the device to check
@@ -265,7 +289,8 @@ const isIPv4Address = (ip, mask) => {
 
 module.exports = {
   isIPv4Address,
-  validateDevice: validateDevice,
+  validateDevice,
+  validateDhcpConfig,
   validateModifyDeviceMsg: validateModifyDeviceMsg,
   getAllOrganizationLanSubnets: getAllOrganizationLanSubnets
 };
