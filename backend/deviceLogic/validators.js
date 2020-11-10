@@ -149,7 +149,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
 
   // Checks if all WAN interfaces metrics are different
   const uniqueMetricsOfUnassigned = interfaces
-    .filter(ifc => !ifc.isAssigned)
+    .filter(ifc => !ifc.isAssigned && ifc.type === 'WAN')
     .map(ifc => Number(ifc.metric))
     .filter((value, index, self) => self.indexOf(value) === index);
 
