@@ -516,7 +516,6 @@ class Connections {
         );
       }
     }
-
   }
 
   /**
