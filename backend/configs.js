@@ -150,8 +150,9 @@ const configEnv = {
     analyticsStatsKeepTime: 7200,
     // Time interval to keep data in the analytics statistics database
     // This value is for storing in the database, it's not impacting the interval presented in the UI
-    analyticsUpdateTime: 300
-
+    analyticsUpdateTime: 300,
+    // Do not allow organization LAN subnet overlaps for running devices flag. Default = true
+    forbidLanSubnetOverlaps: true
   },
   // Override for development environment, default environment if not specified
   development: {
