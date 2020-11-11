@@ -70,6 +70,7 @@ const buildInterfaces = (deviceInterfaces) => {
       type,
       metric,
       multilink: { labels: labels.map((label) => label._id.toString()) },
+      deviceType,
       configuration
     };
     if (ifc.type === 'WAN') ifcInfo.gateway = gateway;
