@@ -56,7 +56,7 @@ const buildInterfaces = (deviceInterfaces) => {
     );
     // Skip interfaces with invalid IPv4 addresses.
     // Currently we allow empty IPv6 address
-    if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'lte') continue;
+    if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'wifi') continue;
 
     const ifcInfo = {
       devId: devId,
@@ -82,7 +82,12 @@ const buildInterfaces = (deviceInterfaces) => {
 };
 
 const lteConfigurationSchema = Joi.object().keys({
-  apn: Joi.string().required().allow('')
+  apn: Joi.string().required()
+});
+
+const WifiConfigurationSchema = Joi.object().keys({
+  ssid: Joi.string().required(),
+  password: Joi.string().required().min(8)
 });
 
 /**
@@ -94,13 +99,14 @@ const lteConfigurationSchema = Joi.object().keys({
  */
 const validateConfiguration = (deviceInterfaces, configurationReq) => {
   const interfacesTypes = {
-    lte: lteConfigurationSchema
+    lte: lteConfigurationSchema,
+    wifi: WifiConfigurationSchema
   };
 
   const intType = deviceInterfaces.deviceType;
 
   if (interfacesTypes[intType]) {
-    const result = lteConfigurationSchema.validate(configurationReq);
+    const result = interfacesTypes[intType].validate(configurationReq);
 
     if (result.error) {
       return { valid: false, err: `${result.error.details[0].message}` };

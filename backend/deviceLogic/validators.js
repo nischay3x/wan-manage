@@ -105,7 +105,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     }
 
     if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') &&
-      ifc.dhcp !== 'yes' && ifc.deviceType !== 'lte'
+      ifc.dhcp !== 'yes' && ifc.deviceType !== 'wifi'
     ) {
       return {
         valid: false,
@@ -149,7 +149,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
         };
       }
       // WAN interfaces must have default GW assigned to them
-      if (ifc.dhcp !== 'yes' && !net.isIPv4(ifc.gateway) && ifc.deviceType !== 'lte') {
+      if (ifc.dhcp !== 'yes' && !net.isIPv4(ifc.gateway)) {
         return {
           valid: false,
           err: 'All WAN interfaces should be assigned a default GW'
@@ -245,10 +245,16 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
-    if ((ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') || ifc.deviceType === 'lte') {
+    if (ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') {
       // allow empty IP on WAN with dhcp client
       continue;
     }
+
+    if (ifc.deviceType === 'wifi') {
+      // allow empty IP on wifi access point interface
+      continue;
+    }
+
     const [ip, mask] = (ifc.addr || '/').split('/');
     if (!net.isIPv4(ip) || !validateIPv4Mask(mask)) {
       return {
