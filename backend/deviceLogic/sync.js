@@ -243,7 +243,10 @@ const queueFullSyncJob = async (device, hash, org) => {
     {
       method: 'sync',
       data: {
-        handlers: completeHandlers
+        handlers: completeHandlers,
+        device: {
+          machineId: machineId
+        }
       }
     },
     // Metadata
@@ -260,6 +263,14 @@ const queueFullSyncJob = async (device, hash, org) => {
 
 /**
  * Called when full sync device job completed
+ * Resets sync hash value in the database. When non-sync-device job
+ * is applied (e.g. modify-device), the new hash value gets updated
+ * in the database immediately, regardless whether or not the job
+ * succeeds (calculated hash should reflect the desired state). However,
+ * when sync-device job gets applied, the update of the hash gets deferred
+ * and is updated after the sync-device job is completed successfully,
+ * otherwise the hash value stays unchanged.
+ * Calls the different module's sync complete callback
  * @param  {number} jobId Kue job ID number
  * @param  {Object} res   device object ID and organization
  * @return {void}
@@ -269,8 +280,19 @@ const complete = async (jobId, res) => {
     params: { result: res, jobId: jobId }
   });
 
+  const { handlers, device } = res;
+
+  // Reset hash value for full-sync messages
+  logger.info('Updating hash after full-sync job succeeded', {
+    params: { }
+  });
+  await devices.updateOne(
+    { machineId: device.machineId },
+    { 'sync.hash': '' },
+    { upsert: false }
+  );
+
   // Call the different module's sync complete callback
-  const { handlers } = res;
   for (const [module, data] of Object.entries(handlers)) {
     const { completeHandler } = syncHandlers[module];
     if (completeHandler) {
@@ -332,57 +354,6 @@ const updateSyncStatusBasedOnJobResult = async (org, deviceId, machineId, isJobS
     });
   } catch (err) {
     logger.error('Device sync state update failed', {
-      params: { deviceId, error: err.message }
-    });
-  }
-};
-/**
- * Updates hash value on the device based after sync-device job. When
- * non-sync-device is applied (e.g. modify-device), the new hash
- * value gets updated in the database immediately, regardless whether
- * or not the job succeeds (hash reflects the desired state). However,
- * when sync-device gets applied, the update of the hash gets deferred
- * and is updated after the sync job is completed successfully, otherwise
- * the hash value is unchanged.
- *
- * @param {*} org - Organization
- * @param {*} deviceId - Device Id
- * @param {*} machineId - Machine Id
- * @param {*} message - device message (job)
- * @returns
- */
-const updateHash = async (org, deviceId, machineId, message) => {
-  // Get current device version
-  const { versions } = await devices.findOne(
-    { org, _id: deviceId },
-    { versions: 1 }
-  )
-    .lean();
-
-  const majorAgentVersion = getMajorVersion(versions.agent);
-  if (majorAgentVersion < 2) {
-    logger.debug('No update hash for this device', {
-      params: { machineId, agentVersion: majorAgentVersion }
-    });
-    return;
-  }
-
-  try {
-    const messageContents = toMessageContents(message);
-    if (messageContents !== 'sync-device') {
-      return;
-    }
-    // Reset hash value for full-sync messages
-    logger.info('Updating hash after full-sync job succeeded', {
-      params: { }
-    });
-    await devices.updateOne(
-      { org, machineId: machineId },
-      { 'sync.hash': '' },
-      { upsert: false }
-    );
-  } catch (err) {
-    logger.error('Device hash update failed', {
       params: { deviceId, error: err.message }
     });
   }
@@ -453,7 +424,7 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       return;
     }
 
-    logger.info('Queuing full-sync job', {
+    logger.info('Queueing full-sync job', {
       params: { deviceId, state, newState, hash, trials }
     });
     await queueFullSyncJob({ deviceId, machineId, hostname }, hash, org);
@@ -519,7 +490,6 @@ deviceQueues.registerUpdateSyncMethod(setSyncStateOnJobQueue);
 module.exports = {
   updateSyncStatus,
   updateSyncStatusBasedOnJobResult,
-  updateHash,
   apply,
   complete,
   error
