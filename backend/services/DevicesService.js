@@ -32,9 +32,10 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
 const { validateConfiguration } = require('../deviceLogic/interfaces');
-const { validateDevice } = require('../deviceLogic/validators');
+const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const { getMajorVersion } = require('../versioning');
 
 class DevicesService {
   /**
@@ -842,7 +843,7 @@ class DevicesService {
 
       let orgLanSubnets = [];
 
-      if (isRunning) {
+      if (isRunning && configs.get('forbidLanSubnetOverlaps')) {
         orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
       }
 
@@ -864,6 +865,15 @@ class DevicesService {
             if (!updIntf.isAssigned) {
               updIntf.metric = origIntf.metric;
             };
+            if (updIntf.isAssigned !== origIntf.isAssigned ||
+              updIntf.type !== origIntf.type ||
+              updIntf.dhcp !== origIntf.dhcp ||
+              updIntf.IPv4 !== origIntf.IPv4 ||
+              updIntf.IPv4Mask !== origIntf.IPv4Mask ||
+              updIntf.gateway !== origIntf.gateway
+            ) {
+              updIntf.modified = true;
+            }
             return updIntf;
           }
           return origIntf;
@@ -878,6 +888,43 @@ class DevicesService {
       // unspecified 'interfaces' are allowed for backward compatibility of some integrations
       if (typeof deviceToValidate.interfaces === 'undefined') {
         deviceToValidate.interfaces = origDevice.interfaces;
+      }
+
+      // validate DHCP info if it exists
+      if (Array.isArray(deviceRequest.dhcp)) {
+        for (const dhcpRequest of deviceRequest.dhcp) {
+          DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
+        }
+      }
+
+      // Don't allow to modify/assign/unassign
+      // interfaces that are assigned with DHCP
+      if (Array.isArray(deviceRequest.interfaces)) {
+        let dhcp = [...origDevice.dhcp];
+        if (Array.isArray(deviceRequest.dhcp)) {
+          // check only for the remaining dhcp configs
+          dhcp = dhcp.filter(orig =>
+            deviceRequest.dhcp.find(upd => orig.interface === upd.interface)
+          );
+        }
+        const modifiedInterfaces = deviceRequest.interfaces
+          .filter(intf => intf.modified)
+          .map(intf => {
+            return {
+              pci: intf.pciaddr
+            };
+          });
+        const { valid, err } = validateDhcpConfig(
+          { ...origDevice.toObject(), dhcp },
+          modifiedInterfaces
+        );
+        if (!valid) {
+          logger.warn('Device update failed',
+            {
+              params: { device: deviceRequest, err }
+            });
+          throw new Error(err);
+        }
       }
 
       const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
@@ -1053,14 +1100,10 @@ class DevicesService {
   static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const device = await devices.findOneAndUpdate(
+      const device = await devices.findOne(
         {
           _id: mongoose.Types.ObjectId(id),
           org: { $in: orgList }
-        },
-        { $set: { 'staticroutes.$[elem].status': 'waiting' } },
-        {
-          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(id) }]
         }
       );
 
@@ -1112,8 +1155,7 @@ class DevicesService {
         destination: staticRouteRequest.destination,
         gateway: staticRouteRequest.gateway,
         ifname: staticRouteRequest.ifname,
-        metric: staticRouteRequest.metric,
-        status: 'waiting'
+        metric: staticRouteRequest.metric
       });
 
       await devices.findOneAndUpdate(
@@ -1337,11 +1379,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesStatisticsGET ({ org }, { user }) {
+  static async devicesStatisticsGET ({ org, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
@@ -1365,11 +1404,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceStatistics
    **/
-  static async devicesIdStatisticsGET ({ id, org, ifnum }, { user }) {
+  static async devicesIdStatisticsGET ({ id, org, ifnum, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceStats({
         org: orgList[0].toString(),
@@ -1393,11 +1429,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceTunnelStatistics
    **/
-  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum }, { user }) {
+  static async devicesIdTunnelStatisticsGET ({ id, org, tunnelnum, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceTunnelStats({
         org: orgList[0].toString(),
@@ -1421,11 +1454,8 @@ class DevicesService {
    * id Object Numeric ID of the Device to fetch information about
    * returns DeviceHealth
    **/
-  static async devicesIdHealthGET ({ id, org }, { user }) {
+  static async devicesIdHealthGET ({ id, org, startTime, endTime }, { user }) {
     try {
-      const startTime = Math.floor(new Date().getTime() / 1000) - 7200;
-      const endTime = null;
-
       const orgList = await getAccessTokenOrgList(user, org, true);
       const stats = await DevicesService.queryDeviceHealth({
         org: orgList[0].toString(),
@@ -1582,44 +1612,73 @@ class DevicesService {
         return (s.id === dhcpId);
       });
       if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
-      const origDhcp = dhcpFiltered[0].toObject();
-      const origCmpDhcp = {
-        _id: origDhcp._id.toString(),
-        dns: origDhcp.dns,
-        interface: origDhcp.interface,
-        macAssign: origDhcp.macAssign.map(m => ({ host: m.host, mac: m.mac, ipv4: m.ipv4 })),
-        rangeStart: origDhcp.rangeStart,
-        rangeEnd: origDhcp.rangeEnd
-      };
 
-      const dhcpData = {
-        _id: dhcpId,
-        interface: dhcpRequest.interface,
-        rangeStart: dhcpRequest.rangeStart,
-        rangeEnd: dhcpRequest.rangeEnd,
-        dns: dhcpRequest.dns,
-        macAssign: dhcpRequest.macAssign,
-        status: 'add-wait'
-      };
+      const majorAgentVersion = getMajorVersion(deviceObject.versions.agent);
 
-      // Check if any difference exists between request to current dhcp,
-      // in that case no need to resend data
-      if (!isEqual(dhcpRequest, origCmpDhcp)) {
-        const copy = Object.assign({}, dhcpRequest);
-        copy.org = orgList[0];
-        copy.method = 'dhcp';
-        copy.action = 'modify';
-        copy.origDhcp = origCmpDhcp;
-        const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      if (majorAgentVersion < 2) {
+        const origDhcp = dhcpFiltered[0].toObject();
+        const origCmpDhcp = {
+          _id: origDhcp._id.toString(),
+          dns: origDhcp.dns,
+          interface: origDhcp.interface,
+          macAssign: origDhcp.macAssign.map(m => ({ host: m.host, mac: m.mac, ipv4: m.ipv4 })),
+          rangeStart: origDhcp.rangeStart,
+          rangeEnd: origDhcp.rangeEnd
+        };
 
-        await devices.findOneAndUpdate(
-          { _id: deviceObject._id },
-          { $set: { 'dhcp.$[elem]': dhcpData } },
-          { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }] });
+        // Check if any difference exists between request to current dhcp,
+        // in that case no need to resend data
+        if (!isEqual(dhcpRequest, origCmpDhcp)) {
+          DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
+          const copy = Object.assign({}, dhcpRequest);
+          copy.org = orgList[0];
+          copy.method = 'dhcp';
+          copy.action = 'modify';
+          copy.origDhcp = origCmpDhcp;
+          const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
+          response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+
+          const dhcpData = {
+            _id: dhcpId,
+            interface: dhcpRequest.interface,
+            rangeStart: dhcpRequest.rangeStart,
+            rangeEnd: dhcpRequest.rangeEnd,
+            dns: dhcpRequest.dns,
+            macAssign: dhcpRequest.macAssign,
+            status: 'add-wait'
+          };
+
+          await devices.findOneAndUpdate(
+            { _id: deviceObject._id },
+            { $set: { 'dhcp.$[elem]': dhcpData } },
+            { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }] });
+          return Service.successResponse(dhcpData, 202);
+        }
       }
 
-      return Service.successResponse(dhcpData, 202);
+      if (majorAgentVersion >= 2) {
+        const dhcpData = {
+          _id: dhcpId,
+          interface: dhcpRequest.interface,
+          rangeStart: dhcpRequest.rangeStart,
+          rangeEnd: dhcpRequest.rangeEnd,
+          dns: dhcpRequest.dns,
+          macAssign: dhcpRequest.macAssign
+        };
+
+        const updDevice = await devices.findOneAndUpdate(
+          { _id: deviceObject._id },
+          { $set: { 'dhcp.$[elem]': dhcpData } },
+          { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }], new: true }
+        );
+
+        const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+          org: orgList[0],
+          newDevice: updDevice
+        });
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+        return Service.successResponse(dhcpData, 202);
+      }
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -1742,13 +1801,24 @@ class DevicesService {
 
   /**
    * Validate that the dhcp request
+   * @param {Object} device - the device object
    * @param {Object} dhcpRequest - request values
    * @throw error, if not valid
    */
-  static validateDhcpRequest (dhcpRequest) {
+  static validateDhcpRequest (device, dhcpRequest) {
     if (!dhcpRequest.interface || dhcpRequest.interface === '') {
-      throw new Error('Interface is required');
+      throw new Error('Interface is required to define DHCP');
     };
+    const interfaceObj = device.interfaces.find(i => {
+      return i.pciaddr === dhcpRequest.interface;
+    });
+    if (!interfaceObj) {
+      throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
+    }
+    if (interfaceObj.type !== 'LAN') {
+      throw new Error('DHCP can be defined only for LAN interfaces');
+    }
+
     // Check that no repeated mac, host or IP
     const macLen = dhcpRequest.macAssign.length;
     const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
@@ -1773,7 +1843,6 @@ class DevicesService {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
       const orgList = await getAccessTokenOrgList(user, org, true);
-      DevicesService.validateDhcpRequest(dhcpRequest);
       const deviceObject = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
@@ -1784,14 +1853,7 @@ class DevicesService {
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
       }
-
-      const interfaceIsExists = deviceObject.interfaces.find(i => {
-        return i.devId === dhcpRequest.interface;
-      });
-
-      if (!interfaceIsExists) {
-        throw new Error('Unknown interface');
-      }
+      DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
 
       // Verify that no dhcp has been defined for the interface
       const dhcpObject = deviceObject.dhcp.filter((s) => {
@@ -1822,8 +1884,10 @@ class DevicesService {
         { new: true }
       ).session(session);
 
-      const copy = Object.assign({}, dhcpRequest);
+      await session.commitTransaction();
+      session = null;
 
+      const copy = Object.assign({}, dhcpRequest);
       copy.method = 'dhcp';
       copy._id = dhcp.id;
       copy.action = 'add';
@@ -1831,9 +1895,6 @@ class DevicesService {
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
       response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
-      await session.commitTransaction();
-      session = null;
 
       return Service.successResponse(result, 202);
     } catch (e) {

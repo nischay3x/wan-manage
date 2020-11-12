@@ -18,6 +18,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../../mongoConns.js')();
+const configs = require('../../configs')();
 
 /**
  * Device statistics Database Schema
@@ -63,8 +64,11 @@ const deviceAggregateStatsSchema = new Schema({
   timestamps: true
 });
 
-// Remove documents created more than a hour ago
-deviceStatsSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7200 });
+// Remove documents created older than configured in analyticsStatsKeepTime
+deviceStatsSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: configs.get('analyticsStatsKeepTime', 'number') }
+);
 
 const deviceStats = mongoConns.getAnalyticsDB().model('deviceStats', deviceStatsSchema);
 const deviceAggregateStats = mongoConns
