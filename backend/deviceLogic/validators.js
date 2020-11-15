@@ -224,6 +224,14 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     }
   }
 
+  const wifiInterface = assignedIfs.find(i => i.deviceType === 'wifi');
+  if (wifiInterface) {
+    const ssid = wifiInterface.configuration && wifiInterface.configuration.ssid;
+    const pass = wifiInterface.configuration && wifiInterface.configuration.password;
+    if (!ssid) return { valid: false, err: 'SSID is not configured for WIFI interface' };
+    if (!pass) return { valid: false, err: 'Password is not configured for WIFI interface' };
+  }
+
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
