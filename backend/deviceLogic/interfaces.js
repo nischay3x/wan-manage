@@ -87,7 +87,8 @@ const lteConfigurationSchema = Joi.object().keys({
 
 const WifiConfigurationSchema = Joi.object().keys({
   ssid: Joi.string().required(),
-  password: Joi.string().required().min(8)
+  password: Joi.string().required().min(8),
+  operationMode: Joi.string().required().valid('b', 'g')
 });
 
 /**
