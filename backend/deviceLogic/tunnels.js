@@ -1107,7 +1107,7 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
       deviceAIntf.PublicIP === deviceBIntf.PublicIP;
 
   paramsDeviceA.src = deviceAIntf.IPv4;
-  paramsDeviceA.pciaddr = deviceAIntf.pciaddr;
+  paramsDeviceA.pci = deviceAIntf.pciaddr;
   paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
   paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort)
     ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
@@ -1117,7 +1117,7 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
     mac: tunnelParams.mac1
   };
   paramsDeviceB.src = deviceBIntf.IPv4;
-  paramsDeviceB.pciaddr = deviceBIntf.pciaddr;
+  paramsDeviceB.pci = deviceBIntf.pciaddr;
   paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
   paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort)
     ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
