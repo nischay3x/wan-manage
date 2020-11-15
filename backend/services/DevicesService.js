@@ -911,7 +911,7 @@ class DevicesService {
           .filter(intf => intf.modified)
           .map(intf => {
             return {
-              pci: intf.pciaddr
+              devId: intf.devId
             };
           });
         const { valid, err } = validateDhcpConfig(
@@ -1283,7 +1283,7 @@ class DevicesService {
   /**
    * Get tunnel statistics from the database
    * @param {string} id          - device ID in mongodb, if not specified, get all stats
-   * @param {string} tunnelnum   - tunnel number (usually a pci address)
+   * @param {string} tunnelnum   - tunnel number (usually a devId address)
    *                               if not specified, get all tunnels stats
    * @param {string} org         - organization ID in mongodb
    * @param {Date} startTime     - start time to get stats, if not specified get all previous time
@@ -1810,7 +1810,7 @@ class DevicesService {
       throw new Error('Interface is required to define DHCP');
     };
     const interfaceObj = device.interfaces.find(i => {
-      return i.pciaddr === dhcpRequest.interface;
+      return i.devId === dhcpRequest.interface;
     });
     if (!interfaceObj) {
       throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
