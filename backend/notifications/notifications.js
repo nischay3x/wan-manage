@@ -23,7 +23,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'n
 const mailer = require('../utils/mailer')(
   configs.get('mailerHost'),
   configs.get('mailerPort'),
-  configs.get('mailerBypassCert')
+  configs.get('mailerBypassCert', 'boolean')
 );
 const mongoose = require('mongoose');
 

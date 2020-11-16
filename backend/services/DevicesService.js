@@ -632,7 +632,7 @@ class DevicesService {
 
       let orgLanSubnets = [];
 
-      if (isRunning && configs.get('forbidLanSubnetOverlaps')) {
+      if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
         orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
       }
 
