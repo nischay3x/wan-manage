@@ -244,9 +244,7 @@ const queueFullSyncJob = async (device, hash, org) => {
       method: 'sync',
       data: {
         handlers: completeHandlers,
-        device: {
-          machineId: machineId
-        }
+        machineId
       }
     },
     // Metadata
@@ -280,14 +278,14 @@ const complete = async (jobId, res) => {
     params: { result: res, jobId: jobId }
   });
 
-  const { handlers, device } = res;
+  const { handlers, machineId } = res;
 
   // Reset hash value for full-sync messages
   logger.info('Updating hash after full-sync job succeeded', {
     params: { }
   });
   await devices.updateOne(
-    { machineId: device.machineId },
+    { machineId: machineId },
     { 'sync.hash': '' },
     { upsert: false }
   );
