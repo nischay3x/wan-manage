@@ -56,8 +56,14 @@ const prepareIfcParams = (interfaces) => {
     });
     newIfc.multilink = { labels };
 
-    // Don't send interface default GW for LAN interfaces
-    if (ifc.type !== 'WAN' && ifc.isAssigned) delete newIfc.gateway;
+    // Don't send default GW and public info for LAN interfaces
+    if (ifc.type !== 'WAN' && ifc.isAssigned) {
+      delete newIfc.gateway;
+      delete newIfc.metric;
+      delete newIfc.PublicIP;
+      delete newIfc.PublicPort;
+      delete newIfc.useStun;
+    }
     return newIfc;
   });
 };
@@ -69,20 +75,8 @@ const prepareIfcParams = (interfaces) => {
  * @returns array of interfaces
  */
 const transformInterfaces = (interfaces) => {
-  return interfaces.map(ifc =>
-    ifc.type === 'LAN' ? {
-      _id: ifc._id,
-      devId: ifc.devId,
-      dhcp: 'no',
-      addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
-      addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
-      routing: ifc.routing,
-      type: ifc.type,
-      isAssigned: ifc.isAssigned,
-      pathlabels: ifc.pathlabels,
-      configuration: ifc.configuration,
-      deviceType: ifc.deviceType
-    } : {
+  return interfaces.map(ifc => {
+    return {
       _id: ifc._id,
       devId: ifc.devId,
       dhcp: ifc.dhcp ? ifc.dhcp : 'no',
@@ -99,8 +93,8 @@ const transformInterfaces = (interfaces) => {
       pathlabels: ifc.pathlabels,
       configuration: ifc.configuration,
       deviceType: ifc.deviceType
-    }
-  );
+    };
+  });
 };
 
 /**
