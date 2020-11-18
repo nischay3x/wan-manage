@@ -40,6 +40,8 @@ const configEnv = {
     userIpReqRateLimit: 300,
     // Unread notification email period (in msec), a mail is sent once a period
     unreadNotificationPeriod: 86400000,
+    // Max.number of unread notifications included into periodic email
+    unreadNotificationsMaxSent: 50,
     // The duration of the user JWT token in seconds
     userTokenExpiration: 300,
     // The duration of the user refresh token in seconds
