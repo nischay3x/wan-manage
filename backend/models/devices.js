@@ -191,7 +191,17 @@ const interfacesSchema = new Schema({
   pathlabels: [{
     type: Schema.Types.ObjectId,
     ref: 'PathLabels'
-  }]
+  }],
+  // true if the agent needs to monitor internet access on the WAN interface
+  internetMonitoring: {
+    type: Boolean,
+    default: true
+  },
+  // true if there is an internet access on the WAN interface
+  internetAccess: {
+    type: Boolean,
+    default: false
+  }
 }, {
   timestamps: true
 });

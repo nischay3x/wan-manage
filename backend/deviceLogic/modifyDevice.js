@@ -63,6 +63,7 @@ const prepareIfcParams = (interfaces) => {
       delete newIfc.PublicIP;
       delete newIfc.PublicPort;
       delete newIfc.useStun;
+      delete newIfc.internetMonitoring;
     }
     return newIfc;
   });

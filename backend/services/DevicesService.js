@@ -644,6 +644,7 @@ class DevicesService {
             // Public port and NAT type is assigned by system only
             updIntf.PublicPort = updIntf.useStun ? origIntf.PublicPort : configs.get('tunnelPort');
             updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
+            updIntf.internetAccess = origIntf.internetAccess;
 
             // For unasigned and non static interfaces we use linux network parameters
             if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
