@@ -131,6 +131,8 @@ class DevicesService {
           'PublicPort',
           'NatType',
           'useStun',
+          'internetAccess',
+          'internetMonitoring',
           'gateway',
           'metric',
           'dhcp',
