@@ -71,7 +71,7 @@ const buildInterfaces = (deviceInterfaces) => {
       ifcInfo.PublicIP = PublicIP;
       ifcInfo.PublicPort = PublicPort;
       ifcInfo.useStun = useStun;
-      ifcInfo.internetMonitoring = internetMonitoring;
+      ifcInfo['internet-monitoring'] = internetMonitoring;
     }
     interfaces.push(ifcInfo);
   }

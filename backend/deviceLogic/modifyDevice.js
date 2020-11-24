@@ -86,7 +86,7 @@ const transformInterfaces = (interfaces) => {
       PublicIP: ifc.PublicIP,
       PublicPort: ifc.PublicPort,
       useStun: ifc.useStun,
-      internetMonitoring: ifc.internetMonitoring,
+      'monitor-internet': ifc.internetMonitoring,
       gateway: ifc.gateway,
       metric: ifc.metric,
       routing: ifc.routing,
