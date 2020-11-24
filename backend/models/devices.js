@@ -199,8 +199,7 @@ const interfacesSchema = new Schema({
   },
   // true if there is an internet access on the WAN interface
   internetAccess: {
-    type: Boolean,
-    default: false
+    type: Boolean
   }
 }, {
   timestamps: true

@@ -476,7 +476,7 @@ class Connections {
             PublicPort: updatedConfig.public_port && i.useStun
               ? updatedConfig.public_port : i.PublicPort,
             NatType: updatedConfig.nat_type || i.NatType,
-            internetAccess: updatedConfig.internetAccess === 'yes'
+            internetAccess: updatedConfig.internetAccess
           };
 
           if (i.dhcp === 'yes' || !i.isAssigned) {
