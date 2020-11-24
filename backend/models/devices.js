@@ -200,6 +200,10 @@ const interfacesSchema = new Schema({
   configuration: {
     type: Object,
     default: {}
+  },
+  deviceParams: {
+    type: Object,
+    default: {}
   }
 }, {
   timestamps: true,

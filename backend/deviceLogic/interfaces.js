@@ -47,7 +47,8 @@ const buildInterfaces = (deviceInterfaces) => {
       metric,
       dhcp,
       deviceType,
-      configuration
+      configuration,
+      deviceParams
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -67,7 +68,8 @@ const buildInterfaces = (deviceInterfaces) => {
       type,
       multilink: { labels: labels.map((label) => label._id.toString()) },
       deviceType,
-      configuration
+      configuration,
+      deviceParams
     };
     if (ifc.type === 'WAN') {
       ifcInfo.gateway = gateway;
@@ -89,7 +91,11 @@ const lteConfigurationSchema = Joi.object().keys({
 const WifiConfigurationSchema = Joi.object().keys({
   ssid: Joi.string().required(),
   password: Joi.string().required().min(8),
-  operationMode: Joi.string().required().valid('b', 'g')
+  operationMode: Joi.string().required().valid('b', 'g', 'n'),
+  channel: Joi.string().regex(/^\d+$/).required(),
+  bandwidth: Joi.string().valid('20', '40').required(),
+  securityMode: Joi.string().valid('wpa').required(),
+  broadcastSsid: Joi.boolean().required()
 });
 
 /**

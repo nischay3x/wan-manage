@@ -148,7 +148,8 @@ class DevicesService {
           '_id',
           'pathlabels',
           'deviceType',
-          'configuration'
+          'configuration',
+          'deviceParams'
         ]);
         retIf._id = retIf._id.toString();
         return retIf;
