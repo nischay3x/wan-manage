@@ -85,7 +85,10 @@ const buildInterfaces = (deviceInterfaces) => {
 };
 
 const lteConfigurationSchema = Joi.object().keys({
-  apn: Joi.string().required()
+  apn: Joi.string().required(),
+  auth: Joi.string().valid('MSCHAPV2', 'PAP', 'CHAP').allow(null, ''),
+  user: Joi.string().allow(null, ''),
+  password: Joi.string().allow(null, '')
 });
 
 const WifiConfigurationSchema = Joi.object().keys({

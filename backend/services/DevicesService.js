@@ -507,48 +507,82 @@ class DevicesService {
     }
   }
 
-  static async devicesIdLteInterfaceStatusGET ({ id, devId, org }, { user }) {
+  static async devicesIdGetInterfaceGET ({ id, interfaceName, org, getEdgeData }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const device = await devices.findOne({
-        _id: mongoose.Types.ObjectId(id),
-        org: { $in: orgList }
-      });
 
-      if (!device) {
-        return Service.rejectResponse('Device not found');
-      }
+      const deviceObject = await devices.findOne({
+        _id: id,
+        org: { $in: orgList },
+        'interfaces.name': interfaceName
+      }).lean();
 
-      if (!connections.isConnected(device.machineId)) {
-        return Service.successResponse({
-          deviceStatus: 'disconnected',
-          status: {}
-        });
-      }
+      if (!deviceObject) {
+        throw new Error('Device or Interface not found');
+      };
 
-      const statusResponse = await connections.deviceSendMessage(
-        null,
-        device.machineId,
-        {
-          entity: 'agent',
-          message: 'get-lte-interface-status',
-          params: { devId }
-        }
-      );
+      const deviceStatus = connections.isConnected(deviceObject.machineId);
+      const selectedInterface = deviceObject.interfaces.find(i => i.name === interfaceName);
+      let interfaceInfo = {};
 
-      if (!statusResponse.ok) {
-        logger.error('Failed to get lte interface status', {
-          params: {
-            deviceId: id,
-            response: statusResponse.message
+      if (getEdgeData === true && deviceStatus) {
+        const interfaceType = selectedInterface.deviceType;
+
+        const agentMessages = {
+          lte: 'get-lte-interface-info'
+        }[interfaceType];
+
+        if (agentMessages) {
+          const response = await connections.deviceSendMessage(
+            null,
+            deviceObject.machineId,
+            {
+              entity: 'agent',
+              message: agentMessages,
+              params: { devId: selectedInterface.devId }
+            }
+          );
+          if (!response.ok) {
+            logger.error('Failed to get interface info', {
+              params: {
+                deviceId: id, response: response.message
+              }
+            });
+          } else {
+            interfaceInfo = response.message;
           }
-        });
-        return Service.rejectResponse('Failed to get lte interface status', 500);
+        }
       }
+      // const agentMessages = {
+      //   lte: 'get-lte-interface-info'
+      // }[interfaceType];
+
+      // if (deviceStatus && agentMessages) {
+      //   const response = await connections.deviceSendMessage(
+      //     null,
+      //     deviceObject.machineId,
+      //     {
+      //       entity: 'agent',
+      //       message: agentMessages,
+      //       params: { devId: selectedInterface.devId }
+      //     }
+      //   );
+
+      //   if (!response.ok) {
+      //     logger.error('Failed to get interface info', {
+      //       params: {
+      //         deviceId: id, response: response.message
+      //       }
+      //     });
+      //   } else {
+      //     deviceInfo = response.message;
+      //   }
+      // }
 
       return Service.successResponse({
-        deviceStatus: 'connected',
-        status: statusResponse.message
+        deviceStatus,
+        interface: selectedInterface,
+        interfaceInfo
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -1908,14 +1942,14 @@ class DevicesService {
   }
 
   static async devicesIdSaveInterfaceConfigurationPUT ({
-    org, id, interfaceConfigurationReq, devId
+    org, id, interfaceConfigurationReq, interfaceName
   }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const deviceObject = await devices.findOne({
         _id: id,
         org: { $in: orgList },
-        'interfaces.devId': devId
+        'interfaces.name': interfaceName
       }).lean();
       if (!deviceObject) {
         throw new Error('Device or Interface not found');
@@ -1923,7 +1957,7 @@ class DevicesService {
 
       // because of the configuration object is dynamically.
       // we need to pick only allowed fields
-      const selectedIf = deviceObject.interfaces.find(i => i.devId === devId);
+      const selectedIf = deviceObject.interfaces.find(i => i.name === interfaceName);
       const { valid, err } = validateConfiguration(selectedIf, interfaceConfigurationReq);
       if (!valid) {
         logger.warn('interface update failed',
@@ -1936,7 +1970,7 @@ class DevicesService {
       await devices.updateOne({
         _id: id,
         org: { $in: orgList },
-        'interfaces.devId': devId
+        'interfaces.name': interfaceName
       }, {
         $set: { 'interfaces.$.configuration': interfaceConfigurationReq }
       });
