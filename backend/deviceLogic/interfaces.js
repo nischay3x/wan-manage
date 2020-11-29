@@ -39,6 +39,7 @@ const buildInterfaces = (deviceInterfaces) => {
       PublicIP,
       PublicPort,
       useStun,
+      internetMonitoring,
       routing,
       type,
       pathlabels,
@@ -70,6 +71,7 @@ const buildInterfaces = (deviceInterfaces) => {
       ifcInfo.PublicIP = PublicIP;
       ifcInfo.PublicPort = PublicPort;
       ifcInfo.useStun = useStun;
+      ifcInfo['internet-monitoring'] = internetMonitoring;
     }
     interfaces.push(ifcInfo);
   }
