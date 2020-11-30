@@ -129,7 +129,39 @@ const validateConfiguration = (deviceInterfaces, configurationReq) => {
   return { valid: false, err: 'You can\'t save configuration for this interface' };
 };
 
+const lteOperationSchema = Joi.object().keys({
+  op: Joi.string().valid('connect', 'disconnect')
+});
+
+/**
+ * Validate dynamic operation object for different types of interfaces
+ *
+ * @param {*} deviceInterfaces interfaces stored in db
+ * @param {*} configurationReq configuration request to save
+ * @returns array of interfaces
+ */
+const validateOperations = (deviceInterfaces, operationReq) => {
+  const interfacesTypes = {
+    lte: lteOperationSchema
+  };
+
+  const intType = deviceInterfaces.deviceType;
+
+  if (interfacesTypes[intType]) {
+    const result = interfacesTypes[intType].validate(operationReq);
+
+    if (result.error) {
+      return { valid: false, err: `${result.error.details[0].message}` };
+    }
+
+    return { valid: true, err: '' };
+  }
+
+  return { valid: false, err: 'You can\'t perform requested operation for this interface' };
+};
+
 module.exports = {
   buildInterfaces,
-  validateConfiguration
+  validateConfiguration,
+  validateOperations
 };

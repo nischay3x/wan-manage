@@ -155,11 +155,11 @@ class DevicesController {
     );
   }
 
-  async devicesIdConnectToLtePOST (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdConnectToLtePOST
-    );
-  }
+  // async devicesIdConnectToLtePOST (request, response) {
+  //   await Controller.handleRequest(
+  //     request, response, this.service.devicesIdConnectToLtePOST
+  //   );
+  // }
 
   async devicesIdGetInterfaceGET (request, response) {
     await Controller.handleRequest(
@@ -174,6 +174,12 @@ class DevicesController {
   async devicesIdSaveInterfaceConfigurationPUT (request, response) {
     await Controller.handleRequest(
       request, response, this.service.devicesIdSaveInterfaceConfigurationPUT
+    );
+  }
+
+  async devicesIdPerformInterfaceActionPOST (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdPerformInterfaceActionPOST
     );
   }
 }

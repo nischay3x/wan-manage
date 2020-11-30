@@ -31,7 +31,7 @@ const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { validateConfiguration } = require('../deviceLogic/interfaces');
+const { validateConfiguration, validateOperations } = require('../deviceLogic/interfaces');
 const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -457,55 +457,55 @@ class DevicesService {
     }
   }
 
-  static async devicesIdConnectToLtePOST ({ id, devId, org, lteConnectRequest }, { user }) {
-    try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
-      const device = await devices.findOne({
-        _id: mongoose.Types.ObjectId(id),
-        org: { $in: orgList }
-      });
+  // static async devicesIdConnectToLtePOST ({ id, devId, org, lteConnectRequest }, { user }) {
+  //   try {
+  //     const orgList = await getAccessTokenOrgList(user, org, false);
+  //     const device = await devices.findOne({
+  //       _id: mongoose.Types.ObjectId(id),
+  //       org: { $in: orgList }
+  //     });
 
-      if (!device) {
-        return Service.rejectResponse('Device not found');
-      }
+  //     if (!device) {
+  //       return Service.rejectResponse('Device not found');
+  //     }
 
-      if (!connections.isConnected(device.machineId)) {
-        return Service.rejectResponse('Failed to connect to lte', 500);
-      }
+  //     if (!connections.isConnected(device.machineId)) {
+  //       return Service.rejectResponse('Failed to connect to lte', 500);
+  //     }
 
-      const response = await connections.deviceSendMessage(
-        null,
-        device.machineId,
-        {
-          entity: 'agent',
-          message: 'connect-to-lte',
-          params: {
-            devId,
-            apn: lteConnectRequest.apn
-          }
-        }
-      );
+  //     const response = await connections.deviceSendMessage(
+  //       null,
+  //       device.machineId,
+  //       {
+  //         entity: 'agent',
+  //         message: 'connect-to-lte',
+  //         params: {
+  //           devId,
+  //           apn: lteConnectRequest.apn
+  //         }
+  //       }
+  //     );
 
-      if (!response.ok) {
-        logger.error('Failed to connect to lte', {
-          params: {
-            deviceId: id,
-            response: response.message
-          }
-        });
-        return Service.rejectResponse('Failed to connect to lte', 500);
-      }
+  //     if (!response.ok) {
+  //       logger.error('Failed to connect to lte', {
+  //         params: {
+  //           deviceId: id,
+  //           response: response.message
+  //         }
+  //       });
+  //       return Service.rejectResponse('Failed to connect to lte', 500);
+  //     }
 
-      return Service.successResponse({
-        success: response.message
-      });
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
+  //     return Service.successResponse({
+  //       success: response.message
+  //     });
+  //   } catch (e) {
+  //     return Service.rejectResponse(
+  //       e.message || 'Internal Server Error',
+  //       e.status || 500
+  //     );
+  //   }
+  // }
 
   static async devicesIdGetInterfaceGET ({ id, interfaceName, org, getEdgeData }, { user }) {
     try {
@@ -1941,6 +1941,76 @@ class DevicesService {
     }
   }
 
+  static async devicesIdPerformInterfaceActionPOST ({
+    org, id, interfaceOperationReq, interfaceName
+  }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      const deviceObject = await devices.findOne({
+        _id: id,
+        org: { $in: orgList },
+        'interfaces.name': interfaceName
+      }).lean();
+
+      if (!deviceObject) {
+        throw new Error('Device or Interface not found');
+      };
+
+      const selectedIf = deviceObject.interfaces.find(i => i.name === interfaceName);
+      const { valid, err } = validateOperations(selectedIf, interfaceOperationReq);
+
+      if (!valid) {
+        logger.warn('interface perform operation failed',
+          {
+            params: { body: interfaceOperationReq, err: err }
+          });
+        return Service.rejectResponse(err, 500);
+      }
+
+      const interfaceType = selectedIf.deviceType;
+      const agentMessages = {
+        lte: 'lte-perform-operation'
+      }[interfaceType];
+
+      if (agentMessages) {
+        const response = await connections.deviceSendMessage(
+          null,
+          deviceObject.machineId,
+          {
+            entity: 'agent',
+            message: agentMessages,
+            params: { devId: selectedIf.devId, operation: interfaceOperationReq.op }
+          }
+        );
+
+        if (!response.ok) {
+          logger.error('Failed to perform interface operation', {
+            params: {
+              deviceId: id, response: response.message
+            }
+          });
+
+          const regex = new RegExp(/(?<='err_msg': ").*(?=")/);
+          const errMsg = response.message.match(regex);
+
+          if (errMsg[0]) {
+            return Service.rejectResponse(errMsg[0], 500);
+          }
+
+          return Service.rejectResponse(response.message, 500);
+        };
+      }
+
+      return Service.successResponse({}, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 500
+      );
+    }
+  };
+
   static async devicesIdSaveInterfaceConfigurationPUT ({
     org, id, interfaceConfigurationReq, interfaceName
   }, { user }) {
@@ -1960,7 +2030,7 @@ class DevicesService {
       const selectedIf = deviceObject.interfaces.find(i => i.name === interfaceName);
       const { valid, err } = validateConfiguration(selectedIf, interfaceConfigurationReq);
       if (!valid) {
-        logger.warn('interface update failed',
+        logger.warn('interface configuration update failed',
           {
             params: { config: interfaceConfigurationReq, err: err }
           });
