@@ -131,13 +131,13 @@ const validateConfiguration = (deviceInterfaces, configurationReq) => {
 
 const lteOperationSchema = Joi.object().keys({
   op: Joi.string().valid('connect', 'disconnect').required(),
-  params: Joi.object({
-    apn: Joi.alternatives().when('op', {
-      is: 'connect',
-      then: Joi.string().required(),
-      otherwise: Joi.string().optional()
-    }).error(() => 'Can\'t start network without an apn')
-  }).optional()
+  params: Joi.alternatives().when('op', {
+    is: 'connect',
+    then: Joi.object({
+      apn: Joi.string().required().error(() => 'Can\'t start network without an apn')
+    }).required(),
+    otherwise: Joi.optional()
+  })
 });
 
 /**
