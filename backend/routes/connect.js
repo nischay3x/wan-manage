@@ -105,6 +105,11 @@ connectRouter.route('/register')
                   intf.PublicIP = intf.public_ip || (intf.metric === lowestMetric ? sourceIP : '');
                   intf.PublicPort = intf.public_port || '';
                   intf.NatType = intf.nat_type || '';
+
+                  if (intf.deviceType === 'lte' && intf.deviceParams.apn) {
+                    intf.configuration = {};
+                    intf.configuration.apn = intf.deviceParams.apn;
+                  }
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
