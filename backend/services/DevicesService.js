@@ -1974,13 +1974,14 @@ class DevicesService {
       }[interfaceType];
 
       if (agentMessages) {
+        const params = interfaceOperationReq.params || {};
         const response = await connections.deviceSendMessage(
           null,
           deviceObject.machineId,
           {
             entity: 'agent',
             message: agentMessages,
-            params: { devId: selectedIf.devId, operation: interfaceOperationReq.op }
+            params: { devId: selectedIf.devId, operation: interfaceOperationReq.op, ...params }
           }
         );
 
@@ -1994,7 +1995,7 @@ class DevicesService {
           const regex = new RegExp(/(?<='err_msg': ").*(?=")/);
           const errMsg = response.message.match(regex);
 
-          if (errMsg[0]) {
+          if (errMsg) {
             return Service.rejectResponse(errMsg[0], 500);
           }
 
