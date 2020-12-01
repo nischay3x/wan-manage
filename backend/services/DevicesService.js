@@ -132,7 +132,7 @@ class DevicesService {
           'NatType',
           'useStun',
           'internetAccess',
-          'internetMonitoring',
+          'monitorInternet',
           'gateway',
           'metric',
           'dhcp',
