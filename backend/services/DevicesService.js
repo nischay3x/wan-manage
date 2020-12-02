@@ -132,7 +132,7 @@ class DevicesService {
           'NatType',
           'useStun',
           'internetAccess',
-          'internetMonitoring',
+          'monitorInternet',
           'gateway',
           'metric',
           'dhcp',
@@ -1708,16 +1708,16 @@ class DevicesService {
   static async devicesIdStatusGET ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const { sync, machineId, isApproved } = await devices.findOne(
+      const { sync, machineId, isApproved, interfaces } = await devices.findOne(
         { _id: id, org: { $in: orgList } },
-        'sync machineId isApproved'
+        'sync machineId isApproved interfaces.pciaddr interfaces.internetAccess'
       ).lean();
-
       const isConnected = connections.isConnected(machineId);
       return Service.successResponse({
         sync,
         isApproved,
-        connection: `${isConnected ? '' : 'dis'}connected`
+        connection: `${isConnected ? '' : 'dis'}connected`,
+        interfaces
       });
     } catch (e) {
       return Service.rejectResponse(

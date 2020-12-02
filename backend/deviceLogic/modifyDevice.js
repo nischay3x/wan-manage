@@ -63,7 +63,7 @@ const prepareIfcParams = (interfaces) => {
       delete newIfc.PublicIP;
       delete newIfc.PublicPort;
       delete newIfc.useStun;
-      delete newIfc.internetMonitoring;
+      delete newIfc.monitorInternet;
     }
     return newIfc;
   });
@@ -86,7 +86,7 @@ const transformInterfaces = (interfaces) => {
       PublicIP: ifc.PublicIP,
       PublicPort: ifc.PublicPort,
       useStun: ifc.useStun,
-      'monitor-internet': ifc.internetMonitoring,
+      monitorInternet: ifc.monitorInternet,
       gateway: ifc.gateway,
       metric: ifc.metric,
       routing: ifc.routing,

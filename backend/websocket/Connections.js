@@ -430,11 +430,8 @@ class Connections {
     const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
     // Check if reconfig was changed
     if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
-      // Check if dhcp client or public IP is defined on any of interfaces or it is unassigned
       const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
-        deviceInfo.message.network.interfaces.length > 0 &&
-        (origDevice.interfaces.filter(i => i.dhcp === 'yes' || !i.isAssigned).length > 0 ||
-        deviceInfo.message.network.interfaces.filter(i => i.public_ip).length > 0);
+        deviceInfo.message.network.interfaces.length > 0;
 
       if (needReconfig) {
         // Currently we allow only one change at a time to the device,
@@ -469,6 +466,28 @@ class Connections {
             return i;
           };
 
+          if (updatedConfig.gateway && updatedConfig.internetAccess !== undefined &&
+            i.monitorInternet && updatedConfig.internetAccess !== i.internetAccess) {
+            const newInterfaceState = `${updatedConfig.internetAccess ? 'Has' : 'No'} internet`;
+            const details = `Interface state changed to "${newInterfaceState}"`;
+            logger.info(details, {
+              params: {
+                machineId,
+                updatedConfig
+              }
+            });
+            notificationsMgr.sendNotifications([
+              {
+                org: origDevice.org,
+                title: 'Interface connection change',
+                time: new Date(),
+                device: origDevice._id,
+                machineId,
+                details
+              }
+            ]);
+          };
+
           const updInterface = {
             ...i.toJSON(),
             PublicIP: updatedConfig.public_ip && i.useStun
@@ -497,6 +516,7 @@ class Connections {
           { $set: { interfaces } },
           { new: true, runValidators: true }
         );
+
         // Update the reconfig hash before applying to prevent infinite loop
         this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
 
