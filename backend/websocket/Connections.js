@@ -432,9 +432,7 @@ class Connections {
     if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
       // Check if dhcp client or public IP is defined on any of interfaces or it is unassigned
       const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
-        deviceInfo.message.network.interfaces.length > 0 &&
-        (origDevice.interfaces.filter(i => i.dhcp === 'yes' || !i.isAssigned).length > 0 ||
-        deviceInfo.message.network.interfaces.filter(i => i.public_ip).length > 0);
+        deviceInfo.message.network.interfaces.length > 0;
 
       if (needReconfig) {
         // Currently we allow only one change at a time to the device,
