@@ -93,11 +93,19 @@ const lteConfigurationSchema = Joi.object().keys({
 
 const WifiConfigurationSchema = Joi.object().keys({
   ssid: Joi.string().required(),
-  password: Joi.string().required().min(8),
+  password: Joi.alternatives().when('securityMode', {
+    is: 'wep',
+    then: Joi.string()
+      .regex(/^([a-z0-9]{5}|[a-z0-9]{13}|[a-z0-9]{16})$/)
+      .error(() => 'Password length must be 5, 13 or 16'),
+    otherwise: Joi.string().min(8)
+  }).required(),
   operationMode: Joi.string().required().valid('b', 'g', 'n'),
   channel: Joi.string().regex(/^\d+$/).required(),
   bandwidth: Joi.string().valid('20', '40').required(),
-  securityMode: Joi.string().valid('wpa').required(),
+  securityMode: Joi.string().valid(
+    'open', 'wep', 'wpa-psk', 'wpa2-psk', 'wpa-psk/wpa2-psk'
+  ).required(),
   broadcastSsid: Joi.boolean().required()
 });
 
