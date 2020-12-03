@@ -88,6 +88,8 @@ connectRouter.route('/register')
               ifs.forEach((intf) => {
                 intf.isAssigned = false;
                 intf.useStun = true;
+                intf.internetAccess = intf.internetAccess === undefined ? ''
+                  : intf.internetAccess ? 'yes' : 'no';
                 if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent
                   intf.PublicIP = intf.public_ip || sourceIP;

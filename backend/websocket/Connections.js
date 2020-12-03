@@ -430,11 +430,8 @@ class Connections {
     const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
     // Check if reconfig was changed
     if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
-      // Check if dhcp client or public IP is defined on any of interfaces or it is unassigned
       const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
-        deviceInfo.message.network.interfaces.length > 0 &&
-        (origDevice.interfaces.filter(i => i.dhcp === 'yes' || !i.isAssigned).length > 0 ||
-        deviceInfo.message.network.interfaces.filter(i => i.public_ip).length > 0);
+        deviceInfo.message.network.interfaces.length > 0;
 
       if (needReconfig) {
         // Currently we allow only one change at a time to the device,
@@ -467,38 +464,59 @@ class Connections {
               }
             });
             return i;
-          }
+          };
+
+          if (updatedConfig.gateway && updatedConfig.internetAccess !== undefined &&
+            i.monitorInternet && updatedConfig.internetAccess !== i.internetAccess) {
+            const newInterfaceState = `${updatedConfig.internetAccess ? 'Has' : 'No'} internet`;
+            const details = `Interface state changed to "${newInterfaceState}"`;
+            logger.info(details, {
+              params: {
+                machineId,
+                updatedConfig
+              }
+            });
+            notificationsMgr.sendNotifications([
+              {
+                org: origDevice.org,
+                title: 'Interface connection change',
+                time: new Date(),
+                device: origDevice._id,
+                machineId,
+                details
+              }
+            ]);
+          };
+
+          const updInterface = {
+            ...i.toJSON(),
+            PublicIP: updatedConfig.public_ip && i.useStun
+              ? updatedConfig.public_ip : i.PublicIP,
+            PublicPort: updatedConfig.public_port && i.useStun
+              ? updatedConfig.public_port : i.PublicPort,
+            NatType: updatedConfig.nat_type || i.NatType,
+            internetAccess: updatedConfig.internetAccess === undefined ? ''
+              : updatedConfig.internetAccess ? 'yes' : 'no'
+          };
+
           if (i.dhcp === 'yes' || !i.isAssigned) {
-            return {
-              ...i.toJSON(),
-              IPv4: updatedConfig.IPv4,
-              IPv4Mask: updatedConfig.IPv4Mask,
-              IPv6: updatedConfig.IPv6,
-              IPv6Mask: updatedConfig.IPv6Mask,
-              gateway: updatedConfig.gateway,
-              PublicIP: updatedConfig.public_ip && i.useStun
-                ? updatedConfig.public_ip : i.PublicIP,
-              PublicPort: updatedConfig.public_port && i.useStun
-                ? updatedConfig.public_port : i.PublicPort,
-              NatType: updatedConfig.nat_type || i.NatType
-            };
-          } else {
-            return {
-              ...i.toJSON(),
-              PublicIP: updatedConfig.public_ip && i.useStun
-                ? updatedConfig.public_ip : i.PublicIP,
-              PublicPort: updatedConfig.public_port && i.useStun
-                ? updatedConfig.public_port : i.PublicPort,
-              NatType: updatedConfig.nat_type || i.NatType
-            };
-          }
+            updInterface.IPv4 = updatedConfig.IPv4;
+            updInterface.IPv4Mask = updatedConfig.IPv4Mask;
+            updInterface.IPv6 = updatedConfig.IPv6;
+            updInterface.IPv6Mask = updatedConfig.IPv6Mask;
+            updInterface.gateway = updatedConfig.gateway;
+          };
+
+          return updInterface;
         });
+
         // Update interfaces in DB
         const updDevice = await devices.findOneAndUpdate(
           { machineId },
           { $set: { interfaces } },
           { new: true, runValidators: true }
         );
+
         // Update the reconfig hash before applying to prevent infinite loop
         this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
 
