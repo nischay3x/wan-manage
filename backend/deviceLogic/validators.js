@@ -18,7 +18,7 @@
 const net = require('net');
 const cidr = require('cidr-tools');
 const { devices } = require('../models/devices');
-
+const maxMetric = 2 * 10 ** 9;
 /**
  * Checks whether a value is empty
  * @param  {string}  val the value to be checked
@@ -92,6 +92,13 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     return {
       valid: false,
       err: 'There should be at least one LAN and one WAN interfaces'
+    };
+  }
+
+  if (assignedIfs.some(ifc => +ifc.metric >= maxMetric)) {
+    return {
+      valid: false,
+      err: `Metric should be lower than ${maxMetric}`
     };
   }
 

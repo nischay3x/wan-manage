@@ -6833,6 +6833,7 @@ components:
           PublicPort: PublicPort
           NatType: NatType
           useStun: useStun
+          monitorInternet : monitorInternet
           IPv4: IPv4
           gateway: gateway
           metric: 0
@@ -6852,6 +6853,7 @@ components:
           PublicPort: PublicPort
           NatType: NatType
           useStun: useStun
+          monitorInternet: monitorInternet
           IPv4: IPv4
           type: WAN
           MAC: MAC
@@ -6952,6 +6954,7 @@ components:
           PublicPort: PublicPort
           NatType: NatType
           useStun: true
+          monitorInternet: true
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6972,6 +6975,7 @@ components:
           PublicPort: PublicPort
           NatType: NatType
           useStun: true
+          monitorInternet: true
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -7106,6 +7110,7 @@ components:
         PublicPort: PublicPort
         NatType: NatType
         useStun: useStun
+        monitorInternet: true
         IPv4: IPv4
         type: WAN
         MAC: MAC
@@ -7146,6 +7151,8 @@ components:
         NatType:
           type: string
         useStun:
+          type: boolean
+        monitorInternet:
           type: boolean
         gateway:
           type: string

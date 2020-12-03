@@ -192,6 +192,21 @@ const interfacesSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'PathLabels'
   }],
+  // true if the agent needs to monitor internet access on the WAN interface
+  monitorInternet: {
+    type: Boolean,
+    default: true
+  },
+  // true if there is an internet access on the WAN interface
+  internetAccess: {
+    type: String,
+    enum: [
+      '',
+      'yes',
+      'no'
+    ],
+    default: ''
+  },
   // device type - wifi, lte
   deviceType: {
     type: String,
