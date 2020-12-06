@@ -106,9 +106,12 @@ const WifiConfigurationSchema = Joi.object().keys({
   channel: Joi.string().regex(/^\d+$/).required(),
   bandwidth: Joi.string().valid('20', '40').required(),
   securityMode: Joi.string().valid(
-    'open', 'wep', 'wpa-psk', 'wpa2-psk', 'wpa-psk/wpa2-psk'
+    'open', 'wpa-psk', 'wpa2-psk', 'wpa-eap', 'wpa2-eap'
   ).required(),
-  broadcastSsid: Joi.boolean().required()
+  hideSsid: Joi.boolean().required(),
+  encryption: Joi.string().valid('aes-ccmp').required(),
+  region: Joi.string().valid(
+    'usa', 'taiwan', 'china', 'japan', 'australia', 'europe', 'russia').required()
 });
 
 /**
@@ -150,6 +153,11 @@ const lteOperationSchema = Joi.object().keys({
   })
 });
 
+const wifiOperationSchema = Joi.object().keys({
+  op: Joi.string().valid('start', 'stop').required(),
+  params: Joi.object().required()
+});
+
 /**
  * Validate dynamic operation object for different types of interfaces
  *
@@ -159,7 +167,8 @@ const lteOperationSchema = Joi.object().keys({
  */
 const validateOperations = (deviceInterfaces, operationReq) => {
   const interfacesTypes = {
-    lte: lteOperationSchema
+    lte: lteOperationSchema,
+    wifi: wifiOperationSchema
   };
 
   const intType = deviceInterfaces.deviceType;

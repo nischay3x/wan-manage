@@ -531,7 +531,8 @@ class DevicesService {
         const interfaceType = selectedInterface.deviceType;
 
         const agentMessages = {
-          lte: 'get-lte-interface-info'
+          lte: 'get-lte-interface-info',
+          wifi: 'get-wifi-interface-info'
         }[interfaceType];
 
         if (agentMessages) {
@@ -1973,7 +1974,8 @@ class DevicesService {
 
       const interfaceType = selectedIf.deviceType;
       const agentMessages = {
-        lte: 'lte-perform-operation'
+        lte: 'lte-perform-operation',
+        wifi: 'wifi-perform-operation'
       }[interfaceType];
 
       if (agentMessages) {
@@ -1984,7 +1986,12 @@ class DevicesService {
           {
             entity: 'agent',
             message: agentMessages,
-            params: { devId: selectedIf.devId, operation: interfaceOperationReq.op, ...params }
+            params: {
+              devId: selectedIf.devId,
+              operation: interfaceOperationReq.op,
+              ...params,
+              readable_errors: true
+            }
           }
         );
 
@@ -1994,13 +2001,6 @@ class DevicesService {
               deviceId: id, response: response.message
             }
           });
-
-          const regex = new RegExp(/(?<='err_msg': ").*(?=")/);
-          const errMsg = response.message.match(regex);
-
-          if (errMsg) {
-            return Service.rejectResponse(errMsg[0], 500);
-          }
 
           return Service.rejectResponse(response.message, 500);
         };
@@ -2070,7 +2070,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const { sync, machineId, isApproved, interfaces } = await devices.findOne(
         { _id: id, org: { $in: orgList } },
-        'sync machineId isApproved interfaces.pciaddr interfaces.internetAccess'
+        'sync machineId isApproved interfaces.devId interfaces.internetAccess'
       ).lean();
       const isConnected = connections.isConnected(machineId);
       return Service.successResponse({
