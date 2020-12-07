@@ -500,6 +500,14 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
 
   const job = await queueJob(org, user.username, tasks, device, removedTunnels);
+
+  try {
+    await reconstructTunnels(removedTunnels, org, user.username);
+  } catch (err) {
+    logger.error('Tunnel reconstruction failed', {
+      params: { jobId: job.id, device, err: err.message }
+    });
+  }
   return [job];
 };
 
@@ -955,13 +963,6 @@ const complete = async (jobId, res) => {
     return;
   }
   logger.info('Device modification complete', { params: { result: res, jobId: jobId } });
-  try {
-    await reconstructTunnels(res.tunnels, res.org, res.user);
-  } catch (err) {
-    logger.error('Tunnel reconstruction failed', {
-      params: { jobId: jobId, res: res, err: err.message }
-    });
-  }
 };
 
 /**
