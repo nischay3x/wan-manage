@@ -434,19 +434,40 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
         await oneTunnelDel(_id, user.username, org);
       } else {
-        // if dhcp was changed from 'no' to 'yes'
-        // then we need to wait for the device new config
         const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
         const modifiedIfcB = modifiedIfcsMap[tunnel.interfaceB.toString()];
+        const loggerParams = {
+          machineA: deviceA.machineId,
+          machineB: deviceB.machineId,
+          tunnelNum: tunnel.num
+        };
+        // skip interfaces without IP or GW
+        const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
+          (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
+
+        if (missingNetParameters(modifiedIfcA) || missingNetParameters(modifiedIfcB)) {
+          logger.info('Missing network parameters, the tunnel will not be rebuilt', {
+            params: loggerParams
+          });
+          continue;
+        }
+        // if dhcp was changed from 'no' to 'yes'
+        // then we need to wait for a new config from the agent
         const waitingDhcpInfo =
           (isObject(modifiedIfcA) && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes') ||
           (isObject(modifiedIfcB) && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
         if (waitingDhcpInfo) {
+          logger.info('Waiting a new config from DHCP, the tunnel will not be rebuilt', {
+            params: loggerParams
+          });
           continue;
         }
         // this could happen if both interfaces are modified at the same time
         // we need to skip adding duplicated jobs
         if (tunnel.pendingTunnelModification) {
+          logger.warn('The tunnel is rebuilt from another modification request', {
+            params: loggerParams
+          });
           continue;
         }
 
