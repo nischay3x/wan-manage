@@ -93,7 +93,7 @@ const lteConfigurationSchema = Joi.object().keys({
   password: Joi.string().allow(null, '')
 });
 
-const WifiConfigurationSchema = Joi.object().keys({
+const shared = {
   ssid: Joi.string().required(),
   password: Joi.alternatives().when('securityMode', {
     is: 'wep',
@@ -112,7 +112,13 @@ const WifiConfigurationSchema = Joi.object().keys({
   encryption: Joi.string().valid('aes-ccmp').required(),
   region: Joi.string().valid(
     'usa', 'taiwan', 'china', 'japan', 'australia', 'europe', 'russia').required()
-});
+};
+
+const WifiConfigurationSchema = Joi.alternatives().try(
+  Joi.object().keys({ '2.4GHz': Joi.object().keys(shared) }),
+  Joi.object().keys({ '5GHz': Joi.object().keys(shared) }),
+  Joi.object().keys({ '5GHz': Joi.object().keys(shared), '2.4GHz': Joi.object().keys(shared) })
+);
 
 /**
  * Validate dynamic configuration object for different types of interfaces
@@ -133,7 +139,10 @@ const validateConfiguration = (deviceInterfaces, configurationReq) => {
     const result = interfacesTypes[intType].validate(configurationReq);
 
     if (result.error) {
-      return { valid: false, err: `${result.error.details[0].message}` };
+      return {
+        valid: false,
+        err: `${result.error.details[result.error.details.length - 1].message}`
+      };
     }
 
     return { valid: true, err: '' };
