@@ -18,6 +18,8 @@
 const configs = require('../configs')();
 const notificationsDb = require('../models/notifications');
 const organizations = require('../models/organizations');
+const accountsModel = require('../models/accounts');
+const devicesModel = require('../models/devices').devices;
 const { membership } = require('../models/membership');
 const logger = require('../logging/logging')({ module: module.filename, type: 'notifications' });
 const mailer = require('../utils/mailer')(
@@ -147,22 +149,34 @@ class NotificationsManager {
           []
         );
         if (emailAddresses.length) {
+          const account = await accountsModel.findOne({ _id: accountID._id });
+          const devicesIDs = accountID.messages.map(m => m.device)
+            .filter((value, index, self) => self.indexOf(value) === index);
+          const devices = await devicesModel.find({ _id: { $in: devicesIDs } });
+          const devNames = devices.reduce((res, dev) => {
+            res[dev._id.toString()] = dev.name;
+            return res;
+          }, {});
           await mailer.sendMailHTML(
             configs.get('mailerFromAddress'),
             emailAddresses,
             'Pending unread notifications',
             `<h2>${configs.get('companyName')} Notification Reminder</h2>
             <p style="font-size:16px">This email was sent to you since you have pending
-             unread notifications. </p>
+             unread notifications in account
+             "${account.name} : ${account._id.toString().substring(0, 13)}".</p>
             <ul>
               ${accountID.messages.map(message => `
               <li>
                 <i>${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}</i>
+                : ${devNames[message.device]}
+                : <small>${message.machineId}</small>
                 : ${message.details}
               </li>
               `).join('')}
             </ul>
-            <p> All new notifications status set to read.
+            <p style="font-size:16px"> Further to this email,
+            all Notifications in your Account have been set to status Read.
             <br>To view the notifications, please check the
             <a href="${configs.get('uiServerUrl')}/notifications">Notifications</a>
              page in your flexiMange account.</br>
