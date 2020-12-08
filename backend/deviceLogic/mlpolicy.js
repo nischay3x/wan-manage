@@ -125,6 +125,7 @@ const getOpDevices = async (devicesObj, org, policy) => {
   // of all devices that are currently running the policy
   const devicesList = Object.keys(devicesObj);
   if (devicesList.length > 0) return devicesList;
+  if (!policy) return [];
 
   // Select only devices on which the policy is already
   // installed or in the process of installation, to make
@@ -197,7 +198,6 @@ const apply = async (deviceList, user, data) => {
         if (!mLPolicy) {
           throw createError(404, `policy ${id} does not exist`);
         }
-
         // Disabled rules should not be sent to the device
         mLPolicy.rules = mLPolicy.rules.filter(rule => rule.enabled === true);
         if (mLPolicy.rules.length === 0) {
