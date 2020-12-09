@@ -488,6 +488,10 @@ class Connections {
               : updatedConfig.internetAccess ? 'yes' : 'no'
           };
 
+          if (!i.isAssigned) {
+            updInterface.metric = updatedConfig.metric;
+          };
+
           if (i.dhcp === 'yes' || !i.isAssigned) {
             updInterface.IPv4 = updatedConfig.IPv4;
             updInterface.IPv4Mask = updatedConfig.IPv4Mask;
