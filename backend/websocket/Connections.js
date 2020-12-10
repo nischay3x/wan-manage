@@ -473,8 +473,8 @@ class Connections {
 
           if (updatedConfig.internetAccess !== undefined &&
             i.monitorInternet && updatedConfig.internetAccess !== i.internetAccess) {
-            const newInterfaceState = `${updatedConfig.internetAccess ? 'Has' : 'No'} internet`;
-            const details = `Interface state changed to "${newInterfaceState}"`;
+            const newInterfaceState = updatedConfig.internetAccess ? 'online' : 'offline';
+            const details = `Interface ${i.name} state changed to "${newInterfaceState}"`;
             logger.info(details, {
               params: {
                 machineId,
@@ -502,6 +502,10 @@ class Connections {
             NatType: updatedConfig.nat_type || i.NatType,
             internetAccess: updatedConfig.internetAccess === undefined ? ''
               : updatedConfig.internetAccess ? 'yes' : 'no'
+          };
+
+          if (!i.isAssigned) {
+            updInterface.metric = updatedConfig.metric;
           };
 
           if (i.dhcp === 'yes' || !i.isAssigned) {
