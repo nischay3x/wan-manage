@@ -154,7 +154,9 @@ const configEnv = {
     // This value is for storing in the database, it's not impacting the interval presented in the UI
     analyticsUpdateTime: 300,
     // Do not allow organization LAN subnet overlaps for running devices flag. Default = true
-    forbidLanSubnetOverlaps: true
+    forbidLanSubnetOverlaps: true,
+    // Agent version with new interface identification
+    newInterfaceIdentificationVersion: '2.2.3'
   },
   // Override for development environment, default environment if not specified
   development: {

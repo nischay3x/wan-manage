@@ -195,8 +195,19 @@ const validateOperations = (deviceInterfaces, operationReq) => {
   return { valid: false, err: 'You can\'t perform requested operation for this interface' };
 };
 
+const getOldInterfaceIdentification = devId => {
+  if (devId && devId.startsWith('pci:')) {
+    const splitted = devId.split(':');
+    splitted.shift();
+    return splitted.join(':');
+  }
+
+  return null;
+};
+
 module.exports = {
   buildInterfaces,
   validateConfiguration,
-  validateOperations
+  validateOperations,
+  getOldInterfaceIdentification
 };

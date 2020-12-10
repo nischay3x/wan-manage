@@ -27,8 +27,8 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { getMajorVersion } = require('../versioning');
-const { buildInterfaces } = require('./interfaces');
+const { getMajorVersion, needUseOldInterfaceIdentification } = require('../versioning');
+const { buildInterfaces, getOldInterfaceIdentification } = require('./interfaces');
 
 /**
  * Creates and queues the start-router job.
@@ -79,13 +79,21 @@ const apply = async (device, user, data) => {
     }
     startParams['default-route'] = defaultGateway || '';
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
-    const deviceInterfaces = buildInterfaces(device[0].interfaces);
+    let deviceInterfaces = buildInterfaces(device[0].interfaces);
     // Send route for backward compatibility (agent version < 1.2.15)
     const routes = [];
     if (defaultGateway && majorAgentVersion < 2) {
       routes.push({
         addr: 'default',
         via: defaultGateway
+      });
+    }
+
+    if (needUseOldInterfaceIdentification(device[0].versions.agent)) {
+      deviceInterfaces = deviceInterfaces.map(devInt => {
+        const pci = getOldInterfaceIdentification(devInt.devId);
+        delete devInt.devId;
+        return { ...devInt, pci };
       });
     }
 

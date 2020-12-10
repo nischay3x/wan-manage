@@ -23,7 +23,12 @@ const { devices } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
 const notificationsMgr = require('../notifications/notifications')();
-const { verifyAgentVersion, isSemVer, isVppVersion } = require('../versioning');
+const {
+  verifyAgentVersion,
+  isSemVer,
+  isVppVersion,
+  needUseOldInterfaceIdentification
+} = require('../versioning');
 const flexibilling = require('../flexibilling');
 /**
  * Verifies a device subscription.
@@ -441,9 +446,20 @@ class Connections {
         if (origDevice.pendingDevModification) {
           throw new Error('Failed to apply new config, only one device change is allowed');
         }
+
+        let incomingInterfaces = deviceInfo.message.network.interfaces;
+        if (needUseOldInterfaceIdentification(deviceInfo.message.device)) {
+          incomingInterfaces = deviceInfo.message.network.interfaces.map(
+            (inf) => {
+              const devId = 'pci:' + inf.pciaddr;
+              delete inf.pciaddr;
+              return { ...inf, devId };
+            }
+          );
+        }
+
         const interfaces = origDevice.interfaces.map(i => {
-          const updatedConfig = deviceInfo.message.network.interfaces
-            .find(u => u.devId === i.devId);
+          const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
           if (!updatedConfig) {
             logger.warn('Missing interface configuration in the get-device-info message', {
               params: {
@@ -457,8 +473,8 @@ class Connections {
 
           if (updatedConfig.internetAccess !== undefined &&
             i.monitorInternet && updatedConfig.internetAccess !== i.internetAccess) {
-            const newInterfaceState = `${updatedConfig.internetAccess ? 'Has' : 'No'} internet`;
-            const details = `Interface state changed to "${newInterfaceState}"`;
+            const newInterfaceState = updatedConfig.internetAccess ? 'online' : 'offline';
+            const details = `Interface ${i.name} state changed to "${newInterfaceState}"`;
             logger.info(details, {
               params: {
                 machineId,
@@ -486,6 +502,10 @@ class Connections {
             NatType: updatedConfig.nat_type || i.NatType,
             internetAccess: updatedConfig.internetAccess === undefined ? ''
               : updatedConfig.internetAccess ? 'yes' : 'no'
+          };
+
+          if (!i.isAssigned) {
+            updInterface.metric = updatedConfig.metric;
           };
 
           if (i.dhcp === 'yes' || !i.isAssigned) {

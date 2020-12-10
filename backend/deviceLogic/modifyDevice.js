@@ -38,16 +38,21 @@ const pullAllWith = require('lodash/pullAllWith');
 const isEqual = require('lodash/isEqual');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
-const { getMajorVersion } = require('../versioning');
-const { buildInterfaces } = require('./interfaces');
+const { getMajorVersion, needUseOldInterfaceIdentification } = require('../versioning');
+const { buildInterfaces, getOldInterfaceIdentification } = require('./interfaces');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
  * @return {Array}            the same array after removing unnecessary fields
  */
-const prepareIfcParams = (interfaces) => {
+const prepareIfcParams = (interfaces, device) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
+
+    if (needUseOldInterfaceIdentification(device.versions.agent)) {
+      newIfc.pci = getOldInterfaceIdentification(newIfc.devId);
+      delete newIfc.devId;
+    }
 
     // Device should only be aware of DIA labels.
     const labels = [];
@@ -124,7 +129,7 @@ const prepareModificationMessageV1 = (messageParams, device) => {
   if (has(messageParams, 'modify_router.assign')) {
     modificationMessage.modify_router = {};
     modificationMessage.modify_router.assign = prepareIfcParams(
-      messageParams.modify_router.assign
+      messageParams.modify_router.assign, device
     );
     modificationMessage.reconnect = true;
   }
@@ -133,7 +138,7 @@ const prepareModificationMessageV1 = (messageParams, device) => {
       modificationMessage.modify_router = {};
     }
     modificationMessage.modify_router.unassign = prepareIfcParams(
-      messageParams.modify_router.unassign
+      messageParams.modify_router.unassign, device
     );
     modificationMessage.reconnect = true;
   }
@@ -141,9 +146,9 @@ const prepareModificationMessageV1 = (messageParams, device) => {
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
     const oldInterfaces = prepareIfcParams(
-      transformInterfaces(device.interfaces.toObject()));
+      transformInterfaces(device.interfaces.toObject()), device);
     const newInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.interfaces
+      messageParams.modify_interfaces.interfaces, device
     );
     const diffInterfaces = differenceWith(
       newInterfaces,
@@ -213,9 +218,9 @@ const prepareModificationMessageV2 = (messageParams, device) => {
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
     const oldInterfaces = prepareIfcParams(
-      transformInterfaces(device.interfaces.toObject()));
+      transformInterfaces(device.interfaces.toObject()), device);
     const newInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.interfaces
+      messageParams.modify_interfaces.interfaces, device
     );
     const diffInterfaces = differenceWith(
       newInterfaces,
@@ -237,7 +242,7 @@ const prepareModificationMessageV2 = (messageParams, device) => {
 
   if (has(messageParams, 'modify_routes')) {
     const routeRequests = messageParams.modify_routes.routes.flatMap(item => {
-      const items = [];
+      let items = [];
       if (item.old_route !== '') {
         items.push({
           entity: 'agent',
@@ -262,6 +267,18 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           }
         });
       }
+
+      if (needUseOldInterfaceIdentification(device.versions.agent)) {
+        items = items.map(item => {
+          if (item.params && item.params.devId) {
+            item.params.pci = getOldInterfaceIdentification(item.params.devId);
+            delete item.params.devId;
+          }
+
+          return item;
+        });
+      }
+
       return items;
     });
 
@@ -271,7 +288,7 @@ const prepareModificationMessageV2 = (messageParams, device) => {
   }
 
   if (has(messageParams, 'modify_router.assign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.assign);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, device);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -281,7 +298,7 @@ const prepareModificationMessageV2 = (messageParams, device) => {
     }));
   }
   if (has(messageParams, 'modify_router.unassign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, device);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -427,7 +444,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // but rather only queue remove/add tunnel jobs to the devices.
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
-      const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
+      const [tasksDeviceA, tasksDeviceB] = await prepareTunnelRemoveJob(tunnel.num, ifcA, ifcB);
       const pathlabels = modifiedIfcsMap[ifc._id] && modifiedIfcsMap[ifc._id].pathlabels
         ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
         : [];
@@ -714,11 +731,17 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
  * @return {Object}            an object containing an array of routes
  */
 const prepareModifyDHCP = (origDevice, newDevice) => {
+  const isNeedUseOldIntIdentifier = needUseOldInterfaceIdentification(origDevice.versions.agent);
+
   // Extract only relevant fields from dhcp database entries
   const [newDHCP, origDHCP] = [
     newDevice.dhcp.map(dhcp => {
+      let intf = dhcp.interface;
+      if (isNeedUseOldIntIdentifier) {
+        intf = getOldInterfaceIdentification(intf);
+      }
       return ({
-        interface: dhcp.interface,
+        interface: intf,
         range_start: dhcp.rangeStart,
         range_end: dhcp.rangeEnd,
         dns: dhcp.dns,
@@ -731,8 +754,12 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
     }),
 
     origDevice.dhcp.map(dhcp => {
+      let intf = dhcp.interface;
+      if (isNeedUseOldIntIdentifier) {
+        intf = getOldInterfaceIdentification(intf);
+      }
       return ({
-        interface: dhcp.interface,
+        interface: intf,
         range_start: dhcp.rangeStart,
         range_end: dhcp.rangeEnd,
         dns: dhcp.dns,
@@ -1004,12 +1031,13 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const { interfaces, staticroutes, dhcp } = await devices.findOne(
+  const { interfaces, staticroutes, dhcp, versions } = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
       staticroutes: 1,
-      dhcp: 1
+      dhcp: 1,
+      versions: 1
     }
   )
     .lean()
@@ -1020,7 +1048,14 @@ const sync = async (deviceId, org) => {
   let defaultRouteIfcInfo;
   // build interfaces
   const deviceInterfaces = buildInterfaces(interfaces);
+  const isNeedUseOldInterfaceIdentification = needUseOldInterfaceIdentification(versions.agent);
+
   deviceInterfaces.forEach(item => {
+    if (isNeedUseOldInterfaceIdentification) {
+      item.pci = getOldInterfaceIdentification(item.devId);
+      delete item.devId;
+    }
+
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-interface',
@@ -1075,12 +1110,16 @@ const sync = async (deviceId, org) => {
   // Prepare add-dhcp-config message
   dhcp.forEach(entry => {
     const { rangeStart, rangeEnd, dns, macAssign } = entry;
+    let devId = entry.interface;
+    if (isNeedUseOldInterfaceIdentification) {
+      devId = getOldInterfaceIdentification(entry.interface);
+    }
 
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-dhcp-config',
       params: {
-        interface: entry.interface,
+        interface: devId,
         range_start: rangeStart,
         range_end: rangeEnd,
         dns: dns,
