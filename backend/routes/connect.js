@@ -24,7 +24,7 @@ const tokens = require('../models/tokens');
 const { devices } = require('../models/devices');
 const jwt = require('jsonwebtoken');
 const mongoConns = require('../mongoConns.js')();
-const { checkDeviceVersion } = require('../versioning');
+const { checkDeviceVersion, needUseOldInterfaceIdentification } = require('../versioning');
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
@@ -75,7 +75,7 @@ connectRouter.route('/register')
               });
 
               // Try to auto populate interfaces parameters
-              const ifs = JSON.parse(req.body.interfaces);
+              let ifs = JSON.parse(req.body.interfaces);
 
               // Get an interface with gateway and the lowest metric
               const defaultIntf = ifs ? ifs.reduce((res, intf) =>
@@ -115,6 +115,14 @@ connectRouter.route('/register')
                   intf.metric = '';
                 }
               });
+
+              if (needUseOldInterfaceIdentification(req.body.device_version)) {
+                ifs = ifs.map(inf => {
+                  inf.devId = 'pci:' + inf.pciaddr;
+                  delete inf.pciaddr;
+                  return { ...inf };
+                });
+              }
 
               // Prepare device versions array
               const versions = {

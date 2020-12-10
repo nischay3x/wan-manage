@@ -51,6 +51,7 @@
     "redis": "^3.0.2",
     "redis-leader": "^0.1.0",
     "request": "^2.88.0",
+    "semver": "^7.3.4",
     "swagger-ui-express": "^4.0.2",
     "uuid": "^3.3.2",
     "valid-url": "^1.0.9",

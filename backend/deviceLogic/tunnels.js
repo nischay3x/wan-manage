@@ -19,6 +19,7 @@
 const configs = require('../configs')();
 const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
+const deviceModel = require('../models/devices');
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
 
@@ -26,7 +27,8 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const { routerVersionsCompatible } = require('../versioning');
+const { routerVersionsCompatible, needUseOldInterfaceIdentification } = require('../versioning');
+const { getOldInterfaceIdentification } = require('./interfaces');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
@@ -597,7 +599,7 @@ const prepareTunnelAddJob = async (
     paramsDeviceA,
     paramsDeviceB,
     tunnelParams
-  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf);
+  } = await prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf);
   const paramsSaAB = {
     spi: tunnelParams.sa1,
     'crypto-key': tunnelKeys.key1,
@@ -931,13 +933,13 @@ const completeTunnelDel = (jobId, res) => {
  * @param  {Object} deviceBIntf device B tunnel interface
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelRemoveJob = (tunnelnum, deviceAIntf, deviceBIntf) => {
+const prepareTunnelRemoveJob = async (tunnelnum, deviceAIntf, deviceBIntf) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
   const {
     paramsDeviceA,
     paramsDeviceB
-  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
+  } = await prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceA });
@@ -969,7 +971,7 @@ const delTunnel = async (
   deviceBIntf,
   pathLabel
 ) => {
-  const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
+  const [tasksDeviceA, tasksDeviceB] = await prepareTunnelRemoveJob(
     tunnelnum,
     deviceAIntf,
     deviceBIntf
@@ -1096,7 +1098,7 @@ const sync = async (deviceId, org) => {
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
 */
-const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
+const prepareTunnelParams = async (tunnelnum, deviceAIntf, deviceBIntf) => {
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnelnum);
 
@@ -1126,6 +1128,19 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
     addr: tunnelParams.ip2 + '/31',
     mac: tunnelParams.mac2
   };
+
+  const deviceA = await deviceModel.devices.findOne({ 'interface.devId': deviceAIntf.devId });
+  const deviceB = await deviceModel.devices.findOne({ 'interface.devId': deviceBIntf.devId });
+
+  if (needUseOldInterfaceIdentification(deviceA.versions.agent)) {
+    paramsDeviceA.pci = getOldInterfaceIdentification(paramsDeviceA.devId);
+    delete paramsDeviceA.devId;
+  }
+
+  if (needUseOldInterfaceIdentification(deviceB.versions.agent)) {
+    paramsDeviceB.pci = getOldInterfaceIdentification(paramsDeviceB.devId);
+    delete paramsDeviceB.devId;
+  }
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };

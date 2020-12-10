@@ -79,6 +79,17 @@ const buildInterfaces = (deviceInterfaces) => {
   return interfaces;
 };
 
+const getOldInterfaceIdentification = devId => {
+  if (devId && devId.startsWith('pci:')) {
+    const splitted = devId.split(':');
+    splitted.shift();
+    return splitted.join(':');
+  }
+
+  return null;
+};
+
 module.exports = {
-  buildInterfaces
+  buildInterfaces,
+  getOldInterfaceIdentification
 };
