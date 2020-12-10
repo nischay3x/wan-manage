@@ -16,18 +16,75 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
-const cidr = require('cidr-tools');
 
 async function up () {
   // Change all pci keys to devId for each interface
-  const devDocuments = await devices.find({});
+  try {
+    const devDocuments = await devices.find({}).lean();
+    for (const deviceDoc of devDocuments) {
+      const { interfaces } = deviceDoc;
+      if (interfaces) {
+        const updated = interfaces.map(i => {
+          const devId = i.pciaddr || '';
+          if (i.pciaddr) {
+            delete i.pciaddr;
+          }
+
+          return { ...i, devId };
+        });
+
+        await devices.updateOne(
+          { _id: deviceDoc._id },
+          { $set: { interfaces: updated } },
+          { upsert: false }
+        );
+      }
+    }
+
+    logger.info('Database migration done!', {
+      params: { collections: ['devices'], operation: 'up' }
+    });
+  } catch (err) {
+    logger.error('Database migration failed', {
+      params: { collections: ['devices'], operation: 'up', err: err.message }
+    });
+  }
 }
 
 /**
  * Make any changes that UNDO the up function side effects here (if possible)
  */
 async function down () {
-  // Write migration here
+  try {
+    const devDocuments = await devices.find({}).lean();
+    for (const deviceDoc of devDocuments) {
+      const { interfaces } = deviceDoc;
+      if (interfaces) {
+        const updated = interfaces.map(i => {
+          const pciaddr = i.devId || '';
+          if (i.devId) {
+            delete i.devId;
+          }
+
+          return { ...i, pciaddr };
+        });
+
+        await devices.updateOne(
+          { _id: deviceDoc._id },
+          { $set: { interfaces: updated } },
+          { upsert: false }
+        );
+      }
+    }
+
+    logger.info('Database migration done!', {
+      params: { collections: ['devices'], operation: 'down' }
+    });
+  } catch (err) {
+    logger.error('Database migration failed', {
+      params: { collections: ['devices'], operation: 'down', err: err.message }
+    });
+  }
 }
 
 module.exports = { up, down };
