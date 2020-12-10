@@ -30,7 +30,7 @@ async function up () {
             delete i.pciaddr;
           }
 
-          return { ...i, devId };
+          return { ...i, devId: 'pci:' + devId };
         });
 
         await devices.updateOne(
