@@ -98,23 +98,14 @@ class NotificationsManager {
     // 1. Get the list of account IDs with pending notifications.
     // 2. Go over the list, populate the users and send them emails.
     try {
-      const accountIDs = await notificationsDb.aggregate([
-        { $match: { status: 'unread' } },
-        { $group: { _id: '$account', messages: { $push: '$$ROOT' } } },
-        {
-          $project: {
-            messages: { $slice: ['$messages', configs.get('unreadNotificationsMaxSent', 'number')] }
-          }
-        }
-      ]);
-
+      const accountIDs = await notificationsDb.distinct('account', { status: 'unread' });
       // Notify users only if there are unread notifications
       for (const accountID of accountIDs) {
         const res = await membership.aggregate([
           {
             $match: {
               $and: [
-                { account: accountID._id },
+                { account: accountID },
                 { to: 'account' },
                 { role: 'owner' }
               ]
@@ -149,14 +140,14 @@ class NotificationsManager {
           []
         );
         if (emailAddresses.length) {
-          const account = await accountsModel.findOne({ _id: accountID._id });
-          const devicesIDs = accountID.messages.map(m => m.device)
-            .filter((value, index, self) => self.indexOf(value) === index);
-          const devices = await devicesModel.find({ _id: { $in: devicesIDs } });
-          const devNames = devices.reduce((res, dev) => {
-            res[dev._id.toString()] = dev.name;
-            return res;
-          }, {});
+          const account = await accountsModel.findOne({ _id: accountID });
+          const messages = await notificationsDb.find(
+            { account: accountID, status: 'unread' },
+            'time device details machineId'
+          ).sort({ time: -1 })
+            .limit(configs.get('unreadNotificationsMaxSent', 'number'))
+            .populate('device', 'name -_id', devicesModel);
+
           await mailer.sendMailHTML(
             configs.get('mailerFromAddress'),
             emailAddresses,
@@ -165,23 +156,25 @@ class NotificationsManager {
             <p style="font-size:16px">This email was sent to you since you have pending
              unread notifications in account
              "${account.name} : ${account._id.toString().substring(0, 13)}".</p>
-            <ul>
-              ${accountID.messages.map(message => `
+             <i><small>
+             <ul>
+              ${messages.map(message => `
               <li>
-                <i>${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}</i>
-                : ${devNames[message.device]}
-                : <small>${message.machineId}</small>
-                : ${message.details}
+                ${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}
+                device ${message.device.name}
+                (ID: ${message.machineId})
+                - ${message.details}
               </li>
               `).join('')}
             </ul>
+            </small></i>
             <p style="font-size:16px"> Further to this email,
             all Notifications in your Account have been set to status Read.
             <br>To view the notifications, please check the
             <a href="${configs.get('uiServerUrl')}/notifications">Notifications</a>
              page in your flexiMange account.</br>
             </p>
-            <p style="font-size:14px;color:gray">Note: Unread notification email alerts
+            <p style="font-size:16px;color:gray">Note: Unread notification email alerts
              are sent to Account owners (not Users in Organization level).
               You can disable these emails in the
                <a href="${configs.get('uiServerUrl')}/accounts/update">Account profile</a>
