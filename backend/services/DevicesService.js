@@ -1710,7 +1710,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const { sync, machineId, isApproved, interfaces } = await devices.findOne(
         { _id: id, org: { $in: orgList } },
-        'sync machineId isApproved interfaces.pciaddr interfaces.internetAccess'
+        'sync machineId isApproved interfaces.devId interfaces.internetAccess'
       ).lean();
       const isConnected = connections.isConnected(machineId);
       return Service.successResponse({
