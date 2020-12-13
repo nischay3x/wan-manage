@@ -54,9 +54,17 @@ class DeviceQueues {
     this.getLastJob = this.getLastJob.bind(this);
     this.getQueueJobsByState = this.getQueueJobsByState.bind(this);
     this.getOPendingJobsCount = this.getOPendingJobsCount.bind(this);
+    this.registerJobRemoveCallback = this.registerJobRemoveCallback.bind(this);
+    this.unregisterJobRemoveCallback = this.unregisterJobRemoveCallback.bind(this);
+    this.callRemoveRegisteredCallback = this.callRemoveRegisteredCallback.bind(this);
+    this.registerJobErrorCallback = this.registerJobErrorCallback.bind(this);
+    this.unregisterJobErrorCallback = this.unregisterJobErrorCallback.bind(this);
+    this.callErrorRegisteredCallback = this.callErrorRegisteredCallback.bind(this);
+    this.failedJobs = this.failedJobs.bind(this);
 
     this.updateSyncState = async (deviceId, job) => {};
     this.removeCallbacks = {};
+    this.errorCallbacks = {};
 
     // TBD: make it more safe
     const args = redis.split('://')[1].split(':');
@@ -405,7 +413,7 @@ class DeviceQueues {
       await this.iterateJobsIdsByOrg(org, jobIDs, async (job) => {
         const removedJob = await job.remove(function (err) { if (err) throw err; });
         const { method } = removedJob.data.response;
-        this.callRegisteredCallback(method, removedJob);
+        this.callRemoveRegisteredCallback(method, removedJob);
       });
     } catch (err) {
       logger.warn('Encountered an error while removing jobs', {
@@ -460,7 +468,7 @@ class DeviceQueues {
    */
   async getLastJob (deviceId, qState) {
     let allJobs = [];
-    const states = [qState] || ['complete', 'failed', 'inactive', 'delayed', 'active'];
+    const states = (qState) ? [qState] : ['complete', 'failed', 'inactive', 'delayed', 'active'];
     for (const state of states) {
       // We call getQueueJobsByState() with 'from' and 'to'
       // set to -1 to get only the last job in the queue
@@ -470,14 +478,18 @@ class DeviceQueues {
 
     // Find the job with the highest ID
     let lastJobId = -1;
+    let lastJobIndex = -1;
     let i = 0;
     for (const job of allJobs) {
       const { id } = job;
-      if (id > lastJobId) lastJobId = i;
+      if (id > lastJobId) {
+        lastJobId = id;
+        lastJobIndex = i;
+      }
       i++;
     }
 
-    return lastJobId !== -1 ? allJobs[lastJobId] : {};
+    return lastJobIndex !== -1 ? allJobs[lastJobIndex] : {};
   }
 
   /**
@@ -509,11 +521,37 @@ class DeviceQueues {
         if (now - job.created_at > createdBefore) {
           const removedJob = await job.remove(function (err) { if (err) throw err; });
           const { method } = removedJob.data.response;
-          this.callRegisteredCallback(method, removedJob);
+          this.callRemoveRegisteredCallback(method, removedJob);
         }
       });
     } catch (err) {
       logger.warn('Encountered an error while removing old jobs', {
+        params: { state: state, createdBefore: createdBefore, err: err.message }
+      });
+      throw err;
+    }
+  }
+
+  /**
+     * Set jobs created before the specified time for a given state to failed
+     * @param  {string} state         queue state to remove jobs from
+     *                                ('complete', 'failed', 'inactive', 'delayed', 'active')
+     * @param  {number} createdBefore time in milliseconds
+     * @return {void}
+     */
+  async failedJobs (state, createdBefore = 3600000) {
+    try {
+      const now = new Date().getTime();
+      await this.iterateJobs(state, async (job) => {
+        if (now - job.created_at > createdBefore) {
+          const failedJob = await job.failed(function (err) { if (err) throw err; });
+          await job.error('Error: Dangle Waiting');
+          const { method } = failedJob.data.response;
+          this.callErrorRegisteredCallback(method, failedJob);
+        }
+      });
+    } catch (err) {
+      logger.warn('Encountered an error while setting failure for old jobs', {
         params: { state: state, createdBefore: createdBefore, err: err.message }
       });
       throw err;
@@ -553,14 +591,45 @@ class DeviceQueues {
   }
 
   /**
-     * Calls all registered callbacks
+     * Calls remove registered callbacks
      * @param  {string} name  The name of the callback to be called.
      * @param  {Object} job   The job object that will be pass to the callbacks.
      * @return {void}
      */
-  callRegisteredCallback (name, job) {
+  callRemoveRegisteredCallback (name, job) {
     if (this.removeCallbacks.hasOwnProperty(name)) {
       return this.removeCallbacks[name](job);
+    }
+  }
+
+  /**
+     * Registers a callback to be called when a job has an error.
+     * @param  {string}   name      the name of the module that registered the callback.
+     * @param  {Callback} callback  the callback method to be called
+     * @return {void}
+     */
+  registerJobErrorCallback (name, callback) {
+    this.errorCallbacks[name] = callback;
+  }
+
+  /**
+       * Unregister a callback that was registered using registerJobErrorCallback().
+       * @param  {string} name The name of the module that registered the callback.
+       * @return {void}
+       */
+  unregisterJobErrorCallback (name) {
+    delete this.errorCallbacks[name];
+  }
+
+  /**
+       * Calls error registered callbacks
+       * @param  {string} name  The name of the callback to be called.
+       * @param  {Object} job   The job object that will be pass to the callbacks.
+       * @return {void}
+       */
+  callErrorRegisteredCallback (name, job) {
+    if (this.errorCallbacks.hasOwnProperty(name)) {
+      return this.errorCallbacks[name](job);
     }
   }
 

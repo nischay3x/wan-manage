@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
@@ -725,7 +726,7 @@ class Connections {
           reject(new Error('Error: Send Timeout'));
           // delete queue for this seq
           delete msgQ[seq];
-        }, 180000);
+        }, configs.get('jobTimeout', 'number'));
         msgQ[seq] = {
           resolver: resolve,
           rejecter: reject,
