@@ -28,7 +28,7 @@ const {
   verifyAgentVersion,
   isSemVer,
   isVppVersion,
-  needUseOldInterfaceIdentification
+  getMajorVersion
 } = require('../versioning');
 class Connections {
   constructor () {
@@ -424,7 +424,7 @@ class Connections {
         }
 
         let incomingInterfaces = deviceInfo.message.network.interfaces;
-        if (needUseOldInterfaceIdentification(deviceInfo.message.device)) {
+        if (getMajorVersion(deviceInfo.message.device) < 3) {
           incomingInterfaces = deviceInfo.message.network.interfaces.map(
             (inf) => {
               const devId = 'pci:' + inf.pciaddr;

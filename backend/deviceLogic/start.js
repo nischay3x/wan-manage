@@ -27,7 +27,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { getMajorVersion, needUseOldInterfaceIdentification } = require('../versioning');
+const { getMajorVersion } = require('../versioning');
 const { buildInterfaces, getOldInterfaceIdentification } = require('./interfaces');
 
 /**
@@ -89,7 +89,7 @@ const apply = async (device, user, data) => {
       });
     }
 
-    const isNeedUseOldIntIdentifier = needUseOldInterfaceIdentification(device[0].versions.agent);
+    const isNeedUseOldIntIdentifier = majorAgentVersion < 3;
     deviceInterfaces = deviceInterfaces.map(devInt => {
       const ret = { ...devInt };
       if (isNeedUseOldIntIdentifier) {

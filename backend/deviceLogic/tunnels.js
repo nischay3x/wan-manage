@@ -27,7 +27,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const { routerVersionsCompatible, needUseOldInterfaceIdentification } = require('../versioning');
+const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
 const { getOldInterfaceIdentification } = require('./interfaces');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
@@ -1132,14 +1132,14 @@ const prepareTunnelParams = async (tunnelnum, deviceAIntf, deviceBIntf) => {
   const deviceA = await deviceModel.devices.findOne({ 'interface.devId': deviceAIntf.devId });
   const deviceB = await deviceModel.devices.findOne({ 'interface.devId': deviceBIntf.devId });
 
-  if (needUseOldInterfaceIdentification(deviceA.versions.agent)) {
+  if (getMajorVersion(deviceA.versions.agent) < 3) {
     paramsDeviceA.pci = getOldInterfaceIdentification(paramsDeviceA.devId);
   } else {
     paramsDeviceA.dev_id = paramsDeviceA.devId;
   }
   delete paramsDeviceA.devId;
 
-  if (needUseOldInterfaceIdentification(deviceB.versions.agent)) {
+  if (getMajorVersion(deviceB.versions.agent) < 3) {
     paramsDeviceB.pci = getOldInterfaceIdentification(paramsDeviceB.devId);
   } else {
     paramsDeviceB.dev_id = paramsDeviceB.devId;

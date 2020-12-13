@@ -38,7 +38,7 @@ const pullAllWith = require('lodash/pullAllWith');
 const isEqual = require('lodash/isEqual');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
-const { getMajorVersion, needUseOldInterfaceIdentification } = require('../versioning');
+const { getMajorVersion } = require('../versioning');
 const { buildInterfaces, getOldInterfaceIdentification } = require('./interfaces');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
@@ -49,7 +49,8 @@ const prepareIfcParams = (interfaces, device) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
-    if (needUseOldInterfaceIdentification(device.versions.agent)) {
+    const majorAgentVersion = getMajorVersion(device.versions.agent);
+    if (majorAgentVersion < 3) {
       newIfc.pci = getOldInterfaceIdentification(newIfc.devId);
     } else {
       newIfc.dev_id = newIfc.devId;
@@ -268,7 +269,8 @@ const prepareModificationMessageV2 = (messageParams, device) => {
         });
       }
 
-      const useOldIntIdentifier = needUseOldInterfaceIdentification(device.versions.agent);
+      const majorAgentVersion = getMajorVersion(device.versions.agent);
+      const useOldIntIdentifier = majorAgentVersion < 3;
 
       items = items.map((item) => {
         if (item.params && item.params.devId) {
@@ -735,7 +737,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
  * @return {Object}            an object containing an array of routes
  */
 const prepareModifyDHCP = (origDevice, newDevice) => {
-  const isNeedUseOldIntIdentifier = needUseOldInterfaceIdentification(origDevice.versions.agent);
+  const majorAgentVersion = getMajorVersion(origDevice.versions.agent);
+  const isNeedUseOldIntIdentifier = majorAgentVersion < 3;
 
   // Extract only relevant fields from dhcp database entries
   const [newDHCP, origDHCP] = [
@@ -1052,7 +1055,9 @@ const sync = async (deviceId, org) => {
   let defaultRouteIfcInfo;
   // build interfaces
   const deviceInterfaces = buildInterfaces(interfaces);
-  const isNeedUseOldInterfaceIdentification = needUseOldInterfaceIdentification(versions.agent);
+
+  const majorAgentVersion = getMajorVersion(versions.agent);
+  const isNeedUseOldInterfaceIdentification = majorAgentVersion < 3;
 
   deviceInterfaces.forEach(item => {
     if (isNeedUseOldInterfaceIdentification) {
