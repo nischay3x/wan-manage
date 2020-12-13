@@ -24,7 +24,7 @@ const tokens = require('../models/tokens');
 const { devices } = require('../models/devices');
 const jwt = require('jsonwebtoken');
 const mongoConns = require('../mongoConns.js')();
-const { checkDeviceVersion, needUseOldInterfaceIdentification } = require('../versioning');
+const { checkDeviceVersion, getMajorVersion } = require('../versioning');
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
@@ -121,8 +121,8 @@ connectRouter.route('/register')
                 }
               });
 
-              if (needUseOldInterfaceIdentification(req.body.device_version)) {
-                ifs = ifs.map(inf => {
+              if (getMajorVersion(req.body.device_version) < 3) {
+                ifs = ifs.map((inf) => {
                   inf.devId = 'pci:' + inf.pciaddr;
                   delete inf.pciaddr;
                   return { ...inf };

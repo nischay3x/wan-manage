@@ -17,10 +17,7 @@
 
 const configs = require('../configs')();
 const { devices } = require('../models/devices');
-const {
-  getOldInterfaceIdentification,
-  needUseOldInterfaceIdentification
-} = require('./interfaces');
+const { getOldInterfaceIdentification } = require('./interfaces');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -66,7 +63,7 @@ const apply = async (device, user, data) => {
     let titlePrefix;
     let params;
 
-    if (needUseOldInterfaceIdentification(device.versions.agent)) {
+    if (majorAgentVersion < 3) {
       data.interface = getOldInterfaceIdentification(data.interface);
     }
 

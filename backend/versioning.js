@@ -19,7 +19,6 @@ const createError = require('http-errors');
 const configs = require('./configs')();
 const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 const mgmtVersion = configs.get('agentApiVersion');
-const semver = require('semver');
 
 /**
  * Get the major version X from a string in semVer format X.Y.Z
@@ -99,14 +98,6 @@ const checkDeviceVersion = (req, res, next) => {
   next();
 };
 
-// We changed the interface identifier from pciaddr to devId
-// to support interface without pci (like LTE or WiFi).
-// this function checks if need to use old interface identification
-// in order to support also old flexiEdge device
-const needUseOldInterfaceIdentification = currentDeviceVersion => {
-  return semver.lt(currentDeviceVersion, configs.get('newInterfaceIdentificationVersion'));
-};
-
 module.exports = {
   getMajorVersion: getMajorVersion,
   isAgentVersionCompatible: isAgentVersionCompatible,
@@ -114,6 +105,5 @@ module.exports = {
   isVppVersion: isVppVersion,
   verifyAgentVersion: verifyAgentVersion,
   checkDeviceVersion: checkDeviceVersion,
-  routerVersionsCompatible: routerVersionsCompatible,
-  needUseOldInterfaceIdentification
+  routerVersionsCompatible: routerVersionsCompatible
 };
