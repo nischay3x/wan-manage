@@ -89,13 +89,18 @@ const apply = async (device, user, data) => {
       });
     }
 
-    if (needUseOldInterfaceIdentification(device[0].versions.agent)) {
-      deviceInterfaces = deviceInterfaces.map(devInt => {
-        const pci = getOldInterfaceIdentification(devInt.devId);
-        delete devInt.devId;
-        return { ...devInt, pci };
-      });
-    }
+    const isNeedUseOldIntIdentifier = needUseOldInterfaceIdentification(device[0].versions.agent);
+    deviceInterfaces = deviceInterfaces.map(devInt => {
+      const ret = { ...devInt };
+      if (isNeedUseOldIntIdentifier) {
+        ret.pci = getOldInterfaceIdentification(devInt.devId);
+      } else {
+        ret.dev_id = devInt.devId;
+      }
+
+      delete ret.devId;
+      return ret;
+    });
 
     startParams.interfaces = deviceInterfaces;
     if (routes.length > 0) {

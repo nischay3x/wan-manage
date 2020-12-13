@@ -1134,13 +1134,17 @@ const prepareTunnelParams = async (tunnelnum, deviceAIntf, deviceBIntf) => {
 
   if (needUseOldInterfaceIdentification(deviceA.versions.agent)) {
     paramsDeviceA.pci = getOldInterfaceIdentification(paramsDeviceA.devId);
-    delete paramsDeviceA.devId;
+  } else {
+    paramsDeviceA.dev_id = paramsDeviceA.devId;
   }
+  delete paramsDeviceA.devId;
 
   if (needUseOldInterfaceIdentification(deviceB.versions.agent)) {
     paramsDeviceB.pci = getOldInterfaceIdentification(paramsDeviceB.devId);
-    delete paramsDeviceB.devId;
+  } else {
+    paramsDeviceB.dev_id = paramsDeviceB.devId;
   }
+  delete paramsDeviceB.devId;
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };
