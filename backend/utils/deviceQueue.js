@@ -455,17 +455,13 @@ class DeviceQueues {
    * Gets the last job in the queue of
    * the device specified by "deviceId"
    * @param  {string} deviceId device UUID
+   * @param  {string} state - state to query last job for. No value looks for all states
    * @return {Promise}         last queued job
    */
-  async getLastJob (deviceId) {
+  async getLastJob (deviceId, qState) {
     let allJobs = [];
-    for (const state of [
-      'complete',
-      'failed',
-      'inactive',
-      'delayed',
-      'active'
-    ]) {
+    const states = [qState] || ['complete', 'failed', 'inactive', 'delayed', 'active'];
+    for (const state of states) {
       // We call getQueueJobsByState() with 'from' and 'to'
       // set to -1 to get only the last job in the queue
       const jobIds = await this.getQueueJobsByState(deviceId, state, -1, -1);
