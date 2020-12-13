@@ -112,7 +112,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     }
 
     if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') &&
-      ifc.dhcp !== 'yes' && ifc.deviceType !== 'wifi'
+      ifc.dhcp !== 'yes'
     ) {
       return {
         valid: false,
@@ -233,8 +233,26 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
 
   const wifiInterface = assignedIfs.find(i => i.deviceType === 'wifi');
   if (wifiInterface) {
-    const ssid = wifiInterface.configuration && wifiInterface.configuration.ssid;
-    const pass = wifiInterface.configuration && wifiInterface.configuration.password;
+    const band2Enable = wifiInterface.configuration['2.4GHz'] &&
+      wifiInterface.configuration['2.4GHz'].enable;
+    const band5Enable = wifiInterface.configuration['5GHz'] &&
+      wifiInterface.configuration['5GHz'].enable;
+
+    if (band2Enable && band5Enable) {
+      return {
+        valid: false, err: 'Dual band as same time is not supported. Please enable one of them'
+      };
+    } ;
+
+    if (!band2Enable && !band5Enable) {
+      return {
+        valid: false, err: 'Wifi access point must be enabled'
+      };
+    } ;
+
+    const key = band2Enable ? '2.4GHz' : '5GHz';
+    const ssid = wifiInterface.configuration[key] && wifiInterface.configuration[key].ssid;
+    const pass = wifiInterface.configuration[key] && wifiInterface.configuration[key].password;
     if (!ssid) return { valid: false, err: 'SSID is not configured for WIFI interface' };
     if (!pass) return { valid: false, err: 'Password is not configured for WIFI interface' };
   }

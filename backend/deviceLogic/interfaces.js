@@ -92,9 +92,10 @@ const lteConfigurationSchema = Joi.object().keys({
   user: Joi.string().allow(null, ''),
   password: Joi.string().allow(null, '')
 });
-
+// wifiChannels
 const shared = {
   ssid: Joi.string().required(),
+  enable: Joi.boolean().required(),
   password: Joi.alternatives().when('securityMode', {
     is: 'wep',
     then: Joi.string()
@@ -102,7 +103,7 @@ const shared = {
       .error(() => 'Password length must be 5, 13 or 16'),
     otherwise: Joi.string().min(8)
   }).required(),
-  operationMode: Joi.string().required().valid('b', 'g', 'n'),
+  operationMode: Joi.string().required().valid('b', 'g', 'n', 'a', 'ac'),
   channel: Joi.string().regex(/^\d+$/).required(),
   bandwidth: Joi.string().valid('20', '40').required(),
   securityMode: Joi.string().valid(
@@ -110,8 +111,7 @@ const shared = {
   ).required(),
   hideSsid: Joi.boolean().required(),
   encryption: Joi.string().valid('aes-ccmp').required(),
-  region: Joi.string().valid(
-    'usa', 'taiwan', 'china', 'japan', 'australia', 'europe', 'russia').required()
+  region: Joi.string()
 };
 
 const WifiConfigurationSchema = Joi.alternatives().try(
@@ -187,6 +187,19 @@ const validateOperations = (deviceInterfaces, operationReq) => {
 
     if (result.error) {
       return { valid: false, err: `${result.error.details[0].message}` };
+    }
+
+    if (intType === 'wifi') {
+      const configuration = operationReq.params.configuration;
+      const isBand2Enabled = configuration['2.4GHz'] && configuration['2.4GHz'].enable;
+      const isBand5Enabled = configuration['5GHz'] && configuration['5GHz'].enable;
+
+      if (isBand2Enabled && isBand5Enabled) {
+        return {
+          valid: false,
+          err: 'You can\'t enabled two bands at the same time. Please enable one of them'
+        };
+      }
     }
 
     return { valid: true, err: '' };

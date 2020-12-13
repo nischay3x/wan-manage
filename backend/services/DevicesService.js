@@ -36,6 +36,7 @@ const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validator
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getMajorVersion } = require('../versioning');
+const wifiChannels = require('../utils/wifi-channels');
 
 class DevicesService {
   /**
@@ -527,9 +528,8 @@ class DevicesService {
       const selectedInterface = deviceObject.interfaces.find(i => i.name === interfaceName);
       let interfaceInfo = {};
 
+      const interfaceType = selectedInterface.deviceType;
       if (getEdgeData === true && deviceStatus) {
-        const interfaceType = selectedInterface.deviceType;
-
         const agentMessages = {
           lte: 'get-lte-interface-info',
           wifi: 'get-wifi-interface-info'
@@ -542,7 +542,7 @@ class DevicesService {
             {
               entity: 'agent',
               message: agentMessages,
-              params: { devId: selectedInterface.devId }
+              params: { dev_id: selectedInterface.devId }
             }
           );
           if (!response.ok) {
@@ -555,6 +555,10 @@ class DevicesService {
             interfaceInfo = response.message;
           }
         }
+      }
+
+      if (interfaceType === 'wifi') {
+        interfaceInfo = { ...interfaceInfo, wifiChannels };
       }
       // const agentMessages = {
       //   lte: 'get-lte-interface-info'
@@ -1987,7 +1991,7 @@ class DevicesService {
             entity: 'agent',
             message: agentMessages,
             params: {
-              devId: selectedIf.devId,
+              dev_id: selectedIf.devId,
               operation: interfaceOperationReq.op,
               ...params,
               readable_errors: true
