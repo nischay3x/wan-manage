@@ -51,8 +51,10 @@ const prepareIfcParams = (interfaces, device) => {
 
     if (needUseOldInterfaceIdentification(device.versions.agent)) {
       newIfc.pci = getOldInterfaceIdentification(newIfc.devId);
-      delete newIfc.devId;
+    } else {
+      newIfc.dev_id = newIfc.devId;
     }
+    delete newIfc.devId;
 
     // Device should only be aware of DIA labels.
     const labels = [];
@@ -266,16 +268,20 @@ const prepareModificationMessageV2 = (messageParams, device) => {
         });
       }
 
-      if (needUseOldInterfaceIdentification(device.versions.agent)) {
-        items = items.map(item => {
-          if (item.params && item.params.devId) {
+      const useOldIntIdentifier = needUseOldInterfaceIdentification(device.versions.agent);
+
+      items = items.map((item) => {
+        if (item.params && item.params.devId) {
+          if (useOldIntIdentifier) {
             item.params.pci = getOldInterfaceIdentification(item.params.devId);
-            delete item.params.devId;
+          } else {
+            item.params.dev_id = item.params.devId;
           }
 
-          return item;
-        });
-      }
+          delete item.params.devId;
+        }
+        return item;
+      });
 
       return items;
     });
@@ -1051,8 +1057,10 @@ const sync = async (deviceId, org) => {
   deviceInterfaces.forEach(item => {
     if (isNeedUseOldInterfaceIdentification) {
       item.pci = getOldInterfaceIdentification(item.devId);
-      delete item.devId;
+    } else {
+      item.dev_id = item.devId;
     }
+    delete item.devId;
 
     deviceConfRequests.push({
       entity: 'agent',

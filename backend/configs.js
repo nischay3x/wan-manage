@@ -156,7 +156,7 @@ const configEnv = {
     // Do not allow organization LAN subnet overlaps for running devices flag. Default = true
     forbidLanSubnetOverlaps: true,
     // Agent version with new interface identification
-    newInterfaceIdentificationVersion: '2.2.3'
+    newInterfaceIdentificationVersion: '2.2.2'
   },
   // Override for development environment, default environment if not specified
   development: {
