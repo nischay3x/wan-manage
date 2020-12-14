@@ -61,6 +61,7 @@ class DeviceQueues {
   /**
      * Removes completed/failed/inactive jobs that
      * are more than a week old
+     * @param  {Boolean} isStart - signal if called on start (true) or periodic (false)
      * @return {void}
      */
   periodicCheckJobs (isStart = false) {
