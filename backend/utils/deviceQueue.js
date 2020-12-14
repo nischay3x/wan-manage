@@ -466,30 +466,18 @@ class DeviceQueues {
    * @param  {string} state - state to query last job for. No value looks for all states
    * @return {Promise}         last queued job
    */
-  async getLastJob (deviceId, qState) {
+  async getLastJob (deviceId, state) {
     let allJobs = [];
-    const states = (qState) ? [qState] : ['complete', 'failed', 'inactive', 'delayed', 'active'];
-    for (const state of states) {
+    const states = (state) ? [state] : ['complete', 'failed', 'inactive', 'delayed', 'active'];
+    for (const _state of states) {
       // We call getQueueJobsByState() with 'from' and 'to'
       // set to -1 to get only the last job in the queue
-      const jobIds = await this.getQueueJobsByState(deviceId, state, -1, -1);
+      const jobIds = await this.getQueueJobsByState(deviceId, _state, -1, -1);
       allJobs = allJobs.concat(jobIds);
     }
 
     // Find the job with the highest ID
-    let lastJobId = -1;
-    let lastJobIndex = -1;
-    let i = 0;
-    for (const job of allJobs) {
-      const { id } = job;
-      if (id > lastJobId) {
-        lastJobId = id;
-        lastJobIndex = i;
-      }
-      i++;
-    }
-
-    return lastJobIndex !== -1 ? allJobs[lastJobIndex] : {};
+    return allJobs.reduce((res, job) => !res.id || job.id > res.id ? job : res, {});
   }
 
   /**
