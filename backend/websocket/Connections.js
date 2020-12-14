@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
@@ -702,6 +703,7 @@ class Connections {
    * @param  {string}   org               organization that owns the device
    * @param  {string}   device            device machine id
    * @param  {Object}   msg               message to be sent to the device
+   * @param  {String}   jobid             sends the job ID to the agent, if job is created
    * @param  {Callback} responseValidator a validator for validating the device response
    * @return {Promise}                    A promise the message has been sent
    */
@@ -720,12 +722,12 @@ class Connections {
     var p = new Promise(function (resolve, reject) {
       if (info.socket && (org == null || info.org === org)) {
         // Increment seq and update queue with resolve function for this promise,
-        // set timeout to 60s to clear when no response received
+        // set timeout to clear when no response received
         var tohandle = setTimeout(() => {
           reject(new Error('Error: Send Timeout'));
           // delete queue for this seq
           delete msgQ[seq];
-        }, 180000);
+        }, configs.get('jobTimeout', 'number'));
         msgQ[seq] = {
           resolver: resolve,
           rejecter: reject,
