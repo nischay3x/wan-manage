@@ -1129,8 +1129,8 @@ const prepareTunnelParams = async (tunnelnum, deviceAIntf, deviceBIntf) => {
     mac: tunnelParams.mac2
   };
 
-  const deviceA = await deviceModel.devices.findOne({ 'interface.devId': deviceAIntf.devId });
-  const deviceB = await deviceModel.devices.findOne({ 'interface.devId': deviceBIntf.devId });
+  const deviceA = await deviceModel.devices.findOne({ 'interfaces.devId': deviceAIntf.devId });
+  const deviceB = await deviceModel.devices.findOne({ 'interfaces.devId': deviceBIntf.devId });
 
   if (getMajorVersion(deviceA.versions.agent) < 3) {
     paramsDeviceA.pci = getOldInterfaceIdentification(paramsDeviceA.devId);
