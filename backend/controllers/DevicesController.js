@@ -182,6 +182,12 @@ class DevicesController {
       request, response, this.service.devicesIdPerformInterfaceActionPOST
     );
   }
+
+  async devicesIdGetDefaultApnGET (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdGetDefaultApnGET
+    );
+  }
 }
 
 module.exports = DevicesController;

@@ -26,6 +26,8 @@ const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
+const path = require('path');
+const fs = require('fs');
 const uniqBy = require('lodash/uniqBy');
 const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -510,6 +512,73 @@ class DevicesService {
   //   }
   // }
 
+  static async devicesIdGetDefaultApnGET ({ id, interfaceName, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      const deviceObject = await devices.findOne({
+        _id: id,
+        org: { $in: orgList },
+        'interfaces.name': interfaceName
+      }).lean();
+
+      if (!deviceObject) {
+        throw new Error('Device or Interface not found');
+      };
+
+      const deviceStatus = connections.isConnected(deviceObject.machineId);
+      const selectedInterface = deviceObject.interfaces.find(i => i.name === interfaceName);
+
+      let apn = null;
+      let mcc = null;
+      let mnc = null;
+
+      if (deviceStatus) {
+        const response = await connections.deviceSendMessage(
+          null,
+          deviceObject.machineId,
+          {
+            entity: 'agent',
+            message: 'get-default-apn',
+            params: { dev_id: selectedInterface.devId }
+          }
+        );
+        if (!response.ok) {
+          logger.error('Failed to get default apn', {
+            params: {
+              deviceId: id, response: response.message
+            }
+          });
+        }
+
+        const data = response.message;
+        apn = data.apn;
+        mcc = data.mcc;
+        mnc = data.mnc;
+      }
+
+      if (!apn && mcc && mnc) {
+        const jsonPath = path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json');
+        if (fs.existsSync(jsonPath)) {
+          const json = require(jsonPath); // Your object array
+          const key = mcc + '-' + mnc;
+          if (json[key]) {
+            apn = json[key];
+          }
+        }
+      }
+
+      return Service.successResponse({
+        apn: apn
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
   static async devicesIdGetInterfaceGET ({ id, interfaceName, org, getEdgeData }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
@@ -560,31 +629,6 @@ class DevicesService {
       if (interfaceType === 'wifi') {
         interfaceInfo = { ...interfaceInfo, wifiChannels };
       }
-      // const agentMessages = {
-      //   lte: 'get-lte-interface-info'
-      // }[interfaceType];
-
-      // if (deviceStatus && agentMessages) {
-      //   const response = await connections.deviceSendMessage(
-      //     null,
-      //     deviceObject.machineId,
-      //     {
-      //       entity: 'agent',
-      //       message: agentMessages,
-      //       params: { devId: selectedInterface.devId }
-      //     }
-      //   );
-
-      //   if (!response.ok) {
-      //     logger.error('Failed to get interface info', {
-      //       params: {
-      //         deviceId: id, response: response.message
-      //       }
-      //     });
-      //   } else {
-      //     deviceInfo = response.message;
-      //   }
-      // }
 
       return Service.successResponse({
         deviceStatus,
@@ -2008,6 +2052,11 @@ class DevicesService {
 
           return Service.rejectResponse(response.message, 500);
         };
+      }
+
+      // if apn is return empty from agent, try to fetch it from the mapping
+      if (interfaceType === 'lte' && interfaceOperationReq.op === 'get-apn') {
+
       }
 
       return Service.successResponse({}, 200);
