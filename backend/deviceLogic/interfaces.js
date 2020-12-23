@@ -87,7 +87,7 @@ const buildInterfaces = (deviceInterfaces) => {
 };
 
 const lteConfigurationSchema = Joi.object().keys({
-  apn: Joi.string().required(),
+  apn: Joi.string().allow(null, ''),
   auth: Joi.string().valid('MSCHAPV2', 'PAP', 'CHAP').allow(null, ''),
   user: Joi.string().allow(null, ''),
   password: Joi.string().allow(null, '')
@@ -153,13 +153,7 @@ const validateConfiguration = (deviceInterfaces, configurationReq) => {
 
 const lteOperationSchema = Joi.object().keys({
   op: Joi.string().valid('connect', 'disconnect', 'reset').required(),
-  params: Joi.alternatives().when('op', {
-    is: 'connect',
-    then: Joi.object({
-      apn: Joi.string().required().error(() => 'Can\'t start network without an apn')
-    }).required(),
-    otherwise: Joi.optional()
-  })
+  params: Joi.object().optional()
 });
 
 const wifiOperationSchema = Joi.object().keys({

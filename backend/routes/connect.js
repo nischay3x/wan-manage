@@ -108,10 +108,10 @@ connectRouter.route('/register')
                   intf.PublicPort = intf.public_port || '';
                   intf.NatType = intf.nat_type || '';
 
-                  if (intf.deviceType === 'lte' && intf.deviceParams.apn) {
-                    intf.configuration = {};
-                    intf.configuration.apn = intf.deviceParams.apn;
-                  }
+                  // if (intf.deviceType === 'lte' && intf.deviceParams.apn) {
+                  //   intf.configuration = {};
+                  //   intf.configuration.apn = intf.deviceParams.apn;
+                  // }
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
