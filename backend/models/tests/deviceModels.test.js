@@ -290,15 +290,15 @@ describe('Interface schema', () => {
     });
   });
 
-  // it('Should be invalid if pci address is invalid', () => {
-  //   interfaceModel.pciaddr = null;
+  it('Should be invalid if dev_id address is invalid', () => {
+    interfaceModel.devId = null;
 
-  //   interfaceModel.validate((err) => {
-  //     expect(err.message).toBe(
-  //       'interfaces validation failed: pciaddr: pciaddr should be a vaild pci address'
-  //     );
-  //   });
-  // });
+    interfaceModel.validate((err) => {
+      expect(err.message).toBe(
+        'interfaces validation failed: devId: devId should be a vaild devId address'
+      );
+    });
+  });
 
   it('Should be invalid if driver name is invalid', () => {
     interfaceModel.driver = '$%@^%!@#$';
