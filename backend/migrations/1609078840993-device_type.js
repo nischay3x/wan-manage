@@ -15,7 +15,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const { devices } = require('../models/devices');
-const { getOldInterfaceIdentification } = require('../deviceLogic/interfaces');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
 
 async function up () {
