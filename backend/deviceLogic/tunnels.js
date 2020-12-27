@@ -592,6 +592,9 @@ const prepareTunnelAddJob = async (
     tunnelParams
   } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf, pathLabel);
 
+  const tasksDeviceA = [];
+  const tasksDeviceB = [];
+
   const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
   const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
   if (majorAgentAVersion >= 3 && majorAgentBVersion >= 3) {
@@ -621,6 +624,23 @@ const prepareTunnelAddJob = async (
       role: 'responder',
       'remote-device-id': deviceA.machineId
     };
+
+    tasksDeviceA.push({
+      entity: 'agent',
+      message: 'update-ikev2',
+      params: {
+        certificate: deviceB.IKEv2.certificate,
+        expireTime: deviceB.IKEv2.expireTime
+      }
+    });
+    tasksDeviceB.push({
+      entity: 'agent',
+      message: 'update-ikev2',
+      params: {
+        certificate: deviceA.IKEv2.certificate,
+        expireTime: deviceA.IKEv2.expireTime
+      }
+    });
   } else {
     // construct static ipsec tunnel
     paramsDeviceA['encryption-mode'] = 'static';
@@ -668,8 +688,6 @@ const prepareTunnelAddJob = async (
 
     paramsDeviceB.ipsec = paramsIpsecDeviceB;
   }
-  const tasksDeviceA = [];
-  const tasksDeviceB = [];
 
   // Saving configuration for device A
   tasksDeviceA.push({
@@ -1054,8 +1072,8 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
-    .populate('deviceA', 'interfaces versions')
-    .populate('deviceB', 'interfaces versions')
+    .populate('deviceA', 'interfaces versions IKEv2')
+    .populate('deviceB', 'interfaces versions IKEv2')
     .lean();
 
   // Create add-tunnel messages
