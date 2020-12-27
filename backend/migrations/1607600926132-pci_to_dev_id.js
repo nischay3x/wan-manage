@@ -15,31 +15,71 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const { devices } = require('../models/devices');
+const { getOldInterfaceIdentification } = require('../deviceLogic/interfaces');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
 
 async function up () {
   // Change all pci keys to devId for each interface
   try {
-    const devDocuments = await devices.find({}).lean();
-    for (const deviceDoc of devDocuments) {
-      const { interfaces } = deviceDoc;
-      if (interfaces) {
-        const updated = interfaces.map(i => {
-          const devId = i.pciaddr || '';
-          if (i.pciaddr) {
-            delete i.pciaddr;
+    await devices.aggregate([
+      {
+        $addFields: {
+          interfaces: {
+            $map: {
+              input: '$interfaces',
+              as: 'inter',
+              in: {
+                devId: { $concat: ['pci:', '$$inter.pciaddr'] },
+                driver: '$$inter.driver',
+                dhcp: '$$inter.dhcp',
+                IPv4: '$$inter.IPv4',
+                IPv6: '$$inter.IPv6',
+                PublicIP: '$$inter.PublicIP',
+                PublicPort: '$$inter.PublicPort',
+                NatType: '$$inter.NatType',
+                useStun: '$$inter.useStun',
+                gateway: '$$inter.gateway',
+                metric: '$$inter.metric',
+                isAssigned: '$$inter.isAssigned',
+                routing: '$$inter.routing',
+                type: '$$inter.type',
+                pathlabels: '$$inter.pathlabels',
+                monitorInternet: '$$inter.monitorInternet',
+                internetAccess: '$$inter.internetAccess',
+                _id: '$$inter._id',
+                MAC: '$$inter.MAC',
+                name: '$$inter.name',
+                IPv4Mask: '$$inter.IPv4Mask',
+                updatedAt: '$$inter.updatedAt',
+                createdAt: '$$inter.createdAt',
+                IPv6Mask: '$$inter.IPv6Mask'
+              }
+            }
           }
+        }
+      },
+      { $out: 'devices' }
+    ]);
+    // const devDocuments = await devices.find({}).lean();
+    // for (const deviceDoc of devDocuments) {
+    //   const { interfaces } = deviceDoc;
+    //   if (interfaces) {
+    //     const updated = interfaces.map(i => {
+    //       const devId = i.pciaddr || '';
+    //       if (i.pciaddr) {
+    //         delete i.pciaddr;
+    //       }
 
-          return { ...i, devId: 'pci:' + devId };
-        });
+    //       return { ...i, devId: 'pci:' + devId };
+    //     });
 
-        await devices.updateOne(
-          { _id: deviceDoc._id },
-          { $set: { interfaces: updated } },
-          { upsert: false }
-        );
-      }
-    }
+    //     await devices.updateOne(
+    //       { _id: deviceDoc._id },
+    //       { $set: { interfaces: updated } },
+    //       { upsert: false }
+    //     );
+    //   }
+    // }
 
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'up' }
@@ -61,18 +101,18 @@ async function down () {
       const { interfaces } = deviceDoc;
       if (interfaces) {
         const updated = interfaces.map(i => {
-          const pciaddr = i.devId || '';
+          const pciaddr = i.devId ? getOldInterfaceIdentification(i.devId) : '';
           if (i.devId) {
             delete i.devId;
           }
 
-          return { ...i, pciaddr };
+          return { ...i, pciaddr: pciaddr };
         });
 
         await devices.updateOne(
           { _id: deviceDoc._id },
           { $set: { interfaces: updated } },
-          { upsert: false }
+          { upsert: false, strict: false }
         );
       }
     }
@@ -88,3 +128,5 @@ async function down () {
 }
 
 module.exports = { up, down };
+
+up();
