@@ -156,7 +156,11 @@ const configEnv = {
     // This value is for storing in the database, it's not impacting the interval presented in the UI
     analyticsUpdateTime: 300,
     // Do not allow organization LAN subnet overlaps for running devices flag. Default = true
-    forbidLanSubnetOverlaps: true
+    forbidLanSubnetOverlaps: true,
+    // Expiration period in ms for generated IKEv2 parameters on the devices. Default = 120 days
+    ikev2ExpirePeriod: 10368000000,
+    // IKEv2 lifetime parameter in minutes. Default = 120 days
+    ikev2Lifetime: 172800
   },
   // Override for development environment, default environment if not specified
   development: {

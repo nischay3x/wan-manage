@@ -572,7 +572,8 @@ const queueTunnel = async (
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
  * @param  {pathLabel} path label used for this tunnel
- * @param  {devBAgentVer} agent version of device B
+ * @param  {Object} deviceA details of device A
+ * @param  {Object} deviceB details of device B
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
@@ -580,76 +581,95 @@ const prepareTunnelAddJob = async (
   deviceAIntf,
   deviceBIntf,
   pathLabel,
-  devBAgentVer
+  deviceA,
+  deviceB
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
-  if (!tunnel.tunnelKeys) throw new Error(`Tunnel ${tunnel.num} has no keys`);
-
-  const tunnelKeys = {
-    key1: tunnel.tunnelKeys.key1,
-    key2: tunnel.tunnelKeys.key2,
-    key3: tunnel.tunnelKeys.key3,
-    key4: tunnel.tunnelKeys.key4
-  };
-
-  const tasksDeviceA = [];
-  const tasksDeviceB = [];
-  const paramsIpsecDeviceA = {};
-  const paramsIpsecDeviceB = {};
   const {
     paramsDeviceA,
     paramsDeviceB,
     tunnelParams
-  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf);
-  const paramsSaAB = {
-    spi: tunnelParams.sa1,
-    'crypto-key': tunnelKeys.key1,
-    'integr-key': tunnelKeys.key2,
-    'crypto-alg': 'aes-cbc-128',
-    'integr-alg': 'sha-256-128'
-  };
-  const paramsSaBA = {
-    spi: tunnelParams.sa2,
-    'crypto-key': tunnelKeys.key3,
-    'integr-key': tunnelKeys.key4,
-    'crypto-alg': 'aes-cbc-128',
-    'integr-alg': 'sha-256-128'
-  };
-  paramsIpsecDeviceA['local-sa'] = paramsSaAB;
-  paramsIpsecDeviceA['remote-sa'] = paramsSaBA;
-  paramsDeviceA.ipsec = paramsIpsecDeviceA;
-  paramsDeviceA['loopback-iface'] = {
-    addr: tunnelParams.ip1 + '/31',
-    mac: tunnelParams.mac1,
-    mtu: 1350,
-    routing: 'ospf',
-    multilink: {
-      labels: pathLabel ? [pathLabel] : []
-    }
-  };
+  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf, pathLabel);
 
-  const majorAgentVersion = getMajorVersion(devBAgentVer);
-  if (majorAgentVersion < 3) { // version 1-2.X.X
-    // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
-    // spi isn't configured properly for SA
-    paramsIpsecDeviceB['local-sa'] = { ...paramsSaAB, spi: tunnelParams.sa2 };
-    paramsIpsecDeviceB['remote-sa'] = { ...paramsSaBA, spi: tunnelParams.sa1 };
-  } else if (majorAgentVersion >= 3) { // version 3.X.X+
-    paramsIpsecDeviceB['local-sa'] = { ...paramsSaBA };
-    paramsIpsecDeviceB['remote-sa'] = { ...paramsSaAB };
+  const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
+  const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
+  if (majorAgentAVersion >= 3 && majorAgentBVersion >= 3) {
+    // construct IKEv2 tunnel
+    paramsDeviceA['encryption-mode'] = 'ikev2';
+    paramsDeviceB['encryption-mode'] = 'ikev2';
+
+    paramsDeviceA.ikev2 = {
+      role: 'initiator',
+      'remote-device-id': deviceB.machineId,
+      lifetime: configs.get('ikev2Lifetime', 'number'),
+      ike: {
+        'crypto-alg': 'aes-cbc-256',
+        'integ-alg': 'sha-1-96',
+        'dh-group': 'modp-2048',
+        'key-size': 256
+      },
+      esp: {
+        'crypto-alg': 'aes-cbc-256',
+        'integ-alg': 'sha-1-96',
+        'dh-group': 'ecp-256',
+        'key-size': 256
+      }
+    };
+
+    paramsDeviceB.ikev2 = {
+      role: 'responder',
+      'remote-device-id': deviceA.machineId
+    };
+  } else {
+    // construct static ipsec tunnel
+    paramsDeviceA['encryption-mode'] = 'static';
+    paramsDeviceB['encryption-mode'] = 'static';
+
+    if (!tunnel.tunnelKeys) throw new Error(`Tunnel ${tunnel.num} has no keys`);
+
+    const tunnelKeys = {
+      key1: tunnel.tunnelKeys.key1,
+      key2: tunnel.tunnelKeys.key2,
+      key3: tunnel.tunnelKeys.key3,
+      key4: tunnel.tunnelKeys.key4
+    };
+
+    const paramsIpsecDeviceA = {};
+    const paramsIpsecDeviceB = {};
+
+    const paramsSaAB = {
+      spi: tunnelParams.sa1,
+      'crypto-key': tunnelKeys.key1,
+      'integr-key': tunnelKeys.key2,
+      'crypto-alg': 'aes-cbc-128',
+      'integr-alg': 'sha-256-128'
+    };
+    const paramsSaBA = {
+      spi: tunnelParams.sa2,
+      'crypto-key': tunnelKeys.key3,
+      'integr-key': tunnelKeys.key4,
+      'crypto-alg': 'aes-cbc-128',
+      'integr-alg': 'sha-256-128'
+    };
+    paramsIpsecDeviceA['local-sa'] = paramsSaAB;
+    paramsIpsecDeviceA['remote-sa'] = paramsSaBA;
+    paramsDeviceA.ipsec = paramsIpsecDeviceA;
+
+    if (majorAgentBVersion < 3) { // version 1-2.X.X
+      // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
+      // spi isn't configured properly for SA
+      paramsIpsecDeviceB['local-sa'] = { ...paramsSaAB, spi: tunnelParams.sa2 };
+      paramsIpsecDeviceB['remote-sa'] = { ...paramsSaBA, spi: tunnelParams.sa1 };
+    } else if (majorAgentBVersion >= 3) { // version 3.X.X+
+      paramsIpsecDeviceB['local-sa'] = { ...paramsSaBA };
+      paramsIpsecDeviceB['remote-sa'] = { ...paramsSaAB };
+    }
+
+    paramsDeviceB.ipsec = paramsIpsecDeviceB;
   }
-
-  paramsDeviceB.ipsec = paramsIpsecDeviceB;
-  paramsDeviceB['loopback-iface'] = {
-    addr: tunnelParams.ip2 + '/31',
-    mac: tunnelParams.mac2,
-    mtu: 1350,
-    routing: 'ospf',
-    multilink: {
-      labels: pathLabel ? [pathLabel] : []
-    }
-  };
+  const tasksDeviceA = [];
+  const tasksDeviceB = [];
 
   // Saving configuration for device A
   tasksDeviceA.push({
@@ -736,7 +756,8 @@ const addTunnel = async (
     deviceAIntf,
     deviceBIntf,
     pathLabel,
-    deviceB.versions.agent
+    deviceA,
+    deviceB
   );
 
   const tunnelJobs = await queueTunnel(
@@ -1033,7 +1054,7 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
-    .populate('deviceA', 'interfaces')
+    .populate('deviceA', 'interfaces versions')
     .populate('deviceB', 'interfaces versions')
     .lean();
 
@@ -1062,7 +1083,8 @@ const sync = async (deviceId, org) => {
       ifcA,
       ifcB,
       pathlabel,
-      deviceB.versions.agent
+      deviceA,
+      deviceB
     );
     // Add the tunnel only for the device that is being synced
     const deviceTasks =
@@ -1099,8 +1121,9 @@ const sync = async (deviceId, org) => {
  * @param  {number} tunnelnum    tunnel id
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
+ * @param  {pathLabel} path label used for this tunnel
 */
-const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
+const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf, pathLabel = null) => {
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnelnum);
 
@@ -1118,7 +1141,12 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
   paramsDeviceA['tunnel-id'] = tunnelnum;
   paramsDeviceA['loopback-iface'] = {
     addr: tunnelParams.ip1 + '/31',
-    mac: tunnelParams.mac1
+    mac: tunnelParams.mac1,
+    mtu: 1350,
+    routing: 'ospf',
+    multilink: {
+      labels: pathLabel ? [pathLabel] : []
+    }
   };
   paramsDeviceB.src = deviceBIntf.IPv4;
   paramsDeviceB.pci = deviceBIntf.pciaddr;
@@ -1128,7 +1156,12 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
   paramsDeviceB['tunnel-id'] = tunnelnum;
   paramsDeviceB['loopback-iface'] = {
     addr: tunnelParams.ip2 + '/31',
-    mac: tunnelParams.mac2
+    mac: tunnelParams.mac2,
+    mtu: 1350,
+    routing: 'ospf',
+    multilink: {
+      labels: pathLabel ? [pathLabel] : []
+    }
   };
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };

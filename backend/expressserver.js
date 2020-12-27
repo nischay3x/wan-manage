@@ -42,6 +42,7 @@ const deviceStatus = require('./periodic/deviceStatus')();
 const deviceQueues = require('./periodic/deviceQueue')();
 const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
+const deviceIKEv2Update = require('./periodic/deviceIKEv2Update')();
 const notifyUsers = require('./periodic/notifyUsers')();
 const appRules = require('./periodic/appRules')();
 
@@ -123,6 +124,7 @@ class ExpressServer {
     deviceQueues.start();
     deviceSwVersion.start();
     deviceSwUpgrade.start();
+    deviceIKEv2Update.start();
     notifyUsers.start();
     appRules.start();
 

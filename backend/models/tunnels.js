@@ -64,6 +64,11 @@ const tunnelSchema = new Schema({
     type: Boolean,
     default: false
   },
+  encryptionMode: {
+    type: String,
+    enum: ['static', 'ikev2'],
+    default: 'static'
+  },
   // device A participate in the tunnel
   deviceA: {
     type: mongoose.Schema.Types.ObjectId,
