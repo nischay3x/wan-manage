@@ -19,7 +19,6 @@
 const configs = require('../configs')();
 const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
-const deviceModel = require('../models/devices');
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
 
@@ -574,10 +573,12 @@ const queueTunnel = async (
  * @param  {Object} deviceBIntf device B tunnel interface
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelAddJob = async (
+const prepareTunnelAddJob = (
   tunnel,
   deviceAIntf,
+  deviceAVersions,
   deviceBIntf,
+  deviceBVersions,
   pathLabel
 ) => {
   // Extract tunnel keys from the database
@@ -599,7 +600,7 @@ const prepareTunnelAddJob = async (
     paramsDeviceA,
     paramsDeviceB,
     tunnelParams
-  } = await prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf);
+  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
   const paramsSaAB = {
     spi: tunnelParams.sa1,
     'crypto-key': tunnelKeys.key1,
@@ -734,7 +735,9 @@ const addTunnel = async (
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
     tunnel,
     deviceAIntf,
+    deviceA.versions,
     deviceBIntf,
+    deviceB.versions,
     pathLabel
   );
 
@@ -933,13 +936,15 @@ const completeTunnelDel = (jobId, res) => {
  * @param  {Object} deviceBIntf device B tunnel interface
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelRemoveJob = async (tunnelnum, deviceAIntf, deviceBIntf) => {
+const prepareTunnelRemoveJob = (
+  tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions
+) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
   const {
     paramsDeviceA,
     paramsDeviceB
-  } = await prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
+  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceA });
@@ -971,10 +976,12 @@ const delTunnel = async (
   deviceBIntf,
   pathLabel
 ) => {
-  const [tasksDeviceA, tasksDeviceB] = await prepareTunnelRemoveJob(
+  const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
     tunnelnum,
     deviceAIntf,
-    deviceBIntf
+    deviceA.versions,
+    deviceBIntf,
+    deviceB.versions
   );
   try {
     const tunnelJobs = await queueTunnel(
@@ -1032,8 +1039,8 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
-    .populate('deviceA', 'interfaces')
-    .populate('deviceB', 'interfaces')
+    .populate('deviceA', 'interfaces versions')
+    .populate('deviceB', 'interfaces versions')
     .lean();
 
   // Create add-tunnel messages
@@ -1059,7 +1066,9 @@ const sync = async (deviceId, org) => {
     const [tasksA, tasksB] = await prepareTunnelAddJob(
       tunnel,
       ifcA,
+      deviceA.versions,
       ifcB,
+      deviceB.versions,
       pathlabel
     );
     // Add the tunnel only for the device that is being synced
@@ -1098,7 +1107,9 @@ const sync = async (deviceId, org) => {
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
 */
-const prepareTunnelParams = async (tunnelnum, deviceAIntf, deviceBIntf) => {
+const prepareTunnelParams = (
+  tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions
+) => {
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnelnum);
 
@@ -1129,17 +1140,14 @@ const prepareTunnelParams = async (tunnelnum, deviceAIntf, deviceBIntf) => {
     mac: tunnelParams.mac2
   };
 
-  const deviceA = await deviceModel.devices.findOne({ 'interfaces.devId': deviceAIntf.devId });
-  const deviceB = await deviceModel.devices.findOne({ 'interfaces.devId': deviceBIntf.devId });
-
-  if (getMajorVersion(deviceA.versions.agent) < 3) {
+  if (getMajorVersion(deviceAVersions.agent) < 3) {
     paramsDeviceA.pci = getOldInterfaceIdentification(paramsDeviceA.devId);
   } else {
     paramsDeviceA.dev_id = paramsDeviceA.devId;
   }
   delete paramsDeviceA.devId;
 
-  if (getMajorVersion(deviceB.versions.agent) < 3) {
+  if (getMajorVersion(deviceBVersions.agent) < 3) {
     paramsDeviceB.pci = getOldInterfaceIdentification(paramsDeviceB.devId);
   } else {
     paramsDeviceB.dev_id = paramsDeviceB.devId;
