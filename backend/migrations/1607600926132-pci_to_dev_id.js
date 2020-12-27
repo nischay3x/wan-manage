@@ -60,26 +60,6 @@ async function up () {
       },
       { $out: 'devices' }
     ]);
-    // const devDocuments = await devices.find({}).lean();
-    // for (const deviceDoc of devDocuments) {
-    //   const { interfaces } = deviceDoc;
-    //   if (interfaces) {
-    //     const updated = interfaces.map(i => {
-    //       const devId = i.pciaddr || '';
-    //       if (i.pciaddr) {
-    //         delete i.pciaddr;
-    //       }
-
-    //       return { ...i, devId: 'pci:' + devId };
-    //     });
-
-    //     await devices.updateOne(
-    //       { _id: deviceDoc._id },
-    //       { $set: { interfaces: updated } },
-    //       { upsert: false }
-    //     );
-    //   }
-    // }
 
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'up' }
@@ -128,5 +108,3 @@ async function down () {
 }
 
 module.exports = { up, down };
-
-up();
