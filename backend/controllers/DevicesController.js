@@ -143,24 +143,6 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdDhcpPOST);
   }
 
-  async devicesIdWifiInterfaceStatusGET (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdWifiInterfaceStatusGET
-    );
-  }
-
-  async devicesIdConnectToWifiPOST (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdConnectToWifiPOST
-    );
-  }
-
-  // async devicesIdConnectToLtePOST (request, response) {
-  //   await Controller.handleRequest(
-  //     request, response, this.service.devicesIdConnectToLtePOST
-  //   );
-  // }
-
   async devicesIdGetInterfaceGET (request, response) {
     await Controller.handleRequest(
       request, response, this.service.devicesIdGetInterfaceGET
