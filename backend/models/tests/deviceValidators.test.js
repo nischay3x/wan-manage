@@ -292,6 +292,7 @@ describe('validatePCI basic BDF format', () => {
         pci                     | result
         ${'pci:00:02.00'}           | ${true}
         ${'pci:0000:02.00'}         | ${true}
+        ${'00:02.00'}           | ${false}
         ${'pci:0:01.00'}            | ${false}
         ${'pci:000:01.00'}          | ${false}
         ${'pci:00:1.00'}            | ${false}
