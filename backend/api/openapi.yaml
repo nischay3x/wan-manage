@@ -2762,7 +2762,7 @@ paths:
     post:
       operationId: devicesIdPerformInterfaceActionPOST
       parameters:
-      - description: Numeric ID of the Device to fetch information about
+      - description: Numeric ID of the device to perform an operation
         explode: false
         in: path
         name: id
@@ -7298,13 +7298,6 @@ components:
           type: string
         params:
           type: object
-      type: object
-    LteConnectRequest:
-      example:
-        apn: Apn phone
-      properties:
-        apn:
-          type: string
       type: object
     WifiConnectRequest:
       example:
