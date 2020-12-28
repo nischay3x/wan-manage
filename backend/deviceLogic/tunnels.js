@@ -607,14 +607,14 @@ const prepareTunnelAddJob = async (
       'remote-device-id': deviceB.machineId,
       lifetime: configs.get('ikev2Lifetime', 'number'),
       ike: {
-        'crypto-alg': 'aes-cbc-256',
-        'integ-alg': 'sha-1-96',
+        'crypto-alg': 'aes-cbc',
+        'integ-alg': 'sha1-96',
         'dh-group': 'modp-2048',
         'key-size': 256
       },
       esp: {
-        'crypto-alg': 'aes-cbc-256',
-        'integ-alg': 'sha-1-96',
+        'crypto-alg': 'aes-cbc',
+        'integ-alg': 'sha1-96',
         'dh-group': 'ecp-256',
         'key-size': 256
       }
