@@ -98,7 +98,16 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
         // Data
         { title: `Create IKEv2 on the device ${dev.hostname}`, tasks },
         // Response data
-        { method: 'ikev2', data: { device: dev._id, org, action: 'create-ikev2', expireTime } },
+        {
+          method: 'ikev2',
+          data: {
+            device: dev._id,
+            machineId: dev.machineId,
+            org,
+            expireTime,
+            action: 'create-ikev2'
+          }
+        },
         // Metadata
         { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
@@ -241,7 +250,7 @@ const complete = async (jobId, res) => {
     const tasks = [{
       entity: 'agent',
       message: 'update-ikev2',
-      params: { certificate, expireTime }
+      params: { 'device-id': res.machineId, certificate, expireTime }
     }];
 
     for (const remoteDev of remoteDevices) {

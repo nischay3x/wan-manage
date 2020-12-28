@@ -629,6 +629,7 @@ const prepareTunnelAddJob = async (
       entity: 'agent',
       message: 'update-ikev2',
       params: {
+        'device-id': deviceB.machineId,
         certificate: deviceB.IKEv2.certificate,
         expireTime: deviceB.IKEv2.expireTime
       }
@@ -637,6 +638,7 @@ const prepareTunnelAddJob = async (
       entity: 'agent',
       message: 'update-ikev2',
       params: {
+        'device-id': deviceA.machineId,
         certificate: deviceA.IKEv2.certificate,
         expireTime: deviceA.IKEv2.expireTime
       }
