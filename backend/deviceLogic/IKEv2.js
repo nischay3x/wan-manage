@@ -249,7 +249,7 @@ const complete = async (jobId, res) => {
 
     const tasks = [{
       entity: 'agent',
-      message: 'add-ikev2public-certificate',
+      message: 'add-public-certificate',
       params: { 'device-id': res.machineId, type: 'ikev2', certificate, expireTime }
     }];
 
