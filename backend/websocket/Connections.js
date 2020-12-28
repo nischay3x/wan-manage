@@ -611,11 +611,12 @@ class Connections {
         { $set: { versions: versions } },
         { new: true, runValidators: true }
       );
+      console.log(origDevice);
 
       if (getMajorVersion(versions.agent) >= 4 &&
         !origDevice.IKEv2.certificate && !origDevice.IKEv2.jobQueued) {
         queueCreateIKEv2Jobs(
-          [origDevice.machineId],
+          [origDevice],
           'system',
           origDevice.org
         ).then(jobResults => {
