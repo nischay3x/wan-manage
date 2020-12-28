@@ -17,7 +17,6 @@
 
 const mongoose = require('mongoose');
 const configs = require('../configs')();
-const deviceStatus = require('../periodic/deviceStatus')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -68,15 +67,12 @@ const updateDevicesIKEv2 = async () => {
       orgDevice._id
     );
     jobResults.forEach(job => {
-      logger.info('Generate IKEv2 certificate job queued', {
+      logger.info('Create IKEv2 certificate device periodic job queued', {
         params: { jobId: job.id },
         job: job,
         periodic: { task: this.taskInfo }
       });
     });
-    // Mark the jobs has been queued to the devices
-    const deviceIDs = orgDevice.devices.map(device => { return device._id; });
-    await setIKEv2QueuedFlag(deviceIDs, true);
   }
 };
 
@@ -97,7 +93,6 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
   }];
   const jobs = [];
   devices.forEach(dev => {
-    deviceStatus.setDeviceStatsField(dev.machineId, 'state', 'pending');
     jobs.push(
       deviceQueues.addJob(dev.machineId, user, org,
         // Data
@@ -110,6 +105,9 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
         null)
     );
   });
+  // Set the create IKEv2 job pending flag for all devices.
+  // This prevents queuing additional IKEv2 tasks on the devices.
+  setIKEv2QueuedFlag(devices.map(dev => dev._id), true);
 
   return Promise.all(jobs);
 };
@@ -170,16 +168,12 @@ const apply = async (devicesIn, user, data) => {
   const org = data.org;
   const jobResults = await queueCreateIKEv2Jobs(opDevices, userName, org);
   jobResults.forEach(job => {
-    logger.info('Create IKEv2 device job queued', {
+    logger.info('Create IKEv2 certificate device job queued', {
       params: { jobId: job.id },
       job: job
     });
   });
 
-  // Set the create IKEv2 job pending flag for all devices.
-  // This prevents queuing additional IKEv2 tasks on the devices.
-  const deviceIDs = opDevices.map(dev => dev._id);
-  await setIKEv2QueuedFlag(deviceIDs, true);
   return { ids: jobResults.map(job => job.id), status: 'completed', message: '' };
 };
 
@@ -315,6 +309,7 @@ const remove = async (job) => {
 
 module.exports = {
   updateDevicesIKEv2,
+  queueCreateIKEv2Jobs,
   apply,
   complete,
   error,
