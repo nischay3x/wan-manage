@@ -27,19 +27,18 @@ const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
 const path = require('path');
-const fs = require('fs');
 const uniqBy = require('lodash/uniqBy');
 const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { validateConfiguration, validateOperations } = require('../deviceLogic/interfaces');
+const { validateOperations } = require('../deviceLogic/interfaces');
 const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getMajorVersion } = require('../versioning');
 const wifiChannels = require('../utils/wifi-channels');
-
+const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -410,14 +409,14 @@ class DevicesService {
     }
   }
 
-  static async devicesIdGetDefaultApnGET ({ id, interfaceName, org }, { user }) {
+  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
       const deviceObject = await devices.findOne({
         _id: id,
         org: { $in: orgList },
-        'interfaces.name': interfaceName
+        'interfaces._id': interfaceId
       }).lean();
 
       if (!deviceObject) {
@@ -425,78 +424,13 @@ class DevicesService {
       };
 
       const deviceStatus = connections.isConnected(deviceObject.machineId);
-      const selectedInterface = deviceObject.interfaces.find(i => i.name === interfaceName);
-
-      let apn = null;
-      let mcc = null;
-      let mnc = null;
-
-      if (deviceStatus) {
-        const response = await connections.deviceSendMessage(
-          null,
-          deviceObject.machineId,
-          {
-            entity: 'agent',
-            message: 'get-default-apn',
-            params: { dev_id: selectedInterface.devId }
-          }
-        );
-        if (!response.ok) {
-          logger.error('Failed to get default apn', {
-            params: {
-              deviceId: id, response: response.message
-            }
-          });
-        }
-
-        const data = response.message;
-        apn = data.apn;
-        mcc = data.mcc;
-        mnc = data.mnc;
-      }
-
-      if (!apn && mcc && mnc) {
-        const jsonPath = path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json');
-        if (fs.existsSync(jsonPath)) {
-          const json = require(jsonPath); // Your object array
-          const key = mcc + '-' + mnc;
-          if (json[key]) {
-            apn = json[key];
-          }
-        }
-      }
-
-      return Service.successResponse({
-        apn: apn
+      const selectedInterface = deviceObject.interfaces.find(i => {
+        return i._id.toString() === interfaceId;
       });
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
-
-  static async devicesIdGetInterfaceGET ({ id, interfaceName, org, getEdgeData }, { user }) {
-    try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
-
-      const deviceObject = await devices.findOne({
-        _id: id,
-        org: { $in: orgList },
-        'interfaces.name': interfaceName
-      }).lean();
-
-      if (!deviceObject) {
-        throw new Error('Device or Interface not found');
-      };
-
-      const deviceStatus = connections.isConnected(deviceObject.machineId);
-      const selectedInterface = deviceObject.interfaces.find(i => i.name === interfaceName);
       let interfaceInfo = {};
 
       const interfaceType = selectedInterface.deviceType;
-      if (getEdgeData === true && deviceStatus) {
+      if (deviceStatus) {
         const agentMessages = {
           lte: 'get-lte-interface-info',
           wifi: 'get-wifi-interface-info'
@@ -526,11 +460,22 @@ class DevicesService {
 
       if (interfaceType === 'wifi') {
         interfaceInfo = { ...interfaceInfo, wifiChannels };
+      } else if (interfaceType === 'lte' && Object.keys(interfaceInfo).length > 0) {
+        let defaultApn = interfaceInfo.default_apn;
+        const mcc = interfaceInfo.system_info.MCC;
+        const mnc = interfaceInfo.system_info.MNC;
+
+        if (!defaultApn && mcc && mnc) {
+          const key = mcc + '-' + mnc;
+          if (apnsJson[key]) {
+            defaultApn = apnsJson[key];
+          }
+        }
+
+        interfaceInfo = { ...interfaceInfo, defaultApn };
       }
 
       return Service.successResponse({
-        deviceStatus,
-        interface: selectedInterface,
         interfaceInfo
       });
     } catch (e) {
@@ -1836,8 +1781,8 @@ class DevicesService {
     }
   }
 
-  static async devicesIdPerformInterfaceActionPOST ({
-    org, id, interfaceOperationReq, interfaceName
+  static async devicesIdInterfacesIdActionPOST ({
+    org, id, interfaceOperationReq, interfaceId
   }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
@@ -1845,14 +1790,14 @@ class DevicesService {
       const deviceObject = await devices.findOne({
         _id: id,
         org: { $in: orgList },
-        'interfaces.name': interfaceName
+        'interfaces._id': interfaceId
       }).lean();
 
       if (!deviceObject) {
         throw new Error('Device or Interface not found');
       };
 
-      const selectedIf = deviceObject.interfaces.find(i => i.name === interfaceName);
+      const selectedIf = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
       const { valid, err } = validateOperations(selectedIf, interfaceOperationReq);
 
       if (!valid) {
@@ -1897,11 +1842,6 @@ class DevicesService {
         };
       }
 
-      // if apn is return empty from agent, try to fetch it from the mapping
-      if (interfaceType === 'lte' && interfaceOperationReq.op === 'get-apn') {
-
-      }
-
       return Service.successResponse({}, 200);
     } catch (e) {
       return Service.rejectResponse(
@@ -1910,49 +1850,6 @@ class DevicesService {
       );
     }
   };
-
-  static async devicesIdSaveInterfaceConfigurationPUT ({
-    org, id, interfaceConfigurationReq, interfaceName
-  }, { user }) {
-    try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
-      const deviceObject = await devices.findOne({
-        _id: id,
-        org: { $in: orgList },
-        'interfaces.name': interfaceName
-      }).lean();
-      if (!deviceObject) {
-        throw new Error('Device or Interface not found');
-      };
-
-      // because of the configuration object is dynamically.
-      // we need to pick only allowed fields
-      const selectedIf = deviceObject.interfaces.find(i => i.name === interfaceName);
-      const { valid, err } = validateConfiguration(selectedIf, interfaceConfigurationReq);
-      if (!valid) {
-        logger.warn('interface configuration update failed',
-          {
-            params: { config: interfaceConfigurationReq, err: err }
-          });
-        return Service.rejectResponse(err, 500);
-      }
-
-      await devices.updateOne({
-        _id: id,
-        org: { $in: orgList },
-        'interfaces.name': interfaceName
-      }, {
-        $set: { 'interfaces.$.configuration': interfaceConfigurationReq }
-      });
-
-      return Service.successResponse({}, 200);
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Invalid input',
-        e.status || 500
-      );
-    }
-  }
 
   /**
    * Get Device Status Information

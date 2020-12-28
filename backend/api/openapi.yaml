@@ -2681,86 +2681,9 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{interfaceName}:
-    get: 
-      operationId: devicesIdGetInterfaceGET
-      parameters:
-      - description: Numeric ID of the Device to fetch information about
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: The name of interface to fetch information about
-        explode: false
-        in: path
-        name: interfaceName
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: Indicator if need to take data from the device
-        in: query
-        name: getEdgeData
-        required: false
-        schema:
-          type: boolean
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InterfaceStatus'
-          description: Successful operation
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BadRequestError'
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Get interface info
-      tags:
-      - Interface
-      x-swagger-router-controller: Devices
-      x-openapi-router-controller: DevicesController
-      x-openapi-router-service: DevicesService
+  /devices/{id}/interfaces/{interfaceId}/action:
     post:
-      operationId: devicesIdPerformInterfaceActionPOST
+      operationId: devicesIdInterfacesIdActionPOST
       parameters:
       - description: Numeric ID of the device to perform an operation
         explode: false
@@ -2773,7 +2696,7 @@ paths:
       - description: The interface name to save configuration for
         explode: false
         in: path
-        name: interfaceName
+        name: interfaceId
         required: true
         schema:
           type: string
@@ -2835,85 +2758,9 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
-    put:
-      operationId: devicesIdSaveInterfaceConfigurationPUT
-      parameters:
-      - description: Numeric ID of the Device to fetch information about
-        explode: false
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      - description: The interface name to save configuration for
-        explode: false
-        in: path
-        name: interfaceName
-        required: true
-        schema:
-          type: string
-        style: simple
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InterfaceConfigurationReq'
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WifiAvailableNetworks'
-          description: Successful operation
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BadRequestError'
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Save Interface Configuration
-      tags:
-      - Interface
-      x-swagger-router-controller: Devices
-      x-openapi-router-controller: DevicesController
-      x-openapi-router-service: DevicesService
-  /devices/{id}/interfaces/{interfaceName}/getDefaultApn:
+  /devices/{id}/interfaces/{interfaceId}/status:
     get: 
-      operationId: devicesIdGetDefaultApnGET
+      operationId: devicesIdInterfacesIdStatusGET
       parameters:
       - description: Numeric ID of the Device to fetch information about
         explode: false
@@ -2923,14 +2770,20 @@ paths:
         schema:
           type: string
         style: simple
-      - description: The name of interface to fetch information about
+      - description: The ID of interface to fetch information about
         explode: false
         in: path
-        name: interfaceName
+        name: interfaceId
         required: true
         schema:
           type: string
         style: simple
+      - description: Indicator if need to take data from the device
+        in: query
+        name: getEdgeData
+        required: false
+        schema:
+          type: boolean
       responses:
         "200":
           content:
@@ -2977,7 +2830,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get Default APN For Lte Interface
+      summary: Get interface info
       tags:
       - Interface
       x-swagger-router-controller: Devices

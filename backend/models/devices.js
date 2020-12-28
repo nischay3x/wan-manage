@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const validators = require('./validators');
+const { validateConfiguration } = require('../deviceLogic/interfaces');
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
@@ -222,7 +223,23 @@ const interfacesSchema = new Schema({
   }
 }, {
   timestamps: true,
-  minimize: false
+  minimize: false,
+  discriminatorKey: 'deviceType'
+});
+
+interfacesSchema.path('configuration').validate(function (value) {
+  if (Object.keys(value).length > 0 && this) {
+    if (this.deviceType === 'lte' || this.deviceType === 'wifi') {
+      const inter = { ...this._doc };
+      const { valid, err } = validateConfiguration(inter, value);
+      if (valid === true) {
+        return true;
+      }
+
+      throw new Error(err);
+    }
+  }
+  return true;
 });
 
 /**

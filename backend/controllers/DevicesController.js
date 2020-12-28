@@ -143,9 +143,9 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdDhcpPOST);
   }
 
-  async devicesIdGetInterfaceGET (request, response) {
+  async devicesIdInterfacesIdStatusGET (request, response) {
     await Controller.handleRequest(
-      request, response, this.service.devicesIdGetInterfaceGET
+      request, response, this.service.devicesIdInterfacesIdStatusGET
     );
   }
 
@@ -153,21 +153,9 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdStatusGET);
   }
 
-  async devicesIdSaveInterfaceConfigurationPUT (request, response) {
+  async devicesIdInterfacesIdActionPOST (request, response) {
     await Controller.handleRequest(
-      request, response, this.service.devicesIdSaveInterfaceConfigurationPUT
-    );
-  }
-
-  async devicesIdPerformInterfaceActionPOST (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdPerformInterfaceActionPOST
-    );
-  }
-
-  async devicesIdGetDefaultApnGET (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdGetDefaultApnGET
+      request, response, this.service.devicesIdInterfacesIdActionPOST
     );
   }
 }
