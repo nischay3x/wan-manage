@@ -627,18 +627,20 @@ const prepareTunnelAddJob = async (
 
     tasksDeviceA.push({
       entity: 'agent',
-      message: 'update-ikev2',
+      message: 'add-public-certificate',
       params: {
         'device-id': deviceB.machineId,
+        type: 'ikev2',
         certificate: deviceB.IKEv2.certificate,
         expireTime: deviceB.IKEv2.expireTime
       }
     });
     tasksDeviceB.push({
       entity: 'agent',
-      message: 'update-ikev2',
+      message: 'add-public-certificate',
       params: {
         'device-id': deviceA.machineId,
+        type: 'ikev2',
         certificate: deviceA.IKEv2.certificate,
         expireTime: deviceA.IKEv2.expireTime
       }

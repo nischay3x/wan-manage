@@ -88,8 +88,8 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
   const expireTime = Date.now() + configs.get('ikev2ExpirePeriod', 'number');
   const tasks = [{
     entity: 'agent',
-    message: 'create-ikev2',
-    params: { expireTime }
+    message: 'add-private-key',
+    params: { expireTime, type: 'ikev2' }
   }];
   const jobs = [];
   devices.forEach(dev => {
@@ -105,7 +105,7 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
             machineId: dev.machineId,
             org,
             expireTime,
-            action: 'create-ikev2'
+            action: 'add-private-key'
           }
         },
         // Metadata
@@ -196,7 +196,7 @@ const apply = async (devicesIn, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  if (res.action !== 'create-ikev2') {
+  if (res.action !== 'add-private-key') {
     logger.info('Device update IKEv2 job complete', { params: { result: res, jobId: jobId } });
     return;
   };
@@ -249,8 +249,8 @@ const complete = async (jobId, res) => {
 
     const tasks = [{
       entity: 'agent',
-      message: 'update-ikev2',
-      params: { 'device-id': res.machineId, certificate, expireTime }
+      message: 'add-ikev2public-certificate',
+      params: { 'device-id': res.machineId, type: 'ikev2', certificate, expireTime }
     }];
 
     for (const remoteDev of remoteDevices) {
@@ -258,7 +258,14 @@ const complete = async (jobId, res) => {
         // Data
         { title: `Update IKEv2 on the device ${remoteDev.hostname}`, tasks },
         // Response data
-        { method: 'ikev2', data: { device: remoteDev._id, org: res.org, action: 'update-ikev2' } },
+        {
+          method: 'ikev2',
+          data: {
+            device: remoteDev._id,
+            org: res.org,
+            action: 'add-public-certificate'
+          }
+        },
         // Metadata
         { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
