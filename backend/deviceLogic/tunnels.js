@@ -1079,7 +1079,7 @@ const sync = async (deviceId, org) => {
     .lean();
 
   // Create add-tunnel messages
-  const tunnelsRequests = [];
+  let tunnelsRequests = [];
   const completeCbData = [];
   let callComplete = false;
   for (const tunnel of tunnels) {
@@ -1107,13 +1107,8 @@ const sync = async (deviceId, org) => {
       deviceB
     );
     // Add the tunnel only for the device that is being synced
-    const deviceTasks =
+    tunnelsRequests =
       deviceId.toString() === deviceA._id.toString() ? tasksA : tasksB;
-    tunnelsRequests.push({
-      entity: 'agent',
-      message: 'add-tunnel',
-      params: deviceTasks[0].params
-    });
 
     // Store the data required by the complete callback
     const target =
