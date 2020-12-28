@@ -27,12 +27,12 @@ const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 /**
- * This function queues IKEv2 jobs to all devices (ver.3)
+ * This function queues IKEv2 jobs to all devices (ver.4+)
  * where expiration time not set or where certificates are about to expire.
  * Called for periodic update of IKEv2 parameters on the devices.
  */
 const updateDevicesIKEv2 = async () => {
-  // Get all devices (ver.3) where expiration time is null
+  // Get all devices (ver.4+) where expiration time is null
   // or where certificates are about to expire (1 month before)
   const expireTime = new Date();
   expireTime.setMonth(expireTime.getMonth() + 1);
@@ -45,7 +45,7 @@ const updateDevicesIKEv2 = async () => {
         ]
       },
       { 'IKEv2.jobQueued': { $ne: true } },
-      { 'versions.device': { $regex: /[3-9]\d?\.\d+\.\d+/ } }
+      { 'versions.device': { $regex: /[4-9]\d?\.\d+\.\d+/ } }
     ]
   };
 
@@ -154,13 +154,13 @@ const apply = async (devicesIn, user, data) => {
     opDevices = devicesIn;
   }
 
-  // Filter out devices (ver.3+) that already have
+  // Filter out devices (ver.4+) that already have
   // a pending IKEv2 job in the queue.
   opDevices = await devices.find({
     $and: [
       { _id: { $in: opDevices } },
       { 'IKEv2.jobQueued': { $ne: true } },
-      { 'versions.device': { $regex: /[3-9]\d?\.\d+\.\d+/ } }
+      { 'versions.device': { $regex: /[4-9]\d?\.\d+\.\d+/ } }
     ]
   },
   '_id machineId hostname'

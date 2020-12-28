@@ -22,7 +22,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'p
 const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 
 /***
- * This class periodically checks if there are devices (ver.3)
+ * This class periodically checks if there are devices (ver.4+)
  * with public certificates wich will expire in 1 month
  * and adds certificate creation jobs for these devices.
  *
@@ -53,7 +53,7 @@ class DeviceIKEv2Update {
   }
 
   /**
-   * This function queues generate IKEv2 jobs to all devices (ver.3)
+   * This function queues generate IKEv2 jobs to all devices (ver.4+)
    * where expiration time not set or where certificates are about to expire
    * @async
    * @return {void}

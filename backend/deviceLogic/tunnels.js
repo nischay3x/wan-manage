@@ -597,7 +597,7 @@ const prepareTunnelAddJob = async (
 
   const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
   const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
-  if (majorAgentAVersion >= 3 && majorAgentBVersion >= 3) {
+  if (majorAgentAVersion >= 4 && majorAgentBVersion >= 4) {
     // construct IKEv2 tunnel
     paramsDeviceA['encryption-mode'] = 'ikev2';
     paramsDeviceB['encryption-mode'] = 'ikev2';
@@ -676,12 +676,12 @@ const prepareTunnelAddJob = async (
     paramsIpsecDeviceA['remote-sa'] = paramsSaBA;
     paramsDeviceA.ipsec = paramsIpsecDeviceA;
 
-    if (majorAgentBVersion < 3) { // version 1-2.X.X
+    if (majorAgentBVersion < 4) { // version 1-3.X.X
       // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
       // spi isn't configured properly for SA
       paramsIpsecDeviceB['local-sa'] = { ...paramsSaAB, spi: tunnelParams.sa2 };
       paramsIpsecDeviceB['remote-sa'] = { ...paramsSaBA, spi: tunnelParams.sa1 };
-    } else if (majorAgentBVersion >= 3) { // version 3.X.X+
+    } else if (majorAgentBVersion >= 4) { // version 4.X.X+
       paramsIpsecDeviceB['local-sa'] = { ...paramsSaBA };
       paramsIpsecDeviceB['remote-sa'] = { ...paramsSaAB };
     }
