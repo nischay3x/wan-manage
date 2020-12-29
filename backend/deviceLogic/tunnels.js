@@ -1058,8 +1058,8 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
-    .populate('deviceA', 'interfaces versions IKEv2')
-    .populate('deviceB', 'interfaces versions IKEv2')
+    .populate('deviceA', 'machineId interfaces versions IKEv2')
+    .populate('deviceB', 'machineId interfaces versions IKEv2')
     .lean();
 
   // Create add-tunnel messages
