@@ -87,6 +87,7 @@ const buildInterfaces = (deviceInterfaces) => {
 };
 
 const lteConfigurationSchema = Joi.object().keys({
+  enable: Joi.boolean().required(),
   apn: Joi.string().allow(null, ''),
   auth: Joi.string().valid('MSCHAPV2', 'PAP', 'CHAP').allow(null, ''),
   user: Joi.string().allow(null, ''),
@@ -152,7 +153,7 @@ const validateConfiguration = (deviceInterfaces, configurationReq) => {
 };
 
 const lteOperationSchema = Joi.object().keys({
-  op: Joi.string().valid('connect', 'disconnect', 'reset').required(),
+  op: Joi.string().valid('enable', 'disable', 'reset').required(),
   params: Joi.object().optional()
 });
 

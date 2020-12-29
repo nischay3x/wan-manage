@@ -211,7 +211,7 @@ const interfacesSchema = new Schema({
   // device type - wifi, lte
   deviceType: {
     type: String,
-    default: ''
+    default: 'dpdk'
   },
   configuration: {
     type: Object,

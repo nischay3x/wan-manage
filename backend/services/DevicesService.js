@@ -39,6 +39,10 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getMajorVersion } = require('../versioning');
 const wifiChannels = require('../utils/wifi-channels');
 const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -432,8 +436,8 @@ class DevicesService {
       const interfaceType = selectedInterface.deviceType;
       if (deviceStatus) {
         const agentMessages = {
-          lte: 'get-lte-interface-info',
-          wifi: 'get-wifi-interface-info'
+          lte: 'lte-get-interface-info',
+          wifi: 'wifi-get-interface-info'
         }[interfaceType];
 
         if (agentMessages) {
@@ -1809,37 +1813,89 @@ class DevicesService {
       }
 
       const interfaceType = selectedIf.deviceType;
-      const agentMessages = {
-        lte: 'lte-perform-operation',
-        wifi: 'wifi-perform-operation'
-      }[interfaceType];
 
-      if (agentMessages) {
-        const params = interfaceOperationReq.params || {};
-        const response = await connections.deviceSendMessage(
-          null,
-          deviceObject.machineId,
-          {
-            entity: 'agent',
-            message: agentMessages,
-            params: {
-              dev_id: selectedIf.devId,
-              operation: interfaceOperationReq.op,
-              ...params,
-              readable_errors: true
-            }
+      const actions = {
+        lte: {
+          enable: {
+            job: true,
+            message: 'lte-enable',
+            title: `Enable LTE on ${deviceObject.hostname}`
+          },
+          disable: {
+            job: true,
+            message: 'lte-disable',
+            title: `Disable LTE on ${deviceObject.hostname}`
+          },
+          reset: {
+            job: false,
+            message: 'lte-reset'
           }
-        );
+        }
+      };
 
-        if (!response.ok) {
-          logger.error('Failed to perform interface operation', {
-            params: {
-              deviceId: id, response: response.message
+      const agentAction = actions[interfaceType]
+        ? actions[interfaceType][interfaceOperationReq.op]
+          ? actions[interfaceType][interfaceOperationReq.op] : null : null;
+
+      if (agentAction) {
+        const params = interfaceOperationReq.params || {};
+        params.dev_id = selectedIf.devId;
+
+        if (agentAction.job) {
+          const tasks = [{ entity: 'agent', message: agentAction.message, params: params }];
+          try {
+            const job = await deviceQueues
+              .addJob(
+                deviceObject.machineId,
+                user.username,
+                orgList[0],
+                // Data
+                {
+                  title: agentAction.title,
+                  tasks: tasks
+                },
+                // Response data
+                {
+                  method: agentAction.message,
+                  data: {
+                    device: deviceObject._id,
+                    org: orgList[0],
+                    shouldUpdateTunnel: false
+                  }
+                },
+                // Metadata
+                { priority: 'medium', attempts: 1, removeOnComplete: false },
+                // Complete callback
+                null
+              );
+            logger.info('Interface action job queued', { params: { job } });
+          } catch (err) {
+            logger.error('Interface action job failed', {
+              params: { machineId: deviceObject.machineId, error: err.message }
+            });
+            return Service.rejectResponse(err.message, 500);
+          }
+        } else {
+          const response = await connections.deviceSendMessage(
+            null,
+            deviceObject.machineId,
+            {
+              entity: 'agent',
+              message: agentAction.message,
+              params: params
             }
-          });
+          );
 
-          return Service.rejectResponse(response.message, 500);
-        };
+          if (!response.ok) {
+            logger.error('Failed to perform interface operation', {
+              params: {
+                deviceId: id, response: response.message
+              }
+            });
+
+            return Service.rejectResponse(response.message, 500);
+          };
+        }
       }
 
       return Service.successResponse({}, 200);
