@@ -663,10 +663,12 @@ class DevicesService {
                 }
               } else {
                 // interface still assigned, check if removed path labels not used by any tunnel
-                const pathlabels = updIntf.pathlabels.map(p => p._id.toString());
-                const remLabels = origIntf.pathlabels.filter(
-                  p => !pathlabels.includes(p._id.toString())
-                );
+                const pathlabels = (Array.isArray(updIntf.pathlabels))
+                  ? updIntf.pathlabels.map(p => p._id.toString()) : [];
+                const remLabels = (Array.isArray(origIntf.pathlabels))
+                  ? origIntf.pathlabels.filter(
+                    p => !pathlabels.includes(p._id.toString())
+                  ) : [];
                 if (remLabels.length > 0) {
                   const remLabelsArray = remLabels.map(p => p._id);
                   const numTunnels = await tunnelsModel
