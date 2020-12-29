@@ -597,7 +597,8 @@ const prepareTunnelAddJob = async (
 
   const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
   const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
-  if (majorAgentAVersion >= 4 && majorAgentBVersion >= 4) {
+  if (majorAgentAVersion >= 4 && majorAgentBVersion >= 4 &&
+      deviceA.IKEv2.certificate && deviceB.IKEv2.certificate) {
     // construct IKEv2 tunnel
     paramsDeviceA['encryption-mode'] = 'ikev2';
     paramsDeviceB['encryption-mode'] = 'ikev2';
@@ -617,34 +618,15 @@ const prepareTunnelAddJob = async (
         'integ-alg': 'sha1-96',
         'dh-group': 'ecp-256',
         'key-size': 256
-      }
+      },
+      certificate: deviceB.IKEv2.certificate
     };
 
     paramsDeviceB.ikev2 = {
       role: 'responder',
-      'remote-device-id': deviceA.machineId
+      'remote-device-id': deviceA.machineId,
+      certificate: deviceA.IKEv2.certificate
     };
-
-    tasksDeviceA.push({
-      entity: 'agent',
-      message: 'add-public-certificate',
-      params: {
-        'device-id': deviceB.machineId,
-        type: 'ikev2',
-        certificate: deviceB.IKEv2.certificate,
-        expireTime: deviceB.IKEv2.expireTime
-      }
-    });
-    tasksDeviceB.push({
-      entity: 'agent',
-      message: 'add-public-certificate',
-      params: {
-        'device-id': deviceA.machineId,
-        type: 'ikev2',
-        certificate: deviceA.IKEv2.certificate,
-        expireTime: deviceA.IKEv2.expireTime
-      }
-    });
   } else {
     // construct static ipsec tunnel
     paramsDeviceA['encryption-mode'] = 'static';
