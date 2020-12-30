@@ -1096,15 +1096,25 @@ const sync = async (deviceId, org) => {
   // Prepare add-route message
   staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
+
+    const params = {
+      addr: destination,
+      via: gateway,
+      devId: ifname || undefined,
+      metric: metric ? parseInt(metric, 10) : undefined
+    };
+
+    if (isNeedUseOldInterfaceIdentification) {
+      params.pci = getOldInterfaceIdentification(params.devId);
+      delete params.devId;
+    } else {
+      params.dev_id = params.devId;
+    }
+
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-route',
-      params: {
-        addr: destination,
-        via: gateway,
-        devId: ifname || undefined,
-        metric: metric ? parseInt(metric, 10) : undefined
-      }
+      params: params
     });
   });
 
