@@ -34,7 +34,7 @@ const updateDevicesIKEv2 = async () => {
   // Get all devices (ver.4+) where expiration time is null
   // or where certificates are about to expire (1 month before)
   const expireTime = new Date();
-  expireTime.setMonth(expireTime.getMonth() + 1);
+  expireTime.setDate(expireTime.getDate() + configs.get('ikev2RenewPeriod', 'number'));
   const query = {
     $and: [
       {
@@ -85,11 +85,13 @@ const updateDevicesIKEv2 = async () => {
  */
 const queueCreateIKEv2Jobs = (devices, user, org) => {
   // @param  {Date}    expireTime    date/time of the certificate expiration
-  const expireTime = Date.now() + configs.get('ikev2ExpirePeriod', 'number');
+  const days = configs.get('ikev2ExpirePeriod', 'number');
+  const expireTime = new Date();
+  expireTime.setDate(expireTime.getDate() + days);
   const tasks = [{
     entity: 'agent',
     message: 'add-private-key',
-    params: { expireTime, type: 'ikev2' }
+    params: { days, type: 'ikev2' }
   }];
   const jobs = [];
   devices.forEach(dev => {
