@@ -24,6 +24,21 @@ async function up () {
     await devices.aggregate([
       {
         $addFields: {
+          staticroutes: {
+            $map: {
+              input: '$staticroutes',
+              as: 'static',
+              in: {
+                _id: '$$static._id',
+                metric: '$$static.metric',
+                destination: '$$static.destination',
+                gateway: '$$static.gateway',
+                ifname: { $concat: ['pci:', '$$static.ifname'] },
+                updatedAt: '$$static.updatedAt',
+                createdAt: '$$static.createdAt'
+              }
+            }
+          },
           interfaces: {
             $map: {
               input: '$interfaces',
