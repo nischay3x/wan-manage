@@ -26,16 +26,23 @@ const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
+const path = require('path');
 const uniqBy = require('lodash/uniqBy');
 const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
+const { validateOperations } = require('../deviceLogic/interfaces');
 const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getMajorVersion } = require('../versioning');
-
+const wifiChannels = require('../utils/wifi-channels');
+const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -145,9 +152,12 @@ class DevicesService {
           'driver',
           'IPv4Mask',
           'name',
-          'pciaddr',
+          'devId',
           '_id',
-          'pathlabels'
+          'pathlabels',
+          'deviceType',
+          'configuration',
+          'deviceParams'
         ]);
         retIf._id = retIf._id.toString();
         return retIf;
@@ -394,6 +404,83 @@ class DevicesService {
       return Service.successResponse({
         status: 'connected',
         configuration
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      const deviceObject = await devices.findOne({
+        _id: id,
+        org: { $in: orgList },
+        'interfaces._id': interfaceId
+      }).lean();
+
+      if (!deviceObject) {
+        throw new Error('Device or Interface not found');
+      };
+
+      const deviceStatus = connections.isConnected(deviceObject.machineId);
+      const selectedInterface = deviceObject.interfaces.find(i => {
+        return i._id.toString() === interfaceId;
+      });
+      let interfaceInfo = {};
+
+      const interfaceType = selectedInterface.deviceType;
+      if (deviceStatus) {
+        const agentMessages = {
+          lte: 'lte-get-interface-info',
+          wifi: 'wifi-get-interface-info'
+        }[interfaceType];
+
+        if (agentMessages) {
+          const response = await connections.deviceSendMessage(
+            null,
+            deviceObject.machineId,
+            {
+              entity: 'agent',
+              message: agentMessages,
+              params: { dev_id: selectedInterface.devId }
+            }
+          );
+          if (!response.ok) {
+            logger.error('Failed to get interface info', {
+              params: {
+                deviceId: id, response: response.message
+              }
+            });
+          } else {
+            interfaceInfo = response.message;
+          }
+        }
+      }
+
+      if (interfaceType === 'wifi') {
+        interfaceInfo = { ...interfaceInfo, wifiChannels };
+      } else if (interfaceType === 'lte' && Object.keys(interfaceInfo).length > 0) {
+        let defaultApn = interfaceInfo.default_apn;
+        const mcc = interfaceInfo.system_info.MCC;
+        const mnc = interfaceInfo.system_info.MNC;
+
+        if (!defaultApn && mcc && mnc) {
+          const key = mcc + '-' + mnc;
+          if (apnsJson[key]) {
+            defaultApn = apnsJson[key];
+          }
+        }
+
+        interfaceInfo = { ...interfaceInfo, defaultApn };
+      }
+
+      return Service.successResponse({
+        interfaceInfo
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -740,7 +827,7 @@ class DevicesService {
           .filter(intf => intf.modified)
           .map(intf => {
             return {
-              pci: intf.pciaddr
+              devId: intf.devId
             };
           });
         const { valid, err } = validateDhcpConfig(
@@ -1060,7 +1147,7 @@ class DevicesService {
   /**
    * Get device statistics from the database
    * @param {string} id      - device ID in mongodb, if not specified, get all devices stats
-   * @param {string} ifNum   - device interface number (usually a pci address)
+   * @param {string} ifNum   - device interface bus address
    *                           if not specified, get all device stats
    * @param {string} org     - organization ID in mongodb
    * @param {Date} startTime - start time to get stats, if not specified get all previous time
@@ -1112,7 +1199,7 @@ class DevicesService {
   /**
    * Get tunnel statistics from the database
    * @param {string} id          - device ID in mongodb, if not specified, get all stats
-   * @param {string} tunnelnum   - tunnel number (usually a pci address)
+   * @param {string} tunnelnum   - tunnel number (usually a devId address)
    *                               if not specified, get all tunnels stats
    * @param {string} org         - organization ID in mongodb
    * @param {Date} startTime     - start time to get stats, if not specified get all previous time
@@ -1639,7 +1726,7 @@ class DevicesService {
       throw new Error('Interface is required to define DHCP');
     };
     const interfaceObj = device.interfaces.find(i => {
-      return i.pciaddr === dhcpRequest.interface;
+      return i.devId === dhcpRequest.interface;
     });
     if (!interfaceObj) {
       throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
@@ -1735,6 +1822,128 @@ class DevicesService {
     }
   }
 
+  static async devicesIdInterfacesIdActionPOST ({
+    org, id, interfaceOperationReq, interfaceId
+  }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      const deviceObject = await devices.findOne({
+        _id: id,
+        org: { $in: orgList },
+        'interfaces._id': interfaceId
+      }).lean();
+
+      if (!deviceObject) {
+        throw new Error('Device or Interface not found');
+      };
+
+      const selectedIf = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
+      const { valid, err } = validateOperations(selectedIf, interfaceOperationReq);
+
+      if (!valid) {
+        logger.warn('interface perform operation failed',
+          {
+            params: { body: interfaceOperationReq, err: err }
+          });
+        return Service.rejectResponse(err, 500);
+      }
+
+      const interfaceType = selectedIf.deviceType;
+
+      const actions = {
+        lte: {
+          enable: {
+            job: true,
+            message: 'lte-enable',
+            title: `Enable LTE on ${deviceObject.hostname}`
+          },
+          disable: {
+            job: true,
+            message: 'lte-disable',
+            title: `Disable LTE on ${deviceObject.hostname}`
+          },
+          reset: {
+            job: false,
+            message: 'lte-reset'
+          }
+        }
+      };
+
+      const agentAction = actions[interfaceType]
+        ? actions[interfaceType][interfaceOperationReq.op]
+          ? actions[interfaceType][interfaceOperationReq.op] : null : null;
+
+      if (agentAction) {
+        const params = interfaceOperationReq.params || {};
+        params.dev_id = selectedIf.devId;
+
+        if (agentAction.job) {
+          const tasks = [{ entity: 'agent', message: agentAction.message, params: params }];
+          try {
+            const job = await deviceQueues
+              .addJob(
+                deviceObject.machineId,
+                user.username,
+                orgList[0],
+                // Data
+                {
+                  title: agentAction.title,
+                  tasks: tasks
+                },
+                // Response data
+                {
+                  method: agentAction.message,
+                  data: {
+                    device: deviceObject._id,
+                    org: orgList[0],
+                    shouldUpdateTunnel: false
+                  }
+                },
+                // Metadata
+                { priority: 'medium', attempts: 1, removeOnComplete: false },
+                // Complete callback
+                null
+              );
+            logger.info('Interface action job queued', { params: { job } });
+          } catch (err) {
+            logger.error('Interface action job failed', {
+              params: { machineId: deviceObject.machineId, error: err.message }
+            });
+            return Service.rejectResponse(err.message, 500);
+          }
+        } else {
+          const response = await connections.deviceSendMessage(
+            null,
+            deviceObject.machineId,
+            {
+              entity: 'agent',
+              message: agentAction.message,
+              params: params
+            }
+          );
+
+          if (!response.ok) {
+            logger.error('Failed to perform interface operation', {
+              params: {
+                deviceId: id, response: response.message
+              }
+            });
+
+            return Service.rejectResponse(response.message, 500);
+          };
+        }
+      }
+
+      return Service.successResponse({}, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Invalid input',
+        e.status || 500
+      );
+    }
+  };
+
   /**
    * Get Device Status Information
    *
@@ -1747,7 +1956,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const { sync, machineId, isApproved, interfaces } = await devices.findOne(
         { _id: id, org: { $in: orgList } },
-        'sync machineId isApproved interfaces.pciaddr interfaces.internetAccess'
+        'sync machineId isApproved interfaces.devId interfaces.internetAccess'
       ).lean();
       const isConnected = connections.isConnected(machineId);
       return Service.successResponse({

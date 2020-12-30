@@ -28,7 +28,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { getMajorVersion } = require('../versioning');
-const { buildInterfaces } = require('./interfaces');
+const { buildInterfaces, getOldInterfaceIdentification } = require('./interfaces');
 
 /**
  * Creates and queues the start-router job.
@@ -70,7 +70,7 @@ const apply = async (device, user, data) => {
       const ifParams = {};
       if (intf.isAssigned === true) {
         ifnum++;
-        ifParams.pci = intf.pciaddr;
+        ifParams.devId = intf.devId;
         ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
         ifParams.addr = intf.IPv4 ? `${intf.IPv4}/${intf.IPv4Mask}` : '';
         if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
@@ -79,7 +79,7 @@ const apply = async (device, user, data) => {
     }
     startParams['default-route'] = defaultGateway || '';
   } else if (majorAgentVersion >= 1) { // version 1.X.X+
-    const deviceInterfaces = buildInterfaces(device[0].interfaces);
+    let deviceInterfaces = buildInterfaces(device[0].interfaces);
     // Send route for backward compatibility (agent version < 1.2.15)
     const routes = [];
     if (defaultGateway && majorAgentVersion < 2) {
@@ -88,6 +88,19 @@ const apply = async (device, user, data) => {
         via: defaultGateway
       });
     }
+
+    const isNeedUseOldIntIdentifier = majorAgentVersion < 3;
+    deviceInterfaces = deviceInterfaces.map(devInt => {
+      const ret = { ...devInt };
+      if (isNeedUseOldIntIdentifier) {
+        ret.pci = getOldInterfaceIdentification(devInt.devId);
+      } else {
+        ret.dev_id = devInt.devId;
+      }
+
+      delete ret.devId;
+      return ret;
+    });
 
     startParams.interfaces = deviceInterfaces;
     if (routes.length > 0) {
