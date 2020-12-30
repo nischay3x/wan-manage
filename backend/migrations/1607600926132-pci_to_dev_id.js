@@ -38,6 +38,23 @@ async function up () {
               }
             }
           },
+          dhcp: {
+            $map: {
+              input: '$dhcp',
+              as: 'dhcpEntry',
+              in: {
+                _id: '$$dhcpEntry._id',
+                dns: '$$dhcpEntry.dns',
+                status: '$$dhcpEntry.status',
+                interface: { $concat: ['pci:', '$$dhcpEntry.interface'] },
+                rangeStart: '$$dhcpEntry.rangeStart',
+                rangeEnd: '$$dhcpEntry.rangeEnd',
+                macAssign: '$$dhcpEntry.macAssign',
+                updatedAt: '$$dhcpEntry.updatedAt',
+                createdAt: '$$dhcpEntry.createdAt'
+              }
+            }
+          },
           interfaces: {
             $map: {
               input: '$interfaces',
@@ -106,6 +123,23 @@ async function down () {
                 ifname: { $arrayElemAt: [{ $split: ['$$static.ifname', 'pci:'] }, 1] },
                 updatedAt: '$$static.updatedAt',
                 createdAt: '$$static.createdAt'
+              }
+            }
+          },
+          dhcp: {
+            $map: {
+              input: '$dhcp',
+              as: 'dhcpEntry',
+              in: {
+                _id: '$$dhcpEntry._id',
+                dns: '$$dhcpEntry.dns',
+                status: '$$dhcpEntry.status',
+                interface: { $arrayElemAt: [{ $split: ['$$dhcpEntry.interface', 'pci:'] }, 1] },
+                rangeStart: '$$dhcpEntry.rangeStart',
+                rangeEnd: '$$dhcpEntry.rangeEnd',
+                macAssign: '$$dhcpEntry.macAssign',
+                updatedAt: '$$dhcpEntry.updatedAt',
+                createdAt: '$$dhcpEntry.createdAt'
               }
             }
           },
