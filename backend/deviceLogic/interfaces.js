@@ -107,12 +107,20 @@ const shared = {
   operationMode: Joi.string().required().valid('b', 'g', 'n', 'a', 'ac'),
   channel: Joi.string().regex(/^\d+$/).required(),
   bandwidth: Joi.string().valid('20', '40').required(),
-  securityMode: Joi.string().valid(
-    'open', 'wpa-psk', 'wpa2-psk', 'wpa-eap', 'wpa2-eap'
-  ).required(),
+  securityMode: Joi.alternatives().when('enable', {
+    is: true,
+    then: Joi.string().valid(
+      'open', 'wpa-psk', 'wpa2-psk', 'wpa-eap', 'wpa2-eap'
+    ).required().error(() => 'Security mode is required field on enabled WiFi band'),
+    otherwise: Joi.string().allow(null, '')
+  }),
   hideSsid: Joi.boolean().required(),
   encryption: Joi.string().valid('aes-ccmp').required(),
-  region: Joi.string()
+  region: Joi.alternatives().when('enable', {
+    is: true,
+    then: Joi.string().required().error(() => 'Region is required field on enabled WiFi band'),
+    otherwise: Joi.string().allow(null, '')
+  })
 };
 
 const WifiConfigurationSchema = Joi.alternatives().try(

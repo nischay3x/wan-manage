@@ -220,16 +220,16 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     }
   }
 
-  // const lteInterface = assignedIfs.find(i => i.deviceType === 'lte');
-  // if (lteInterface) {
-  //   const apn = lteInterface.configuration && lteInterface.configuration.apn;
-  //   if (!apn) {
-  //     return {
-  //       valid: false,
-  //       err: 'APN is not configured for LTE interface'
-  //     };
-  //   }
-  // }
+  const lteInterface = assignedIfs.find(i => i.deviceType === 'lte');
+  if (lteInterface) {
+    const isEnabled = lteInterface.configuration && lteInterface.configuration.enable;
+    if (!isEnabled) {
+      return {
+        valid: false,
+        err: 'LTE must be enabled'
+      };
+    }
+  }
 
   const wifiInterface = assignedIfs.find(i => i.deviceType === 'wifi');
   if (wifiInterface) {
