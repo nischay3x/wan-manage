@@ -15,7 +15,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const { devices } = require('../models/devices');
-const { getOldInterfaceIdentification } = require('../deviceLogic/interfaces');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
 
 async function up () {
@@ -91,26 +90,60 @@ async function up () {
  */
 async function down () {
   try {
-    const devDocuments = await devices.find({}).lean();
-    for (const deviceDoc of devDocuments) {
-      const { interfaces } = deviceDoc;
-      if (interfaces) {
-        const updated = interfaces.map(i => {
-          const pciaddr = i.devId ? getOldInterfaceIdentification(i.devId) : '';
-          if (i.devId) {
-            delete i.devId;
+    await devices.aggregate([
+      {
+        $addFields: {
+          staticroutes: {
+            $map: {
+              input: '$staticroutes',
+              as: 'static',
+              in: {
+                _id: '$$static._id',
+                metric: '$$static.metric',
+                destination: '$$static.destination',
+                gateway: '$$static.gateway',
+                ifname: { $arrayElemAt: [{ $split: ['$$static.ifname', 'pci:'] }, 1] },
+                updatedAt: '$$static.updatedAt',
+                createdAt: '$$static.createdAt'
+              }
+            }
+          },
+          interfaces: {
+            $map: {
+              input: '$interfaces',
+              as: 'inter',
+              in: {
+                pciaddr: { $arrayElemAt: [{ $split: ['$$inter.devId', 'pci:'] }, 1] },
+                driver: '$$inter.driver',
+                dhcp: '$$inter.dhcp',
+                IPv4: '$$inter.IPv4',
+                IPv6: '$$inter.IPv6',
+                PublicIP: '$$inter.PublicIP',
+                PublicPort: '$$inter.PublicPort',
+                NatType: '$$inter.NatType',
+                useStun: '$$inter.useStun',
+                gateway: '$$inter.gateway',
+                metric: '$$inter.metric',
+                isAssigned: '$$inter.isAssigned',
+                routing: '$$inter.routing',
+                type: '$$inter.type',
+                pathlabels: '$$inter.pathlabels',
+                monitorInternet: '$$inter.monitorInternet',
+                internetAccess: '$$inter.internetAccess',
+                _id: '$$inter._id',
+                MAC: '$$inter.MAC',
+                name: '$$inter.name',
+                IPv4Mask: '$$inter.IPv4Mask',
+                updatedAt: '$$inter.updatedAt',
+                createdAt: '$$inter.createdAt',
+                IPv6Mask: '$$inter.IPv6Mask'
+              }
+            }
           }
-
-          return { ...i, pciaddr: pciaddr };
-        });
-
-        await devices.updateOne(
-          { _id: deviceDoc._id },
-          { $set: { interfaces: updated } },
-          { upsert: false, strict: false }
-        );
-      }
-    }
+        }
+      },
+      { $out: 'devices' }
+    ]).option({ bypassDocumentValidation: true });
 
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'down' }
