@@ -66,7 +66,8 @@ async function up () {
                 IPv4Mask: '$$inter.IPv4Mask',
                 updatedAt: '$$inter.updatedAt',
                 createdAt: '$$inter.createdAt',
-                IPv6Mask: '$$inter.IPv6Mask'
+                IPv6Mask: '$$inter.IPv6Mask',
+                deviceType: 'dpdk'
               }
             }
           }
