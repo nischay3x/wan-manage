@@ -21,26 +21,6 @@ const { deviceStats } = require('../models/analytics/deviceStats');
 async function up () {
   // Change all pci keys to devId for each interface
   try {
-    await deviceStats.aggregate([
-      {
-        $addFields: {
-          stats: {
-            $arrayToObject: {
-              $map: {
-                input: { $objectToArray: '$stats' },
-                as: 'st',
-                in: {
-                  k: { $concat: ['pci:', '$$st.k'] },
-                  v: '$$st.v'
-                }
-              }
-            }
-          }
-        }
-      },
-      { $out: 'deviceStats' }
-    ]).allowDiskUse(true);
-
     await devices.aggregate([
       {
         $addFields: {
@@ -114,6 +94,26 @@ async function up () {
       { $out: 'devices' }
     ]).allowDiskUse(true);
 
+    await deviceStats.aggregate([
+      {
+        $addFields: {
+          stats: {
+            $arrayToObject: {
+              $map: {
+                input: { $objectToArray: '$stats' },
+                as: 'st',
+                in: {
+                  k: { $concat: ['pci:', '$$st.k'] },
+                  v: '$$st.v'
+                }
+              }
+            }
+          }
+        }
+      },
+      { $out: 'devicestats' }
+    ]).allowDiskUse(true);
+
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'up' }
     });
@@ -129,26 +129,6 @@ async function up () {
  */
 async function down () {
   try {
-    await deviceStats.aggregate([
-      {
-        $addFields: {
-          stats: {
-            $arrayToObject: {
-              $map: {
-                input: { $objectToArray: '$stats' },
-                as: 'st',
-                in: {
-                  k: { $arrayElemAt: [{ $split: ['$$st.k', 'pci:'] }, 1] },
-                  v: '$$st.v'
-                }
-              }
-            }
-          }
-        }
-      },
-      { $out: 'deviceStats' }
-    ]).allowDiskUse(true);
-
     await devices.aggregate([
       {
         $addFields: {
@@ -220,6 +200,26 @@ async function down () {
       },
       { $out: 'devices' }
     ]).allowDiskUse(true).option({ bypassDocumentValidation: true });
+
+    await deviceStats.aggregate([
+      {
+        $addFields: {
+          stats: {
+            $arrayToObject: {
+              $map: {
+                input: { $objectToArray: '$stats' },
+                as: 'st',
+                in: {
+                  k: { $arrayElemAt: [{ $split: ['$$st.k', 'pci:'] }, 1] },
+                  v: '$$st.v'
+                }
+              }
+            }
+          }
+        }
+      },
+      { $out: 'devicestats' }
+    ]).allowDiskUse(true);
 
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'down' }
