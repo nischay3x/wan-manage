@@ -1054,6 +1054,7 @@ const sync = async (deviceId, org) => {
     {
       _id: 0,
       num: 1,
+      org: 1,
       deviceA: 1,
       deviceB: 1,
       interfaceA: 1,
