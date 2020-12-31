@@ -91,7 +91,7 @@ async function up () {
         }
       },
       { $out: 'devices' }
-    ]);
+    ]).allowDiskUse(true);
 
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'up' }
@@ -178,7 +178,7 @@ async function down () {
         }
       },
       { $out: 'devices' }
-    ]).option({ bypassDocumentValidation: true });
+    ]).allowDiskUse(true).option({ bypassDocumentValidation: true });
 
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'down' }
