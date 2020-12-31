@@ -26,21 +26,30 @@ const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 /**
+ * Returns date to compare with expiration time of IKEv2 certificates
+ * which are about to expire and decide if need to regenerate it
+ */
+const getRenewBeforeExpireTime = () => {
+  const renewBeforeExpireTime = new Date();
+  renewBeforeExpireTime.setDate(renewBeforeExpireTime.getDate() +
+    configs.get('ikev2RenewBeforeExpireDays', 'number'));
+  return renewBeforeExpireTime;
+};
+
+/**
  * This function queues IKEv2 jobs to all devices (ver.4+)
  * where expiration time not set or where certificates are about to expire.
  * Called for periodic update of IKEv2 parameters on the devices.
  */
-const updateDevicesIKEv2 = async () => {
+const updateDevicesIKEv2 = async (task) => {
   // Get all devices (ver.4+) where expiration time is null
   // or where certificates are about to expire (1 month before)
-  const expireTime = new Date();
-  expireTime.setDate(expireTime.getDate() + configs.get('ikev2RenewPeriod', 'number'));
   const query = {
     $and: [
       {
         $or: [
           { 'IKEv2.expireTime': null },
-          { 'IKEv2.expireTime': { $lte: expireTime } }
+          { 'IKEv2.expireTime': { $lte: getRenewBeforeExpireTime() } }
         ]
       },
       { 'IKEv2.jobQueued': { $ne: true } },
@@ -70,7 +79,7 @@ const updateDevicesIKEv2 = async () => {
       logger.info('Create IKEv2 certificate device periodic job queued', {
         params: { jobId: job.id },
         job: job,
-        periodic: { task: this.taskInfo }
+        periodic: { task }
       });
     });
   }
@@ -85,7 +94,7 @@ const updateDevicesIKEv2 = async () => {
  */
 const queueCreateIKEv2Jobs = (devices, user, org) => {
   // @param  {Date}    expireTime    date/time of the certificate expiration
-  const days = configs.get('ikev2ExpirePeriod', 'number');
+  const days = configs.get('ikev2ExpireDays', 'number');
   const expireTime = new Date();
   expireTime.setDate(expireTime.getDate() + days);
   const tasks = [{
@@ -326,6 +335,7 @@ const remove = async (job) => {
 };
 
 module.exports = {
+  getRenewBeforeExpireTime,
   updateDevicesIKEv2,
   queueCreateIKEv2Jobs,
   apply,

@@ -41,6 +41,15 @@ const OrgSchema = new Schema({
   account: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'accounts'
+  },
+  encryptionMethod: {
+    type: String,
+    enum: [
+      'none',
+      'pre-shared-key',
+      'ikev2'
+    ],
+    default: 'ikev2'
   }
 });
 

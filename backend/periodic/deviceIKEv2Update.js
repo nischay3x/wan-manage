@@ -34,10 +34,10 @@ class DeviceIKEv2Update {
 
     // Runs once every day
     this.taskInfo = {
-      name: 'create_device_certificate',
+      name: 'update_device_ikev2',
       func: this.periodicUpdateIKEv2,
       handle: null,
-      period: (1000 * 60 * 60 * 24) // Runs once in a day
+      period: configs.get('ikev2ExpireCheckPeriod', 'number') // Runs once a period (ms)
     };
   }
 
@@ -61,7 +61,7 @@ class DeviceIKEv2Update {
   periodicUpdateIKEv2 () {
     ha.runIfActive(async () => {
       try {
-        await updateDevicesIKEv2();
+        await updateDevicesIKEv2(this.taskInfo);
       } catch (err) {
         logger.error('Device periodic task failed', {
           params: { reason: 'Failed to queue generate IKEv2 jobs', err: err.message },

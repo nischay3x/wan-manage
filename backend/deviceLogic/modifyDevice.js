@@ -541,6 +541,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
   try {
     const tunnels = await tunnelsModel
       .find({ _id: { $in: removedTunnels }, isActive: true })
+      .populate('org')
       .populate('deviceA')
       .populate('deviceB');
 

@@ -26,7 +26,7 @@ const tunnelsModel = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
 const notificationsMgr = require('../notifications/notifications')();
 const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
-const { queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
+const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 class Connections {
   constructor () {
     this.createConnection = this.createConnection.bind(this);
@@ -611,10 +611,9 @@ class Connections {
         { $set: { versions: versions } },
         { new: true, runValidators: true }
       );
-      console.log(origDevice);
-
-      if (getMajorVersion(versions.agent) >= 4 &&
-        !origDevice.IKEv2.certificate && !origDevice.IKEv2.jobQueued) {
+      const { certificate, expireTime, jobQueued } = origDevice.IKEv2;
+      if (getMajorVersion(versions.agent) >= 4 && !jobQueued &&
+        (!certificate || (expireTime && expireTime < getRenewBeforeExpireTime()))) {
         queueCreateIKEv2Jobs(
           [origDevice],
           'system',

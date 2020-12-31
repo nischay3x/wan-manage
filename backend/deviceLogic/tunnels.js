@@ -19,6 +19,7 @@
 const configs = require('../configs')();
 const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
+const orgModel = require('../models/organizations');
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
 const { getMajorVersion } = require('../versioning');
@@ -27,6 +28,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const { getRenewBeforeExpireTime } = require('./IKEv2');
 const { routerVersionsCompatible } = require('../versioning');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
@@ -597,8 +599,11 @@ const prepareTunnelAddJob = async (
 
   const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
   const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
+  const renewBeforeExpireTime = getRenewBeforeExpireTime();
   if (majorAgentAVersion >= 4 && majorAgentBVersion >= 4 &&
-      deviceA.IKEv2.certificate && deviceB.IKEv2.certificate) {
+    tunnel.org.encryptionMethod === 'ikev2' &&
+    deviceA.IKEv2.certificate && deviceA.IKEv2.expireTime > renewBeforeExpireTime &&
+    deviceB.IKEv2.certificate && deviceB.IKEv2.expireTime > renewBeforeExpireTime) {
     // construct IKEv2 tunnel
     paramsDeviceA['encryption-mode'] = 'ikev2';
     paramsDeviceB['encryption-mode'] = 'ikev2';
@@ -753,7 +758,7 @@ const addTunnel = async (
     },
     // Options
     { upsert: true, new: true }
-  );
+  ).populate('org');
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
     tunnel,
@@ -1058,6 +1063,7 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
+    .populate('org')
     .populate('deviceA', 'machineId interfaces versions IKEv2')
     .populate('deviceB', 'machineId interfaces versions IKEv2')
     .lean();
