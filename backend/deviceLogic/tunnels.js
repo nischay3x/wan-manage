@@ -19,7 +19,6 @@
 const configs = require('../configs')();
 const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
-const orgModel = require('../models/organizations');
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
 const { getMajorVersion } = require('../versioning');
