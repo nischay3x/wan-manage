@@ -246,6 +246,7 @@ class Connections {
                 org: resp[0].org.toString(),
                 deviceObj: resp[0]._id,
                 machineId: resp[0].machineId,
+                version: resp[0].versions.agent,
                 ready: false
               });
               return done(true);
@@ -505,6 +506,7 @@ class Connections {
 
         // Update the reconfig hash before applying to prevent infinite loop
         this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
+        this.devices.updateDeviceInfo(machineId, 'version', deviceInfo.message.device);
 
         // Apply the new config and rebuild tunnels if need
         logger.info('Applying new configuration from the device', {
