@@ -16,10 +16,31 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
+const { deviceStats } = require('../models/analytics/deviceStats');
 
 async function up () {
   // Change all pci keys to devId for each interface
   try {
+    await deviceStats.aggregate([
+      {
+        $addFields: {
+          stats: {
+            $arrayToObject: {
+              $map: {
+                input: { $objectToArray: '$stats' },
+                as: 'st',
+                in: {
+                  k: { $concat: ['pci:', '$$st.k'] },
+                  v: '$$st.v'
+                }
+              }
+            }
+          }
+        }
+      },
+      { $out: 'deviceStats' }
+    ]).allowDiskUse(true);
+
     await devices.aggregate([
       {
         $addFields: {
@@ -108,6 +129,26 @@ async function up () {
  */
 async function down () {
   try {
+    await deviceStats.aggregate([
+      {
+        $addFields: {
+          stats: {
+            $arrayToObject: {
+              $map: {
+                input: { $objectToArray: '$stats' },
+                as: 'st',
+                in: {
+                  k: { $arrayElemAt: [{ $split: ['$$st.k', 'pci:'] }, 1] },
+                  v: '$$st.v'
+                }
+              }
+            }
+          }
+        }
+      },
+      { $out: 'deviceStats' }
+    ]).allowDiskUse(true);
+
     await devices.aggregate([
       {
         $addFields: {
