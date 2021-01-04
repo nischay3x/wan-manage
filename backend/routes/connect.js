@@ -121,7 +121,7 @@ connectRouter.route('/register')
                 }
               });
 
-              if (getMajorVersion(req.body.device_version) < 3) {
+              if (getMajorVersion(req.body.fwagent_version) < 3) {
                 ifs = ifs.map((inf) => {
                   inf.devId = 'pci:' + inf.pciaddr;
                   delete inf.pciaddr;
