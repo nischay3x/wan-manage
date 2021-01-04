@@ -1123,21 +1123,21 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  // // lte enable job
-  // const enabledLte = interfaces.filter(item =>
-  //   item.deviceType === 'lte' && item.configuration.enable);
-  // if (enabledLte.length) {
-  //   enabledLte.forEach(lte => {
-  //     deviceConfRequests.push({
-  //       entity: 'agent',
-  //       message: 'lte-enable',
-  //       params: {
-  //         ...lte.configuration,
-  //         dev_id: lte.devId
-  //       }
-  //     });
-  //   });
-  // }
+  // lte enable job
+  const enabledLte = interfaces.filter(item =>
+    item.deviceType === 'lte' && item.configuration.enable);
+  if (enabledLte.length) {
+    enabledLte.forEach(lte => {
+      deviceConfRequests.push({
+        entity: 'agent',
+        message: 'lte-enable',
+        params: {
+          ...lte.configuration,
+          dev_id: lte.devId
+        }
+      });
+    });
+  }
 
   // build routes
   deviceInterfaces.forEach(item => {
