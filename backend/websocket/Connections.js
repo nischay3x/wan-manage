@@ -540,7 +540,8 @@ class Connections {
           }),
           network: joi.object().optional(),
           tunnels: joi.array().optional(),
-          reconfig: joi.string().allow('').optional()
+          reconfig: joi.string().allow('').optional(),
+          'ikev2-certificate-expiration': joi.string().allow('').optional()
         }),
         name: 'versions',
         language: {
