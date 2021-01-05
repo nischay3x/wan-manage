@@ -616,8 +616,26 @@ class Connections {
         { new: true, runValidators: true }
       );
       const { certificate, expireTime, jobQueued } = origDevice.IKEv2;
-      if (getMajorVersion(versions.agent) >= 4 && !jobQueued &&
-        (!certificate || (expireTime && expireTime < getRenewBeforeExpireTime()))) {
+
+      let needNewIKEv2Certificate = false;
+      if (deviceInfo.ikev2 && certificate) {
+        if (deviceInfo.ikev2.error) {
+          logger.warn('IKEv2 certificate error on device', {
+            params: { deviceId, err: deviceInfo.ikev2.error }
+          });
+          needNewIKEv2Certificate = true;
+        } else {
+          const certificateExpiration =
+            (new Date(deviceInfo.ikev2.certificateExpiration)).getTime();
+          // check if expiration is different on agent and management
+          // or certificate is about to expire
+          if (certificateExpiration !== expireTime || expireTime < getRenewBeforeExpireTime()) {
+            needNewIKEv2Certificate = true;
+          }
+        }
+      }
+
+      if ((!certificate || needNewIKEv2Certificate) && !jobQueued) {
         queueCreateIKEv2Jobs(
           [origDevice],
           'system',

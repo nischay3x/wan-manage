@@ -22,6 +22,7 @@ const Joi = require('@hapi/joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const notificationsMgr = require('../notifications/notifications')();
 const configs = require('../configs')();
+const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 
 /***
  * This class gets periodic status from all connected devices
@@ -173,8 +174,30 @@ class DeviceStatus {
               deviceID,
               msg['router-cfg-hash']
             );
-            // Check if config was modified on the device
-            if (lastUpdateEntry.reconfig && lastUpdateEntry.reconfig !== deviceInfo.reconfig) {
+            // check if need to generate a new IKEv2 certificate
+            let needNewIKEv2Certificate = false;
+            if (lastUpdateEntry.ikev2) {
+              if (lastUpdateEntry.ikev2.error) {
+                logger.warn('IKEv2 certificate error on device', {
+                  params: { deviceID: deviceID, err: lastUpdateEntry.ikev2.error },
+                  periodic: { task: this.taskInfo }
+                });
+                needNewIKEv2Certificate = true;
+              } else {
+                const certificateExpiration =
+                  (new Date(lastUpdateEntry.ikev2.certificateExpiration)).getTime();
+                // check if expiration is different on agent and management
+                // or certificate is about to expire
+                if (deviceInfo.certificateExpiration !== certificateExpiration ||
+                  certificateExpiration < getRenewBeforeExpireTime()) {
+                  needNewIKEv2Certificate = true;
+                }
+              }
+            }
+
+            // Check if config was modified on the device or need to check IKEv2 certificate
+            if ((lastUpdateEntry.reconfig && lastUpdateEntry.reconfig !== deviceInfo.reconfig) ||
+              needNewIKEv2Certificate) {
               // Call get-device-info and reconfig
               connections.sendDeviceInfoMsg(deviceID, deviceInfo.deviceObj);
             }

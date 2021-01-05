@@ -219,19 +219,19 @@ const complete = async (jobId, res) => {
   const expireTime = certificate && res.agentMessage.expiration
     ? (new Date(res.agentMessage.expiration)).getTime() : null;
 
-  // update the device IKEv2 data
-  await devices.updateOne(
-    { _id: res.device },
-    {
-      $set: {
-        'IKEv2.certificate': certificate,
-        'IKEv2.expireTime': expireTime
-      }
-    },
-    { upsert: false }
-  );
+  if (certificate && expireTime && !isNaN(expireTime)) {
+    // update the device IKEv2 data
+    await devices.updateOne(
+      { _id: res.device },
+      {
+        $set: {
+          'IKEv2.certificate': certificate,
+          'IKEv2.expireTime': expireTime
+        }
+      },
+      { upsert: false }
+    );
 
-  if (certificate) {
     // update public certificate on the devices having IKEv2 tunnel with this one
     const localDevID = mongoose.Types.ObjectId(res.device);
     const remoteDevices = await tunnelsModel
@@ -285,6 +285,10 @@ const complete = async (jobId, res) => {
         // Complete callback
         null);
     }
+  } else {
+    logger.warn('Failed to create IKEv2 certificate',
+      { params: { result: { certificate, expireTime } } }
+    );
   }
   // unset the pending IKEv2 job flag in the database
   try {
