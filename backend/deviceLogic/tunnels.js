@@ -598,6 +598,7 @@ const prepareTunnelAddJob = async (
 
   const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
   const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
+
   const renewBeforeExpireTime = getRenewBeforeExpireTime();
   if (majorAgentAVersion >= 4 && majorAgentBVersion >= 4 &&
     tunnel.org.encryptionMethod === 'ikev2' &&

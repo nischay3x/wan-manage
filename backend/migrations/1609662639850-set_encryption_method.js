@@ -20,10 +20,10 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'm
 
 async function up () {
   try {
-    // Add encryptionMethod field, set to 'ikev2' by default
+    // Add encryptionMethod field, set as 'pre-shared-key' to all existing organizations
     await orgModel.updateMany(
       {},
-      { $set: { encryptionMethod: 'ikev2' } },
+      { $set: { encryptionMethod: 'pre-shared-key' } },
       { upsert: false }
     );
   } catch (err) {

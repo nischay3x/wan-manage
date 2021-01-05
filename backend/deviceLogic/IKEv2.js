@@ -99,15 +99,15 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
   expireTime.setDate(expireTime.getDate() + days);
   const tasks = [{
     entity: 'agent',
-    message: 'add-private-key',
-    params: { days, type: 'ikev2' }
+    message: 'get-device-certificate',
+    params: { days, type: 'ikev2', new: true }
   }];
   const jobs = [];
   devices.forEach(dev => {
     jobs.push(
       deviceQueues.addJob(dev.machineId, user, org,
         // Data
-        { title: `Create IKEv2 on the device ${dev.hostname}`, tasks },
+        { title: `Create IKEv2 certificate on the device ${dev.hostname}`, tasks },
         // Response data
         {
           method: 'ikev2',
@@ -116,7 +116,7 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
             machineId: dev.machineId,
             org,
             expireTime,
-            action: 'add-private-key'
+            action: 'get-device-certificate'
           }
         },
         // Metadata
@@ -207,7 +207,7 @@ const apply = async (devicesIn, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  if (res.action !== 'add-private-key') {
+  if (res.action !== 'get-device-certificate') {
     logger.info('Device update IKEv2 job complete', { params: { result: res, jobId: jobId } });
     return;
   };
@@ -238,16 +238,17 @@ const complete = async (jobId, res) => {
         {
           $match: {
             isActive: true,
-            encryptionMode: 'ikev2',
+            // encryptionMode: 'ikev2',
             $or: [{ deviceA: localDevID }, { deviceB: localDevID }]
           }
         },
         {
           $project: {
+            num: 1,
             dev_id: { $cond: [{ $eq: ['$deviceA', localDevID] }, '$deviceB', '$deviceA'] }
           }
         },
-        { $group: { _id: '$dev_id' } },
+        { $group: { _id: '$dev_id', tunnels: { $push: '$$ROOT.num' } } },
         { $lookup: { from: 'devices', localField: '_id', foreignField: '_id', as: 'devices' } },
         {
           $addFields: {
@@ -255,26 +256,27 @@ const complete = async (jobId, res) => {
             machineId: { $arrayElemAt: ['$devices.machineId', 0] }
           }
         },
-        { $project: { hostname: 1, machineId: 1 } }
+        { $project: { hostname: 1, machineId: 1, tunnels: 1 } }
       ]);
 
-    const tasks = [{
-      entity: 'agent',
-      message: 'add-public-certificate',
-      params: { 'device-id': res.machineId, type: 'ikev2', certificate, expireTime }
-    }];
-
     for (const remoteDev of remoteDevices) {
+      const tasks = remoteDev.tunnels.map(tunNum => {
+        return {
+          entity: 'agent',
+          message: 'modify-tunnel',
+          params: { 'tunnel-id': tunNum, ikev2: { certificate } }
+        };
+      });
       deviceQueues.addJob(remoteDev.machineId, 'system', res.org,
         // Data
-        { title: `Update IKEv2 on the device ${remoteDev.hostname}`, tasks },
+        { title: `Modify tunnel IKEv2 certificate on device ${remoteDev.hostname}`, tasks },
         // Response data
         {
           method: 'ikev2',
           data: {
             device: remoteDev._id,
             org: res.org,
-            action: 'add-public-certificate'
+            action: 'update-public-certificate'
           }
         },
         // Metadata
