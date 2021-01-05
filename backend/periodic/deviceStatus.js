@@ -92,7 +92,10 @@ class DeviceStatus {
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
-      'ikev2-certificate-expiration': Joi.string().allow('').optional(),
+      ikev2: Joi.object({
+        certificateExpiration: Joi.string().allow('').optional(),
+        error: Joi.string().allow('').optional()
+      }).allow({}).optional(),
       health: Joi.object({
         cpu: Joi.array().items(Joi.number()).min(1).optional(),
         mem: Joi.number().optional(),

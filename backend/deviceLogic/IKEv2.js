@@ -216,7 +216,8 @@ const complete = async (jobId, res) => {
 
   let certificate = res.agentMessage.certificate;
   certificate = Array.isArray(certificate) ? certificate.join('') : certificate;
-  const expireTime = certificate ? res.expireTime : null;
+  const expireTime = certificate && res.agentMessage.expiration
+    ? (new Date(res.agentMessage.expiration)).getTime() : null;
 
   // update the device IKEv2 data
   await devices.updateOne(
