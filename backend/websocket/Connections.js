@@ -25,7 +25,7 @@ const Accounts = require('../models/accounts');
 const tunnelsModel = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
 const notificationsMgr = require('../notifications/notifications')();
-const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
+const { verifyAgentVersion, isSemVer, isVppVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 class Connections {
   constructor () {
@@ -616,21 +616,24 @@ class Connections {
         { new: true, runValidators: true }
       );
       const { certificate, expireTime, jobQueued } = origDevice.IKEv2;
+      const dbExpireTime = expireTime.getTime();
 
+      const { ikev2 } = deviceInfo.message;
       let needNewIKEv2Certificate = false;
-      if (deviceInfo.ikev2 && certificate) {
-        if (deviceInfo.ikev2.error) {
+      if (ikev2 && certificate) {
+        if (ikev2.error) {
           logger.warn('IKEv2 certificate error on device', {
-            params: { deviceId, err: deviceInfo.ikev2.error }
+            params: { deviceId, err: ikev2.error }
           });
           needNewIKEv2Certificate = true;
         } else {
-          const certificateExpiration =
-            (new Date(deviceInfo.ikev2.certificateExpiration)).getTime();
+          const devExpireTime = (new Date(ikev2.certificateExpiration)).getTime();
           // check if expiration is different on agent and management
           // or certificate is about to expire
-          if (certificateExpiration !== expireTime || expireTime < getRenewBeforeExpireTime()) {
+          if (devExpireTime !== dbExpireTime || dbExpireTime < getRenewBeforeExpireTime()) {
             needNewIKEv2Certificate = true;
+          } else {
+            this.devices.updateDeviceInfo(machineId, 'certificateExpiration', dbExpireTime);
           }
         }
       }
