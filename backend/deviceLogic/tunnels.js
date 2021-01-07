@@ -17,6 +17,7 @@
 
 // Logic to apply tunnels between devices
 const configs = require('../configs')();
+const orgModel = require('../models/organizations');
 const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
 const mongoose = require('mongoose');
@@ -27,7 +28,6 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const { getRenewBeforeExpireTime } = require('./IKEv2');
 const { routerVersionsCompatible } = require('../versioning');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
@@ -72,6 +72,7 @@ const applyTunnelAdd = async (devices, user, data) => {
     const dbTasks = [];
     const userName = user.username;
     const org = data.org;
+    const { encryptionMethod } = await orgModel.findOne({ _id: org });
 
     // reasons of not created tunnels for some devices
     // used to build a response message
@@ -157,7 +158,7 @@ const applyTunnelAdd = async (devices, user, data) => {
                   } else {
                     dbTasks.push(generateTunnelPromise(userName, org, null,
                       { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                      { ...wanIfcA }, { ...wanIfcB }));
+                      { ...wanIfcA }, { ...wanIfcB }), encryptionMethod);
                   }
                 } else {
                   reasons.withLabels = true;
@@ -190,7 +191,7 @@ const applyTunnelAdd = async (devices, user, data) => {
                   // Use a copy of devices objects as promise runs later
                   dbTasks.push(generateTunnelPromise(userName, org, label,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA }, { ...wanIfcB }));
+                    { ...wanIfcA }, { ...wanIfcB }), encryptionMethod);
                 }
               }
             };
@@ -339,9 +340,10 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB) => {
  * @param  {Object}   deviceB      device B details
  * @param  {Object}   deviceAIntf device A tunnel interface
  * @param  {Object}   deviceBIntf device B tunnel interface
+ * @param  {string}   encryptionMethod encryption method [ikev2|pre-shared-key]
  */
 const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
-  deviceAIntf, deviceBIntf) => {
+  deviceAIntf, deviceBIntf, encryptionMethod) => {
   logger.debug('Adding tunnel between devices', {
     params: {
       deviceA: deviceA.hostname,
@@ -350,11 +352,35 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
         interfaceA: deviceAIntf.name,
         interfaceB: deviceBIntf.name
       },
-      label: pathLabel
+      label: pathLabel,
+      encryptionMethod
     }
   });
 
   var tPromise = new Promise(function (resolve, reject) {
+    // Check if tunnel can be created
+    if (encryptionMethod === 'ikev2') {
+      const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
+      const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
+      const now = Date.now();
+      if (majorAgentAVersion < 4 || majorAgentBVersion < 4) {
+        reject(new Error('IKEv2 encryption method not supported for devices with version < 4'));
+      }
+      if (!deviceA.IKEv2.certificate || !deviceA.IKEv2.expireTime) {
+        reject(new Error(`IKEv2 certificate is not generated on device ${deviceA.hostname}`));
+      }
+      if (!deviceB.IKEv2.certificate || !deviceB.IKEv2.expireTime) {
+        reject(new Error(`IKEv2 certificate is not generated on device ${deviceB.hostname}`));
+      }
+      if (deviceA.IKEv2.expireTime.getTime() < now) {
+        reject(new Error(`IKEv2 certificate is expired on device ${deviceA.hostname}`));
+      }
+      if (deviceB.IKEv2.expireTime.getTime() < now) {
+        reject(new Error(`IKEv2 certificate is expired on device ${deviceB.hostname}`));
+      }
+    } else if (encryptionMethod !== 'preshared-key') {
+      reject(new Error('Not supported encryption method'));
+    }
     // Get a unique tunnel number
     // Search first in deleted tunnels
     tunnelsModel.findOneAndUpdate(
@@ -373,7 +399,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
           logger.info('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
 
           // Configure tunnel using this num
-          const tunnelJobs = await addTunnel(user, org, tunnelnum,
+          const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
             deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
 
           return resolve(tunnelJobs);
@@ -393,7 +419,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
             logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
 
             // Configure tunnel using this num
-            const tunnelJobs = await addTunnel(user, org, tunnelnum,
+            const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
               deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
 
             return resolve(tunnelJobs);
@@ -420,7 +446,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
                 const tunnelnum = idResp.nextAvailID;
                 logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
                 // Configure tunnel using this num
-                const tunnelJobs = await addTunnel(user, org, tunnelnum,
+                const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
                   deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
 
                 return resolve(tunnelJobs);
@@ -596,18 +622,12 @@ const prepareTunnelAddJob = async (
   const tasksDeviceA = [];
   const tasksDeviceB = [];
 
-  const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
   const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
 
-  const renewBeforeExpireTime = getRenewBeforeExpireTime();
-  if (majorAgentAVersion >= 4 && majorAgentBVersion >= 4 &&
-    tunnel.org.encryptionMethod === 'ikev2' &&
-    deviceA.IKEv2.certificate && deviceA.IKEv2.expireTime > renewBeforeExpireTime &&
-    deviceB.IKEv2.certificate && deviceB.IKEv2.expireTime > renewBeforeExpireTime) {
+  paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
+  paramsDeviceB['encryption-mode'] = tunnel.encryptionMethod;
+  if (tunnel.encryptionMethod === 'ikev2') {
     // construct IKEv2 tunnel
-    paramsDeviceA['encryption-mode'] = 'ikev2';
-    paramsDeviceB['encryption-mode'] = 'ikev2';
-
     paramsDeviceA.ikev2 = {
       role: 'initiator',
       'remote-device-id': deviceB.machineId,
@@ -634,11 +654,7 @@ const prepareTunnelAddJob = async (
     };
   } else {
     // construct static ipsec tunnel
-    paramsDeviceA['encryption-mode'] = 'static';
-    paramsDeviceB['encryption-mode'] = 'static';
-
     if (!tunnel.tunnelKeys) throw new Error(`Tunnel ${tunnel.num} has no keys`);
-
     const tunnelKeys = {
       key1: tunnel.tunnelKeys.key1,
       key2: tunnel.tunnelKeys.key2,
@@ -702,6 +718,7 @@ const prepareTunnelAddJob = async (
  * @param  {string}   user         user id of requesting user
  * @param  {string}   org          id of the organization of the user
  * @param  {number}   tunnelnum    id of the tunnel to be added
+ * @param  {string}   encryptionMethod encryption method [ikev2|pre-shared-key]
  * @param  {Object}   deviceA      details of device A
  * @param  {Object}   deviceB      details of device B
  * @param  {Object}   deviceAIntf device A tunnel interface
@@ -715,6 +732,7 @@ const addTunnel = async (
   user,
   org,
   tunnelnum,
+  encryptionMethod,
   deviceA,
   deviceB,
   deviceAIntf,
@@ -731,7 +749,7 @@ const addTunnel = async (
   });
 
   // Generate IPsec Keys and store them in the database
-  const { key1, key2, key3, key4 } = generateRandomKeys();
+  const tunnelKeys = encryptionMethod === 'pre-shared-key' ? generateRandomKeys() : null;
 
   const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
@@ -749,16 +767,12 @@ const addTunnel = async (
       deviceB: deviceB._id,
       interfaceB: deviceBIntf._id,
       pathlabel: pathLabel,
-      tunnelKeys: {
-        key1,
-        key2,
-        key3,
-        key4
-      }
+      encryptionMethod,
+      tunnelKeys
     },
     // Options
     { upsert: true, new: true }
-  ).populate('org');
+  );
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
     tunnel,
@@ -1064,7 +1078,6 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
-    .populate('org')
     .populate('deviceA', 'machineId interfaces versions IKEv2')
     .populate('deviceB', 'machineId interfaces versions IKEv2')
     .lean();

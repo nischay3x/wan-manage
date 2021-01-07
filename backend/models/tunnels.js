@@ -64,7 +64,7 @@ const tunnelSchema = new Schema({
     type: Boolean,
     default: false
   },
-  encryptionMode: {
+  encryptionMethod: {
     type: String,
     enum: ['none', 'pre-shared-key', 'ikev2'],
     default: 'pre-shared-key'

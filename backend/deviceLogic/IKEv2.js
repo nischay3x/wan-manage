@@ -186,7 +186,7 @@ const complete = async (jobId, res) => {
         {
           $match: {
             isActive: true,
-            // encryptionMode: 'ikev2',
+            encryptionMethod: 'ikev2',
             $or: [{ deviceA: localDevID }, { deviceB: localDevID }]
           }
         },
