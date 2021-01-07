@@ -616,11 +616,11 @@ class Connections {
         { new: true, runValidators: true }
       );
       const { certificate, expireTime, jobQueued } = origDevice.IKEv2;
-      const dbExpireTime = expireTime.getTime();
 
       const { ikev2 } = deviceInfo.message;
       let needNewIKEv2Certificate = false;
-      if (ikev2 && certificate) {
+      if (ikev2 && certificate && expireTime) {
+        const dbExpireTime = expireTime.getTime();
         if (ikev2.error) {
           logger.warn('IKEv2 certificate error on device', {
             params: { deviceId, err: ikev2.error }
