@@ -23,6 +23,7 @@ const tunnelIDsModel = require('../models/tunnelids');
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
 const { getMajorVersion } = require('../versioning');
+const { validateIKEv2 } = require('./IKEv2');
 
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -74,9 +75,22 @@ const applyTunnelAdd = async (devices, user, data) => {
     const org = data.org;
     const { encryptionMethod } = await orgModel.findOne({ _id: org });
 
-    // reasons of not created tunnels for some devices
+    // for now only 'ikev2' and 'pre-shared-key' encryption methods are supported
+    if (!['ikev2', 'pre-shared-key'].includes(encryptionMethod)) {
+      logger.error('Tunnel creation failed',
+        { params: { reason: 'Not supported encryption method', encryptionMethod } }
+      );
+      throw new Error('Not supported encryption method');
+    }
+
+    // array of common reasons of not created tunnels for some devices
     // used to build a response message
-    const reasons = {};
+    const reasons = [];
+    const addReason = (reason) => {
+      if (!reasons.includes(reason)) {
+        reasons.push(reason);
+      }
+    };
 
     for (let idxA = 0; idxA < devicesLen - 1; idxA++) {
       for (let idxB = idxA + 1; idxB < devicesLen; idxB++) {
@@ -89,7 +103,27 @@ const applyTunnelAdd = async (devices, user, data) => {
           logger.warn('Tunnel creation failed', {
             params: { reason: 'Router version mismatch', versions: { verA: verA, verB: verB } }
           });
-          throw new Error('Cannot create tunnels between devices with mismatching router versions');
+          addReason('Router version mismatch for some devices.');
+          continue;
+        }
+
+        // only devices with version of agent >= 4 and valid certificates
+        // are supported for creating tunnels with IKEv2 encryption method
+        if (encryptionMethod === 'ikev2') {
+          let ikev2Validated = true;
+          for (const device of [deviceA, deviceB]) {
+            const { valid, reason } = validateIKEv2(device);
+            if (!valid) {
+              logger.warn('Tunnel creation failed', {
+                params: { reason, machineId: deviceA.machineId }
+              });
+              addReason(`${reason} on some devices.`);
+              ikev2Validated = false;
+            }
+          }
+          if (!ikev2Validated) {
+            continue;
+          }
         }
 
         // Create the list of interfaces for both devices.
@@ -154,20 +188,22 @@ const applyTunnelAdd = async (devices, user, data) => {
                     logger.debug('Found tunnel', {
                       params: { tunnel: tunnelFound }
                     });
-                    reasons.foundTunnels = true;
+                    addReason('Some tunnels exist already.');
                   } else {
                     dbTasks.push(generateTunnelPromise(userName, org, null,
                       { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                      { ...wanIfcA }, { ...wanIfcB }), encryptionMethod);
+                      { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
                   }
                 } else {
-                  reasons.withLabels = true;
+                  addReason(
+                    'No Path Labels specified but some devices have interfaces with Path Labels.'
+                  );
                 }
               } else {
                 // Create a list of path labels that are common to both interfaces.
                 const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
                 if (labelsIntersection.length === 0) {
-                  reasons.noSpecifiedLabelsMatched = true;
+                  addReason('Some devices have interfaces without specified Path Labels.');
                 }
                 for (const label of labelsIntersection) {
                   // Skip tunnel if the label is not included in
@@ -176,7 +212,7 @@ const applyTunnelAdd = async (devices, user, data) => {
                     !createForAllLabels &&
                     !specifiedLabels.has(label);
                   if (shouldSkipTunnel) {
-                    reasons.noSpecifiedLabelsMatched = true;
+                    addReason('Some devices have interfaces without specified Path Labels.');
                     continue;
                   }
                   // If a tunnel already exists, skip the configuration
@@ -191,7 +227,7 @@ const applyTunnelAdd = async (devices, user, data) => {
                   // Use a copy of devices objects as promise runs later
                   dbTasks.push(generateTunnelPromise(userName, org, label,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA }, { ...wanIfcB }), encryptionMethod);
+                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
                 }
               }
             };
@@ -204,7 +240,7 @@ const applyTunnelAdd = async (devices, user, data) => {
               reason: 'no valid WAN interfaces'
             }
           });
-          reasons.noValidWanInterfaces = true;
+          addReason('Some devices have no valid WAN interfaces.');
         }
       }
     }
@@ -234,19 +270,8 @@ const applyTunnelAdd = async (devices, user, data) => {
     } else {
       message = `${ids.length} ${message}`;
     }
-    if (desired.length === 0 || ids.length < desired.length) {
-      if (reasons.withLabels) {
-        message += ' No Path Labels specified but some devices have interfaces with Path Labels.';
-      }
-      if (reasons.noSpecifiedLabelsMatched) {
-        message += ' Some devices have interfaces without specified Path Labels.';
-      }
-      if (reasons.noValidWanInterfaces) {
-        message += ' Some devices have no valid WAN interfaces.';
-      }
-      if (reasons.foundTunnels) {
-        message += ' Some tunnels exist already.';
-      }
+    if (reasons.length > 0) {
+      message = `${message} ${reasons.join(' ')}`;
     }
     return { ids, status, message };
   } else {
@@ -359,28 +384,6 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
 
   var tPromise = new Promise(function (resolve, reject) {
     // Check if tunnel can be created
-    if (encryptionMethod === 'ikev2') {
-      const majorAgentAVersion = getMajorVersion(deviceA.versions.agent);
-      const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
-      const now = Date.now();
-      if (majorAgentAVersion < 4 || majorAgentBVersion < 4) {
-        reject(new Error('IKEv2 encryption method not supported for devices with version < 4'));
-      }
-      if (!deviceA.IKEv2.certificate || !deviceA.IKEv2.expireTime) {
-        reject(new Error(`IKEv2 certificate is not generated on device ${deviceA.hostname}`));
-      }
-      if (!deviceB.IKEv2.certificate || !deviceB.IKEv2.expireTime) {
-        reject(new Error(`IKEv2 certificate is not generated on device ${deviceB.hostname}`));
-      }
-      if (deviceA.IKEv2.expireTime.getTime() < now) {
-        reject(new Error(`IKEv2 certificate is expired on device ${deviceA.hostname}`));
-      }
-      if (deviceB.IKEv2.expireTime.getTime() < now) {
-        reject(new Error(`IKEv2 certificate is expired on device ${deviceB.hostname}`));
-      }
-    } else if (encryptionMethod !== 'preshared-key') {
-      reject(new Error('Not supported encryption method'));
-    }
     // Get a unique tunnel number
     // Search first in deleted tunnels
     tunnelsModel.findOneAndUpdate(

@@ -24,6 +24,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const { getMajorVersion } = require('../versioning');
 
 /**
  * Returns a timestamp to compare with expiration time of IKEv2 certificates
@@ -34,6 +35,38 @@ const getRenewBeforeExpireTime = () => {
   renewBeforeExpireTime.setDate(renewBeforeExpireTime.getDate() +
     configs.get('ikev2RenewBeforeExpireDays', 'number'));
   return renewBeforeExpireTime.getTime();
+};
+
+/**
+ * Checks if the device is valid for creating IKEv2 tunnels
+ * @param {Object} device - the device to validate
+ * @return {{valid: boolean, reason: string}}
+ */
+const validateIKEv2 = (device) => {
+  const majorAgentVersion = getMajorVersion(device.versions.agent);
+  if (majorAgentVersion < 4) {
+    return {
+      valid: false,
+      reason: 'IKEv2 encryption method not supported'
+    };
+  };
+  if (!device.IKEv2.certificate || !device.IKEv2.expireTime) {
+    return {
+      valid: false,
+      reason: 'No valid IKEv2 certificate'
+    };
+  };
+  const now = Date.now();
+  if (device.IKEv2.expireTime.getTime() < now) {
+    return {
+      valid: false,
+      reason: 'IKEv2 certificate is expired'
+    };
+  };
+  return {
+    valid: true,
+    reason: ''
+  };
 };
 
 /**
@@ -290,6 +323,7 @@ const remove = async (job) => {
 
 module.exports = {
   getRenewBeforeExpireTime,
+  validateIKEv2,
   queueCreateIKEv2Jobs,
   apply,
   complete,
