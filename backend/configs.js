@@ -157,8 +157,6 @@ const configEnv = {
     analyticsUpdateTime: 300,
     // Do not allow organization LAN subnet overlaps for running devices flag. Default = true
     forbidLanSubnetOverlaps: true,
-    // Periodical check if need to update IKEv2 certificates (in msec). Default 24 hours.
-    ikev2ExpireCheckPeriod: 86400000,
     // Expiration period in days for generated IKEv2 parameters on the devices. Default = 120 days
     ikev2ExpireDays: 120,
     // Number of days before expiration to renew the IKEv2 parameters. Default = 30 days

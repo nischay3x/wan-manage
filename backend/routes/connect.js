@@ -24,7 +24,7 @@ const tokens = require('../models/tokens');
 const { devices } = require('../models/devices');
 const jwt = require('jsonwebtoken');
 const mongoConns = require('../mongoConns.js')();
-const { checkDeviceVersion } = require('../versioning');
+const { checkDeviceVersion, getMajorVersion } = require('../versioning');
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
@@ -75,7 +75,7 @@ connectRouter.route('/register')
               });
 
               // Try to auto populate interfaces parameters
-              const ifs = JSON.parse(req.body.interfaces);
+              let ifs = JSON.parse(req.body.interfaces);
 
               // Get an interface with gateway and the lowest metric
               const defaultIntf = ifs ? ifs.reduce((res, intf) =>
@@ -99,7 +99,7 @@ connectRouter.route('/register')
                   intf.dhcp = intf.dhcp || 'no';
                   intf.gateway = req.body.default_route;
                   intf.metric = '0';
-                } else if (intf.gateway) {
+                } else if (intf.gateway || intf.deviceType === 'lte') {
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
@@ -107,6 +107,11 @@ connectRouter.route('/register')
                   intf.PublicIP = intf.public_ip || (intf.metric === lowestMetric ? sourceIP : '');
                   intf.PublicPort = intf.public_port || '';
                   intf.NatType = intf.nat_type || '';
+
+                  // if (intf.deviceType === 'lte' && intf.deviceParams.apn) {
+                  //   intf.configuration = {};
+                  //   intf.configuration.apn = intf.deviceParams.apn;
+                  // }
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
@@ -115,6 +120,14 @@ connectRouter.route('/register')
                   intf.metric = '';
                 }
               });
+
+              if (getMajorVersion(req.body.device_version) < 3) {
+                ifs = ifs.map((inf) => {
+                  inf.devId = 'pci:' + inf.pciaddr;
+                  delete inf.pciaddr;
+                  return { ...inf };
+                });
+              }
 
               // Prepare device versions array
               const versions = {

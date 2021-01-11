@@ -143,8 +143,20 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdDhcpPOST);
   }
 
+  async devicesIdInterfacesIdStatusGET (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdInterfacesIdStatusGET
+    );
+  }
+
   async devicesIdStatusGET (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdStatusGET);
+  }
+
+  async devicesIdInterfacesIdActionPOST (request, response) {
+    await Controller.handleRequest(
+      request, response, this.service.devicesIdInterfacesIdActionPOST
+    );
   }
 }
 

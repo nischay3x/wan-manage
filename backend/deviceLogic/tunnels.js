@@ -22,14 +22,14 @@ const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
-const { getMajorVersion } = require('../versioning');
 const { validateIKEv2 } = require('./IKEv2');
 
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const { routerVersionsCompatible } = require('../versioning');
+const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
+const { getOldInterfaceIdentification } = require('./interfaces');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
@@ -606,7 +606,7 @@ const queueTunnel = async (
  * @param  {Object} deviceB details of device B
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelAddJob = async (
+const prepareTunnelAddJob = (
   tunnel,
   deviceAIntf,
   deviceBIntf,
@@ -620,7 +620,14 @@ const prepareTunnelAddJob = async (
     paramsDeviceA,
     paramsDeviceB,
     tunnelParams
-  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf, pathLabel);
+  } = prepareTunnelParams(
+    tunnel.num,
+    deviceAIntf,
+    deviceA.versions,
+    deviceBIntf,
+    deviceB.versions,
+    pathLabel
+  );
 
   const tasksDeviceA = [];
   const tasksDeviceB = [];
@@ -981,13 +988,15 @@ const completeTunnelDel = (jobId, res) => {
  * @param  {Object} deviceBIntf device B tunnel interface
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelRemoveJob = (tunnelnum, deviceAIntf, deviceBIntf) => {
+const prepareTunnelRemoveJob = (
+  tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions
+) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
   const {
     paramsDeviceA,
     paramsDeviceB
-  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
+  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceA });
@@ -1022,7 +1031,9 @@ const delTunnel = async (
   const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
     tunnelnum,
     deviceAIntf,
-    deviceBIntf
+    deviceA.versions,
+    deviceBIntf,
+    deviceB.versions
   );
   try {
     const tunnelJobs = await queueTunnel(
@@ -1145,7 +1156,9 @@ const sync = async (deviceId, org) => {
  * @param  {Object} deviceBIntf device B tunnel interface
  * @param  {pathLabel} path label used for this tunnel
 */
-const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf, pathLabel = null) => {
+const prepareTunnelParams = (
+  tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions, pathLabel = null
+) => {
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnelnum);
 
@@ -1156,7 +1169,7 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf, pathLabel = nu
       deviceAIntf.PublicIP === deviceBIntf.PublicIP;
 
   paramsDeviceA.src = deviceAIntf.IPv4;
-  paramsDeviceA.pci = deviceAIntf.pciaddr;
+  paramsDeviceA.devId = deviceAIntf.devId;
   paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
   paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort)
     ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
@@ -1171,7 +1184,7 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf, pathLabel = nu
     }
   };
   paramsDeviceB.src = deviceBIntf.IPv4;
-  paramsDeviceB.pci = deviceBIntf.pciaddr;
+  paramsDeviceB.devId = deviceBIntf.devId;
   paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
   paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort)
     ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
@@ -1185,6 +1198,20 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf, pathLabel = nu
       labels: pathLabel ? [pathLabel] : []
     }
   };
+
+  if (getMajorVersion(deviceAVersions.agent) < 3) {
+    paramsDeviceA.pci = getOldInterfaceIdentification(paramsDeviceA.devId);
+  } else {
+    paramsDeviceA.dev_id = paramsDeviceA.devId;
+  }
+  delete paramsDeviceA.devId;
+
+  if (getMajorVersion(deviceBVersions.agent) < 3) {
+    paramsDeviceB.pci = getOldInterfaceIdentification(paramsDeviceB.devId);
+  } else {
+    paramsDeviceB.dev_id = paramsDeviceB.devId;
+  }
+  delete paramsDeviceB.devId;
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };

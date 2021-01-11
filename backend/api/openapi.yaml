@@ -2439,7 +2439,7 @@ paths:
         required: false
         schema:
           type: string
-      - description: Interface Number (PCI Address) to filter
+      - description: Interface Dev Id to filter
         explode: true
         in: query
         name: ifnum
@@ -2678,6 +2678,161 @@ paths:
       summary: Retrieve device tunnel statistics information
       tags:
       - Statistics
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/interfaces/{interfaceId}/action:
+    post:
+      operationId: devicesIdInterfacesIdActionPOST
+      parameters:
+      - description: Numeric ID of the device to perform an operation
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The interface name to save configuration for
+        explode: false
+        in: path
+        name: interfaceId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InterfaceOperationReq'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WifiAvailableNetworks'
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Perform Interface Operation
+      tags:
+      - Interface
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/interfaces/{interfaceId}/status:
+    get: 
+      operationId: devicesIdInterfacesIdStatusGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: The ID of interface to fetch information about
+        explode: false
+        in: path
+        name: interfaceId
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Indicator if need to take data from the device
+        in: query
+        name: getEdgeData
+        required: false
+        schema:
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterfaceStatus'
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get interface info
+      tags:
+      - Interface
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
@@ -6405,7 +6560,7 @@ components:
           driver: driver
           IPv4Mask: "24"
           name: name
-          pciaddr: pciaddr
+          devId: devId
           _id: _id
         - IPv6: IPv6
           PublicIP: PublicIP
@@ -6423,7 +6578,7 @@ components:
           driver: driver
           IPv4Mask: "24"
           name: name
-          pciaddr: pciaddr
+          devId: devId
           _id: _id
         org: org
         isConnected: true
@@ -6514,6 +6669,7 @@ components:
           NatType: NatType
           useStun: true
           monitorInternet: true
+          internetAccess: 'yes'
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6526,7 +6682,7 @@ components:
           driver: driver
           IPv4Mask: "24"
           name: name
-          pciaddr: pciaddr
+          devId: devId
           _id: _id
           pathlabels: path labels list
         - IPv6: IPv6
@@ -6535,6 +6691,7 @@ components:
           NatType: NatType
           useStun: true
           monitorInternet: true
+          internetAccess: 'no'
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -6547,7 +6704,7 @@ components:
           driver: driver
           IPv4Mask: "24"
           name: name
-          pciaddr: pciaddr
+          devId: devId
           _id: _id
           pathlabels: path labels list
         org: org
@@ -6642,6 +6799,10 @@ components:
         sync:
           $ref: '#/components/schemas/DeviceSyncStatus'
       type: object
+    InterfaceConfigurationReq:
+      type: object
+    InterfaceOperationReq:
+      type: object
     UpgradeSchedule:
       example:
         jobQueued: true
@@ -6666,6 +6827,7 @@ components:
         NatType: NatType
         useStun: useStun
         monitorInternet: true
+        internetAccess: 'yes'
         IPv4: IPv4
         type: WAN
         MAC: MAC
@@ -6678,7 +6840,7 @@ components:
         driver: driver
         IPv4Mask: "24"
         name: name
-        pciaddr: pciaddr
+        devId: devId
         _id: _id
         pathlabels: path labels list
       properties:
@@ -6686,7 +6848,7 @@ components:
           maxLength: 24
           minLength: 24
           type: string
-        pciaddr:
+        devId:
           type: string
         driver:
           type: string
@@ -6709,6 +6871,12 @@ components:
           type: boolean
         monitorInternet:
           type: boolean
+        internetAccess:
+          enum:
+          - ''
+          - yes
+          - no
+          type: string
         gateway:
           type: string
         metric:
@@ -7008,6 +7176,43 @@ components:
         params:
           type: object
       type: object
+    WifiConnectRequest:
+      example:
+        essid: Access point ssid
+        password: somepassword  
+        useDHCP: true    
+      properties:
+        essid: 
+          type: string
+        password:
+          type: string
+        useDHCP:
+          type: boolean
+      type: object
+    WifiAvailableNetworks:
+      example:
+        networks: 
+        - network 1
+        - network 2
+        deviceStatus: connected
+      properties:
+        networks:
+          items:
+            type: string
+          type: array
+      type: object
+    InterfaceStatus:
+      example:
+        status: 
+          key: value
+          key: value
+        deviceStatus: connected
+      properties:
+        status:
+          type: object
+        deviceStatus:
+          type: string
+      type: object
     DeviceLog:
       example:
         logs:
@@ -7217,7 +7422,7 @@ components:
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
       properties:
         interface:
-          description: Interface PCI Address
+          description: Interface bus Address
           maxLength: 24
           type: string
         rangeStart:
@@ -7259,7 +7464,7 @@ components:
           minLength: 24
           type: string
         interface:
-          description: Interface PCI Address
+          description: Interface bus Address
           maxLength: 24
           type: string
         rangeStart:

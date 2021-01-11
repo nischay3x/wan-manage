@@ -25,7 +25,7 @@ const Accounts = require('../models/accounts');
 const tunnelsModel = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
 const notificationsMgr = require('../notifications/notifications')();
-const { verifyAgentVersion, isSemVer, isVppVersion } = require('../versioning');
+const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 class Connections {
   constructor () {
@@ -419,9 +419,20 @@ class Connections {
         if (origDevice.pendingDevModification) {
           throw new Error('Failed to apply new config, only one device change is allowed');
         }
+
+        let incomingInterfaces = deviceInfo.message.network.interfaces;
+        if (getMajorVersion(deviceInfo.message.device) < 3) {
+          incomingInterfaces = deviceInfo.message.network.interfaces.map(
+            (inf) => {
+              const devId = 'pci:' + inf.pciaddr;
+              delete inf.pciaddr;
+              return { ...inf, devId };
+            }
+          );
+        }
+
         const interfaces = origDevice.interfaces.map(i => {
-          const updatedConfig = deviceInfo.message.network.interfaces
-            .find(u => u.pciaddr === i.pciaddr);
+          const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
           if (!updatedConfig) {
             logger.warn('Missing interface configuration in the get-device-info message', {
               params: {
@@ -486,7 +497,7 @@ class Connections {
           { machineId },
           { $set: { interfaces } },
           { new: true, runValidators: true }
-        );
+        ).populate('interfaces.pathlabels', '_id type');
 
         // Update the reconfig hash before applying to prevent infinite loop
         this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
@@ -614,7 +625,7 @@ class Connections {
         { _id: deviceId },
         { $set: { versions: versions } },
         { new: true, runValidators: true }
-      );
+      ).populate('interfaces.pathlabels', '_id type');
       const { certificate, expireTime, jobQueued } = origDevice.IKEv2;
 
       const { ikev2 } = deviceInfo.message;

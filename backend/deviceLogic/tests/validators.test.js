@@ -34,7 +34,7 @@ describe('validateDevice', () => {
     device = {
       interfaces: [{
         name: 'eth0',
-        pciaddr: '00:02.00',
+        devId: '00:02.00',
         driver: 'igb-1000',
         MAC: 'ab:45:90:ed:89:16',
         dhcp: 'no',
@@ -55,7 +55,7 @@ describe('validateDevice', () => {
       },
       {
         name: 'eth1',
-        pciaddr: '00:02.01',
+        devId: '00:02.01',
         driver: 'igb-1000',
         MAC: 'ab:45:90:ed:89:17',
         dhcp: 'no',
@@ -86,7 +86,7 @@ describe('validateDevice', () => {
   it('Should ignore unassigned interfaces', () => {
     device.interfaces.push({
       name: 'eth0',
-      pciaddr: '00:02.01',
+      devId: '00:02.01',
       driver: 'igb-1000',
       MAC: 'ab:45:90:ed:89:17',
       dhcp: 'invalid-dhcp',
@@ -262,7 +262,7 @@ describe('validateDevice', () => {
     device.interfaces[0].pathlabels = [];
     device.interfaces.push({
       name: 'eth2',
-      pciaddr: '00:03.01',
+      devId: '00:03.01',
       driver: 'igb-1000',
       MAC: 'ab:45:90:ed:89:18',
       dhcp: 'no',
