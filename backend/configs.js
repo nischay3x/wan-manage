@@ -169,7 +169,7 @@ const configEnv = {
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
-    agentApiVersion: '2.0.0',
+    agentApiVersion: '3.0.0',
     // Kue prefix
     kuePrefix: 'testq'
   },

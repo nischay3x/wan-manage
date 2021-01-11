@@ -49,10 +49,10 @@ const validateIPv4Mask = mask => {
  */
 const validateDhcpConfig = (device, modifiedInterfaces) => {
   const assignedDhcps = device.dhcp.map(d => d.interface);
-  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.pci));
+  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.devId));
   if (modifiedDhcp.length > 0) {
     // get first interface from device
-    const firstIf = device.interfaces.filter(i => i.pciaddr === modifiedDhcp[0].pci);
+    const firstIf = device.interfaces.filter(i => i.devId === modifiedDhcp[0].devId);
     const result = {
       valid: false,
       err: `DHCP defined on interface ${
@@ -111,7 +111,9 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
       };
     }
 
-    if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') && ifc.dhcp !== 'yes') {
+    if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') &&
+      ifc.dhcp !== 'yes'
+    ) {
       return {
         valid: false,
         err: `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
@@ -166,7 +168,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
   // Assigned interfaces must not be on the same subnet
   const assignedNotEmptyIfs = assignedIfs.filter(i => net.isIPv4(i.IPv4) && i.IPv4Mask !== '');
   for (const ifc1 of assignedNotEmptyIfs) {
-    for (const ifc2 of assignedNotEmptyIfs.filter(i => i.pciaddr !== ifc1.pciaddr)) {
+    for (const ifc2 of assignedNotEmptyIfs.filter(i => i.devId !== ifc1.devId)) {
       const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
       const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
       if (cidr.overlap(ifc1Subnet, ifc2Subnet)) {
@@ -218,6 +220,43 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     }
   }
 
+  const lteInterface = assignedIfs.find(i => i.deviceType === 'lte');
+  if (lteInterface) {
+    const isEnabled = lteInterface.configuration && lteInterface.configuration.enable;
+    if (!isEnabled) {
+      return {
+        valid: false,
+        err: 'LTE must be enabled'
+      };
+    }
+  }
+
+  const wifiInterface = assignedIfs.find(i => i.deviceType === 'wifi');
+  if (wifiInterface) {
+    const band2Enable = wifiInterface.configuration['2.4GHz'] &&
+      wifiInterface.configuration['2.4GHz'].enable;
+    const band5Enable = wifiInterface.configuration['5GHz'] &&
+      wifiInterface.configuration['5GHz'].enable;
+
+    if (band2Enable && band5Enable) {
+      return {
+        valid: false, err: 'Dual band as same time is not supported. Please enable one of them'
+      };
+    } ;
+
+    if (!band2Enable && !band5Enable) {
+      return {
+        valid: false, err: 'Wifi access point must be enabled'
+      };
+    } ;
+
+    const key = band2Enable ? '2.4GHz' : '5GHz';
+    const ssid = wifiInterface.configuration[key] && wifiInterface.configuration[key].ssid;
+    const pass = wifiInterface.configuration[key] && wifiInterface.configuration[key].password;
+    if (!ssid) return { valid: false, err: 'SSID is not configured for WIFI interface' };
+    if (!pass) return { valid: false, err: 'Password is not configured for WIFI interface' };
+  }
+
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -243,6 +282,12 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
       // allow empty IP on WAN with dhcp client
       continue;
     }
+
+    if (ifc.deviceType === 'wifi') {
+      // allow empty IP on wifi access point interface
+      continue;
+    }
+
     const [ip, mask] = (ifc.addr || '/').split('/');
     if (!net.isIPv4(ip) || !validateIPv4Mask(mask)) {
       return {

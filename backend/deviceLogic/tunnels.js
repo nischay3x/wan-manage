@@ -27,7 +27,8 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const { routerVersionsCompatible } = require('../versioning');
+const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
+const { getOldInterfaceIdentification } = require('./interfaces');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
@@ -572,15 +573,15 @@ const queueTunnel = async (
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
  * @param  {pathLabel} path label used for this tunnel
- * @param  {devBAgentVer} agent version of device B
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelAddJob = async (
+const prepareTunnelAddJob = (
   tunnel,
   deviceAIntf,
+  deviceAVersions,
   deviceBIntf,
-  pathLabel,
-  devBAgentVer
+  deviceBVersions,
+  pathLabel
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -601,7 +602,7 @@ const prepareTunnelAddJob = async (
     paramsDeviceA,
     paramsDeviceB,
     tunnelParams
-  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceBIntf);
+  } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
   const paramsSaAB = {
     spi: tunnelParams.sa1,
     'crypto-key': tunnelKeys.key1,
@@ -629,7 +630,7 @@ const prepareTunnelAddJob = async (
     }
   };
 
-  const majorAgentVersion = getMajorVersion(devBAgentVer);
+  const majorAgentVersion = getMajorVersion(deviceBVersions.agent);
   if (majorAgentVersion < 3) { // version 1-2.X.X
     // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
     // spi isn't configured properly for SA
@@ -734,9 +735,10 @@ const addTunnel = async (
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
     tunnel,
     deviceAIntf,
+    deviceA.versions,
     deviceBIntf,
-    pathLabel,
-    deviceB.versions.agent
+    deviceB.versions,
+    pathLabel
   );
 
   const tunnelJobs = await queueTunnel(
@@ -934,13 +936,15 @@ const completeTunnelDel = (jobId, res) => {
  * @param  {Object} deviceBIntf device B tunnel interface
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelRemoveJob = (tunnelnum, deviceAIntf, deviceBIntf) => {
+const prepareTunnelRemoveJob = (
+  tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions
+) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
   const {
     paramsDeviceA,
     paramsDeviceB
-  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceBIntf);
+  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceA });
@@ -975,7 +979,9 @@ const delTunnel = async (
   const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
     tunnelnum,
     deviceAIntf,
-    deviceBIntf
+    deviceA.versions,
+    deviceBIntf,
+    deviceB.versions
   );
   try {
     const tunnelJobs = await queueTunnel(
@@ -1033,7 +1039,11 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
+<<<<<<< HEAD
     .populate('deviceA', 'interfaces')
+=======
+    .populate('deviceA', 'interfaces versions')
+>>>>>>> dev
     .populate('deviceB', 'interfaces versions')
     .lean();
 
@@ -1060,9 +1070,10 @@ const sync = async (deviceId, org) => {
     const [tasksA, tasksB] = await prepareTunnelAddJob(
       tunnel,
       ifcA,
+      deviceA.versions,
       ifcB,
-      pathlabel,
-      deviceB.versions.agent
+      deviceB.versions,
+      pathlabel
     );
     // Add the tunnel only for the device that is being synced
     const deviceTasks =
@@ -1100,7 +1111,9 @@ const sync = async (deviceId, org) => {
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
 */
-const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
+const prepareTunnelParams = (
+  tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions
+) => {
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnelnum);
 
@@ -1111,7 +1124,7 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
       deviceAIntf.PublicIP === deviceBIntf.PublicIP;
 
   paramsDeviceA.src = deviceAIntf.IPv4;
-  paramsDeviceA.pci = deviceAIntf.pciaddr;
+  paramsDeviceA.devId = deviceAIntf.devId;
   paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
   paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort)
     ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
@@ -1121,7 +1134,7 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
     mac: tunnelParams.mac1
   };
   paramsDeviceB.src = deviceBIntf.IPv4;
-  paramsDeviceB.pci = deviceBIntf.pciaddr;
+  paramsDeviceB.devId = deviceBIntf.devId;
   paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
   paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort)
     ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
@@ -1130,6 +1143,20 @@ const prepareTunnelParams = (tunnelnum, deviceAIntf, deviceBIntf) => {
     addr: tunnelParams.ip2 + '/31',
     mac: tunnelParams.mac2
   };
+
+  if (getMajorVersion(deviceAVersions.agent) < 3) {
+    paramsDeviceA.pci = getOldInterfaceIdentification(paramsDeviceA.devId);
+  } else {
+    paramsDeviceA.dev_id = paramsDeviceA.devId;
+  }
+  delete paramsDeviceA.devId;
+
+  if (getMajorVersion(deviceBVersions.agent) < 3) {
+    paramsDeviceB.pci = getOldInterfaceIdentification(paramsDeviceB.devId);
+  } else {
+    paramsDeviceB.dev_id = paramsDeviceB.devId;
+  }
+  delete paramsDeviceB.devId;
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };

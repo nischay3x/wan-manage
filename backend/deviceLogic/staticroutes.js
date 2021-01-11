@@ -50,7 +50,7 @@ const apply = async (device, user, data) => {
     const params = { addr: data.destination, via: data.gateway };
 
     if (data.ifname) {
-      params.pci = data.ifname;
+      params.devId = data.ifname;
     }
 
     if (data.metric) {

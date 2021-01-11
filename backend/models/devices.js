@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const validators = require('./validators');
+const { validateConfiguration } = require('../deviceLogic/interfaces');
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
@@ -35,13 +36,13 @@ const interfacesSchema = new Schema({
     },
     required: [true, 'Interface name must be set']
   },
-  // PCI address
-  pciaddr: {
+  // Device bus address
+  devId: {
     type: String,
-    maxlength: [50, 'PCI address length must be at most 50'],
+    maxlength: [50, 'devId length must be at most 50'],
     validate: {
-      validator: validators.validatePciAddress,
-      message: 'pciaddr should be a vaild pci address'
+      validator: validators.validateDevId,
+      message: 'devId should be a vaild devId address'
     },
     default: ''
   },
@@ -206,9 +207,39 @@ const interfacesSchema = new Schema({
       'no'
     ],
     default: ''
+  },
+  // device type - wifi, lte
+  deviceType: {
+    type: String,
+    default: 'dpdk'
+  },
+  configuration: {
+    type: Object,
+    default: {}
+  },
+  deviceParams: {
+    type: Object,
+    default: {}
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  minimize: false,
+  discriminatorKey: 'deviceType'
+});
+
+interfacesSchema.path('configuration').validate(function (value) {
+  if (Object.keys(value).length > 0 && this) {
+    if (this.deviceType === 'lte' || this.deviceType === 'wifi') {
+      const inter = { ...this._doc };
+      const { valid, err } = validateConfiguration(inter, value);
+      if (valid === true) {
+        return true;
+      }
+
+      throw new Error(err);
+    }
+  }
+  return true;
 });
 
 /**
@@ -288,8 +319,8 @@ const DHCPSchema = new Schema({
     maxlength: [50, 'Interface length must be at most 50'],
     required: [true, 'Interface must be set'],
     validate: {
-      validator: validators.validatePciAddress,
-      message: 'Interface should be a vaild interface pci address'
+      validator: validators.validateDevId,
+      message: 'Interface should be a vaild interface devId'
     }
   },
   rangeStart: {
