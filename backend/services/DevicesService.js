@@ -384,7 +384,7 @@ class DevicesService {
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-router-config' }
+        { entity: 'agent', message: 'get-device-config' }
       );
 
       if (!deviceConf.ok) {
@@ -436,8 +436,8 @@ class DevicesService {
       const interfaceType = selectedInterface.deviceType;
       if (deviceStatus) {
         const agentMessages = {
-          lte: 'lte-get-interface-info',
-          wifi: 'wifi-get-interface-info'
+          lte: 'get-lte-interface-info',
+          wifi: 'get-wifi-interface-info'
         }[interfaceType];
 
         if (agentMessages) {
@@ -1867,7 +1867,7 @@ class DevicesService {
               return { valid: true, err: '' };
             },
             job: false,
-            message: 'lte-reset'
+            message: 'reset-lte'
           }
         }
       };

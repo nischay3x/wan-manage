@@ -263,7 +263,7 @@ const prepareModificationMessageV2 = (messageParams, device) => {
       tasks.push(...lteDiffInterfaces.map(item => {
         return {
           entity: 'agent',
-          message: item.configuration.enable ? 'lte-enable' : 'lte-disable',
+          message: item.configuration.enable ? 'add-lte' : 'remove-lte',
           params: {
             ...item.configuration,
             dev_id: item.dev_id
@@ -969,7 +969,7 @@ const apply = async (device, user, data) => {
     return ifc.isAssigned === true;
   });
 
-  // lte-enable job should be submitted even if unassigned interface
+  // add-lte job should be submitted even if unassigned interface
   const newLteInterfaces = device[0].interfaces.filter(item => item.deviceType === 'lte');
   const oldLteInterfaces = data.newDevice.interfaces.filter(item => item.deviceType === 'lte');
   const lteInterfacesDiff = differenceWith(
@@ -1130,7 +1130,7 @@ const sync = async (deviceId, org) => {
     enabledLte.forEach(lte => {
       deviceConfRequests.push({
         entity: 'agent',
-        message: 'lte-enable',
+        message: 'add-lte',
         params: {
           ...lte.configuration,
           dev_id: lte.devId
