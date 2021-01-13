@@ -436,8 +436,8 @@ class DevicesService {
       const interfaceType = selectedInterface.deviceType;
       if (deviceStatus) {
         const agentMessages = {
-          lte: 'get-lte-interface-info',
-          wifi: 'get-wifi-interface-info'
+          lte: 'get-lte-info',
+          wifi: 'get-wifi-info'
         }[interfaceType];
 
         if (agentMessages) {
