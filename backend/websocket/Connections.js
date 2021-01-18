@@ -628,7 +628,7 @@ class Connections {
       ).populate('interfaces.pathlabels', '_id type');
 
       const { tunnels } = deviceInfo.message;
-      if (tunnels) {
+      if (Array.isArray(tunnels) && tunnels.length > 0) {
         await this.updateTunnelKeys(tunnels);
       }
 
