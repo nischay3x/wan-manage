@@ -1096,7 +1096,7 @@ const sync = async (deviceId, org) => {
   });
 
   // Prepare add-route message
-  staticroutes.forEach(route => {
+  Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
 
     const params = {
@@ -1136,7 +1136,7 @@ const sync = async (deviceId, org) => {
   }
 
   // Prepare add-dhcp-config message
-  dhcp.forEach(entry => {
+  Array.isArray(dhcp) && dhcp.forEach(entry => {
     const { rangeStart, rangeEnd, dns, macAssign } = entry;
     let devId = entry.interface;
     if (isNeedUseOldInterfaceIdentification) {
