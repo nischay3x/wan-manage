@@ -20,7 +20,11 @@ const Service = require('./Service');
 const Accounts = require('../models/accounts');
 const Users = require('../models/users');
 const { getToken } = require('../tokens');
-const { getUserAccounts, orgUpdateFromNull } = require('../utils/membershipUtils');
+const {
+  getUserAccounts,
+  orgUpdateFromNull,
+  checkAccountPermissions
+} = require('../utils/membershipUtils');
 
 class AccountsService {
   /**
@@ -50,7 +54,13 @@ class AccountsService {
    **/
   static async accountsIdGET ({ id }, { user }) {
     try {
-      const account = await Accounts.findOne({ _id: user.defaultAccount._id });
+      const isAllowed = checkAccountPermissions(user._id, id, 'get');
+      if (!isAllowed) {
+        return Service.rejectResponse(
+          'You don\'t have permission to perform this operation', 403
+        );
+      }
+      const account = await Accounts.findOne({ _id: id });
       const {
         logoFile,
         organizations,
@@ -79,6 +89,12 @@ class AccountsService {
    **/
   static async accountsIdPUT ({ id, accountRequest }, { user }, response) {
     try {
+      const isAllowed = checkAccountPermissions(user._id, id, 'put');
+      if (!isAllowed) {
+        return Service.rejectResponse(
+          'You don\'t have permission to perform this operation', 403
+        );
+      }
       const account = await Accounts.findOneAndUpdate(
         { _id: id },
         { $set: accountRequest },
@@ -125,6 +141,13 @@ class AccountsService {
       // If current account not changed, return OK
       if (user.defaultAccount._id.toString() === accountSelectRequest.account) {
         return Service.successResponse({ _id: user.defaultAccount._id.toString() }, 201);
+      }
+
+      const isAllowed = checkAccountPermissions(user._id, accountSelectRequest.account, 'get');
+      if (!isAllowed) {
+        return Service.rejectResponse(
+          'You don\'t have permission to perform this operation', 403
+        );
       }
 
       // Get organizations for the new account

@@ -18,7 +18,7 @@
 const organizations = require('../models/organizations');
 const User = require('../models/users');
 const Accounts = require('../models/accounts');
-const { membership } = require('../models/membership');
+const { membership, permissionMasks } = require('../models/membership');
 const { getToken } = require('../tokens');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
@@ -129,6 +129,24 @@ const getAccessTokenOrgList = async (user, orgId, orgIdRequired = false) => {
 };
 
 /**
+ * Check user permissions for the account
+ * @param {String} userId - user id
+ * @param {String} accountId - account id
+ * @param {String} operation - requested operation (get, post, put, del)
+ */
+const checkAccountPermissions = async (userId, accountId, operation) => {
+  const perms = await membership.findOne({
+    account: accountId,
+    user: userId,
+    to: 'account'
+  });
+  if (!perms) {
+    return false;
+  };
+  return perms.accounts & permissionMasks[operation];
+};
+
+/**
  * Get all accounts available for a user
  * @param {Object} user - user object with user _id
  */
@@ -226,5 +244,6 @@ module.exports = {
   getUserOrgByID: getUserOrgByID,
   getAccessTokenOrgList: getAccessTokenOrgList,
   getUserAccounts: getUserAccounts,
-  orgUpdateFromNull: orgUpdateFromNull
+  orgUpdateFromNull: orgUpdateFromNull,
+  isUserAccountMember: checkAccountPermissions
 };
