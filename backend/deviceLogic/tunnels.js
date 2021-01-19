@@ -19,6 +19,7 @@
 const configs = require('../configs')();
 const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
+const devicesModel = require('../models/devices').devices;
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
 
@@ -573,7 +574,7 @@ const queueTunnel = async (
  * @param  {Object} deviceBIntf device B tunnel interface
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelAddJob = (
+const prepareTunnelAddJob = async (
   tunnel,
   deviceAIntf,
   deviceAVersions,
@@ -583,7 +584,25 @@ const prepareTunnelAddJob = (
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
-  if (!tunnel.tunnelKeys) throw new Error(`Tunnel ${tunnel.num} has no keys`);
+  if (!tunnel.tunnelKeys) {
+    // Generate new IPsec Keys and store them in the database
+    const { key1, key2, key3, key4 } = generateRandomKeys();
+    try {
+      await tunnelsModel.findOneAndUpdate(
+        { _id: tunnel._id },
+        { tunnelKeys: { key1, key2, key3, key4 } },
+        { upsert: false }
+      );
+      tunnel.tunnelKeys = { key1, key2, key3, key4 };
+      logger.warn('New tunnel keys generated', {
+        params: { tunnelId: tunnel._id }
+      });
+    } catch (err) {
+      logger.error('Failed to set new tunnel keys', {
+        params: { tunnelId: tunnel._id, err: err.message }
+      });
+    }
+  }
 
   const tunnelKeys = {
     key1: tunnel.tunnelKeys.key1,
@@ -1029,7 +1048,7 @@ const sync = async (deviceId, org) => {
       ]
     },
     {
-      _id: 0,
+      _id: 1,
       num: 1,
       deviceA: 1,
       deviceB: 1,
@@ -1047,13 +1066,16 @@ const sync = async (deviceId, org) => {
   const tunnelsRequests = [];
   const completeCbData = [];
   let callComplete = false;
+  const devicesToSync = [];
   for (const tunnel of tunnels) {
     const {
+      _id,
       num,
       deviceA,
       deviceB,
       interfaceA,
       interfaceB,
+      tunnelKeys,
       pathlabel
     } = tunnel;
 
@@ -1063,6 +1085,17 @@ const sync = async (deviceId, org) => {
     const ifcB = deviceB.interfaces.find(
       (ifc) => ifc._id.toString() === interfaceB.toString()
     );
+    if (!tunnelKeys) {
+      // No keys for some reason, probably version 2 upgraded.
+      // Tunnel keys will be generated in prepareTunnelAddJob.
+      // Need to sync another side as well.
+      const remoteDeviceId = deviceId === deviceA._id
+        ? deviceB._id : deviceA._id;
+      logger.warn('No tunnel keys', { params: { tunnelId: _id, deviceId: remoteDeviceId } });
+      if (!devicesToSync.includes(remoteDeviceId)) {
+        devicesToSync.push(remoteDeviceId);
+      }
+    }
     const [tasksA, tasksB] = await prepareTunnelAddJob(
       tunnel,
       ifcA,
@@ -1093,7 +1126,23 @@ const sync = async (deviceId, org) => {
     });
     callComplete = true;
   };
-
+  // Reset auto sync in database for devices with generated keys
+  if (devicesToSync.length > 0) {
+    logger.info(
+      'Resest autosync to set new keys on devices',
+      { params: { devices: devicesToSync } }
+    );
+    devicesModel.updateMany(
+      { _id: { $in: devicesToSync } },
+      {
+        $set: {
+          'sync.state': 'syncing',
+          'sync.autoSync': 'on'
+        }
+      },
+      { upsert: false }
+    );
+  };
   return {
     requests: tunnelsRequests,
     completeCbData,
