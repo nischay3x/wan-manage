@@ -382,7 +382,7 @@ class Connections {
    * @param  {Array} tunnels An array of tunnels information
    * @return {void}
    */
-  async updateTunnelKeys (tunnels) {
+  async updateTunnelKeys (org, tunnels) {
     // Update all tunnels with the keys sent by the device
     const tunnelsOps = [];
     for (const tunnel of tunnels) {
@@ -390,7 +390,7 @@ class Connections {
       tunnelsOps.push({
         updateOne:
           {
-            filter: { num: id },
+            filter: { org, num: id },
             update: { $set: { tunnelKeys: { key1, key2, key3, key4 } } },
             upsert: false
           }
@@ -629,7 +629,7 @@ class Connections {
 
       const { tunnels } = deviceInfo.message;
       if (Array.isArray(tunnels) && tunnels.length > 0) {
-        await this.updateTunnelKeys(tunnels);
+        await this.updateTunnelKeys(origDevice.org, tunnels);
       }
 
       // Check if config was modified on the device
