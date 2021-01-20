@@ -260,7 +260,7 @@ const prepareModificationMessageV2 = (messageParams, device) => {
     // don't put these requests as aggregated because
     // they are don't related to router api in the agent
     if (lteDiffInterfaces.length > 0) {
-      tasks.push(...lteDiffInterfaces.map(item => {
+      requests.push(...lteDiffInterfaces.map(item => {
         return {
           entity: 'agent',
           message: item.configuration.enable ? 'add-lte' : 'remove-lte',
