@@ -1089,7 +1089,7 @@ const sync = async (deviceId, org) => {
       // No keys for some reason, probably version 2 upgraded.
       // Tunnel keys will be generated in prepareTunnelAddJob.
       // Need to sync another side as well.
-      const remoteDeviceId = deviceId === deviceA._id
+      const remoteDeviceId = deviceId.toString() === deviceA._id.toString()
         ? deviceB._id : deviceA._id;
       logger.warn('No tunnel keys', { params: { tunnelId: _id, deviceId: remoteDeviceId } });
       if (!devicesToSync.includes(remoteDeviceId)) {
