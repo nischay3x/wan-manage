@@ -397,7 +397,7 @@ devicesRouter.route('/:deviceId/configuration')
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-router-config' }
+        { entity: 'agent', message: 'get-device-config' }
       );
 
       if (!deviceConf.ok) {

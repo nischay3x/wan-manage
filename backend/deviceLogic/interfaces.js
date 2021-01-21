@@ -161,7 +161,7 @@ const validateConfiguration = (deviceInterfaces, configurationReq) => {
 };
 
 const lteOperationSchema = Joi.object().keys({
-  op: Joi.string().valid('enable', 'disable', 'reset').required(),
+  op: Joi.string().valid('reset').required(),
   params: Joi.object().optional()
 });
 
