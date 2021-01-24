@@ -830,7 +830,10 @@ class DevicesService {
           .filter(intf => intf.modified)
           .map(intf => {
             return {
-              devId: intf.devId
+              devId: intf.devId,
+              type: intf.type,
+              addr: intf.IPv4 && intf.IPv4Mask ? `${intf.IPv4}/${intf.IPv4Mask}` : '',
+              gateway: intf.gateway
             };
           });
         const { valid, err } = validateDhcpConfig(
