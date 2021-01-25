@@ -54,7 +54,7 @@ class AccountsService {
    **/
   static async accountsIdGET ({ id }, { user }) {
     try {
-      const isAllowed = checkAccountPermissions(user._id, id, 'get');
+      const isAllowed = await checkAccountPermissions(user._id, id, 'get');
       if (!isAllowed) {
         return Service.rejectResponse(
           'You don\'t have permission to perform this operation', 403
@@ -89,7 +89,7 @@ class AccountsService {
    **/
   static async accountsIdPUT ({ id, accountRequest }, { user }, response) {
     try {
-      const isAllowed = checkAccountPermissions(user._id, id, 'put');
+      const isAllowed = await checkAccountPermissions(user._id, id, 'put');
       if (!isAllowed) {
         return Service.rejectResponse(
           'You don\'t have permission to perform this operation', 403
@@ -132,6 +132,7 @@ class AccountsService {
    **/
   static async accountsSelectPOST ({ accountSelectRequest }, req, res) {
     const user = req.user;
+    const { account } = accountSelectRequest;
 
     try {
       if (!user.defaultAccount || !user.defaultAccount._id || !user._id) {
@@ -139,11 +140,11 @@ class AccountsService {
       }
 
       // If current account not changed, return OK
-      if (user.defaultAccount._id.toString() === accountSelectRequest.account) {
+      if (user.defaultAccount._id.toString() === account) {
         return Service.successResponse({ _id: user.defaultAccount._id.toString() }, 201);
       }
 
-      const isAllowed = checkAccountPermissions(user._id, accountSelectRequest.account, 'get');
+      const isAllowed = await checkAccountPermissions(user._id, account, 'get');
       if (!isAllowed) {
         return Service.rejectResponse(
           'You don\'t have permission to perform this operation', 403
@@ -156,7 +157,7 @@ class AccountsService {
         { _id: user._id },
         // Update account, set default org to null so the system
         // will choose an organization on login if something failed
-        { defaultAccount: accountSelectRequest.account, defaultOrg: null },
+        { defaultAccount: account, defaultOrg: null },
         // Options
         { upsert: false, new: true }
       ).populate('defaultAccount');

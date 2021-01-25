@@ -245,5 +245,5 @@ module.exports = {
   getAccessTokenOrgList: getAccessTokenOrgList,
   getUserAccounts: getUserAccounts,
   orgUpdateFromNull: orgUpdateFromNull,
-  isUserAccountMember: checkAccountPermissions
+  checkAccountPermissions: checkAccountPermissions
 };
