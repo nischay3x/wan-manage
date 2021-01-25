@@ -226,7 +226,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     if (!isEnabled) {
       return {
         valid: false,
-        err: 'LTE must be enabled'
+        err: 'LTE interface is assigned but not enabled. Please enable or unassign it'
       };
     }
   }

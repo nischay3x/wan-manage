@@ -246,6 +246,7 @@ class Connections {
                 org: resp[0].org.toString(),
                 deviceObj: resp[0]._id,
                 machineId: resp[0].machineId,
+                version: resp[0].versions.agent,
                 ready: false
               });
               return done(true);
@@ -382,7 +383,7 @@ class Connections {
    * @param  {Array} tunnels An array of tunnels information
    * @return {void}
    */
-  async updateTunnelKeys (tunnels) {
+  async updateTunnelKeys (org, tunnels) {
     // Update all tunnels with the keys sent by the device
     const tunnelsOps = [];
     for (const tunnel of tunnels) {
@@ -390,7 +391,7 @@ class Connections {
       tunnelsOps.push({
         updateOne:
           {
-            filter: { num: id },
+            filter: { org, num: id },
             update: { $set: { tunnelKeys: { key1, key2, key3, key4 } } },
             upsert: false
           }
@@ -448,8 +449,10 @@ class Connections {
             return i;
           }
 
+          // from device internetAccess type is boolean, in management it is enum yes/no
+          const prevInternetAccess = i.internetAccess === 'yes';
           if (updatedConfig.internetAccess !== undefined &&
-            i.monitorInternet && updatedConfig.internetAccess !== i.internetAccess) {
+            i.monitorInternet && updatedConfig.internetAccess !== prevInternetAccess) {
             const newInterfaceState = updatedConfig.internetAccess ? 'online' : 'offline';
             const details = `Interface ${i.name} state changed to "${newInterfaceState}"`;
             logger.info(details, {
@@ -505,6 +508,7 @@ class Connections {
 
         // Update the reconfig hash before applying to prevent infinite loop
         this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
+        this.devices.updateDeviceInfo(machineId, 'version', deviceInfo.message.device);
 
         // Apply the new config and rebuild tunnels if need
         logger.info('Applying new configuration from the device', {
@@ -628,8 +632,8 @@ class Connections {
       ).populate('interfaces.pathlabels', '_id type');
 
       const { tunnels } = deviceInfo.message;
-      if (tunnels) {
-        await this.updateTunnelKeys(tunnels);
+      if (Array.isArray(tunnels) && tunnels.length > 0) {
+        await this.updateTunnelKeys(origDevice.org, tunnels);
       }
 
       // Check if config was modified on the device

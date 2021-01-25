@@ -102,16 +102,16 @@ connectRouter.route('/register')
                 } else if (intf.gateway || intf.deviceType === 'lte') {
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
-                  intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
-                    ? '0' : intf.metric || (autoAssignedMetric++).toString();
+                  if (intf.deviceType === 'lte') {
+                    // LTE devices are not enabled at registration stage so they can't have a metric
+                    intf.metric = '';
+                  } else {
+                    intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
+                      ? '0' : intf.metric || (autoAssignedMetric++).toString();
+                  }
                   intf.PublicIP = intf.public_ip || (intf.metric === lowestMetric ? sourceIP : '');
                   intf.PublicPort = intf.public_port || '';
                   intf.NatType = intf.nat_type || '';
-
-                  // if (intf.deviceType === 'lte' && intf.deviceParams.apn) {
-                  //   intf.configuration = {};
-                  //   intf.configuration.apn = intf.deviceParams.apn;
-                  // }
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
@@ -121,7 +121,7 @@ connectRouter.route('/register')
                 }
               });
 
-              if (getMajorVersion(req.body.device_version) < 3) {
+              if (getMajorVersion(req.body.fwagent_version) < 3) {
                 ifs = ifs.map((inf) => {
                   inf.devId = 'pci:' + inf.pciaddr;
                   delete inf.pciaddr;

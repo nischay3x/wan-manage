@@ -384,7 +384,7 @@ class DevicesService {
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-router-config' }
+        { entity: 'agent', message: 'get-device-config' }
       );
 
       if (!deviceConf.ok) {
@@ -436,8 +436,8 @@ class DevicesService {
       const interfaceType = selectedInterface.deviceType;
       if (deviceStatus) {
         const agentMessages = {
-          lte: 'lte-get-interface-info',
-          wifi: 'wifi-get-interface-info'
+          lte: 'get-lte-info',
+          wifi: 'get-wifi-info'
         }[interfaceType];
 
         if (agentMessages) {
@@ -1853,19 +1853,21 @@ class DevicesService {
 
       const actions = {
         lte: {
-          enable: {
-            job: true,
-            message: 'lte-enable',
-            title: `Enable LTE on ${deviceObject.hostname}`
-          },
-          disable: {
-            job: true,
-            message: 'lte-disable',
-            title: `Disable LTE on ${deviceObject.hostname}`
-          },
           reset: {
+            validate: () => {
+              const routerStats = deviceStatus.getDeviceStatus(deviceObject.machineId);
+              if (selectedIf.isAssigned && routerStats === 'running') {
+                return {
+                  valid: false,
+                  err: `The modem is currently in use as the router is running.
+                  'Please stop the router or unassigned the interface in order to reset the modem`
+                };
+              }
+
+              return { valid: true, err: '' };
+            },
             job: false,
-            message: 'lte-reset'
+            message: 'reset-lte'
           }
         }
       };
@@ -1877,6 +1879,18 @@ class DevicesService {
       if (agentAction) {
         const params = interfaceOperationReq.params || {};
         params.dev_id = selectedIf.devId;
+
+        if (agentAction.validate) {
+          const { valid, err } = agentAction.validate();
+
+          if (!valid) {
+            logger.warn('interface perform operation failed',
+              {
+                params: { body: interfaceOperationReq, err: err }
+              });
+            return Service.rejectResponse(err, 500);
+          }
+        }
 
         if (agentAction.job) {
           const tasks = [{ entity: 'agent', message: agentAction.message, params: params }];
