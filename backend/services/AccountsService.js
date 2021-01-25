@@ -95,9 +95,10 @@ class AccountsService {
           'You don\'t have permission to perform this operation', 403
         );
       }
+      const { name, companyType, companyDesc, country, enableNotifications } = accountRequest;
       const account = await Accounts.findOneAndUpdate(
         { _id: id },
-        { $set: accountRequest },
+        { $set: { name, companyType, companyDesc, country, enableNotifications } },
         { upsert: false, new: true, runValidators: true });
 
       // Update token
