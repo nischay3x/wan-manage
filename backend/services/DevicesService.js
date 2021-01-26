@@ -778,7 +778,10 @@ class DevicesService {
               updIntf.IPv4Mask = origIntf.IPv4Mask;
               updIntf.gateway = origIntf.gateway;
             };
-            if (!updIntf.isAssigned) {
+            // don't update metric on an unassigned interface,
+            // except lte interface because we enable lte connection on it,
+            // hence we need the metric fo it
+            if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
               updIntf.metric = origIntf.metric;
             };
             if (updIntf.isAssigned !== origIntf.isAssigned ||
@@ -827,7 +830,10 @@ class DevicesService {
           .filter(intf => intf.modified)
           .map(intf => {
             return {
-              devId: intf.devId
+              devId: intf.devId,
+              type: intf.type,
+              addr: intf.IPv4 && intf.IPv4Mask ? `${intf.IPv4}/${intf.IPv4Mask}` : '',
+              gateway: intf.gateway
             };
           });
         const { valid, err } = validateDhcpConfig(

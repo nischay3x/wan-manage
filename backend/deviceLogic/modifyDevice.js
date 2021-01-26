@@ -249,11 +249,13 @@ const prepareModificationMessageV2 = (messageParams, device) => {
       messageParams.modify_interfaces.lte_enable_disable, device
     );
 
+    // we send lte job if configuration or interface metric was changed
     const lteDiffInterfaces = differenceWith(
       newLteInterfaces,
       oldLteInterfaces,
       (origIfc, newIfc) => {
-        return isEqual(origIfc.configuration, newIfc.configuration);
+        return isEqual(origIfc.configuration, newIfc.configuration) &&
+          isEqual(origIfc.metric, newIfc.metric);
       }
     );
 
@@ -266,7 +268,8 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           message: item.configuration.enable ? 'add-lte' : 'remove-lte',
           params: {
             ...item.configuration,
-            dev_id: item.dev_id
+            dev_id: item.dev_id,
+            metric: item.metric
           }
         };
       }));
@@ -970,13 +973,15 @@ const apply = async (device, user, data) => {
   });
 
   // add-lte job should be submitted even if unassigned interface
-  const newLteInterfaces = device[0].interfaces.filter(item => item.deviceType === 'lte');
-  const oldLteInterfaces = data.newDevice.interfaces.filter(item => item.deviceType === 'lte');
+  // we send this job if configuration or interface metric was changed
+  const oldLteInterfaces = device[0].interfaces.filter(item => item.deviceType === 'lte');
+  const newLteInterfaces = data.newDevice.interfaces.filter(item => item.deviceType === 'lte');
   const lteInterfacesDiff = differenceWith(
-    oldLteInterfaces,
     newLteInterfaces,
+    oldLteInterfaces,
     (origIfc, newIfc) => {
-      return isEqual(origIfc.configuration, newIfc.configuration);
+      return isEqual(origIfc.configuration, newIfc.configuration) &&
+        isEqual(origIfc.metric, newIfc.metric);
     }
   );
 
@@ -1133,7 +1138,8 @@ const sync = async (deviceId, org) => {
         message: 'add-lte',
         params: {
           ...lte.configuration,
-          dev_id: lte.devId
+          dev_id: lte.devId,
+          metric: lte.metric
         }
       });
     });
