@@ -638,6 +638,14 @@ class Connections {
         { new: true, runValidators: true }
       ).populate('interfaces.pathlabels', '_id type');
 
+      if (!origDevice) {
+        logger.warn('Device not found in DB', {
+          params: { device: machineId }
+        });
+        this.deviceDisconnect(machineId);
+        return;
+      }
+
       const { tunnels } = deviceInfo.message;
       if (Array.isArray(tunnels) && tunnels.length > 0) {
         await this.updateTunnelKeys(origDevice.org, tunnels);
