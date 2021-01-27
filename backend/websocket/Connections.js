@@ -412,7 +412,8 @@ class Connections {
     const machineId = origDevice.machineId;
     const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
     // Check if reconfig was changed
-    if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
+    if ((prevDeviceInfo === undefined) || (deviceInfo.message.reconfig &&
+      prevDeviceInfo.reconfig !== deviceInfo.message.reconfig)) {
       const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
         deviceInfo.message.network.interfaces.length > 0;
 
