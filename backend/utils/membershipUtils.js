@@ -135,7 +135,7 @@ const getAccessTokenOrgList = async (user, orgId, orgIdRequired = false) => {
  * @param {String} operation - requested operation (get, post, put, del)
  */
 const checkAccountPermissions = async (userId, accountId, operation) => {
-  const perms = await membership.findOne({
+  const { perms } = await membership.findOne({
     account: accountId,
     user: userId,
     to: 'account'
