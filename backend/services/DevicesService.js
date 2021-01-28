@@ -381,10 +381,16 @@ class DevicesService {
         });
       }
 
+      let api = 'get-device-config';
+      const majorAgentVersion = getMajorVersion(device.versions.agent);
+      if (majorAgentVersion < 3) {
+        api = 'get-router-config';
+      }
+
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-device-config' }
+        { entity: 'agent', message: api }
       );
 
       if (!deviceConf.ok) {
