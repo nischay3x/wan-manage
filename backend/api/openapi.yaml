@@ -6547,6 +6547,7 @@ components:
           name: name
           devId: devId
           _id: _id
+          deviceType: dpdk
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
@@ -6565,6 +6566,26 @@ components:
           name: name
           devId: devId
           _id: _id
+          deviceType: dpdk
+        - IPv6: IPv6
+          PublicIP: PublicIP
+          PublicPort: PublicPort
+          NatType: NatType
+          useStun: useStun
+          monitorInternet: monitorInternet
+          IPv4: IPv4
+          type: WAN
+          MAC: MAC
+          dhcp: "yes"
+          routing: OSPF
+          IPv6Mask: "64"
+          isAssigned: true
+          driver: cdc_mbim
+          IPv4Mask: "24"
+          name: name
+          devId: devId
+          _id: _id
+          deviceType: lte
         org: org
         isConnected: true
         upgradeSchedule:
@@ -6891,6 +6912,35 @@ components:
           items:
             $ref: '#/components/schemas/PathLabel'
           type: array
+        configuration:
+          oneOf:
+            - $ref: '#/components/schemas/LteConfiguration'
+            - $ref: '#/components/schemas/WifiConfiguration'
+            # - type: object
+            #   required:
+            #     - 5GHz
+            #   properties:
+            #     5GHz:
+            #       $ref: '#/components/schemas/WifiConfiguration'
+            # - type: object
+            #   required:
+            #     - 2.4GHz
+            #   properties:
+            #     2.4GHz:
+            #       $ref: '#/components/schemas/WifiConfiguration'
+            # - type: object
+            #   required:
+            #     - 2.4GHz
+            #     - 5GHz
+            #   properties:
+            #     2.4GHz:
+            #       $ref: '#/components/schemas/WifiConfiguration'
+            #     5GHz:
+            #       $ref: '#/components/schemas/WifiConfiguration'
+            - type: object
+              minProperties: 0
+              maxProperties: 0
+          type: object
       type: object
     DeviceVersion:
       example:
@@ -7941,6 +7991,90 @@ components:
       - code
       - message
       type: object
+    LteConfiguration:
+      required:
+        - apn
+        - enable
+      properties:
+        apn:
+          type: string
+        enable:
+          type: boolean
+        password:
+          type: string
+        user:
+          type: string
+      type: object
+    WifiBand:
+      type: object
+      required:
+        - enable
+        - bandwidth
+        - encryption
+      properties:
+        enable:
+          type: boolean
+        bandwidth:
+          type: number
+          enum: [20]
+        encryption:
+          type: string
+          enum: [aes-ccmp]
+    WifiBand2.4GHz:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/WifiBand'
+        - type: object
+          required:
+            - channel
+          properties:
+            channel:
+              type: string
+              pattern: ^([0-9]|1[0-3])$
+    WifiBand5GHz:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/WifiBand'
+        - type: object
+          required:
+            - channel
+          properties:
+            channel:
+              type: string
+              pattern: ^(0|3[2-9]|[4-9][0-9]|17[0-3]|1[0-6][0-9])$
+    WifiConfiguration:
+      type: object
+      oneOf:
+        - type: object
+          required:
+            - 5GHz
+          properties:
+            5GHz:
+              $ref: '#/components/schemas/WifiBand5GHz'
+        - type: object
+          required:
+            - 2.4GHz
+          properties:
+            2.4GHz:
+              $ref: '#/components/schemas/WifiBand2.4GHz'
+        - type: object
+          required:
+            - 2.4GHz
+            - 5GHz
+          properties:
+            2.4GHz:
+              $ref: '#/components/schemas/WifiBand2.4GHz'
+            5GHz:
+              $ref: '#/components/schemas/WifiBand5GHz'
+      # properties:
+      #   5GHz:
+      #   # type: object
+      #   # properties:
+      #     $ref: '#/components/schemas/WifiBand'
+      #   2.4GHz:
+      #   # type: object
+      #   # properties:
+      #     $ref: '#/components/schemas/WifiBand'
   securitySchemes:
     apiKey:
       in: header
