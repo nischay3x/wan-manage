@@ -412,7 +412,8 @@ class Connections {
     const machineId = origDevice.machineId;
     const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
     // Check if reconfig was changed
-    if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
+    if ((prevDeviceInfo === undefined) || (deviceInfo.message.reconfig &&
+      prevDeviceInfo.reconfig !== deviceInfo.message.reconfig)) {
       const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
         deviceInfo.message.network.interfaces.length > 0;
 
@@ -499,29 +500,35 @@ class Connections {
           return updInterface;
         });
 
-        // Update interfaces in DB
-        const updDevice = await devices.findOneAndUpdate(
-          { machineId },
-          { $set: { interfaces } },
-          { new: true, runValidators: true }
-        ).populate('interfaces.pathlabels', '_id type');
+        try {
+          // Update interfaces in DB
+          const updDevice = await devices.findOneAndUpdate(
+            { machineId },
+            { $set: { interfaces } },
+            { new: true, runValidators: true }
+          ).populate('interfaces.pathlabels', '_id type');
 
-        // Update the reconfig hash before applying to prevent infinite loop
-        this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
-        this.devices.updateDeviceInfo(machineId, 'version', deviceInfo.message.device);
+          // Update the reconfig hash before applying to prevent infinite loop
+          this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
+          this.devices.updateDeviceInfo(machineId, 'version', deviceInfo.message.device);
 
-        // Apply the new config and rebuild tunnels if need
-        logger.info('Applying new configuration from the device', {
-          params: {
-            reconfig: deviceInfo.message.reconfig,
-            machineId
-          }
-        });
-        await modifyDeviceDispatcher.apply(
-          [origDevice],
-          { username: 'system' },
-          { newDevice: updDevice, org: origDevice.org.toString() }
-        );
+          // Apply the new config and rebuild tunnels if need
+          logger.info('Applying new configuration from the device', {
+            params: {
+              reconfig: deviceInfo.message.reconfig,
+              machineId
+            }
+          });
+          await modifyDeviceDispatcher.apply(
+            [origDevice],
+            { username: 'system' },
+            { newDevice: updDevice, org: origDevice.org.toString() }
+          );
+        } catch (err) {
+          logger.error('Failed to apply new configuration from device', {
+            params: { device: machineId, err: err.message }
+          });
+        }
       }
     }
   }
@@ -630,6 +637,14 @@ class Connections {
         { $set: { versions: versions } },
         { new: true, runValidators: true }
       ).populate('interfaces.pathlabels', '_id type');
+
+      if (!origDevice) {
+        logger.warn('Device not found in DB', {
+          params: { device: machineId }
+        });
+        this.deviceDisconnect(machineId);
+        return;
+      }
 
       const { tunnels } = deviceInfo.message;
       if (Array.isArray(tunnels) && tunnels.length > 0) {

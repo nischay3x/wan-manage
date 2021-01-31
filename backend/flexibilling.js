@@ -24,7 +24,7 @@ const config = require('./flexibillingconfig.json');
  */
 class FlexiBilling {
   async getMaxDevicesRegisteredSummmary (account) {
-    return { current: 'N/A', max: 'N/A' };
+    return null;
   }
 
   async getMaxDevicesAllowed (id) {
