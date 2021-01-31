@@ -382,7 +382,7 @@ class DevicesService {
       }
 
       let api = 'get-device-config';
-      const majorAgentVersion = getMajorVersion(device.versions.agent);
+      const majorAgentVersion = getMajorVersion(device[0].versions.agent);
       if (majorAgentVersion < 3) {
         api = 'get-router-config';
       }
