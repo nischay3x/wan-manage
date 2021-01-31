@@ -95,34 +95,6 @@ const lteConfigurationSchema = Joi.object().keys({
   password: Joi.string().allow(null, '')
 });
 
-const wifiRegion = (value, helpers) => {
-
-  const regions = Object.values(wifiChannels);
-  const exists = regions.find(r => r.code === value);
-  // Throw an error (will be replaced with 'any.custom' error)
-  if (!exists) {
-    throw new Error('Region must by valid country code');
-  }
-
-  // // Replace value with a new value
-  // if (value === '2') {
-  //     return '3';
-  // }
-
-  // // Use error to return an existing error code
-  // if (value === '4') {
-  //     return helpers.error('any.invalid');
-  // }
-
-  // // Override value with undefined to unset
-  // if (value === '5') {
-  //     return undefined;
-  // }
-
-  // Return the value unchanged
-  return value;
-};
-
 const shared = {
   enable: Joi.boolean().required(),
   ssid: Joi.alternatives().when('enable', {
@@ -207,9 +179,9 @@ const validateWifiCountryCode = (configurationReq) => {
   // });
 
   if (err) {
-    return { err: err, valid: false }
+    return { err: err, valid: false };
   }
-  return { err: '', valid: true }
+  return { err: '', valid: true };
 };
 
 /**
