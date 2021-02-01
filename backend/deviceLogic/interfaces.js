@@ -148,6 +148,11 @@ const validateWifiCountryCode = (configurationReq) => {
   const regions = Object.values(wifiChannels);
   let err = null;
   for (const band in configurationReq) {
+
+    if (configurationReq[band].enable === false) {
+      continue;
+    }
+
     const region = configurationReq[band].region;
     const exists = regions.find(r => r.code === region);
     if (!exists) {
