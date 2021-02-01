@@ -6916,27 +6916,6 @@ components:
           oneOf:
             - $ref: '#/components/schemas/LteConfiguration'
             - $ref: '#/components/schemas/WifiConfiguration'
-            # - type: object
-            #   required:
-            #     - 5GHz
-            #   properties:
-            #     5GHz:
-            #       $ref: '#/components/schemas/WifiConfiguration'
-            # - type: object
-            #   required:
-            #     - 2.4GHz
-            #   properties:
-            #     2.4GHz:
-            #       $ref: '#/components/schemas/WifiConfiguration'
-            # - type: object
-            #   required:
-            #     - 2.4GHz
-            #     - 5GHz
-            #   properties:
-            #     2.4GHz:
-            #       $ref: '#/components/schemas/WifiConfiguration'
-            #     5GHz:
-            #       $ref: '#/components/schemas/WifiConfiguration'
             - type: object
               minProperties: 0
               maxProperties: 0
