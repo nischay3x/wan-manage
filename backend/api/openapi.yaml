@@ -6547,6 +6547,7 @@ components:
           name: name
           devId: devId
           _id: _id
+          deviceType: dpdk
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
@@ -6565,6 +6566,26 @@ components:
           name: name
           devId: devId
           _id: _id
+          deviceType: dpdk
+        - IPv6: IPv6
+          PublicIP: PublicIP
+          PublicPort: PublicPort
+          NatType: NatType
+          useStun: useStun
+          monitorInternet: monitorInternet
+          IPv4: IPv4
+          type: WAN
+          MAC: MAC
+          dhcp: "yes"
+          routing: OSPF
+          IPv6Mask: "64"
+          isAssigned: true
+          driver: cdc_mbim
+          IPv4Mask: "24"
+          name: name
+          devId: devId
+          _id: _id
+          deviceType: lte
         org: org
         isConnected: true
         upgradeSchedule:
@@ -6891,6 +6912,14 @@ components:
           items:
             $ref: '#/components/schemas/PathLabel'
           type: array
+        configuration:
+          oneOf:
+            - $ref: '#/components/schemas/LteConfiguration'
+            - $ref: '#/components/schemas/WifiConfiguration'
+            - type: object
+              minProperties: 0
+              maxProperties: 0
+          type: object
       type: object
     DeviceVersion:
       example:
@@ -7941,6 +7970,126 @@ components:
       - code
       - message
       type: object
+    LteConfiguration:
+      required:
+        - apn
+        - enable
+      properties:
+        apn:
+          type: string
+        enable:
+          type: boolean
+        password:
+          type: string
+        user:
+          type: string
+      type: object
+    WifiBand:
+      type: object
+      required:
+        - enable
+        - bandwidth
+        - encryption
+        - securityMode
+        - hideSsid
+        - ssid
+        - password
+        - region
+      properties:
+        enable:
+          type: boolean
+        bandwidth:
+          type: string
+          enum: ['20']
+        encryption:
+          type: string
+          enum: [aes-ccmp]
+        securityMode:
+          type: string
+          enum: [wpa2-psk, wpa-psk, open, '']
+        hideSsid:
+          type: boolean
+        ssid:
+          type: string
+          maxLength: 32
+        password:
+          oneOf:
+            - type: string
+              enum: ['']
+            - type: string
+              minLength: 8
+              maxLength: 63
+        region:
+          oneOf:
+            - type: string
+              enum: [other, '']
+            - type: string
+              minLength: 2
+              maxLength: 2
+              pattern: ^([A-Z]{2})$
+              description: Country Code (ISO/IEC 3166-1)
+    WifiBand2.4GHz:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/WifiBand'
+        - type: object
+          required:
+            - channel
+            - operationMode
+          properties:
+            channel:
+              type: string
+              pattern: ^([0-9]|1[0-3])$
+              description: 'Between 0-13'
+            operationMode:
+              type: string
+              enum: [g, n, '']
+    WifiBand5GHz:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/WifiBand'
+        - type: object
+          required:
+            - channel
+            - operationMode
+          properties:
+            channel:
+              type: string
+              pattern: ^(0|3[2-9]|[4-9][0-9]|17[0-3]|1[0-6][0-9])$
+              description: '0 or a valid channel number for 5GHz'
+            operationMode:
+              type: string
+              enum: [a, ac, n, '']
+    WifiConfiguration:
+      type: object
+      oneOf:
+        - type: object
+          minProperties: 1
+          maxProperties: 1
+          required:
+            - 5GHz
+          properties:
+            5GHz:
+              $ref: '#/components/schemas/WifiBand5GHz'
+        - type: object
+          minProperties: 1
+          maxProperties: 1
+          required:
+            - 2.4GHz
+          properties:
+            2.4GHz:
+              $ref: '#/components/schemas/WifiBand2.4GHz'
+        - type: object
+          minProperties: 2
+          maxProperties: 2
+          required:
+            - 2.4GHz
+            - 5GHz
+          properties:
+            2.4GHz:
+              $ref: '#/components/schemas/WifiBand2.4GHz'
+            5GHz:
+              $ref: '#/components/schemas/WifiBand5GHz'
   securitySchemes:
     apiKey:
       in: header
