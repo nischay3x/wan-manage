@@ -7190,7 +7190,6 @@ components:
       example:
         status: 
           key: value
-          key: value
         deviceStatus: connected
       properties:
         status:
