@@ -92,7 +92,8 @@ const lteConfigurationSchema = Joi.object().keys({
   apn: Joi.string().required(),
   auth: Joi.string().valid('MSCHAPV2', 'PAP', 'CHAP').allow(null, ''),
   user: Joi.string().allow(null, ''),
-  password: Joi.string().allow(null, '')
+  password: Joi.string().allow(null, ''),
+  pin: Joi.string().allow(null, '')
 });
 
 const shared = {
@@ -227,7 +228,7 @@ const validateConfiguration = (deviceInterface, configurationReq) => {
 };
 
 const lteOperationSchema = Joi.object().keys({
-  op: Joi.string().valid('reset').required(),
+  op: Joi.string().valid('reset', 'pin').required(),
   params: Joi.object().optional()
 });
 

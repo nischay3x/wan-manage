@@ -483,6 +483,12 @@ class DevicesService {
         }
 
         interfaceInfo = { ...interfaceInfo, defaultApn };
+
+        // update pin state
+        await devices.updateOne(
+          { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+          { $set: { 'interfaces.$.deviceParams.initial_pin1_state': interfaceInfo.pin_state } }
+        );
       }
 
       return Service.successResponse({
@@ -1880,6 +1886,10 @@ class DevicesService {
             },
             job: false,
             message: 'reset-lte'
+          },
+          pin: {
+            job: false,
+            message: 'modify-lte-pin'
           }
         }
       };
@@ -1956,7 +1966,9 @@ class DevicesService {
               }
             });
 
-            return Service.rejectResponse(response.message, 500);
+            const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
+            const err = response.message.match(regex).join(',');
+            return Service.rejectResponse(err, 500);
           };
         }
       }
