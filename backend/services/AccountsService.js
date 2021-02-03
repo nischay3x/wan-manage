@@ -54,8 +54,7 @@ class AccountsService {
    **/
   static async accountsIdGET ({ id }, { user }) {
     try {
-      const isAllowed = await checkAccountPermissions(user._id, id, 'get');
-      if (!isAllowed) {
+      if (user.defaultAccount._id.toString() !== id) {
         return Service.rejectResponse(
           'You don\'t have permission to perform this operation', 403
         );
@@ -89,8 +88,7 @@ class AccountsService {
    **/
   static async accountsIdPUT ({ id, accountRequest }, { user }, response) {
     try {
-      const isAllowed = await checkAccountPermissions(user._id, id, 'put');
-      if (!isAllowed) {
+      if (user.defaultAccount._id.toString() !== id) {
         return Service.rejectResponse(
           'You don\'t have permission to perform this operation', 403
         );
