@@ -1872,18 +1872,6 @@ class DevicesService {
       const actions = {
         lte: {
           reset: {
-            validate: () => {
-              const routerStats = deviceStatus.getDeviceStatus(deviceObject.machineId);
-              if (selectedIf.isAssigned && routerStats === 'running') {
-                return {
-                  valid: false,
-                  err: `The modem is currently in use as the router is running.
-                  'Please stop the router or unassigned the interface in order to reset the modem`
-                };
-              }
-
-              return { valid: true, err: '' };
-            },
             job: false,
             message: 'reset-lte'
           },
@@ -1949,6 +1937,10 @@ class DevicesService {
             return Service.rejectResponse(err.message, 500);
           }
         } else {
+          const isConnected = connections.isConnected(deviceObject.machineId);
+          if (!isConnected) {
+            return Service.rejectResponse('Device must be connected', 500);
+          }
           const response = await connections.deviceSendMessage(
             null,
             deviceObject.machineId,
@@ -1969,7 +1961,7 @@ class DevicesService {
             const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
             const err = response.message.match(regex).join(',');
             return Service.rejectResponse(err, 500);
-          };
+          }
         }
       }
 
