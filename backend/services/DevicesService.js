@@ -746,6 +746,8 @@ class DevicesService {
             updIntf.PublicPort = updIntf.useStun ? origIntf.PublicPort : configs.get('tunnelPort');
             updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
             updIntf.internetAccess = origIntf.internetAccess;
+            // Device type is assigned by system only
+            updIntf.deviceType = origIntf.deviceType;
 
             // Check tunnels connectivity
             if (origIntf.isAssigned) {
