@@ -18,7 +18,7 @@
 const organizations = require('../models/organizations');
 const User = require('../models/users');
 const Accounts = require('../models/accounts');
-const { membership, permissionMasks } = require('../models/membership');
+const { membership } = require('../models/membership');
 const { getToken } = require('../tokens');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
