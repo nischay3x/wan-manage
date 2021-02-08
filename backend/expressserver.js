@@ -239,7 +239,7 @@ class ExpressServer {
     validator
       .install(this.app)
       .then(async () => {
-        await this.app.use(openapiRouter());
+        await this.app.use(openapiRouter(this.schema.components.schemas));
         await this.launch();
         logger.info('Express server running');
       });

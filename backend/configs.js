@@ -36,6 +36,9 @@ const configEnv = {
     // Whether to validate open API response. True for testing and dev, False for production,
     // to remove unneeded fields from the response, use validateOpenAPIResponse = { removeAdditional: 'failing' }
     validateOpenAPIResponse: true,
+    // Whether to validate open API request, now False for all.
+    // Not described in schema fields will be removed if true,
+    validateOpenAPIRequest: false,
     // Number of REST requests allowed in 5 min per IP address, more requests will be rate limited
     userIpReqRateLimit: 300,
     // Unread notification email period (in msec), a mail is sent once a period

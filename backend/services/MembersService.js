@@ -265,10 +265,17 @@ class MembersService {
         .populate('account')
         .populate('organization');
 
+      if (!member) {
+        throw (new Error('Member not found'));
+      }
+
       // Verify if default organization still accessible by the
       // user after the change, if not switch to another org
       const _user = await Users.findOne({ _id: memberRequest.userId })
         .populate('defaultAccount');
+      if (!user) {
+        throw (new Error('User not found'));
+      }
 
       if (_user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
         const orgs = await getUserOrganizations(_user);
@@ -290,7 +297,7 @@ class MembersService {
           reason: err.message
         }
       });
-      return Service.rejectResponse(err, 400);
+      return Service.rejectResponse(err.message, 400);
     }
   }
 

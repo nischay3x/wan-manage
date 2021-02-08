@@ -19,6 +19,7 @@ const Service = require('./Service');
 const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
+const pathLabelsModel = require('../models/pathlabels');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -739,6 +740,17 @@ class DevicesService {
 
       // Make sure interfaces are not deleted, only modified
       if (Array.isArray(deviceRequest.interfaces)) {
+        // not allowed to assign path labels of a different organization
+        let orgPathLabels = await pathLabelsModel.find({ org: origDevice.org }, '_id').lean();
+        orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
+        const notAllowedPathLabels = deviceRequest.interfaces.map(intf =>
+          !Array.isArray(intf.pathlabels) ? []
+            : intf.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
+        ).flat();
+        if (notAllowedPathLabels.length) {
+          logger.error('Not allowed path labels', { params: { notAllowedPathLabels } });
+          throw new Error('Not allowed to assign path labels of a different organization');
+        };
         deviceRequest.interfaces = await Promise.all(origDevice.interfaces.map(async origIntf => {
           const updIntf = deviceRequest.interfaces.find(rif => origIntf._id.toString() === rif._id);
           if (updIntf) {

@@ -6137,6 +6137,7 @@ components:
       type: object
     MemberRequest:
       example:
+        userId: userId
         userJobTitle: userJobTitle
         userEntity: userEntity
         userLastName: userLastName
@@ -6146,6 +6147,8 @@ components:
         userPermissionTo: account
       properties:
         email:
+          type: string
+        userId:
           type: string
         userFirstName:
           type: string
@@ -7214,7 +7217,6 @@ components:
     InterfaceStatus:
       example:
         status: 
-          key: value
           key: value
         deviceStatus: connected
       properties:
