@@ -617,37 +617,6 @@ const prepareTunnelAddJob = async (
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
-  if (!tunnel.tunnelKeys) {
-    // Generate new IPsec Keys and store them in the database
-    const { key1, key2, key3, key4 } = generateRandomKeys();
-    try {
-      await tunnelsModel.findOneAndUpdate(
-        { _id: tunnel._id },
-        { tunnelKeys: { key1, key2, key3, key4 } },
-        { upsert: false }
-      );
-      tunnel.tunnelKeys = { key1, key2, key3, key4 };
-      logger.warn('New tunnel keys generated', {
-        params: { tunnelId: tunnel._id }
-      });
-    } catch (err) {
-      logger.error('Failed to set new tunnel keys', {
-        params: { tunnelId: tunnel._id, err: err.message }
-      });
-    }
-  }
-
-  const tunnelKeys = {
-    key1: tunnel.tunnelKeys.key1,
-    key2: tunnel.tunnelKeys.key2,
-    key3: tunnel.tunnelKeys.key3,
-    key4: tunnel.tunnelKeys.key4
-  };
-
-  const tasksDeviceA = [];
-  const tasksDeviceB = [];
-  const paramsIpsecDeviceA = {};
-  const paramsIpsecDeviceB = {};
   const {
     paramsDeviceA,
     paramsDeviceB,
@@ -696,7 +665,26 @@ const prepareTunnelAddJob = async (
     };
   } else {
     // construct static ipsec tunnel
-    if (!tunnel.tunnelKeys) throw new Error(`Tunnel ${tunnel.num} has no keys`);
+    if (!tunnel.tunnelKeys) {
+      // Generate new IPsec Keys and store them in the database
+      const { key1, key2, key3, key4 } = generateRandomKeys();
+      try {
+        await tunnelsModel.findOneAndUpdate(
+          { _id: tunnel._id },
+          { tunnelKeys: { key1, key2, key3, key4 } },
+          { upsert: false }
+        );
+        tunnel.tunnelKeys = { key1, key2, key3, key4 };
+        logger.warn('New tunnel keys generated', {
+          params: { tunnelId: tunnel._id }
+        });
+      } catch (err) {
+        logger.error('Failed to set new tunnel keys', {
+          params: { tunnelId: tunnel._id, err: err.message }
+        });
+      }
+    }
+
     const tunnelKeys = {
       key1: tunnel.tunnelKeys.key1,
       key2: tunnel.tunnelKeys.key2,
