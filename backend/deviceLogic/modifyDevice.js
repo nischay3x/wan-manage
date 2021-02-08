@@ -216,7 +216,7 @@ const prepareModificationMessageV1 = (messageParams, device) => {
  */
 const prepareModificationMessageV2 = (messageParams, device) => {
   const requests = [];
-
+  const tasks = [];
   // Check against the old configured interfaces.
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
@@ -238,6 +238,39 @@ const prepareModificationMessageV2 = (messageParams, device) => {
           entity: 'agent',
           message: 'modify-interface',
           params: item
+        };
+      }));
+    }
+
+    const oldLteInterfaces = prepareIfcParams(
+      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device);
+
+    const newLteInterfaces = prepareIfcParams(
+      messageParams.modify_interfaces.lte_enable_disable, device
+    );
+
+    // we send lte job if configuration or interface metric was changed
+    const lteDiffInterfaces = differenceWith(
+      newLteInterfaces,
+      oldLteInterfaces,
+      (origIfc, newIfc) => {
+        return isEqual(origIfc.configuration, newIfc.configuration) &&
+          isEqual(origIfc.metric, newIfc.metric);
+      }
+    );
+
+    // don't put these requests as aggregated because
+    // they are don't related to router api in the agent
+    if (lteDiffInterfaces.length > 0) {
+      requests.push(...lteDiffInterfaces.map(item => {
+        return {
+          entity: 'agent',
+          message: item.configuration.enable ? 'add-lte' : 'remove-lte',
+          params: {
+            ...item.configuration,
+            dev_id: item.dev_id,
+            metric: item.metric
+          }
         };
       }));
     }
@@ -340,7 +373,6 @@ const prepareModificationMessageV2 = (messageParams, device) => {
     }
   }
 
-  const tasks = [];
   if (requests.length !== 0) {
     tasks.push(
       {
@@ -926,7 +958,7 @@ const apply = async (device, user, data) => {
   }
 
   // Handle changes in interface fields other than 'isAssigned'
-  let interfacesDiff = differenceWith(
+  const interfacesDiff = differenceWith(
     newInterfaces,
     origInterfaces,
     (origIfc, newIfc) => {
@@ -936,12 +968,27 @@ const apply = async (device, user, data) => {
 
   // Changes made to unassigned interfaces should be
   // stored in the MGMT, but should not reach the device.
-  interfacesDiff = interfacesDiff.filter(ifc => {
+  const assignedInterfacesDiff = interfacesDiff.filter(ifc => {
     return ifc.isAssigned === true;
   });
-  if (interfacesDiff.length > 0) {
+
+  // add-lte job should be submitted even if unassigned interface
+  // we send this job if configuration or interface metric was changed
+  const oldLteInterfaces = device[0].interfaces.filter(item => item.deviceType === 'lte');
+  const newLteInterfaces = data.newDevice.interfaces.filter(item => item.deviceType === 'lte');
+  const lteInterfacesDiff = differenceWith(
+    newLteInterfaces,
+    oldLteInterfaces,
+    (origIfc, newIfc) => {
+      return isEqual(origIfc.configuration, newIfc.configuration) &&
+        isEqual(origIfc.metric, newIfc.metric);
+    }
+  );
+
+  if (assignedInterfacesDiff.length > 0 || lteInterfacesDiff.length > 0) {
     modifyParams.modify_interfaces = {};
-    modifyParams.modify_interfaces.interfaces = interfacesDiff;
+    modifyParams.modify_interfaces.interfaces = assignedInterfacesDiff;
+    modifyParams.modify_interfaces.lte_enable_disable = lteInterfacesDiff;
   }
 
   const shouldQueueJob =
@@ -1081,6 +1128,23 @@ const sync = async (deviceId, org) => {
     });
   });
 
+  // lte enable job
+  const enabledLte = interfaces.filter(item =>
+    item.deviceType === 'lte' && item.configuration.enable);
+  if (enabledLte.length) {
+    enabledLte.forEach(lte => {
+      deviceConfRequests.push({
+        entity: 'agent',
+        message: 'add-lte',
+        params: {
+          ...lte.configuration,
+          dev_id: lte.devId,
+          metric: lte.metric
+        }
+      });
+    });
+  }
+
   // build routes
   deviceInterfaces.forEach(item => {
     const { metric, devId, gateway } = item;
@@ -1096,7 +1160,7 @@ const sync = async (deviceId, org) => {
   });
 
   // Prepare add-route message
-  staticroutes.forEach(route => {
+  Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
 
     const params = {
@@ -1136,7 +1200,7 @@ const sync = async (deviceId, org) => {
   }
 
   // Prepare add-dhcp-config message
-  dhcp.forEach(entry => {
+  Array.isArray(dhcp) && dhcp.forEach(entry => {
     const { rangeStart, rangeEnd, dns, macAssign } = entry;
     let devId = entry.interface;
     if (isNeedUseOldInterfaceIdentification) {

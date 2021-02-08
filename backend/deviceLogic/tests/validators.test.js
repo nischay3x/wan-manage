@@ -17,6 +17,7 @@
 
 const { ObjectId } = require('mongoose').Types;
 const { validateDevice, validateModifyDeviceMsg } = require('../validators');
+const { validateConfiguration } = require('../interfaces');
 const maxMetric = 2 * 10 ** 9;
 
 describe('validateDevice', () => {
@@ -402,6 +403,196 @@ describe('validateModifyDeviceMsg', () => {
     modifyDevMsg[1].addr = '';
     failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[1].addr}`;
     const result = validateModifyDeviceMsg(modifyDevMsg);
+    expect(result).toMatchObject(failureObject);
+  });
+});
+
+describe('validateLteInterfaceConfiguration', () => {
+  let intf;
+  let configuration;
+  const successObject = {
+    valid: true,
+    err: ''
+  };
+  const failureObject = {
+    valid: false,
+    err: ''
+  };
+
+  beforeEach(() => {
+    intf = {
+      deviceType: 'lte'
+    };
+    configuration = {
+      apn: 'test_apn',
+      enable: true
+    };
+  });
+
+  it('Should be a valid lte configuration', () => {
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid lte configuration - missed enable', () => {
+    delete configuration.enable;
+    failureObject.err = '"enable" is required';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid lte configuration - missed apn', () => {
+    delete configuration.apn;
+    failureObject.err = '"apn" is required';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid lte configuration - auth not supported', () => {
+    configuration.auth = 'TEST';
+    failureObject.err = '"auth" must be one of [MSCHAPV2, PAP, CHAP, null, ]';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+});
+
+describe('validateWiFiInterfaceConfiguration', () => {
+  let intf;
+  let configuration;
+  const successObject = {
+    valid: true,
+    err: ''
+  };
+  const failureObject = {
+    valid: false,
+    err: ''
+  };
+
+  beforeEach(() => {
+    intf = {
+      deviceType: 'wifi'
+    };
+    configuration = {
+      '2.4GHz': {
+        ssid: 'wifi_band_2.4',
+        enable: true,
+        channel: '0',
+        bandwidth: '20',
+        hideSsid: false,
+        encryption: 'aes-ccmp',
+        operationMode: 'n',
+        securityMode: 'wpa2-psk',
+        password: 'wifi_band_2_pass',
+        region: 'other'
+      },
+      '5GHz': {
+        ssid: 'wifi_band_5',
+        enable: true,
+        channel: '0',
+        bandwidth: '20',
+        hideSsid: false,
+        encryption: 'aes-ccmp',
+        operationMode: 'ac',
+        securityMode: 'wpa2-psk',
+        password: 'wifi_band_2_pass',
+        region: 'US'
+      }
+    };
+  });
+
+  it('Should be a valid wifi configuration  - two bands', () => {
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an valid wifi configuration - 2.4GHz', () => {
+    delete configuration['5GHz'];
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an valid wifi configuration - 5GHz', () => {
+    delete configuration['2.4Ghz'];
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an valid wifi configuration - 5GHz', () => {
+    delete configuration['2.4Ghz'];
+    delete configuration['5Ghz'];
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid wifi configuration - missed securityMode', () => {
+    configuration['2.4GHz'].securityMode = '';
+    failureObject.err = 'Security mode is required field on enabled WiFi band';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid wifi configuration - missed securityMode but band disabled', () => {
+    configuration['2.4GHz'].securityMode = '';
+    configuration['2.4GHz'].enable = false;
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid wifi configuration - not supported country code', () => {
+    configuration['2.4GHz'].region = 'GG';
+    failureObject.err = 'Region GG is not valid';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid wifi configuration - channel not valid', () => {
+    configuration['2.4GHz'].channel = '-2';
+    failureObject.err = '"channel" with value "-2" fails to match the required pattern: /^\\d+$/';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid wifi configuration - channel not valid', () => {
+    configuration['2.4GHz'].channel = '12';
+    configuration['2.4GHz'].region = 'US';
+    failureObject.err = 'Channel must be between 0 to 11';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid wifi configuration', () => {
+    configuration['2.4GHz'].channel = '12';
+    configuration['2.4GHz'].region = 'CA';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid wifi configuration - channel not valid', () => {
+    configuration['2.4GHz'].channel = '14';
+    configuration['2.4GHz'].region = 'CA';
+    failureObject.err = 'Channel must be between 0 to 13';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid wifi configuration - channel not valid', () => {
+    configuration['5GHz'].channel = '14';
+    failureObject.err = 'Channel 14 is not valid number for country US';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid wifi configuration', () => {
+    configuration['5GHz'].channel = '110';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid wifi configuration', () => {
+    configuration['5GHz'].channel = '110';
+    configuration['5GHz'].region = 'RU';
+    failureObject.err = 'Channel 110 is not valid number for country RU';
+    const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(failureObject);
   });
 });

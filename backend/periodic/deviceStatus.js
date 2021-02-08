@@ -23,6 +23,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'p
 const notificationsMgr = require('../notifications/notifications')();
 const configs = require('../configs')();
 const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
+const { getMajorVersion } = require('../versioning');
 
 /***
  * This class gets periodic status from all connected devices
@@ -254,9 +255,12 @@ class DeviceStatus {
       const dbStats = {};
       let shouldUpdate = false;
       const stats = statsEntry.stats;
-      for (const intf in stats) {
+      for (let intf in stats) {
         if (!stats.hasOwnProperty(intf)) continue;
         const intfStats = stats[intf];
+        if (getMajorVersion(deviceInfo.version) < 3) {
+          intf = 'pci:' + intf;
+        }
         for (const stat in intfStats) {
           if (!intfStats.hasOwnProperty(stat) || !this.statsFieldsMap.get(stat)) continue;
           const key = 'stats.' + intf.replace('.', ':') + '.' + this.statsFieldsMap.get(stat);

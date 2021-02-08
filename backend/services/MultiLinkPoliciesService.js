@@ -21,6 +21,7 @@ const isEqual = require('lodash/isEqual');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const MultiLinkPolicies = require('../models/mlpolicies');
 const { devices } = require('../models/devices');
+const pathLabelsModel = require('../models/pathlabels');
 const { ObjectId } = require('mongoose').Types;
 
 const emptyPrefix = {
@@ -89,6 +90,24 @@ class MultiLinkPoliciesService {
         message: 'Duplicate names are not allowed in the same organization'
       };
     };
+
+    // Not allowed to assign path labels of a different organization
+    let orgPathLabels = await pathLabelsModel.find({ org }, '_id').lean();
+    orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
+    const notAllowedPathLabels = rules.map(rule =>
+      rule.action && !Array.isArray(rule.action.links) ? []
+        : rule.action.links.map(link =>
+          !Array.isArray(link.pathlabels) ? []
+            : link.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
+        )
+    ).flat();
+    if (notAllowedPathLabels.length) {
+      return {
+        valid: false,
+        message: 'Not allowed to assign path labels of a different organization'
+      };
+    };
+
     return { valid: true, message: '' };
   }
 

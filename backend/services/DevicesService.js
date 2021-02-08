@@ -19,6 +19,7 @@ const Service = require('./Service');
 const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
+const pathLabelsModel = require('../models/pathlabels');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -381,10 +382,16 @@ class DevicesService {
         });
       }
 
+      let api = 'get-device-config';
+      const majorAgentVersion = getMajorVersion(device[0].versions.agent);
+      if (majorAgentVersion < 3) {
+        api = 'get-router-config';
+      }
+
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-router-config' }
+        { entity: 'agent', message: api }
       );
 
       if (!deviceConf.ok) {
@@ -436,8 +443,8 @@ class DevicesService {
       const interfaceType = selectedInterface.deviceType;
       if (deviceStatus) {
         const agentMessages = {
-          lte: 'lte-get-interface-info',
-          wifi: 'wifi-get-interface-info'
+          lte: 'get-lte-info',
+          wifi: 'get-wifi-info'
         }[interfaceType];
 
         if (agentMessages) {
@@ -477,6 +484,12 @@ class DevicesService {
         }
 
         interfaceInfo = { ...interfaceInfo, defaultApn };
+
+        // update pin state
+        await devices.updateOne(
+          { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+          { $set: { 'interfaces.$.deviceParams.initial_pin1_state': interfaceInfo.pin_state } }
+        );
       }
 
       return Service.successResponse({
@@ -727,6 +740,17 @@ class DevicesService {
 
       // Make sure interfaces are not deleted, only modified
       if (Array.isArray(deviceRequest.interfaces)) {
+        // not allowed to assign path labels of a different organization
+        let orgPathLabels = await pathLabelsModel.find({ org: origDevice.org }, '_id').lean();
+        orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
+        const notAllowedPathLabels = deviceRequest.interfaces.map(intf =>
+          !Array.isArray(intf.pathlabels) ? []
+            : intf.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
+        ).flat();
+        if (notAllowedPathLabels.length) {
+          logger.error('Not allowed path labels', { params: { notAllowedPathLabels } });
+          throw new Error('Not allowed to assign path labels of a different organization');
+        };
         deviceRequest.interfaces = await Promise.all(origDevice.interfaces.map(async origIntf => {
           const updIntf = deviceRequest.interfaces.find(rif => origIntf._id.toString() === rif._id);
           if (updIntf) {
@@ -734,6 +758,8 @@ class DevicesService {
             updIntf.PublicPort = updIntf.useStun ? origIntf.PublicPort : configs.get('tunnelPort');
             updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
             updIntf.internetAccess = origIntf.internetAccess;
+            // Device type is assigned by system only
+            updIntf.deviceType = origIntf.deviceType;
 
             // Check tunnels connectivity
             if (origIntf.isAssigned) {
@@ -778,7 +804,10 @@ class DevicesService {
               updIntf.IPv4Mask = origIntf.IPv4Mask;
               updIntf.gateway = origIntf.gateway;
             };
-            if (!updIntf.isAssigned) {
+            // don't update metric on an unassigned interface,
+            // except lte interface because we enable lte connection on it,
+            // hence we need the metric fo it
+            if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
               updIntf.metric = origIntf.metric;
             };
             if (updIntf.isAssigned !== origIntf.isAssigned ||
@@ -827,7 +856,10 @@ class DevicesService {
           .filter(intf => intf.modified)
           .map(intf => {
             return {
-              devId: intf.devId
+              devId: intf.devId,
+              type: intf.type,
+              addr: intf.IPv4 && intf.IPv4Mask ? `${intf.IPv4}/${intf.IPv4Mask}` : '',
+              gateway: intf.gateway
             };
           });
         const { valid, err } = validateDhcpConfig(
@@ -1853,19 +1885,13 @@ class DevicesService {
 
       const actions = {
         lte: {
-          enable: {
-            job: true,
-            message: 'lte-enable',
-            title: `Enable LTE on ${deviceObject.hostname}`
-          },
-          disable: {
-            job: true,
-            message: 'lte-disable',
-            title: `Disable LTE on ${deviceObject.hostname}`
-          },
           reset: {
             job: false,
-            message: 'lte-reset'
+            message: 'reset-lte'
+          },
+          pin: {
+            job: false,
+            message: 'modify-lte-pin'
           }
         }
       };
@@ -1877,6 +1903,18 @@ class DevicesService {
       if (agentAction) {
         const params = interfaceOperationReq.params || {};
         params.dev_id = selectedIf.devId;
+
+        if (agentAction.validate) {
+          const { valid, err } = agentAction.validate();
+
+          if (!valid) {
+            logger.warn('interface perform operation failed',
+              {
+                params: { body: interfaceOperationReq, err: err }
+              });
+            return Service.rejectResponse(err, 500);
+          }
+        }
 
         if (agentAction.job) {
           const tasks = [{ entity: 'agent', message: agentAction.message, params: params }];
@@ -1913,6 +1951,10 @@ class DevicesService {
             return Service.rejectResponse(err.message, 500);
           }
         } else {
+          const isConnected = connections.isConnected(deviceObject.machineId);
+          if (!isConnected) {
+            return Service.rejectResponse('Device must be connected', 500);
+          }
           const response = await connections.deviceSendMessage(
             null,
             deviceObject.machineId,
@@ -1930,8 +1972,10 @@ class DevicesService {
               }
             });
 
-            return Service.rejectResponse(response.message, 500);
-          };
+            const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
+            const err = response.message.match(regex).join(',');
+            return Service.rejectResponse(err, 500);
+          }
         }
       }
 
