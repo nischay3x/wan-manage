@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const configs = require('../configs')();
 
 class Controller {
   static sendResponse (response, payload) {
@@ -72,9 +73,22 @@ class Controller {
 
       const [contentType] = request.headers['content-type'].split(';');
       const ref = request.openapi.schema.requestBody.content[contentType].schema.$ref;
-      const param = lower(ref.substr(ref.lastIndexOf('/') + 1));
-
-      requestParams[param] = request.body;
+      if (ref) {
+        const refName = ref.substr(ref.lastIndexOf('/') + 1);
+        const refComponent = request.openapi.refs[refName];
+        const requestName = lower(refName);
+        if (refComponent && refComponent.properties &&
+          configs.get('validateOpenAPIRequest', 'boolean')) {
+          // continue only with described in schema parameters
+          requestParams[requestName] = {};
+          for (const param in refComponent.properties) {
+            requestParams[requestName][param] = request.body[param];
+          }
+        } else {
+          // if request is not described in schema then skip unknown parameters validation
+          requestParams[requestName] = request.body;
+        }
+      }
     }
 
     request.openapi.schema.parameters.forEach((param) => {
