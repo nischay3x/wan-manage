@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
+const { deviceStats } = require('../models/analytics/deviceStats');
 
 async function up () {
   // Change all pci keys to devId for each interface
@@ -35,6 +36,23 @@ async function up () {
                 ifname: { $concat: ['pci:', '$$static.ifname'] },
                 updatedAt: '$$static.updatedAt',
                 createdAt: '$$static.createdAt'
+              }
+            }
+          },
+          dhcp: {
+            $map: {
+              input: '$dhcp',
+              as: 'dhcpEntry',
+              in: {
+                _id: '$$dhcpEntry._id',
+                dns: '$$dhcpEntry.dns',
+                status: '$$dhcpEntry.status',
+                interface: { $concat: ['pci:', '$$dhcpEntry.interface'] },
+                rangeStart: '$$dhcpEntry.rangeStart',
+                rangeEnd: '$$dhcpEntry.rangeEnd',
+                macAssign: '$$dhcpEntry.macAssign',
+                updatedAt: '$$dhcpEntry.updatedAt',
+                createdAt: '$$dhcpEntry.createdAt'
               }
             }
           },
@@ -74,7 +92,27 @@ async function up () {
         }
       },
       { $out: 'devices' }
-    ]);
+    ]).allowDiskUse(true);
+
+    await deviceStats.aggregate([
+      {
+        $addFields: {
+          stats: {
+            $arrayToObject: {
+              $map: {
+                input: { $objectToArray: '$stats' },
+                as: 'st',
+                in: {
+                  k: { $concat: ['pci:', '$$st.k'] },
+                  v: '$$st.v'
+                }
+              }
+            }
+          }
+        }
+      },
+      { $out: 'devicestats' }
+    ]).allowDiskUse(true);
 
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'up' }
@@ -106,6 +144,23 @@ async function down () {
                 ifname: { $arrayElemAt: [{ $split: ['$$static.ifname', 'pci:'] }, 1] },
                 updatedAt: '$$static.updatedAt',
                 createdAt: '$$static.createdAt'
+              }
+            }
+          },
+          dhcp: {
+            $map: {
+              input: '$dhcp',
+              as: 'dhcpEntry',
+              in: {
+                _id: '$$dhcpEntry._id',
+                dns: '$$dhcpEntry.dns',
+                status: '$$dhcpEntry.status',
+                interface: { $arrayElemAt: [{ $split: ['$$dhcpEntry.interface', 'pci:'] }, 1] },
+                rangeStart: '$$dhcpEntry.rangeStart',
+                rangeEnd: '$$dhcpEntry.rangeEnd',
+                macAssign: '$$dhcpEntry.macAssign',
+                updatedAt: '$$dhcpEntry.updatedAt',
+                createdAt: '$$dhcpEntry.createdAt'
               }
             }
           },
@@ -144,7 +199,27 @@ async function down () {
         }
       },
       { $out: 'devices' }
-    ]).option({ bypassDocumentValidation: true });
+    ]).allowDiskUse(true).option({ bypassDocumentValidation: true });
+
+    await deviceStats.aggregate([
+      {
+        $addFields: {
+          stats: {
+            $arrayToObject: {
+              $map: {
+                input: { $objectToArray: '$stats' },
+                as: 'st',
+                in: {
+                  k: { $arrayElemAt: [{ $split: ['$$st.k', 'pci:'] }, 1] },
+                  v: '$$st.v'
+                }
+              }
+            }
+          }
+        }
+      },
+      { $out: 'devicestats' }
+    ]).allowDiskUse(true);
 
     logger.info('Database migration done!', {
       params: { collections: ['devices'], operation: 'down' }

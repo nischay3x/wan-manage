@@ -43,7 +43,7 @@ function handleError (err, request, response, next) {
  * are passed on to the next middleware handler.
  * @returns {Function}
  */
-function openApiRouter () {
+function openApiRouter (openapiSchemas) {
   return async (request, response, next) => {
     try {
       /**
@@ -81,6 +81,8 @@ function openApiRouter () {
           const err = `Operation ${controllerOperation} not found in controller ${name}`;
           throw new Error(err);
         }
+
+        request.openapi.refs = openapiSchemas;
 
         await apiController[controllerOperation](request, response, next);
       }

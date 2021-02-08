@@ -49,7 +49,24 @@ const validateIPv4Mask = mask => {
  */
 const validateDhcpConfig = (device, modifiedInterfaces) => {
   const assignedDhcps = device.dhcp.map(d => d.interface);
-  const modifiedDhcp = modifiedInterfaces.filter(i => assignedDhcps.includes(i.devId));
+  const modifiedDhcp = modifiedInterfaces.filter(i => {
+    // don't validate unassigned modified interface
+    if (!assignedDhcps.includes(i.devId)) {
+      return false;
+    }
+
+    // validate only critical fields
+    const orig = device.interfaces.find(intf => intf.devId === i.devId);
+    if (i.type !== orig.type ||
+      i.dhcp !== orig.dhcp ||
+      i.addr !== `${orig.IPv4}/${orig.IPv4Mask}` ||
+      i.gateway !== orig.gateway
+    ) {
+      return true;
+    } else {
+      return false;
+    }
+  });
   if (modifiedDhcp.length > 0) {
     // get first interface from device
     const firstIf = device.interfaces.filter(i => i.devId === modifiedDhcp[0].devId);
@@ -226,7 +243,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     if (!isEnabled) {
       return {
         valid: false,
-        err: 'LTE must be enabled'
+        err: 'LTE interface is assigned but not enabled. Please enable or unassign it'
       };
     }
   }
