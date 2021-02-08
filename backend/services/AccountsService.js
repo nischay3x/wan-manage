@@ -22,8 +22,7 @@ const Users = require('../models/users');
 const { getToken } = require('../tokens');
 const {
   getUserAccounts,
-  orgUpdateFromNull,
-  checkAccountPermissions
+  orgUpdateFromNull
 } = require('../utils/membershipUtils');
 
 class AccountsService {
@@ -56,7 +55,7 @@ class AccountsService {
     try {
       if (user.defaultAccount._id.toString() !== id) {
         return Service.rejectResponse(
-          'You don\'t have permission to perform this operation', 403
+          'No permission to access this account', 403
         );
       }
       const account = await Accounts.findOne({ _id: id });
@@ -90,12 +89,13 @@ class AccountsService {
     try {
       if (user.defaultAccount._id.toString() !== id) {
         return Service.rejectResponse(
-          'You don\'t have permission to perform this operation', 403
+          'No permission to access this account', 403
         );
       }
+      const { name, companyType, companyDesc, country, enableNotifications } = accountRequest;
       const account = await Accounts.findOneAndUpdate(
         { _id: id },
-        { $set: accountRequest },
+        { $set: { name, companyType, companyDesc, country, enableNotifications } },
         { upsert: false, new: true, runValidators: true });
 
       // Update token
@@ -142,10 +142,10 @@ class AccountsService {
         return Service.successResponse({ _id: user.defaultAccount._id.toString() }, 201);
       }
 
-      const isAllowed = await checkAccountPermissions(user._id, account, 'get');
-      if (!isAllowed) {
+      const accounts = await getUserAccounts(user);
+      if (!accounts.find(acc => acc._id === account)) {
         return Service.rejectResponse(
-          'You don\'t have permission to perform this operation', 403
+          'No permission to access this account', 403
         );
       }
 

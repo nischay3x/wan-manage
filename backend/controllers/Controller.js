@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const configs = require('../configs')();
 
 class Controller {
   static sendResponse (response, payload) {
@@ -76,7 +77,8 @@ class Controller {
         const refName = ref.substr(ref.lastIndexOf('/') + 1);
         const refComponent = request.openapi.refs[refName];
         const requestName = lower(refName);
-        if (refComponent && refComponent.properties) {
+        if (refComponent && refComponent.properties &&
+          configs.get('validateOpenAPIRequest', 'boolean')) {
           // continue only with described in schema parameters
           requestParams[requestName] = {};
           for (const param in refComponent.properties) {
