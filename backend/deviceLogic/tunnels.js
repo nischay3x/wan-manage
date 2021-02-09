@@ -1130,6 +1130,7 @@ const sync = async (deviceId, org) => {
       interfaceA,
       interfaceB,
       tunnelKeys,
+      encryptionMethod,
       pathlabel
     } = tunnel;
 
@@ -1139,7 +1140,7 @@ const sync = async (deviceId, org) => {
     const ifcB = deviceB.interfaces.find(
       (ifc) => ifc._id.toString() === interfaceB.toString()
     );
-    if (!tunnelKeys) {
+    if (!tunnelKeys && encryptionMethod === 'pre-shared-key') {
       // No keys for some reason, probably version 2 upgraded.
       // Tunnel keys will be generated in prepareTunnelAddJob.
       // Need to sync another side as well.
