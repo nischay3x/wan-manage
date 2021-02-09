@@ -187,96 +187,133 @@ const apply = async (devicesIn, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  if (res.action !== 'get-device-certificate') {
+  if (res.action === 'update-public-certificate') {
     logger.info('Device update IKEv2 job complete', { params: { result: res, jobId: jobId } });
-    return;
-  };
-
-  logger.info('Device create IKEv2 job complete', { params: { result: res, jobId: jobId } });
-
-  let certificate = res.agentMessage.certificate;
-  certificate = Array.isArray(certificate) ? certificate.join('') : certificate;
-  const expireTime = certificate && res.agentMessage.expiration
-    ? (new Date(res.agentMessage.expiration)).getTime() : null;
-
-  if (certificate && expireTime && !isNaN(expireTime)) {
-    // update the device IKEv2 data
-    await devices.updateOne(
-      { _id: res.device },
+    // send job to initiator that remote cert was applied on responder
+    const tasks = res.reinitiateTunnels.tunnels.map(tunnel => {
+      return {
+        entity: 'agent',
+        message: 'modify-tunnel',
+        params: {
+          'tunnel-id': tunnel.num,
+          ikev2: { 'remote-cert-applied': true }
+        }
+      };
+    });
+    deviceQueues.addJob(res.machineId, 'system', res.org,
+      // Data
+      { title: `IKEv2 certificate applied on device ${res.hostname}`, tasks },
+      // Response data
       {
-        $set: {
-          'IKEv2.certificate': certificate,
-          'IKEv2.expireTime': expireTime
+        method: 'ikev2',
+        data: {
+          deviceId: res.deviceId,
+          org: res.org,
+          action: 'remote-certificate-applied'
         }
       },
-      { upsert: false }
-    );
+      // Metadata
+      { priority: 'normal', attempts: 1, removeOnComplete: false },
+      // Complete callback
+      null);
+  } else if (res.action === 'get-device-certificate') {
+    logger.info('Device create IKEv2 job complete', { params: { result: res, jobId: jobId } });
 
-    // update public certificate on the devices having IKEv2 tunnel with this one
-    const localDevID = mongoose.Types.ObjectId(res.device);
-    const remoteDevices = await tunnelsModel
-      .aggregate([
-        {
-          $match: {
-            isActive: true,
-            encryptionMethod: 'ikev2',
-            $or: [{ deviceA: localDevID }, { deviceB: localDevID }]
-          }
-        },
-        {
-          $project: {
-            num: 1,
-            dev_id: { $cond: [{ $eq: ['$deviceA', localDevID] }, '$deviceB', '$deviceA'] }
-          }
-        },
-        { $group: { _id: '$dev_id', tunnels: { $push: '$$ROOT.num' } } },
-        { $lookup: { from: 'devices', localField: '_id', foreignField: '_id', as: 'devices' } },
-        {
-          $addFields: {
-            hostname: { $arrayElemAt: ['$devices.hostname', 0] },
-            machineId: { $arrayElemAt: ['$devices.machineId', 0] }
-          }
-        },
-        { $project: { hostname: 1, machineId: 1, tunnels: 1 } }
-      ]);
+    let certificate = res.agentMessage.certificate;
+    certificate = Array.isArray(certificate) ? certificate.join('') : certificate;
+    const expireTime = certificate && res.agentMessage.expiration
+      ? (new Date(res.agentMessage.expiration)).getTime() : null;
 
-    for (const remoteDev of remoteDevices) {
-      const tasks = remoteDev.tunnels.map(tunNum => {
-        return {
-          entity: 'agent',
-          message: 'modify-tunnel',
-          params: { 'tunnel-id': tunNum, ikev2: { certificate } }
-        };
-      });
-      deviceQueues.addJob(remoteDev.machineId, 'system', res.org,
-        // Data
-        { title: `Modify tunnel IKEv2 certificate on device ${remoteDev.hostname}`, tasks },
-        // Response data
+    if (certificate && expireTime && !isNaN(expireTime)) {
+      // update the device IKEv2 data
+      await devices.updateOne(
+        { _id: res.deviceId },
         {
-          method: 'ikev2',
-          data: {
-            device: remoteDev._id,
-            org: res.org,
-            action: 'update-public-certificate'
+          $set: {
+            'IKEv2.certificate': certificate,
+            'IKEv2.expireTime': expireTime
           }
         },
-        // Metadata
-        { priority: 'normal', attempts: 1, removeOnComplete: false },
-        // Complete callback
-        null);
+        { upsert: false }
+      );
+      // update public certificate on the devices having IKEv2 tunnel with this one
+      const localDevID = mongoose.Types.ObjectId(res.deviceId);
+      const remoteDevices = await tunnelsModel
+        .aggregate([
+          {
+            $match: {
+              isActive: true,
+              encryptionMethod: 'ikev2',
+              $or: [{ deviceA: localDevID }, { deviceB: localDevID }]
+            }
+          },
+          {
+            $project: {
+              num: 1,
+              role: { $cond: [{ $eq: ['$deviceA', localDevID] }, 'responder', 'initiator'] },
+              dev_id: { $cond: [{ $eq: ['$deviceA', localDevID] }, '$deviceB', '$deviceA'] }
+            }
+          },
+          {
+            $group: {
+              _id: '$dev_id',
+              tunnels: { $push: { num: '$$ROOT.num', role: '$$ROOT.role' } }
+            }
+          },
+          { $lookup: { from: 'devices', localField: '_id', foreignField: '_id', as: 'devices' } },
+          {
+            $addFields: {
+              hostname: { $arrayElemAt: ['$devices.hostname', 0] },
+              machineId: { $arrayElemAt: ['$devices.machineId', 0] }
+            }
+          },
+          { $project: { hostname: 1, machineId: 1, tunnels: 1 } }
+        ]);
+
+      for (const { _id, hostname, machineId, tunnels } of remoteDevices) {
+        const tasks = tunnels.map(tunnel => {
+          return {
+            entity: 'agent',
+            message: 'modify-tunnel',
+            params: {
+              'tunnel-id': tunnel.num,
+              ikev2: { certificate, 'remote-cert-applied': tunnel.role === 'responder' }
+            }
+          };
+        });
+        deviceQueues.addJob(machineId, 'system', res.org,
+          // Data
+          { title: `Modify tunnel IKEv2 certificate on device ${hostname}`, tasks },
+          // Response data
+          {
+            method: 'ikev2',
+            data: {
+              deviceId: _id,
+              machineId,
+              hostname,
+              reinitiateTunnels: tunnels.filter(t => t.role === 'responder').map(t => t.num),
+              org: res.org,
+              action: 'update-public-certificate'
+            }
+          },
+          // Metadata
+          { priority: 'normal', attempts: 1, removeOnComplete: false },
+          // Complete callback
+          null);
+      }
+    } else {
+      logger.warn('Failed to create IKEv2 certificate',
+        { params: { result: { certificate, expireTime } } }
+      );
     }
-  } else {
-    logger.warn('Failed to create IKEv2 certificate',
-      { params: { result: { certificate, expireTime } } }
-    );
-  }
-  // unset the pending IKEv2 job flag in the database
-  try {
-    await setIKEv2QueuedFlag([res.device], false);
-  } catch (err) {
-    logger.warn('Failed to update jobQueued field in database', {
-      params: { result: res, jobId: jobId }
-    });
+    // unset the pending IKEv2 job flag in the database
+    try {
+      await setIKEv2QueuedFlag([res.deviceId], false);
+    } catch (err) {
+      logger.warn('Failed to update jobQueued field in database', {
+        params: { result: res, jobId: jobId }
+      });
+    }
   }
 };
 
