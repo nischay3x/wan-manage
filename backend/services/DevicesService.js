@@ -472,7 +472,8 @@ class DevicesService {
       if (interfaceType === 'wifi') {
         interfaceInfo = { ...interfaceInfo, wifiChannels };
       } else if (interfaceType === 'lte' && Object.keys(interfaceInfo).length > 0) {
-        let defaultApn = interfaceInfo.default_apn;
+        let defaultApn = interfaceInfo.default_settings
+          ? interfaceInfo.default_settings.APN : null;
         const mcc = interfaceInfo.system_info.MCC;
         const mnc = interfaceInfo.system_info.MNC;
 
@@ -483,7 +484,13 @@ class DevicesService {
           }
         }
 
-        interfaceInfo = { ...interfaceInfo, defaultApn };
+        interfaceInfo = {
+          ...interfaceInfo,
+          default_settings: {
+            ...interfaceInfo.default_settings,
+            APN: defaultApn
+          }
+        };
 
         // update pin state
         await devices.updateOne(
