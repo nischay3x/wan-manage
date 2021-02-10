@@ -100,7 +100,7 @@ class MultiLinkPoliciesService {
           !Array.isArray(link.pathlabels) ? []
             : link.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
         )
-    ).flat();
+    ).flat(3);
     if (notAllowedPathLabels.length) {
       return {
         valid: false,

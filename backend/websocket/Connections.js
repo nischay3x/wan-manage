@@ -558,7 +558,10 @@ class Connections {
               .required(),
             frr: Joi.object()
               .keys({ version: Joi.string().required() })
-              .required()
+              .required(),
+            edgeui: Joi.object()
+              .keys({ version: Joi.string().required() })
+              .optional()
           }),
           network: joi.object().optional(),
           tunnels: joi.array().optional(),
