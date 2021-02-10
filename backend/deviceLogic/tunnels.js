@@ -1058,6 +1058,7 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
+    .populate('deviceA', 'interfaces versions')
     .populate('deviceB', 'interfaces versions')
     .lean();
 
