@@ -158,6 +158,10 @@ class DevicesController {
       request, response, this.service.devicesIdInterfacesIdActionPOST
     );
   }
+
+  async devicesIdSendPOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdSendPOST);
+  };
 }
 
 module.exports = DevicesController;
