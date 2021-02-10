@@ -645,13 +645,13 @@ const prepareTunnelAddJob = async (
       lifetime: configs.get('ikev2Lifetime', 'number'),
       ike: {
         'crypto-alg': 'aes-cbc',
-        'integ-alg': 'aes-xcbc-96',
+        'integ-alg': 'hmac-sha2-256-128',
         'dh-group': 'modp-2048',
         'key-size': 256
       },
       esp: {
         'crypto-alg': 'aes-cbc',
-        'integ-alg': 'aes-xcbc-96',
+        'integ-alg': 'hmac-sha2-256-128',
         'dh-group': 'ecp-256',
         'key-size': 256
       },
@@ -1115,7 +1115,7 @@ const sync = async (deviceId, org) => {
     .lean();
 
   // Create add-tunnel messages
-  let tunnelsRequests = [];
+  const tunnelsRequests = [];
   const completeCbData = [];
   let callComplete = false;
   const devicesToSync = [];
