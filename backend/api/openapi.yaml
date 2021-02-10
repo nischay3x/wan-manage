@@ -3083,6 +3083,70 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/{id}/send:
+    post:
+      operationId: devicesIdSendPOST
+      parameters:
+      - description: Numeric ID of the Device to start
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceSendRequest'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceSendResponse'
+          description: Execution Applied
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Execute a Linux command on the device side
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /jobs:
     get:
       operationId: jobsGET
@@ -7608,6 +7672,41 @@ components:
           type: object
         meta:
           type: object
+    DeviceSendRequest:
+      example:
+        entity: "agent"
+        api: "exec"
+        params: ["date"]
+      type: object
+      properties:
+        entity:
+          type: string
+        api:
+          type: string
+        params:
+          oneOf:
+            - type: object
+            - type: string
+            - type: array
+    DeviceSendResponse:
+      example:
+        router-cfg-hash: "e5dbf5ee9541264307041dfae1f6abbe2b62179e"
+        message: "Mon Feb  8 10:22:11 UTC 2020\n"
+        ok: 1
+        entity: "osReply"
+      type: object
+      properties:
+        router-cfg-hash:
+          type: string
+        message:
+          oneOf:
+            - type: object
+            - type: string
+            - type: array
+        ok:
+          type: integer
+        entity:
+          type: string
     Invoice:
       properties:
         id:

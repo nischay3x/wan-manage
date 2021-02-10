@@ -2018,6 +2018,57 @@ class DevicesService {
   }
 
   /**
+   * Send Linux Command to Device
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by
+   * sendRequest Send Command Request
+   * returns Command Output Result
+   **/
+  static async devicesIdSendPOST ({ id, org, deviceSendRequest }, { user }, response) {
+    try {
+      if (!deviceSendRequest.api || !deviceSendRequest.entity) {
+        throw new Error('Request must include entity and api fields');
+      }
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+      if (!connections.isConnected(deviceObject.machineId)) {
+        throw new Error('Device not connected');
+      }
+
+      const request = {
+        entity: deviceSendRequest.entity,
+        message: deviceSendRequest.api
+      };
+      if (deviceSendRequest.params) {
+        request.params = deviceSendRequest.params;
+      }
+
+      const result = await connections.deviceSendMessage(
+        null,
+        deviceObject.machineId,
+        request
+      );
+
+      return Service.successResponse(result, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Returns an URL of jobs list request
    * @param {Array} jobsIds - array of jobs ids
    * @param {string} orgId - ID of the organzation
