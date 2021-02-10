@@ -1058,11 +1058,6 @@ const sync = async (deviceId, org) => {
       pathlabel: 1
     }
   )
-<<<<<<< HEAD
-    .populate('deviceA', 'interfaces')
-=======
-    .populate('deviceA', 'interfaces versions')
->>>>>>> dev
     .populate('deviceB', 'interfaces versions')
     .lean();
 
