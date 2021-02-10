@@ -93,7 +93,7 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
         {
           method: 'ikev2',
           data: {
-            device: dev._id,
+            deviceId: dev._id,
             machineId: dev.machineId,
             org,
             action: 'get-device-certificate'
@@ -189,33 +189,35 @@ const apply = async (devicesIn, user, data) => {
 const complete = async (jobId, res) => {
   if (res.action === 'update-public-certificate') {
     logger.info('Device update IKEv2 job complete', { params: { result: res, jobId: jobId } });
-    // send job to initiator that remote cert was applied on responder
-    const tasks = res.reinitiateTunnels.tunnels.map(tunnel => {
-      return {
-        entity: 'agent',
-        message: 'modify-tunnel',
-        params: {
-          'tunnel-id': tunnel.num,
-          ikev2: { 'remote-cert-applied': true }
-        }
-      };
-    });
-    deviceQueues.addJob(res.machineId, 'system', res.org,
-      // Data
-      { title: `IKEv2 certificate applied on device ${res.hostname}`, tasks },
-      // Response data
-      {
-        method: 'ikev2',
-        data: {
-          deviceId: res.deviceId,
-          org: res.org,
-          action: 'remote-certificate-applied'
-        }
-      },
-      // Metadata
-      { priority: 'normal', attempts: 1, removeOnComplete: false },
-      // Complete callback
-      null);
+    // send job to initiator to confirm that remote cert was applied on responder
+    if (Array.isArray(res.reinitiateTunnels) && res.reinitiateTunnels.length) {
+      const tasks = res.reinitiateTunnels.map(tunnel => {
+        return {
+          entity: 'agent',
+          message: 'modify-tunnel',
+          params: {
+            'tunnel-id': tunnel.num,
+            ikev2: { 'remote-cert-applied': true }
+          }
+        };
+      });
+      deviceQueues.addJob(res.machineId, 'system', res.org,
+        // Data
+        { title: `IKEv2 certificate applied on device ${res.hostname}`, tasks },
+        // Response data
+        {
+          method: 'ikev2',
+          data: {
+            deviceId: res.deviceId,
+            org: res.org,
+            action: 'remote-certificate-applied'
+          }
+        },
+        // Metadata
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null);
+    }
   } else if (res.action === 'get-device-certificate') {
     logger.info('Device create IKEv2 job complete', { params: { result: res, jobId: jobId } });
 
@@ -277,7 +279,7 @@ const complete = async (jobId, res) => {
             message: 'modify-tunnel',
             params: {
               'tunnel-id': tunnel.num,
-              ikev2: { certificate, 'remote-cert-applied': tunnel.role === 'responder' }
+              ikev2: { certificate, 'remote-cert-applied': tunnel.role === 'initiator' }
             }
           };
         });
@@ -289,7 +291,7 @@ const complete = async (jobId, res) => {
             method: 'ikev2',
             data: {
               deviceId: _id,
-              machineId,
+              machineId: res.machineId,
               hostname,
               reinitiateTunnels: tunnels.filter(t => t.role === 'responder').map(t => t.num),
               org: res.org,

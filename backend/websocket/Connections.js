@@ -20,6 +20,7 @@ const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
 const createError = require('http-errors');
+const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
 const Accounts = require('../models/accounts');
 const tunnelsModel = require('../models/tunnels');
@@ -640,11 +641,13 @@ class Connections {
         { $set: { versions: versions } },
         { new: true, runValidators: true }
       ).populate('interfaces.pathlabels', '_id type');
-      const { certificate, expireTime, jobQueued } = origDevice.IKEv2;
+      const { expireTime, jobQueued } = origDevice.IKEv2;
 
+      const { encryptionMethod } = await orgModel.findOne({ _id: origDevice.org });
       const { ikev2 } = deviceInfo.message;
       let needNewIKEv2Certificate = false;
-      if (ikev2 && certificate && expireTime) {
+      if (encryptionMethod === 'ikev2' && ikev2 && ikev2.expireTime &&
+        getMajorVersion(deviceInfo.message.device) >= 4) {
         const dbExpireTime = expireTime.getTime();
         if (ikev2.error) {
           logger.warn('IKEv2 certificate error on device', {
@@ -663,7 +666,7 @@ class Connections {
         }
       }
 
-      if ((!certificate || needNewIKEv2Certificate) && !jobQueued) {
+      if (needNewIKEv2Certificate && !jobQueued) {
         queueCreateIKEv2Jobs(
           [origDevice],
           'system',
