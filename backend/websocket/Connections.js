@@ -646,15 +646,15 @@ class Connections {
       const { encryptionMethod } = await orgModel.findOne({ _id: origDevice.org });
       const { ikev2 } = deviceInfo.message;
       let needNewIKEv2Certificate = false;
-      if (encryptionMethod === 'ikev2' && ikev2 && ikev2.expireTime &&
+      if (encryptionMethod === 'ikev2' && ikev2 &&
         getMajorVersion(deviceInfo.message.device) >= 4) {
-        const dbExpireTime = expireTime.getTime();
         if (ikev2.error) {
           logger.warn('IKEv2 certificate error on device', {
             params: { deviceId, err: ikev2.error }
           });
           needNewIKEv2Certificate = true;
         } else {
+          const dbExpireTime = expireTime ? expireTime.getTime() : 0;
           const devExpireTime = (new Date(ikev2.certificateExpiration)).getTime();
           // check if expiration is different on agent and management
           // or certificate is about to expire
