@@ -7660,8 +7660,8 @@ components:
     DeviceSendRequest:
       example:
         entity: "agent"
-        api: "exec"
-        params: ["date"]
+        api: "exec_timeout"
+        params: {"cmd":"date","timeout":60}
       type: object
       properties:
         entity:
@@ -7676,7 +7676,7 @@ components:
     DeviceSendResponse:
       example:
         router-cfg-hash: "e5dbf5ee9541264307041dfae1f6abbe2b62179e"
-        message: "Mon Feb  8 10:22:11 UTC 2020\n"
+        message: {"output":"Mon Feb  8 10:22:11 UTC 2020\n", "returncode":0, "error":""}
         ok: 1
         entity: "osReply"
       type: object
