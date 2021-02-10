@@ -645,13 +645,13 @@ const prepareTunnelAddJob = async (
       lifetime: configs.get('ikev2Lifetime', 'number'),
       ike: {
         'crypto-alg': 'aes-cbc',
-        'integ-alg': 'sha1-96',
+        'integ-alg': 'aes-xcbc-96',
         'dh-group': 'modp-2048',
         'key-size': 256
       },
       esp: {
         'crypto-alg': 'aes-cbc',
-        'integ-alg': 'sha1-96',
+        'integ-alg': 'aes-xcbc-96',
         'dh-group': 'ecp-256',
         'key-size': 256
       },
