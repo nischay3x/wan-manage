@@ -495,7 +495,12 @@ class DevicesService {
         // update pin state
         await devices.updateOne(
           { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-          { $set: { 'interfaces.$.deviceParams.initial_pin1_state': interfaceInfo.pin_state } }
+          {
+            $set: {
+              'interfaces.$.deviceParams.initial_pin1_state': interfaceInfo.pin_state,
+              'interfaces.$.deviceParams.default_settings': interfaceInfo.default_settings
+            }
+          }
         );
       }
 
