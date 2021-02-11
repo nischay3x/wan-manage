@@ -683,44 +683,44 @@ const prepareTunnelAddJob = async (
           params: { tunnelId: tunnel._id, err: err.message }
         });
       }
-      const tunnelKeys = {
-        key1: tunnel.tunnelKeys.key1,
-        key2: tunnel.tunnelKeys.key2,
-        key3: tunnel.tunnelKeys.key3,
-        key4: tunnel.tunnelKeys.key4
-      };
-
-      const paramsIpsecDeviceA = {};
-      const paramsIpsecDeviceB = {};
-      const paramsSaAB = {
-        spi: tunnelParams.sa1,
-        'crypto-key': tunnelKeys.key1,
-        'integr-key': tunnelKeys.key2,
-        'crypto-alg': 'aes-cbc-128',
-        'integr-alg': 'sha-256-128'
-      };
-      const paramsSaBA = {
-        spi: tunnelParams.sa2,
-        'crypto-key': tunnelKeys.key3,
-        'integr-key': tunnelKeys.key4,
-        'crypto-alg': 'aes-cbc-128',
-        'integr-alg': 'sha-256-128'
-      };
-      paramsIpsecDeviceA['local-sa'] = paramsSaAB;
-      paramsIpsecDeviceA['remote-sa'] = paramsSaBA;
-      paramsDeviceA.ipsec = paramsIpsecDeviceA;
-
-      if (majorAgentBVersion < 4) { // version 1-3.X.X
-        // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
-        // spi isn't configured properly for SA
-        paramsIpsecDeviceB['local-sa'] = { ...paramsSaAB, spi: tunnelParams.sa2 };
-        paramsIpsecDeviceB['remote-sa'] = { ...paramsSaBA, spi: tunnelParams.sa1 };
-      } else if (majorAgentBVersion >= 4) { // version 4.X.X+
-        paramsIpsecDeviceB['local-sa'] = { ...paramsSaBA };
-        paramsIpsecDeviceB['remote-sa'] = { ...paramsSaAB };
-      }
-      paramsDeviceB.ipsec = paramsIpsecDeviceB;
     }
+    const tunnelKeys = {
+      key1: tunnel.tunnelKeys.key1,
+      key2: tunnel.tunnelKeys.key2,
+      key3: tunnel.tunnelKeys.key3,
+      key4: tunnel.tunnelKeys.key4
+    };
+
+    const paramsIpsecDeviceA = {};
+    const paramsIpsecDeviceB = {};
+    const paramsSaAB = {
+      spi: tunnelParams.sa1,
+      'crypto-key': tunnelKeys.key1,
+      'integr-key': tunnelKeys.key2,
+      'crypto-alg': 'aes-cbc-128',
+      'integr-alg': 'sha-256-128'
+    };
+    const paramsSaBA = {
+      spi: tunnelParams.sa2,
+      'crypto-key': tunnelKeys.key3,
+      'integr-key': tunnelKeys.key4,
+      'crypto-alg': 'aes-cbc-128',
+      'integr-alg': 'sha-256-128'
+    };
+    paramsIpsecDeviceA['local-sa'] = paramsSaAB;
+    paramsIpsecDeviceA['remote-sa'] = paramsSaBA;
+    paramsDeviceA.ipsec = paramsIpsecDeviceA;
+
+    if (majorAgentBVersion < 4) { // version 1-3.X.X
+      // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
+      // spi isn't configured properly for SA
+      paramsIpsecDeviceB['local-sa'] = { ...paramsSaAB, spi: tunnelParams.sa2 };
+      paramsIpsecDeviceB['remote-sa'] = { ...paramsSaBA, spi: tunnelParams.sa1 };
+    } else if (majorAgentBVersion >= 4) { // version 4.X.X+
+      paramsIpsecDeviceB['local-sa'] = { ...paramsSaBA };
+      paramsIpsecDeviceB['remote-sa'] = { ...paramsSaAB };
+    }
+    paramsDeviceB.ipsec = paramsIpsecDeviceB;
   }
 
   // Saving configuration for device A
