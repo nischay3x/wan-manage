@@ -2878,6 +2878,7 @@ paths:
           - vpp
           - ospf
           - hostapd
+          - agentui
           type: string
         style: form
       responses:
