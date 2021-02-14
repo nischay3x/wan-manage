@@ -2877,6 +2877,7 @@ paths:
           - dhcp
           - vpp
           - ospf
+          - hostapd
           type: string
         style: form
       responses:
