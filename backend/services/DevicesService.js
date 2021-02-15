@@ -832,7 +832,7 @@ class DevicesService {
             // hence we need the metric fo it
             if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
               if (updIntf.metric && updIntf.metric !== origIntf.metric) {
-                responseWarnings.push(
+                throw new Error(
                   `Not allowed to change metric of unassigned interfaces (${origIntf.name})`
                 );
               }
