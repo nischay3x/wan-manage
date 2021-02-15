@@ -161,14 +161,20 @@ const validateWifiCountryCode = (configurationReq) => {
     };
 
     const channel = parseInt(configurationReq[band].channel);
+
+    if (channel < 0) {
+      err = 'Channel must be greater than or equal to 0';
+      break;
+    }
+
     if (band === '2.4GHz') {
       if ((region === 'US' || region === 'TW') && channel > 11) {
-        err = 'Channel must be between 0 to 11';
+        err = 'Channel must be between 1 to 11';
         break;
       }
 
       if (channel > 13) {
-        err = 'Channel must be between 0 to 13';
+        err = 'Channel must be between 1 to 13';
         break;
       }
     }
@@ -181,7 +187,6 @@ const validateWifiCountryCode = (configurationReq) => {
       }
     }
   };
-  // });
 
   if (err) {
     return { err: err, valid: false };
