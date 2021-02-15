@@ -149,7 +149,7 @@ class SwVersionUpdateManager {
           });
         } catch (errAccount) {
           logger.error('Version update email failed to send', {
-            params: { err: errAccount.message },
+            params: { err: errAccount.message, accountId: account._id },
             periodic: { task: this.taskInfo }
           });
         }
