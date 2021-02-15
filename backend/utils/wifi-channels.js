@@ -11,10 +11,6 @@ module.exports = {
     code: 'NO',
     channels: [36, 40, 44, 48, 149, 153, 157, 161, 165]
   },
-  France: {
-    code: 'FR',
-    channels: [36, 40, 44, 48]
-  },
   'Europe/Israel': {
     code: 'DE',
     channels: [36, 40, 44, 48]

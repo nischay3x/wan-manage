@@ -169,12 +169,12 @@ const validateWifiCountryCode = (configurationReq) => {
 
     if (band === '2.4GHz') {
       if ((region === 'US' || region === 'TW') && channel > 11) {
-        err = 'Channel must be between 1 to 11';
+        err = 'Channel must be between 0 to 11';
         break;
       }
 
       if (channel > 13) {
-        err = 'Channel must be between 1 to 13';
+        err = 'Channel must be between 0 to 13';
         break;
       }
     }
