@@ -197,13 +197,8 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     }
   }
 
-  // Checks if all WAN interfaces metrics are different
-  const uniqueMetricsOfUnassigned = interfaces
-    .filter(ifc => !ifc.isAssigned && ifc.type === 'WAN')
-    .map(ifc => Number(ifc.metric))
-    .filter((value, index, self) => self.indexOf(value) === index);
-
-  const metricsArray = wanIfcs.map(i => Number(i.metric)).concat(uniqueMetricsOfUnassigned);
+  // Checks if all assigned WAN interfaces metrics are different
+  const metricsArray = wanIfcs.map(i => Number(i.metric));
   const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
   if (hasDuplicates) {
     return {
