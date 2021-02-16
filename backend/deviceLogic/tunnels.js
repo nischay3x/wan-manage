@@ -899,10 +899,22 @@ const oneTunnelDel = async (tunnelID, user, org) => {
 
   logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
 
+  if (!tunnelResp) {
+    throw new Error('Tunnel not found');
+  };
+
   // Define devices
-  const deviceA = tunnelResp.deviceA;
-  const deviceB = tunnelResp.deviceB;
-  const pathLabel = tunnelResp.pathlabel;
+  const { num, deviceA, deviceB, pathLabel } = tunnelResp;
+
+  // Check is tunnel used by any static route
+  const { ip1, ip2 } = generateTunnelParams(num);
+  const tunnelUsedByStaticRoute = (Array.isArray(deviceA.staticroutes) &&
+    deviceA.staticroutes.some(s => s.gateway === ip1)) ||
+    (Array.isArray(deviceB.staticroutes) &&
+    deviceB.staticroutes.some(s => s.gateway === ip2));
+  if (tunnelUsedByStaticRoute) {
+    throw new Error('Tunnel used by static route');
+  };
 
   // Populate interface details
   const deviceAIntf = tunnelResp.deviceA.interfaces
@@ -910,9 +922,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   const deviceBIntf = tunnelResp.deviceB.interfaces
     .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
 
-  const tunnelnum = tunnelResp.num;
-
-  const tunnelJobs = await delTunnel(user, org, tunnelnum, deviceA, deviceB,
+  const tunnelJobs = await delTunnel(user, org, num, deviceA, deviceB,
     deviceAIntf, deviceBIntf, pathLabel);
 
   logger.info('Deleting tunnels from database');
