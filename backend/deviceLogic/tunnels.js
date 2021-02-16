@@ -909,9 +909,9 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   // Check is tunnel used by any static route
   const { ip1, ip2 } = generateTunnelParams(num);
   const tunnelUsedByStaticRoute = (Array.isArray(deviceA.staticroutes) &&
-    deviceA.staticroutes.some(s => s.gateway === ip1)) ||
+    deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
     (Array.isArray(deviceB.staticroutes) &&
-    deviceB.staticroutes.some(s => s.gateway === ip2));
+    deviceB.staticroutes.some(s => [ip1, ip2].includes(s.gateway)));
   if (tunnelUsedByStaticRoute) {
     throw new Error('Tunnel used by static route');
   };
