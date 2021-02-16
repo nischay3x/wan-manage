@@ -257,7 +257,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
 
     if (band2Enable && band5Enable) {
       return {
-        valid: false, err: 'Dual band as same time is not supported. Please enable one of them'
+        valid: false, err: 'Dual band at the same time is not supported. Please enable one of them'
       };
     } ;
 
