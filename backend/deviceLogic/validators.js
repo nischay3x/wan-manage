@@ -18,7 +18,7 @@
 const net = require('net');
 const cidr = require('cidr-tools');
 const { devices } = require('../models/devices');
-const { generateTunnelParams } = require('./tunnels');
+const { generateTunnelParams } = require('../utils/tunnelUtils');
 const maxMetric = 2 * 10 ** 9;
 /**
  * Checks whether a value is empty
