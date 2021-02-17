@@ -18,6 +18,7 @@
 const net = require('net');
 const cidr = require('cidr-tools');
 const { devices } = require('../models/devices');
+const { generateTunnelParams } = require('./tunnels');
 const maxMetric = 2 * 10 ** 9;
 /**
  * Checks whether a value is empty
@@ -365,6 +366,7 @@ const isIPv4Address = (ip, mask) => {
  */
 const validateStaticRoute = (device, tunnels, route) => {
   const { ifname, destination, gateway } = route;
+  const gatewaySubnet = `${gateway}/32`;
   if (ifname) {
     const ifc = device.interfaces.find(i => i.devId === ifname);
     if (ifc === undefined) {
@@ -379,10 +381,26 @@ const validateStaticRoute = (device, tunnels, route) => {
         err: `Static routes not allowed on unassigned interfaces '${ifname}'`
       };
     }
-    if (!cidr.overlap(destination, `${gateway}/32`)) {
+    if (!cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
       return {
         valid: false,
-        err: `Destination ${destination} and gateway ${gateway} are not on the same subnet`
+        err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+      };
+    }
+  } else {
+    let valid = device.interfaces.some(ifc =>
+      cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)
+    );
+    if (!valid) {
+      valid = tunnels.some(tunnel => {
+        const { ip1 } = generateTunnelParams(tunnel.num);
+        return cidr.overlap(`${ip1}/31`, gatewaySubnet);
+      });
+    }
+    if (!valid) {
+      return {
+        valid: false,
+        err: `Static route gateway ${gateway} not overlapped with any interface or tunnel`
       };
     }
   }

@@ -1281,5 +1281,6 @@ module.exports = {
   prepareTunnelRemoveJob: prepareTunnelRemoveJob,
   prepareTunnelAddJob: prepareTunnelAddJob,
   queueTunnel: queueTunnel,
-  oneTunnelDel: oneTunnelDel
+  oneTunnelDel: oneTunnelDel,
+  generateTunnelParams
 };
