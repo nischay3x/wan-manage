@@ -365,7 +365,7 @@ const isIPv4Address = (ip, mask) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateStaticRoute = (device, tunnels, route) => {
-  const { ifname, destination, gateway } = route;
+  const { ifname, gateway } = route;
   const gatewaySubnet = `${gateway}/32`;
   if (ifname) {
     const ifc = device.interfaces.find(i => i.devId === ifname);
