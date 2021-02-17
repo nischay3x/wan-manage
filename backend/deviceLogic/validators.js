@@ -356,10 +356,44 @@ const isIPv4Address = (ip, mask) => {
   return net.isIPv4(ip) && !isEmpty(mask);
 };
 
+/**
+ * Checks whether static route is valid
+ * @param {Object} device - the device to validate
+ * @param {List} tunnels - list of tunnels nums of the device
+ * @param {Object} route - the added/modified route
+ * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
+ */
+const validateStaticRoute = (device, tunnels, route) => {
+  const { ifname, destination, gateway } = route;
+  if (ifname) {
+    const ifc = device.interfaces.find(i => i.devId === ifname);
+    if (ifc === undefined) {
+      return {
+        valid: false,
+        err: `Static route interface not found '${ifname}'`
+      };
+    };
+    if (!ifc.isAssigned) {
+      return {
+        valid: false,
+        err: `Static routes not allowed on unassigned interfaces '${ifname}'`
+      };
+    }
+    if (!cidr.overlap(destination, `${gateway}/32`)) {
+      return {
+        valid: false,
+        err: `Destination ${destination} and gateway ${gateway} are not on the same subnet`
+      };
+    }
+  }
+  return { valid: true, err: '' };
+};
+
 module.exports = {
   isIPv4Address,
   validateDevice,
   validateDhcpConfig,
+  validateStaticRoute,
   validateModifyDeviceMsg: validateModifyDeviceMsg,
   getAllOrganizationLanSubnets: getAllOrganizationLanSubnets
 };

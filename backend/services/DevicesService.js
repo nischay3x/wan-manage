@@ -34,7 +34,11 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
 const { validateOperations } = require('../deviceLogic/interfaces');
-const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
+const {
+  validateDevice,
+  validateDhcpConfig,
+  validateStaticRoute
+} = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getMajorVersion } = require('../versioning');
@@ -870,6 +874,24 @@ class DevicesService {
         }
       }
 
+      // validate static routes
+      if (Array.isArray(deviceRequest.staticroutes)) {
+        const tunnels = await tunnelsModel.find({
+          isActive: true,
+          $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+        }, { num: 1 }).lean();
+        for (const route of deviceRequest.staticroutes) {
+          const { valid, err } = validateStaticRoute(deviceToValidate, tunnels, route);
+          if (!valid) {
+            logger.warn('Wrong static route parameters',
+              {
+                params: { route, err }
+              });
+            throw new Error(err);
+          }
+        }
+      }
+
       // Don't allow to modify/assign/unassign
       // interfaces that are assigned with DHCP
       if (Array.isArray(deviceRequest.interfaces)) {
@@ -1133,6 +1155,19 @@ class DevicesService {
         ifname: staticRouteRequest.ifname,
         metric: staticRouteRequest.metric
       });
+
+      const tunnels = await tunnelsModel.find({
+        isActive: true,
+        $or: [{ deviceA: device._id }, { deviceB: device._id }]
+      }, { num: 1 });
+      const { valid, err } = validateStaticRoute(device, tunnels, route);
+      if (!valid) {
+        logger.warn('Adding a new static route failed',
+          {
+            params: { staticRouteRequest, err }
+          });
+        throw new Error(err);
+      }
 
       await devices.findOneAndUpdate(
         { _id: device._id },
