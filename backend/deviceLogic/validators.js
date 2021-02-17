@@ -17,7 +17,6 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
-const { devices } = require('../models/devices');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const maxMetric = 2 * 10 ** 9;
 /**
@@ -312,47 +311,6 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   return { valid: true, err: '' };
 };
 
-/**
- * Get all LAN subnets in the same organization
- * @param  {string} orgId         the id of the organization
- * @return {[_id: objectId, name: string, subnet: string]} array of LAN subnets with router name
- */
-const getAllOrganizationLanSubnets = async orgId => {
-  const subnets = await devices.aggregate([
-    { $match: { org: orgId } },
-    {
-      $project: {
-        'interfaces.IPv4': 1,
-        'interfaces.IPv4Mask': 1,
-        'interfaces.type': 1,
-        'interfaces.isAssigned': 1,
-        name: 1,
-        _id: 1
-      }
-    },
-    { $unwind: '$interfaces' },
-    {
-      $match: {
-        'interfaces.type': 'LAN',
-        'interfaces.isAssigned': true,
-        'interfaces.IPv4': { $ne: '' },
-        'interfaces.IPv4Mask': { $ne: '' }
-      }
-    },
-    {
-      $project: {
-        _id: 1,
-        name: 1,
-        subnet: {
-          $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
-        }
-      }
-    }
-  ]);
-
-  return subnets;
-};
-
 const isIPv4Address = (ip, mask) => {
   return net.isIPv4(ip) && !isEmpty(mask);
 };
@@ -412,6 +370,5 @@ module.exports = {
   validateDevice,
   validateDhcpConfig,
   validateStaticRoute,
-  validateModifyDeviceMsg: validateModifyDeviceMsg,
-  getAllOrganizationLanSubnets: getAllOrganizationLanSubnets
+  validateModifyDeviceMsg: validateModifyDeviceMsg
 };
