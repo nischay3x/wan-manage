@@ -541,6 +541,19 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
           continue;
         }
 
+        // only rebuild tunnels when IP, Public IP or port is changed
+        if ((isObject(modifiedIfcA) &&
+          modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
+          modifiedIfcA.PublicIP === ifcA.PublicIP &&
+          modifiedIfcA.PublicPort === ifcA.PublicPort
+        ) || (isObject(modifiedIfcB) &&
+          modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
+          modifiedIfcB.PublicIP === ifcB.PublicIP &&
+          modifiedIfcB.PublicPort === ifcB.PublicPort
+        )) {
+          continue;
+        }
+
         // no need to recreate the tunnel with local direct connection
         const isLocal = (ifcA, ifcB) => {
           return !ifcA.PublicIP || !ifcB.PublicIP ||
