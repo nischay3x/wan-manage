@@ -48,6 +48,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const cidr = require('cidr-tools');
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -1829,7 +1830,19 @@ class DevicesService {
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
-
+    // check that DHCP Range Start/End IP are on the same subnet with interface IP
+    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
+      throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
+    }
+    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeEnd)) {
+      throw new Error('DHCP Range End IP address is not on the same subnet with interface IP');
+    }
+    // check that DHCP range End address IP is greater than Start IP address
+    const ip2int = IP => IP.split('.')
+      .reduce((res, val, idx) => res + (+val) * 256 ** (3 - idx), 0);
+    if (ip2int(dhcpRequest.rangeStart) > ip2int(dhcpRequest.rangeEnd)) {
+      throw new Error('DHCP Range End IP address must be greater than Start IP address');
+    }
     // Check that no repeated mac, host or IP
     const macLen = dhcpRequest.macAssign.length;
     const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
