@@ -191,12 +191,12 @@ const complete = async (jobId, res) => {
     logger.info('Device update IKEv2 job complete', { params: { result: res, jobId: jobId } });
     // send job to initiator to confirm that remote cert was applied on responder
     if (Array.isArray(res.reinitiateTunnels) && res.reinitiateTunnels.length) {
-      const tasks = res.reinitiateTunnels.map(tunnel => {
+      const tasks = res.reinitiateTunnels.map(tunnelnum => {
         return {
           entity: 'agent',
           message: 'modify-tunnel',
           params: {
-            'tunnel-id': tunnel.num,
+            'tunnel-id': tunnelnum,
             ikev2: { 'remote-cert-applied': true }
           }
         };
