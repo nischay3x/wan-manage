@@ -141,7 +141,8 @@ class TokensService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const body = jwt.sign({
         org: orgList[0].toString(),
-        account: user.defaultAccount._id
+        account: user.defaultAccount._id,
+        server: configs.get('restServerUrl')
       }, configs.get('deviceTokenSecretKey'));
 
       const token = await Tokens.create({

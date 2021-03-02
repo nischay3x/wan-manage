@@ -483,7 +483,7 @@ describe('validateWiFiInterfaceConfiguration', () => {
         operationMode: 'n',
         securityMode: 'wpa2-psk',
         password: 'wifi_band_2_pass',
-        region: 'other'
+        region: 'US'
       },
       '5GHz': {
         ssid: 'wifi_band_5',
@@ -562,14 +562,14 @@ describe('validateWiFiInterfaceConfiguration', () => {
 
   it('Should be a valid wifi configuration', () => {
     configuration['2.4GHz'].channel = '12';
-    configuration['2.4GHz'].region = 'CA';
+    configuration['2.4GHz'].region = 'DE';
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(successObject);
   });
 
   it('Should be an invalid wifi configuration - channel not valid', () => {
     configuration['2.4GHz'].channel = '14';
-    configuration['2.4GHz'].region = 'CA';
+    configuration['2.4GHz'].region = 'DE';
     failureObject.err = 'Channel must be between 0 to 13';
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(failureObject);
@@ -583,15 +583,23 @@ describe('validateWiFiInterfaceConfiguration', () => {
   });
 
   it('Should be a valid wifi configuration', () => {
-    configuration['5GHz'].channel = '110';
+    configuration['5GHz'].channel = '153';
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an invalid wifi configuration', () => {
+  it('Should be an invalid wifi region', () => {
     configuration['5GHz'].channel = '110';
     configuration['5GHz'].region = 'RU';
-    failureObject.err = 'Channel 110 is not valid number for country RU';
+    failureObject.err = 'Region RU is not valid';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid wifi configuration', () => {
+    configuration['5GHz'].channel = '110';
+    configuration['5GHz'].region = 'NO';
+    failureObject.err = 'Channel 110 is not valid number for country NO';
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(failureObject);
   });
