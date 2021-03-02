@@ -6137,6 +6137,478 @@ paths:
       x-swagger-router-controller: AppIdentifications
       x-openapi-router-controller: AppIdentificationsController
       x-openapi-router-service: AppIdentificationsService
+  /firewallpolicies:
+    get:
+      operationId: firewallPoliciesGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/FirewallPolicy'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Firewall policies
+      tags:
+      - Firewall Policies
+      x-swagger-router-controller: FirewallPolicies
+      x-openapi-router-controller: FirewallPoliciesController
+      x-openapi-router-service: FirewallPoliciesService
+    post:
+      operationId: firewallPoliciesPOST
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FirewallPolicyRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirewallPolicy'
+          description: Firewall policy created
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Add a new Firewall policy
+      tags:
+      - Firewall Policies
+      x-swagger-router-controller: FirewallPolicies
+      x-openapi-router-controller: FirewallPoliciesController
+      x-openapi-router-service: FirewallPoliciesService
+  /firewallpolicies/{id}:
+    get:
+      operationId: firewallPoliciesIdGET
+      parameters:
+      - description: Numeric ID of the Firewall policy to retrieve
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirewallPolicy'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get a Firewall policy by id
+      tags:
+      - Firewall Policies
+      x-swagger-router-controller: FirewallPolicies
+      x-openapi-router-controller: FirewallPoliciesController
+      x-openapi-router-service: FirewallPoliciesService
+    put:
+      operationId: firewallPoliciesIdPUT
+      parameters:
+      - description: Numeric ID of the Firewall policy to modify
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FirewallPolicyRequest'
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirewallPolicy'
+          description: A new Firewall created
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirewallPolicy'
+          description: Firewall was modified
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify a Firewall policy
+      tags:
+      - Firewall Policies
+      x-swagger-router-controller: FirewallPolicies
+      x-openapi-router-controller: FirewallPoliciesController
+      x-openapi-router-service: FirewallPoliciesService
+    delete:
+      operationId: firewallPoliciesIdDELETE
+      parameters:
+      - description: Numeric ID of the Firewall policy to delete
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Delete a Firewall policy
+      tags:
+      - Firewall Policies
+      x-swagger-router-controller: FirewallPolicies
+      x-openapi-router-controller: FirewallPoliciesController
+      x-openapi-router-service: FirewallPoliciesService
+  /firewallpolicies/list:
+    get:
+      operationId: FirewallPoliciesListGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/FirewallPolicyList'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Firewall policies names and IDs only
+      tags:
+      - Firewall Policies
+      x-swagger-router-controller: FirewallPolicies
+      x-openapi-router-controller: FirewallPoliciesController
+      x-openapi-router-service: FirewallPoliciesService
+  /firewallpolicies/meta:
+    get:
+      operationId: firewallPoliciesMetaGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/FirewallPolicyMetaData'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all Firewall metadata
+      tags:
+      - Firewall Policies
+      x-swagger-router-controller: FirewallPolicies
+      x-openapi-router-controller: FirewallPoliciesController
+      x-openapi-router-service: FirewallPoliciesService
 components:
   responses:
     NotFoundError:
@@ -8042,6 +8514,235 @@ components:
           - protocol
           type: object
     MLClassApp:
+      properties:
+        application:
+          properties:
+            appId:
+              type: string
+            category:
+              type: string
+            serviceClass:
+              type: string
+            importance:
+              enum:
+              - ''
+              - high
+              - medium
+              - low
+              type: string
+          required:
+          - appId
+          - category
+          - serviceClass
+          - importance
+          type: object
+    FirewallPolicy:
+      example:
+        _id: id
+        name: name
+        description: description
+        isDefault: false
+        rules: [rule 1, rule 2, ...]
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        isDefault:
+          type: boolean
+        rules:
+          items:
+            $ref: '#/components/schemas/FirewallRule'
+          type: array
+      required:
+      - _id
+      - name
+      - description
+      - isDefault
+      - rules
+      type: object
+    FirewallPolicyList:
+      example:
+        id: id
+        name: name
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+      required:
+      - _id
+      - name
+    FirewallPolicyMetaData:
+      example:
+        _id: id
+        name: name
+        description: description
+        installCount: installCount
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        installCount:
+          $ref: '#/components/schemas/PolicyInstallCount'
+          type: object
+      required:
+      - _id
+      - name
+      - description
+      - installCount
+      type: object
+    FirewallPolicyRequest:
+      example:
+        name: name
+        description: description
+        isDefault: false
+        rules: [rule 1, rule 2, ...]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        isDefault:
+          type: boolean
+        rules:
+          items:
+            $ref: '#/components/schemas/FirewallRuleRequest'
+          type: array
+      required:
+      - name
+      - description
+      - isDefault
+      - rules
+      type: object
+    FirewallRule:
+      example:
+        _id: id
+        name: name
+        priority: priority
+        enabled: true
+        direction: inbound
+        source: source
+        destination: destination
+        action: allow
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        enabled:
+          type: boolean
+        direction:
+          enum:
+          - inbound
+          - outbound
+          type: string
+        source:
+          schema:
+          $ref: '#/components/schemas/FirewallRuleClassification'
+        destination:
+          schema:
+          $ref: '#/components/schemas/FirewallRuleClassification'
+        action:
+          enum:
+          - allow
+          - deny
+          type: string
+      required:
+      - _id
+      - name
+      - priority
+      - enabled
+      - direction
+      - action
+      type: object
+    FirewallRuleRequest:
+      example:
+        name: name
+        priority: priority
+        enabled: true
+        direction: inbound
+        source: source
+        destination: destination
+        action: allow
+      properties:
+        name:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 1000
+        enabled:
+            type: boolean
+        direction:
+          enum:
+          - inbound
+          - outbound
+          type: string
+        source:
+          schema:
+          $ref: '#/components/schemas/FirewallRuleClassification'
+        destination:
+          schema:
+          $ref: '#/components/schemas/FirewallRuleClassification'
+        action:
+          enum:
+          - allow
+          - deny
+          type: string
+      required:
+      - name
+      - priority
+      - enabled
+      - direction
+      - action
+      type: object
+    FirewallRuleClassification:
+      example:
+        custom: custom
+        application: application
+      anyOf:
+      - $ref: '#/components/schemas/FirewallClassCustom'
+      - $ref: '#/components/schemas/FirewallClassApp'
+      type: object
+    FirewallClassCustom:
+      properties:
+        custom:
+          properties:
+            ip:
+              type: string
+            ports:
+              type: string
+              pattern: "^$|^()([0-9]|[1-5]?[0-9]{2,4}|6[0-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5])(-([0-9]|[1-5]?[0-9]{2,4}|6[0-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5]))?$"
+            protocol:
+              enum:
+              - ""
+              - tcp
+              - udp
+              type: string
+          required:
+          - ip
+          - ports
+          - protocol
+          type: object
+    FirewallClassApp:
       properties:
         application:
           properties:

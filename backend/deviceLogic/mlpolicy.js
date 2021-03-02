@@ -186,12 +186,7 @@ const apply = async (deviceList, user, data) => {
           },
           {
             rules: 1,
-            name: 1,
-            'rules.enabled': 1,
-            'rules.priority': 1,
-            'rules._id': 1,
-            'rules.classification': 1,
-            'rules.action': 1
+            name: 1
           }
         ).session(session);
 
@@ -463,12 +458,7 @@ const sync = async (deviceId, org) => {
       },
       {
         rules: 1,
-        name: 1,
-        'rules.enabled': 1,
-        'rules.priority': 1,
-        'rules._id': 1,
-        'rules.classification': 1,
-        'rules.action': 1
+        name: 1
       }
     );
 
