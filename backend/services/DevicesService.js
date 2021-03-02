@@ -495,7 +495,12 @@ class DevicesService {
         // update pin state
         await devices.updateOne(
           { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-          { $set: { 'interfaces.$.deviceParams.initial_pin1_state': interfaceInfo.pin_state } }
+          {
+            $set: {
+              'interfaces.$.deviceParams.initial_pin1_state': interfaceInfo.pin_state,
+              'interfaces.$.deviceParams.default_settings': interfaceInfo.default_settings
+            }
+          }
         );
       }
 
@@ -805,6 +810,17 @@ class DevicesService {
               }
             }
 
+            // Unassigned interfaces are not controlled from manage
+            // we only get these parameters from the device itself
+            if (!updIntf.isAssigned) {
+              if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
+                (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
+                (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
+                throw new Error(
+                  `Not allowed to modify parameters of unassigned interfaces (${origIntf.name})`
+                );
+              }
+            };
             // For unasigned and non static interfaces we use linux network parameters
             if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
               updIntf.IPv4 = origIntf.IPv4;
@@ -815,6 +831,11 @@ class DevicesService {
             // except lte interface because we enable lte connection on it,
             // hence we need the metric fo it
             if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
+              if (updIntf.metric && updIntf.metric !== origIntf.metric) {
+                throw new Error(
+                  `Not allowed to change metric of unassigned interfaces (${origIntf.name})`
+                );
+              }
               updIntf.metric = origIntf.metric;
             };
             if (updIntf.isAssigned !== origIntf.isAssigned ||
