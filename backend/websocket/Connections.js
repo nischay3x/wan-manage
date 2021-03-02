@@ -289,10 +289,10 @@ class Connections {
     const msgQ = this.msgQueue;
 
     // Initialize to alive connection, with 3 retries
-    socket.isAlive = 3;
+    socket.isAlive = 7;
     socket.on('pong', function heartbeat () {
       // Pong received, reset retries
-      socket.isAlive = 3;
+      socket.isAlive = 7;
     });
 
     socket.on('message', function incoming (message) {

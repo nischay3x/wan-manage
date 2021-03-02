@@ -197,13 +197,8 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     }
   }
 
-  // Checks if all WAN interfaces metrics are different
-  const uniqueMetricsOfUnassigned = interfaces
-    .filter(ifc => !ifc.isAssigned && ifc.type === 'WAN')
-    .map(ifc => Number(ifc.metric))
-    .filter((value, index, self) => self.indexOf(value) === index);
-
-  const metricsArray = wanIfcs.map(i => Number(i.metric)).concat(uniqueMetricsOfUnassigned);
+  // Checks if all assigned WAN interfaces metrics are different
+  const metricsArray = wanIfcs.map(i => Number(i.metric));
   const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
   if (hasDuplicates) {
     return {
@@ -257,7 +252,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
 
     if (band2Enable && band5Enable) {
       return {
-        valid: false, err: 'Dual band as same time is not supported. Please enable one of them'
+        valid: false, err: 'Dual band at the same time is not supported. Please enable one of them'
       };
     } ;
 
