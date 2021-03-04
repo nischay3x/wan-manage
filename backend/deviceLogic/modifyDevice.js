@@ -589,9 +589,25 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       }
     }
   }
-
+  // Send modify device job only if used in the device parameters modified
+  const needModifyJob = device.interfaces.some(origIfc => {
+    const modifiedIfc = modifiedIfcsMap[origIfc._id];
+    return modifiedIfc && (
+      modifiedIfc.isAssigned !== origIfc.isAssigned ||
+      modifiedIfc.dhcp !== origIfc.dhcp ||
+      modifiedIfc.metric !== origIfc.metric ||
+      modifiedIfc.useStun !== origIfc.useStun ||
+      modifiedIfc.monitorInternet !== origIfc.monitorInternet ||
+      (
+        modifiedIfc.dhch !== 'yes' && (
+          modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
+          modifiedIfc.gateway !== origIfc.gateway
+        )
+      )
+    );
+  });
   // Queue device modification job
-  const job = await queueJob(org, user.username, tasks, device);
+  const job = needModifyJob ? await queueJob(org, user.username, tasks, device) : null;
 
   // Queue tunnel reconstruction jobs
   try {
@@ -601,7 +617,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       params: { jobId: job.id, device, err: err.message }
     });
   }
-  return [job];
+  return job ? [job] : [];
 };
 
 /**
