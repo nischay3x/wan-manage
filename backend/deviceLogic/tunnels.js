@@ -913,7 +913,9 @@ const oneTunnelDel = async (tunnelID, user, org) => {
     (Array.isArray(deviceB.staticroutes) &&
     deviceB.staticroutes.some(s => [ip1, ip2].includes(s.gateway)));
   if (tunnelUsedByStaticRoute) {
-    throw new Error('Tunnel used by static route');
+    throw new Error(
+      'Some static routes defined via removed tunnel, please remove static routes first'
+    );
   };
 
   // Populate interface details
