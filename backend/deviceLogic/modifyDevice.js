@@ -599,7 +599,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       modifiedIfc.useStun !== origIfc.useStun ||
       modifiedIfc.monitorInternet !== origIfc.monitorInternet ||
       (
-        modifiedIfc.dhch !== 'yes' && (
+        modifiedIfc.dhcp !== 'yes' && (
           modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
           modifiedIfc.gateway !== origIfc.gateway
         )
