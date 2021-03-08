@@ -589,30 +589,37 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       }
     }
   }
-  // Send modify device job only if used in the device parameters modified
-  const needModifyJob = device.interfaces.some(origIfc => {
-    const modifiedIfc = modifiedIfcsMap[origIfc._id];
-    const diaPathLabelsModified = modifiedIfc && !isEqual(
-      modifiedIfc.pathlabels.filter(pl => pl.type === 'DIA'),
-      origIfc.pathlabels.filter(pl => pl.type === 'DIA')
-    );
-    return modifiedIfc && (
-      diaPathLabelsModified ||
-      modifiedIfc.isAssigned !== origIfc.isAssigned ||
-      modifiedIfc.dhcp !== origIfc.dhcp ||
-      modifiedIfc.metric !== origIfc.metric ||
-      modifiedIfc.useStun !== origIfc.useStun ||
-      modifiedIfc.monitorInternet !== origIfc.monitorInternet ||
-      (
-        modifiedIfc.dhcp !== 'yes' && (
-          modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
-          modifiedIfc.gateway !== origIfc.gateway
-        )
-      )
-    );
-  });
+  // Send modify device job only if required
+  const skipModifyJob = !has(messageParams, 'modify_router') &&
+    !has(messageParams, 'modify_routes') &&
+    !has(messageParams, 'modify_dhcp_config') &&
+    Object.values(modifiedIfcsMap).every(modifiedIfc => {
+      const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
+      const propsModified = Object.keys(modifiedIfc).filter(prop => {
+        switch (prop) {
+          case 'pathlabels':
+            return !isEqual(
+              modifiedIfc[prop].filter(pl => pl.type === 'DIA'),
+              origIfc[prop].filter(pl => pl.type === 'DIA')
+            );
+          case 'addr':
+            return modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
+          case 'addr6':
+            return modifiedIfc.addr6 !== `${origIfc.IPv6}/${origIfc.IPv6Mask}`;
+          default:
+            return !isEqual(modifiedIfc[prop], origIfc[prop]);
+        }
+      });
+      // skip modify-device job if only PublicIP or PublicPort are modified
+      // or if dhcp==='yes' and only IPv4, IPv6, gateway are modified
+      // these parameters are set by device
+      const propsToSkip = modifiedIfc.dhcp !== 'yes' ? ['PublicIP', 'PublicPort']
+        : ['PublicIP', 'PublicPort', 'addr', 'addr6', 'gateway'];
+      return differenceWith(propsModified, propsToSkip, isEqual).length === 0;
+    });
+
   // Queue device modification job
-  const job = needModifyJob ? await queueJob(org, user.username, tasks, device) : null;
+  const job = !skipModifyJob ? await queueJob(org, user.username, tasks, device) : null;
 
   // Queue tunnel reconstruction jobs
   try {
