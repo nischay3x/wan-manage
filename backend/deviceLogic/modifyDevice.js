@@ -592,7 +592,12 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   // Send modify device job only if used in the device parameters modified
   const needModifyJob = device.interfaces.some(origIfc => {
     const modifiedIfc = modifiedIfcsMap[origIfc._id];
+    const diaPathLabelsModified = modifiedIfc && !isEqual(
+      modifiedIfc.pathlabels.filter(pl => pl.type === 'DIA'),
+      origIfc.pathlabels.filter(pl => pl.type === 'DIA')
+    );
     return modifiedIfc && (
+      diaPathLabelsModified ||
       modifiedIfc.isAssigned !== origIfc.isAssigned ||
       modifiedIfc.dhcp !== origIfc.dhcp ||
       modifiedIfc.metric !== origIfc.metric ||
