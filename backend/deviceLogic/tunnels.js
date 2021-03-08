@@ -866,17 +866,22 @@ const applyTunnelDel = async (devices, user, data) => {
     });
 
     const promiseStatus = await Promise.allSettled(delPromises);
-    const fulfilled = promiseStatus.reduce((arr, elem) => {
+    const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
         const job = elem.value;
-        arr.push(job);
-      }
-      return arr;
-    }, []);
+        fulfilled.push(job);
+      } else {
+        if (!reasons.includes(elem.reason.message)) {
+          reasons.push(elem.reason.message);
+        }
+      };
+      return { fulfilled, reasons };
+    }, { fulfilled: [], reasons: [] });
     const status = fulfilled.length < tunnelIds.length
       ? 'partially completed' : 'completed';
     const message = fulfilled.length < tunnelIds.length
-      ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added` : '';
+      ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added.
+      ${reasons.join('. ')}` : '';
     return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found',
