@@ -84,9 +84,9 @@ const validatePciAddress = pci => {
 const validateUsbAddress = usb => {
   return (
     usb === '' ||
-    /^usb:usb[0-9]\/[0-9]+-[0-9]+\/[0-9]+-[0-9]+:[0-9]+\.[0-9]+$/i.test(
-      usb
-    )
+    /^usb:usb[0-9]\/[0-9]+-[0-9]+\/[0-9]+-[0-9]+:[0-9]+\.[0-9]+$/i.test(usb) ||
+    /* eslint-disable max-len */
+    /^usb:usb[0-9]\/[0-9]+-[0-9]+\/[0-9]+-[0-9]+.[0-9]+\/[0-9]+-[0-9]+.[0-9]:[0-9].[0-9]+$/i.test(usb)
   );
 };
 const validateIfcName = (name) => { return /^[a-zA-Z0-9_]{1,15}$/i.test(name || ''); };
