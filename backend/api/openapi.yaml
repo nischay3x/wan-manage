@@ -6471,7 +6471,7 @@ paths:
       x-openapi-router-service: FirewallPoliciesService
   /firewallpolicies/list:
     get:
-      operationId: FirewallPoliciesListGET
+      operationId: firewallPoliciesListGET
       parameters:
       - description: The number of items to skip before starting to collect the result
           set
@@ -7826,8 +7826,12 @@ components:
         multilink:
           type: object
           $ref: '#/components/schemas/DevicePolicy'
+        firewall:
+          type: object
+          $ref: '#/components/schemas/DevicePolicy'
       required:
         - multilink
+        - firewall
     DevicePolicy:
       type: object
       properties:
@@ -8633,10 +8637,9 @@ components:
         _id: id
         name: name
         priority: priority
-        enabled: true
+        status: enabled
         direction: inbound
-        source: source
-        destination: destination
+        classification: classification
         action: allow
       properties:
         _id:
@@ -8649,17 +8652,17 @@ components:
           type: integer
           minimum: 0
           maximum: 1000
-        enabled:
-          type: boolean
+        status:
+          enum:
+          - enabled
+          - disabled
+          type: string
         direction:
           enum:
           - inbound
           - outbound
           type: string
-        source:
-          schema:
-          $ref: '#/components/schemas/FirewallRuleClassification'
-        destination:
+        classification:
           schema:
           $ref: '#/components/schemas/FirewallRuleClassification'
         action:
@@ -8671,18 +8674,18 @@ components:
       - _id
       - name
       - priority
-      - enabled
+      - status
       - direction
+      - classification
       - action
       type: object
     FirewallRuleRequest:
       example:
         name: name
         priority: priority
-        enabled: true
+        status: enabled
         direction: inbound
-        source: source
-        destination: destination
+        classification: classification
         action: allow
       properties:
         name:
@@ -8691,17 +8694,17 @@ components:
           type: integer
           minimum: 0
           maximum: 1000
-        enabled:
-            type: boolean
+        status:
+          enum:
+          - enabled
+          - disabled
+          type: string
         direction:
           enum:
           - inbound
           - outbound
           type: string
-        source:
-          schema:
-          $ref: '#/components/schemas/FirewallRuleClassification'
-        destination:
+        classification:
           schema:
           $ref: '#/components/schemas/FirewallRuleClassification'
         action:
@@ -8712,18 +8715,26 @@ components:
       required:
       - name
       - priority
-      - enabled
+      - status
       - direction
+      - classification
       - action
       type: object
     FirewallRuleClassification:
       example:
-        custom: custom
-        application: application
-      anyOf:
-      - $ref: '#/components/schemas/FirewallClassCustom'
-      - $ref: '#/components/schemas/FirewallClassApp'
-      type: object
+        source: source
+        destination: destination
+      properties:
+        source:
+          anyOf:
+          - $ref: '#/components/schemas/FirewallClassCustom'
+          - $ref: '#/components/schemas/FirewallClassApp'
+          type: object
+        destination:
+          anyOf:
+          - $ref: '#/components/schemas/FirewallClassCustom'
+          - $ref: '#/components/schemas/FirewallClassApp'
+          type: object
     FirewallClassCustom:
       properties:
         custom:

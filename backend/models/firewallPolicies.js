@@ -33,6 +33,50 @@ Schema.ObjectId.get(v => v ? v.toString() : v);
 /**
  * Firewall Policy Schema
  */
+
+// Rule classification schema
+const firewallRuleClassificationSchema = new Schema({
+  custom: {
+    ip: {
+      type: String,
+      maxlength: [20, 'ip length must be at most 20'],
+      validate: {
+        validator: validateIPv4WithMask,
+        message: 'IPv4 should be a valid ip address'
+      }
+    },
+    ports: {
+      type: String,
+      validate: {
+        validator: validatePortRange,
+        message: 'ports should be a valid ports range'
+      }
+    },
+    protocol: {
+      type: String,
+      enum: ['', 'udp', 'tcp']
+    }
+  },
+  application: {
+    appId: {
+      type: String,
+      maxlength: [25, 'appId must be at most 25']
+    },
+    category: {
+      type: String,
+      maxlength: [20, 'category must be at most 20']
+    },
+    serviceClass: {
+      type: String,
+      maxlength: [20, 'service class must be at most 20']
+    },
+    importance: {
+      type: String,
+      enum: ['', 'high', 'medium', 'low']
+    }
+  }
+});
+
 // Rule schema
 const firewallRuleSchema = new Schema({
   name: {
@@ -55,92 +99,15 @@ const firewallRuleSchema = new Schema({
     max: [1000, 'priority should be a number between 0-1000'],
     required: true
   },
-  enabled: {
-    type: Boolean,
-    default: true,
+  status: {
+    type: String,
+    enum: ['enabled', 'disabled'],
+    default: 'enabled',
     required: true
   },
-  destination: {
-    custom: {
-      ip: {
-        type: String,
-        maxlength: [20, 'ip length must be at most 20'],
-        validate: {
-          validator: validateIPv4WithMask,
-          message: 'IPv4 should be a valid ip address'
-        }
-      },
-      ports: {
-        type: String,
-        validate: {
-          validator: validatePortRange,
-          message: 'ports should be a valid ports range'
-        }
-      },
-      protocol: {
-        type: String,
-        enum: ['', 'udp', 'tcp']
-      }
-    },
-    application: {
-      appId: {
-        type: String,
-        maxlength: [25, 'appId must be at most 25']
-      },
-      category: {
-        type: String,
-        maxlength: [20, 'category must be at most 20']
-      },
-      serviceClass: {
-        type: String,
-        maxlength: [20, 'service class must be at most 20']
-      },
-      importance: {
-        type: String,
-        enum: ['', 'high', 'medium', 'low']
-      }
-    }
-  },
-  source: {
-    custom: {
-      ip: {
-        type: String,
-        maxlength: [20, 'ip length must be at most 20'],
-        validate: {
-          validator: validateIPv4WithMask,
-          message: 'IPv4 should be a valid ip address'
-        }
-      },
-      ports: {
-        type: String,
-        validate: {
-          validator: validatePortRange,
-          message: 'ports should be a valid ports range'
-        }
-      },
-      protocol: {
-        type: String,
-        enum: ['', 'udp', 'tcp']
-      }
-    },
-    application: {
-      appId: {
-        type: String,
-        maxlength: [25, 'appId must be at most 25']
-      },
-      category: {
-        type: String,
-        maxlength: [20, 'category must be at most 20']
-      },
-      serviceClass: {
-        type: String,
-        maxlength: [20, 'service class must be at most 20']
-      },
-      importance: {
-        type: String,
-        enum: ['', 'high', 'medium', 'low']
-      }
-    }
+  classification: {
+    source: firewallRuleClassificationSchema,
+    destination: firewallRuleClassificationSchema
   },
   action: {
     type: String,

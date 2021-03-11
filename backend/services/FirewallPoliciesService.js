@@ -40,7 +40,7 @@ class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org) {
     const { _id, name, rules } = firewallPolicyRequest;
     for (const rule of rules) {
-      const { source, destination } = rule;
+      const { source, destination } = rule.classification;
       for (const { application, prefix } of [source, destination]) {
         // Empty prefix is not allowed
         if (prefix && isEqual(prefix, emptyPrefix)) {
@@ -319,18 +319,6 @@ class FirewallPoliciesService {
         rules
       }))(result);
 
-/*
-      firewallPolicy.rules = firewallPolicy.rules.map(rule => {
-        return ({
-          _id: rule._id,
-          name: rule.name,
-          enabled: rule.enabled,
-          priority: rule.priority,
-          classification: rule.classification,
-          action: rule.action
-        });
-      });
-*/
       const converted = JSON.parse(JSON.stringify(firewallPolicy));
       return Service.successResponse(converted, 201);
     } catch (e) {

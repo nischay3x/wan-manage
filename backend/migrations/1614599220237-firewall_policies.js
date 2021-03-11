@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { membership } = require('../models/membership');
+const { devices } = require('../models/devices');
 const { addPerms, removePerms } = require('./utils/updatePerms');
 const logger = require('../logging/logging')({
   module: module.filename,
@@ -23,6 +24,14 @@ const logger = require('../logging/logging')({
 });
 
 async function up () {
+  // Add the "policies.firewall" document to all devices
+  const res = await devices.updateMany(
+    { 'policies.firewall': { $exists: false } },
+    { $set: { 'policies.firewall': {} } },
+    { upsert: false }
+  );
+  console.log(res);
+  // Add firewall to user permission
   try {
     await addPerms(membership, 'firewallpolicies');
   } catch (err) {
@@ -38,6 +47,14 @@ async function up () {
 
 async function down () {
   try {
+    // Remove the "policies.firewall" from all devices
+    await devices.updateMany(
+      {},
+      { $unset: { 'policies.firewall': '' } },
+      { upsert: false }
+    );
+
+    // Remove firewall policies permissions
     await removePerms(membership, 'firewallpolicies');
   } catch (err) {
     logger.error('Database migration failed', {
