@@ -293,7 +293,7 @@ class FirewallPoliciesService {
    **/
   static async firewallPoliciesPOST ({ firewallPolicyRequest, org }, { user }) {
     try {
-      const { name, description, rules } = firewallPolicyRequest;
+      const { name, description, isDefault, rules } = firewallPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Verify request schema
@@ -308,6 +308,7 @@ class FirewallPoliciesService {
         org: orgList[0].toString(),
         name: name,
         description: description,
+        isDefault: isDefault,
         rules: rules
       });
 
