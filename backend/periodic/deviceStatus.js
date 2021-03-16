@@ -24,6 +24,7 @@ const notificationsMgr = require('../notifications/notifications')();
 const configs = require('../configs')();
 const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const { getMajorVersion } = require('../versioning');
+const orgModel = require('../models/organizations');
 
 /***
  * This class gets periodic status from all connected devices
@@ -158,7 +159,7 @@ class DeviceStatus {
   periodicPollOneDevice (deviceID) {
     connections.deviceSendMessage(null, deviceID,
       { entity: 'agent', message: 'get-device-stats' }, '', this.validateDevStatsMessage)
-      .then((msg) => {
+      .then(async (msg) => {
         if (msg != null) {
           if (msg.ok === 1) {
             if (msg.message.length === 0) return;
@@ -177,16 +178,21 @@ class DeviceStatus {
             );
             // check if need to generate a new IKEv2 certificate
             let needNewIKEv2Certificate = false;
-            if (lastUpdateEntry.ikev2) {
-              if (lastUpdateEntry.ikev2.error) {
+            const { encryptionMethod } = await orgModel.findOne({ _id: deviceInfo.org });
+
+            if (encryptionMethod === 'ikev2') {
+              const { ikev2 } = lastUpdateEntry;
+              if (!ikev2) {
+                needNewIKEv2Certificate = true;
+              } else if (ikev2.error) {
                 logger.warn('IKEv2 certificate error on device', {
-                  params: { deviceID: deviceID, err: lastUpdateEntry.ikev2.error },
+                  params: { deviceID: deviceID, err: ikev2.error },
                   periodic: { task: this.taskInfo }
                 });
                 needNewIKEv2Certificate = true;
               } else {
                 const certificateExpiration =
-                  (new Date(lastUpdateEntry.ikev2.certificateExpiration)).getTime();
+                  (new Date(ikev2.certificateExpiration)).getTime();
                 // check if expiration is different on agent and management
                 // or certificate is about to expire
                 if (deviceInfo.certificateExpiration !== certificateExpiration ||
@@ -197,8 +203,8 @@ class DeviceStatus {
             }
 
             // Check if config was modified on the device or need to check IKEv2 certificate
-            if ((lastUpdateEntry.reconfig && lastUpdateEntry.reconfig !== deviceInfo.reconfig) ||
-              needNewIKEv2Certificate) {
+            const { reconfig } = lastUpdateEntry;
+            if ((reconfig && reconfig !== deviceInfo.reconfig) || needNewIKEv2Certificate) {
               // Call get-device-info and reconfig
               connections.sendDeviceInfoMsg(deviceID, deviceInfo.deviceObj);
             }
