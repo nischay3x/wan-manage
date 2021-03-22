@@ -158,7 +158,9 @@ class DevicesService {
           'pathlabels',
           'deviceType',
           'configuration',
-          'deviceParams'
+          'deviceParams',
+          'staticDnsServers',
+          'staticDnsDomains'
         ]);
         retIf._id = retIf._id.toString();
         return retIf;

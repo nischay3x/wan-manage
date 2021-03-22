@@ -76,6 +76,12 @@ const interfacesSchema = new Schema({
     },
     default: 'no'
   },
+  staticDnsServers: {
+    type: [String]
+  },
+  staticDnsDomains: {
+    type: [String]
+  },
   // ipv4 address
   IPv4: {
     type: String,
