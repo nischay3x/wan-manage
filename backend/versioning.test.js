@@ -26,7 +26,7 @@ const {
 const { checkDeviceVersion } = require('./routes/connect');
 const configs = require('./configs')();
 const httpMocks = require('node-mocks-http');
-const createError = require('http-errors');
+// const createError = require('http-errors');
 
 describe('isAgentVersionCompatible', () => {
   // Different variations of compatible versions. Majors are equal.
