@@ -58,10 +58,35 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
 
     if (op === 'install') {
       tasks[0][0].params.id = policy._id;
-      tasks[0][0].params.rules = policy.rules.map(rule => {
-        const { _id, priority, action, classification } = rule;
-        return { id: _id, priority, action, classification };
-      });
+      tasks[0][0].params.outbound = {
+        rules: policy.rules.filter(rule => rule.direction === 'outbound').map(rule => {
+          const { _id, priority, action, classification } = rule;
+          const jobRule = {
+            id: _id,
+            priority,
+            classification,
+            action: {
+              permit: action === 'allow'
+            }
+          };
+          return jobRule;
+        })
+      };
+      tasks[0][0].params.inbound = policy.rules.filter(r => r.direction === 'inbound')
+        .reduce((result, rule) => {
+          const { _id, inbound, priority, action, classification } = rule;
+          const jobRule = {
+            id: _id,
+            priority,
+            classification,
+            action: {
+              permit: action === 'allow'
+            }
+          };
+          result[inbound] = result[inbound] || { rules: [] };
+          result[inbound].rules.push(jobRule);
+          return result;
+        }, {});
     }
     const data = {
       policy: {

@@ -57,11 +57,11 @@ const firewallRuleClassificationSchema = new Schema({
       enum: ['', 'udp', 'tcp']
     }
   },
-  application: {
-    appId: {
-      type: String,
-      maxlength: [25, 'appId must be at most 25']
-    },
+  trafficId: {
+    type: String,
+    maxlength: [25, 'trafficId must be at most 25']
+  },
+  trafficTags: {
     category: {
       type: String,
       maxlength: [20, 'category must be at most 20']
@@ -91,6 +91,12 @@ const firewallRuleSchema = new Schema({
     type: String,
     enum: ['inbound', 'outbound'],
     default: 'inbound',
+    required: true
+  },
+  inbound: {
+    type: String,
+    enum: ['edge_access', 'port_forward', 'nat_1to1'],
+    default: 'edge_access',
     required: true
   },
   priority: {

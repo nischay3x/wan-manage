@@ -17,46 +17,37 @@
 /* eslint-disable no-unused-vars */
 const Service = require('./Service');
 const createError = require('http-errors');
-const isEqual = require('lodash/isEqual');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const FirewallPolicies = require('../models/firewallPolicies');
 const { devices } = require('../models/devices');
 const { ObjectId } = require('mongoose').Types;
 
-const emptyPrefix = {
-  ip: '',
-  ports: '',
-  protocol: ''
-};
-
-const emptyApp = {
-  appId: '',
-  category: '',
-  serviceClass: '',
-  importance: ''
-};
-
 class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org) {
     const { _id, name, rules } = firewallPolicyRequest;
     for (const rule of rules) {
-      const { source, destination } = rule.classification;
-      for (const { application, prefix } of [source, destination]) {
-        // Empty prefix is not allowed
-        if (prefix && isEqual(prefix, emptyPrefix)) {
-          return {
-            valid: false,
-            message: 'Empty prefix is not allowed'
-          };
+      for (const { trafficTags, custom } of Object.values(rule.classification)) {
+        // Empty custom (ip, ports, protocol) not allowed
+        if (custom) {
+          const { ip, ports, protocol } = custom;
+          if (!(ip || ports || protocol)) {
+            return {
+              valid: false,
+              message: 'IP, ports or protocol must be provided'
+            };
+          }
         };
 
-        // Empty application is not allowed
-        if (application && isEqual(application, emptyApp)) {
-          return {
-            valid: false,
-            message: 'Empty application is not allowed'
-          };
-        };
+        // Empty Traffic Tags not allowed
+        if (trafficTags) {
+          const { category, serviceClass, importance } = trafficTags;
+          if (!(category || serviceClass || importance)) {
+            return {
+              valid: false,
+              message: 'Category, service class or importance must be provided'
+            };
+          }
+        }
       }
     };
 

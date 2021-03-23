@@ -8639,6 +8639,7 @@ components:
         priority: priority
         status: enabled
         direction: inbound
+        inbound: edge_access
         classification: classification
         action: allow
       properties:
@@ -8661,6 +8662,12 @@ components:
           enum:
           - inbound
           - outbound
+          type: string
+        inbound:
+          enum:
+          - edge_access
+          - port_forward
+          - nat_1to1
           type: string
         classification:
           schema:
@@ -8685,6 +8692,7 @@ components:
         priority: priority
         status: enabled
         direction: inbound
+        inbound: edge_access
         classification: classification
         action: allow
       properties:
@@ -8703,6 +8711,12 @@ components:
           enum:
           - inbound
           - outbound
+          type: string
+        inbound:
+          enum:
+          - edge_access
+          - port_forward
+          - nat_1to1
           type: string
         classification:
           schema:
@@ -8728,12 +8742,14 @@ components:
         source:
           anyOf:
           - $ref: '#/components/schemas/FirewallClassCustom'
-          - $ref: '#/components/schemas/FirewallClassApp'
+          - $ref: '#/components/schemas/FirewallClassTrafficId'
+          - $ref: '#/components/schemas/FirewallClassTrafficTags'
           type: object
         destination:
           anyOf:
           - $ref: '#/components/schemas/FirewallClassCustom'
-          - $ref: '#/components/schemas/FirewallClassApp'
+          - $ref: '#/components/schemas/FirewallClassTrafficId'
+          - $ref: '#/components/schemas/FirewallClassTrafficTags'
           type: object
     FirewallClassCustom:
       properties:
@@ -8755,12 +8771,14 @@ components:
           - ports
           - protocol
           type: object
-    FirewallClassApp:
+    FirewallClassTrafficId:
       properties:
-        application:
+        trafficId:
+          type: string
+    FirewallClassTrafficTags:
+      properties:
+        trafficTags:
           properties:
-            appId:
-              type: string
             category:
               type: string
             serviceClass:
@@ -8773,7 +8791,6 @@ components:
               - low
               type: string
           required:
-          - appId
           - category
           - serviceClass
           - importance
