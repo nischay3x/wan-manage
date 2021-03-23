@@ -343,6 +343,7 @@ class FirewallPoliciesService {
           $project: {
             _id: 1,
             name: 1,
+            isDefault: 1,
             description: 1
           }
         },
@@ -363,6 +364,7 @@ class FirewallPoliciesService {
             _id: { $toString: '$_id' },
             name: 1,
             description: 1,
+            isDefault: 1,
             statuses: 1
           }
         }
