@@ -8741,19 +8741,29 @@ components:
       properties:
         source:
           anyOf:
-          - $ref: '#/components/schemas/FirewallClassCustom'
+          - $ref: '#/components/schemas/FirewallClassIpPort'
           - $ref: '#/components/schemas/FirewallClassTrafficId'
           - $ref: '#/components/schemas/FirewallClassTrafficTags'
           type: object
         destination:
           anyOf:
-          - $ref: '#/components/schemas/FirewallClassCustom'
+          - $ref: '#/components/schemas/FirewallClassIpProtoPort'
           - $ref: '#/components/schemas/FirewallClassTrafficId'
           - $ref: '#/components/schemas/FirewallClassTrafficTags'
           type: object
-    FirewallClassCustom:
+    FirewallClassIpPort:
       properties:
-        custom:
+        ipPort:
+          properties:
+            ip:
+              type: string
+            ports:
+              type: string
+              pattern: "^$|^()([0-9]|[1-5]?[0-9]{2,4}|6[0-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5])(-([0-9]|[1-5]?[0-9]{2,4}|6[0-4][0-9]{3}|65[1-4][0-9]{2}|655[1-2][0-9]|6553[1-5]))?$"
+          type: object
+    FirewallClassIpProtoPort:
+      properties:
+        ipProtoPort:
           properties:
             ip:
               type: string
@@ -8765,11 +8775,10 @@ components:
               - ""
               - tcp
               - udp
-              type: string
-          required:
-          - ip
-          - ports
-          - protocol
+            protocols:
+              items:
+                $ref: '#/components/schemas/Protocol'
+              type: array
           type: object
     FirewallClassTrafficId:
       properties:
@@ -8795,6 +8804,12 @@ components:
           - serviceClass
           - importance
           type: object
+    Protocol:
+      enum:
+      - tcp
+      - udp
+      - icmp
+      type: string
     Error:
       properties:
         code:

@@ -36,7 +36,24 @@ Schema.ObjectId.get(v => v ? v.toString() : v);
 
 // Rule classification schema
 const firewallRuleClassificationSchema = new Schema({
-  custom: {
+  ipPort: {
+    ip: {
+      type: String,
+      maxlength: [20, 'ip length must be at most 20'],
+      validate: {
+        validator: validateIPv4WithMask,
+        message: 'IPv4 should be a valid ip address'
+      }
+    },
+    ports: {
+      type: String,
+      validate: {
+        validator: validatePortRange,
+        message: 'ports should be a valid ports range'
+      }
+    }
+  },
+  ipProtoPort: {
     ip: {
       type: String,
       maxlength: [20, 'ip length must be at most 20'],

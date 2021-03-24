@@ -26,14 +26,24 @@ class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org) {
     const { _id, name, rules } = firewallPolicyRequest;
     for (const rule of rules) {
-      for (const [side, { trafficTags, custom }] of Object.entries(rule.classification)) {
-        // Empty custom (ip, ports, protocol) not allowed
-        if (custom) {
-          const { ip, ports, protocol } = custom;
-          if (!(ip || ports || protocol)) {
+      for (const [side, { trafficTags, ipPort, ipProtoPort }]
+        of Object.entries(rule.classification)) {
+        // Empty (ip, ports, protocol) not allowed
+        if (ipPort) {
+          const { ip, ports } = ipPort;
+          if (!(ip || ports)) {
             return {
               valid: false,
-              message: 'IP, ports or protocol must be provided'
+              message: 'IP or ports must be provided'
+            };
+          }
+        };
+        if (ipProtoPort) {
+          const { ip, ports, protocols } = ipProtoPort;
+          if (!(ip || ports || (Array.isArray(protocols) && protocols.length))) {
+            return {
+              valid: false,
+              message: 'IP, ports or protocols must be provided'
             };
           }
         };
