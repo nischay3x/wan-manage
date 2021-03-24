@@ -210,6 +210,15 @@ class FirewallPoliciesService {
         throw createError(400, message);
       }
 
+      // only one default policy per organization is allowed
+      if (isDefault) {
+        await FirewallPolicies.update(
+          { org: { $in: orgList }, _id: { $ne: id }, isDefault: true },
+          { $set: { isDefault: false } },
+          { upsert: false }
+        );
+      };
+
       const firewallPolicy = await FirewallPolicies.findOneAndUpdate(
         {
           org: { $in: orgList },
@@ -294,6 +303,15 @@ class FirewallPoliciesService {
       if (!valid) {
         throw createError(400, message);
       }
+
+      // only one default policy per organization is allowed
+      if (isDefault) {
+        await FirewallPolicies.update(
+          { org: { $in: orgList }, isDefault: true },
+          { $set: { isDefault: false } },
+          { upsert: false }
+        );
+      };
 
       const result = await FirewallPolicies.create({
         org: orgList[0].toString(),
