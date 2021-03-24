@@ -6601,6 +6601,7 @@ components:
           PublicPort: PublicPort
           NatType: NatType
           useStun: useStun
+          usePortForwarding: usePortForwarding
           monitorInternet : monitorInternet
           IPv4: IPv4
           gateway: gateway
@@ -6743,6 +6744,7 @@ components:
           PublicPort: PublicPort
           NatType: NatType
           useStun: true
+          usePortForwarding: false
           monitorInternet: true
           internetAccess: 'yes'
           IPv4: IPv4
@@ -6765,6 +6767,7 @@ components:
           PublicPort: PublicPort
           NatType: NatType
           useStun: true
+          usePortForwarding: false
           monitorInternet: true
           internetAccess: 'no'
           IPv4: IPv4
@@ -6939,6 +6942,8 @@ components:
         NatType:
           type: string
         useStun:
+          type: boolean
+        usePortForwarding:
           type: boolean
         monitorInternet:
           type: boolean

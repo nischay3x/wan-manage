@@ -71,6 +71,7 @@ const prepareIfcParams = (interfaces, device) => {
       delete newIfc.PublicIP;
       delete newIfc.PublicPort;
       delete newIfc.useStun;
+      delete newIfc.usePortForwarding;
       delete newIfc.monitorInternet;
     }
     return newIfc;
@@ -94,6 +95,7 @@ const transformInterfaces = (interfaces) => {
       PublicIP: ifc.PublicIP,
       PublicPort: ifc.PublicPort,
       useStun: ifc.useStun,
+      usePortForwarding: ifc.usePortForwarding,
       monitorInternet: ifc.monitorInternet,
       gateway: ifc.gateway,
       metric: ifc.metric,
