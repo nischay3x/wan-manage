@@ -1031,7 +1031,7 @@ const apply = async (device, user, data) => {
       if (!valid) throw (new Error(err));
       // Don't allow to modify/assign/unassign
       // interfaces that are assigned with DHCP
-      const dhcpValidation = validateDhcpConfig(device[0], [
+      const dhcpValidation = validateDhcpConfig(data.newDevice, [
         ...interfaces,
         ...unassign
       ]);

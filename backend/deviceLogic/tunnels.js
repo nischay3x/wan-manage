@@ -76,8 +76,8 @@ const applyTunnelAdd = async (devices, user, data) => {
     const org = data.org;
     const { encryptionMethod } = await orgModel.findOne({ _id: org });
 
-    // for now only 'ikev2' and 'pre-shared-key' encryption methods are supported
-    if (!['ikev2', 'pre-shared-key'].includes(encryptionMethod)) {
+    // for now only 'none', 'ikev2' and 'pre-shared-key' encryption methods are supported
+    if (!['none', 'ikev2', 'pre-shared-key'].includes(encryptionMethod)) {
       logger.error('Tunnel creation failed',
         { params: { reason: 'Not supported encryption method', encryptionMethod } }
       );
@@ -108,6 +108,26 @@ const applyTunnelAdd = async (devices, user, data) => {
           continue;
         }
 
+        // only devices with version of agent >= 4
+        // are supported for creating tunnels with none encryption method
+        if (encryptionMethod === 'none') {
+          let noneEncryptionValidated = true;
+          for (const device of [deviceA, deviceB]) {
+            const majorAgentVersion = getMajorVersion(device.versions.agent);
+            if (majorAgentVersion < 4) {
+              const reason = 'None encryption method not supported';
+              logger.warn('Tunnel creation failed', {
+                params: { reason, machineId: device.machineId }
+              });
+              addReason(`${reason} on some of devices.`);
+              noneEncryptionValidated = false;
+            }
+          }
+          if (!noneEncryptionValidated) {
+            continue;
+          }
+        }
+
         // only devices with version of agent >= 4 and valid certificates
         // are supported for creating tunnels with IKEv2 encryption method
         if (encryptionMethod === 'ikev2') {
@@ -116,7 +136,7 @@ const applyTunnelAdd = async (devices, user, data) => {
             const { valid, reason } = validateIKEv2(device);
             if (!valid) {
               logger.warn('Tunnel creation failed', {
-                params: { reason, machineId: deviceA.machineId }
+                params: { reason, machineId: device.machineId }
               });
               addReason(`${reason} on some of devices.`);
               ikev2Validated = false;
@@ -663,7 +683,7 @@ const prepareTunnelAddJob = async (
       'remote-device-id': deviceA.machineId,
       certificate: deviceA.IKEv2.certificate
     };
-  } else {
+  } else if (tunnel.encryptionMethod === 'pre-shared-key') {
     // construct static ipsec tunnel
     if (!tunnel.tunnelKeys) {
       // Generate new IPsec Keys and store them in the database
