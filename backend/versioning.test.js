@@ -188,18 +188,18 @@ describe('verifyAgentVersion', () => {
     const result = verifyAgentVersion('1.1.0');
     expect(result).toMatchObject({
       valid: false,
-      statusCode: 400,
-      err: 'Incompatible versions: management version: 4.0.0 agent version: 1.1.0'
+      statusCode: 403,
+      err: 'Incompatible version: agent version: 1.1.0 too low, management version: 4.0.0'
     });
   });
 });
 
 it('Should return failure object if agent version is higher', () => {
-  const result = verifyAgentVersion('4.1.0');
+  const result = verifyAgentVersion('5.1.0');
   expect(result).toMatchObject({
     valid: false,
     statusCode: 400,
-    err: 'Incompatible version: agent version: 4.1.0 too high, management version: 3.0.0'
+    err: 'Incompatible version: agent version: 5.1.0 too high, management version: 4.0.0'
   });
 });
 
