@@ -39,6 +39,7 @@ class TunnelsService {
       'deviceAconf',
       'deviceB',
       'deviceBconf',
+      'encryptionMethod',
       '_id',
       'pathlabel']);
 

@@ -49,7 +49,7 @@ const OrgSchema = new Schema({
       'pre-shared-key',
       'ikev2'
     ],
-    default: 'ikev2'
+    default: 'pre-shared-key'
   }
 });
 
