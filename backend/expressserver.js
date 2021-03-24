@@ -33,6 +33,7 @@ const createError = require('http-errors');
 
 const passport = require('passport');
 const auth = require('./authenticate');
+const { connectRouter } = require('./routes/connect');
 const morgan = require('morgan');
 const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 const { reqLogger, errLogger } = require('./logging/request-logging');
@@ -181,7 +182,7 @@ class ExpressServer {
     });
 
     // no authentication
-    this.app.use('/api/connect', require('./routes/connect'));
+    this.app.use('/api/connect', connectRouter);
     this.app.use('/api/users', require('./routes/users'));
 
     // add API documentation
