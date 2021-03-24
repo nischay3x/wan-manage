@@ -95,8 +95,8 @@ const firewallRuleSchema = new Schema({
   },
   inbound: {
     type: String,
-    enum: ['edge_access', 'port_forward', 'nat_1to1'],
-    default: 'edge_access',
+    enum: ['edgeAccess', 'portForward', 'nat1to1'],
+    default: 'edgeAccess',
     required: true
   },
   priority: {

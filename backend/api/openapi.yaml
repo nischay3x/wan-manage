@@ -8639,7 +8639,7 @@ components:
         priority: priority
         status: enabled
         direction: inbound
-        inbound: edge_access
+        inbound: edgeAccess
         classification: classification
         action: allow
       properties:
@@ -8665,9 +8665,9 @@ components:
           type: string
         inbound:
           enum:
-          - edge_access
-          - port_forward
-          - nat_1to1
+          - edgeAccess
+          - portForward
+          - nat1to1
           type: string
         classification:
           schema:
@@ -8692,7 +8692,7 @@ components:
         priority: priority
         status: enabled
         direction: inbound
-        inbound: edge_access
+        inbound: edgeAccess
         classification: classification
         action: allow
       properties:
@@ -8714,9 +8714,9 @@ components:
           type: string
         inbound:
           enum:
-          - edge_access
-          - port_forward
-          - nat_1to1
+          - edgeAccess
+          - portForward
+          - nat1to1
           type: string
         classification:
           schema:
