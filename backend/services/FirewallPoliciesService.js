@@ -26,7 +26,7 @@ class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org) {
     const { _id, name, rules } = firewallPolicyRequest;
     for (const rule of rules) {
-      for (const { trafficTags, custom } of Object.values(rule.classification)) {
+      for (const [side, { trafficTags, custom }] of Object.entries(rule.classification)) {
         // Empty custom (ip, ports, protocol) not allowed
         if (custom) {
           const { ip, ports, protocol } = custom;
@@ -38,9 +38,16 @@ class FirewallPoliciesService {
           }
         };
 
-        // Empty Traffic Tags not allowed
         if (trafficTags) {
+          // Traffic Tags not allowed for source
+          if (side === 'source') {
+            return {
+              valid: false,
+              message: 'Traffic Tags not allowed for source'
+            };
+          }
           const { category, serviceClass, importance } = trafficTags;
+          // Empty Traffic Tags not allowed
           if (!(category || serviceClass || importance)) {
             return {
               valid: false,
