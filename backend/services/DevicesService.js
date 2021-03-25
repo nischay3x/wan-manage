@@ -139,7 +139,7 @@ class DevicesService {
           'PublicPort',
           'NatType',
           'useStun',
-          'usePortForwarding',
+          'useFixedPublicPort',
           'internetAccess',
           'monitorInternet',
           'gateway',

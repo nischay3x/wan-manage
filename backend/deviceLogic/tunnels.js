@@ -1172,7 +1172,7 @@ const prepareTunnelParams = (
   paramsDeviceA.devId = deviceAIntf.devId;
 
   paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
-  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.usePortForwarding)
+  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
     ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
 
   paramsDeviceA['tunnel-id'] = tunnelnum;
@@ -1184,7 +1184,7 @@ const prepareTunnelParams = (
   paramsDeviceB.devId = deviceBIntf.devId;
 
   paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
-  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort || deviceAIntf.usePortForwarding)
+  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort || deviceAIntf.useFixedPublicPort)
     ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
 
   paramsDeviceB['tunnel-id'] = tunnelnum;

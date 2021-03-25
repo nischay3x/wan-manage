@@ -146,7 +146,7 @@ const interfacesSchema = new Schema({
     default: true
   },
   // use port forwarding to define fixed public port
-  usePortForwarding: {
+  useFixedPublicPort: {
     type: Boolean,
     default: false
   },
