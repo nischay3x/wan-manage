@@ -78,7 +78,13 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
           const jobRule = {
             id: _id,
             priority,
-            classification,
+            classification: {
+              ...classification,
+              destination: {
+                ports: classification.destination.ipProtoPort.ports,
+                protocol: classification.destination.ipProtoPort.protocol
+              }
+            },
             action: {
               permit: action === 'allow'
             }
