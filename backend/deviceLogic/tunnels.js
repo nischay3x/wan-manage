@@ -620,6 +620,19 @@ const prepareTunnelAddJob = async (
     paramsDeviceB,
     tunnelParams
   } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
+
+  [paramsDeviceA, paramsDeviceB].forEach(({ src, dst, dstPort }) => {
+    if (!src) {
+      throw new Error('Source IP address is empty');
+    }
+    if (!dst) {
+      throw new Error('Destination IP address is empty');
+    }
+    if (!dstPort) {
+      throw new Error('Destination port is empty');
+    }
+  });
+
   const paramsSaAB = {
     spi: tunnelParams.sa1,
     'crypto-key': tunnelKeys.key1,
