@@ -79,7 +79,7 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
             id: _id,
             priority,
             classification: {
-              ...classification,
+              source: classification.source,
               destination: {
                 ports: classification.destination.ipProtoPort.ports,
                 protocol: classification.destination.ipProtoPort.protocol
