@@ -7170,6 +7170,15 @@ components:
         - destination: destination
           interface: interface
           gateway: gateway
+        firewallrules:
+        - name: name
+          direction: direction
+          status: status
+          action: action
+        - name: name
+          direction: direction
+          status: status
+          action: action
         fromToken: fromToken
         account: account
         ipList: ipList
@@ -7218,6 +7227,10 @@ components:
         interfaces:
           items:
             $ref: '#/components/schemas/Interface'
+          type: array
+        firewallrules:
+          items:
+            $ref: '#/components/schemas/FirewallRuleRequest'
           type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
@@ -7302,6 +7315,15 @@ components:
           destination: 10.10.0.0
           gateway: 10.10.0.1
           interface: eth1
+        firewallrules:
+        - name: name
+          direction: outbound
+          status: enabled
+          action: allow
+        - name: name
+          direction: inbound
+          status: disabled
+          action: deny
         fromToken: fromToken
         account: account
         ipList: ipList
@@ -7355,6 +7377,10 @@ components:
         interfaces:
           items:
             $ref: '#/components/schemas/Interface'
+          type: array
+        firewallrules:
+          items:
+            $ref: '#/components/schemas/FirewallRule'
           type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
@@ -8642,6 +8668,7 @@ components:
         inbound: edgeAccess
         classification: classification
         action: allow
+        interfaces: interfaces
       properties:
         _id:
           maxLength: 24
@@ -8677,6 +8704,10 @@ components:
           - allow
           - deny
           type: string
+        interfaces:
+          items:
+            type: string
+          type: array
       required:
       - _id
       - name
@@ -8695,6 +8726,7 @@ components:
         inbound: edgeAccess
         classification: classification
         action: allow
+        interfaces: interfaces
       properties:
         name:
           type: string
@@ -8726,6 +8758,10 @@ components:
           - allow
           - deny
           type: string
+        interfaces:
+          items:
+            type: string
+          type: array
       required:
       - name
       - priority

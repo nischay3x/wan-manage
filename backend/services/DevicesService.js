@@ -207,6 +207,23 @@ class DevicesService {
       });
     } else retDhcpList = [];
 
+    const retFirewallRules = (item.firewall && item.firewall.rules) ?
+      item.firewall.rules.map(r => {
+        const retRule = pick(r, [
+          '_id',
+          'name',
+          'priority',
+          'status',
+          'direction',
+          'inbound',
+          'classification',
+          'action',
+          'interfaces'
+        ]);
+        retRule._id = retRule._id.toString();
+        return retRule;
+      }) : [];
+
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
@@ -219,6 +236,7 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
+    retDevice.firewall = { rules: retFirewallRules };
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
@@ -346,6 +364,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.firewall.policy', '_id name description')
         .populate('policies.multilink.policy', '_id name description');
       const device = DevicesService.selectDeviceParams(result);
 

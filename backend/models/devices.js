@@ -20,6 +20,7 @@ const { validateConfiguration } = require('../deviceLogic/interfaces');
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
+const { firewallRuleSchema } = require('./firewallRule');
 
 /**
  * Interfaces Database Schema
@@ -712,6 +713,9 @@ const deviceSchema = new Schema({
       type: deviceFirewallPolicySchema,
       default: deviceFirewallPolicySchema
     }
+  },
+  firewall: {
+    rules: [firewallRuleSchema]
   },
   sync: {
     type: deviceSyncSchema,
