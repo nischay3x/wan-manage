@@ -164,6 +164,15 @@ const interfacesSchema = new Schema({
       message: 'Metric should be a number'
     }
   },
+  // MTU
+  mtu: {
+    type: Number,
+    default: 1500,
+    validate: {
+      validator: validators.validateMtu,
+      message: 'MTU should be a number between 500 and 65521'
+    }
+  },
   // assigned
   isAssigned: {
     type: Boolean,
