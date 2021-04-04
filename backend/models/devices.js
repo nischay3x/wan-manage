@@ -160,7 +160,7 @@ const interfacesSchema = new Schema({
     type: String,
     default: '0',
     validate: {
-      validator: validators.validateIsNumber,
+      validator: validators.validateMetric,
       message: 'Metric should be a number'
     }
   },
@@ -280,7 +280,7 @@ const staticroutesSchema = new Schema({
     type: String,
     default: '',
     validate: {
-      validator: validators.validateIsNumber,
+      validator: validators.validateMetric,
       message: 'Metric should be a number'
     }
   }
