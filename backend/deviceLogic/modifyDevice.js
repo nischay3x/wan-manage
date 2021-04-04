@@ -97,6 +97,7 @@ const transformInterfaces = (interfaces) => {
       monitorInternet: ifc.monitorInternet,
       gateway: ifc.gateway,
       metric: ifc.metric,
+      mtu: ifc.mtu,
       routing: ifc.routing,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
@@ -544,6 +545,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         // only rebuild tunnels when IP, Public IP or port is changed
         const tunnelParametersModified = (origIfc, modifiedIfc) => isObject(modifiedIfc) && (
           modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
+          modifiedIfc.mtu !== origIfc.mtu ||
           modifiedIfc.PublicIP !== origIfc.PublicIP ||
           modifiedIfc.PublicPort !== origIfc.PublicPort
         );
@@ -559,9 +561,9 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         };
         const skipLocal =
           (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
-          isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
+          modifiedIfcA.mtu === ifcA.mtu && isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
           (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
-          isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
+          modifiedIfcB.mtu === ifcB.mtu && isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
 
         if (skipLocal) {
           continue;
