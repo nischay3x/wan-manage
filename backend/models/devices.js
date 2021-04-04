@@ -170,7 +170,7 @@ const interfacesSchema = new Schema({
     default: 1500,
     validate: {
       validator: validators.validateMtu,
-      message: 'MTU should be a number between 500 and 65521'
+      message: 'MTU should be a number between 500 and 9000'
     }
   },
   // assigned

@@ -163,7 +163,7 @@ const validateLabelColor = (color) => { return /^#[0-9A-F]{6}$/i.test(color); };
 const validatePolicyName = (name) => { return /^[a-z0-9-_ .]{3,50}$/i.test(name || ''); };
 const validateRuleName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name || ''); };
 
-const validateMtu = (val) => val && validateIsNumber(val) && val >= 500 && val <= 65521;
+const validateMtu = (val) => val && validateIsNumber(val) && val >= 500 && val <= 9000;
 
 module.exports = {
   validateDHCP,
