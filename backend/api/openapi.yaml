@@ -6620,6 +6620,7 @@ components:
           IPv4: IPv4
           gateway: gateway
           metric: 0
+          mtu: 1500
           type: WAN
           MAC: MAC
           dhcp: "no"
@@ -6641,6 +6642,7 @@ components:
           IPv4: IPv4
           type: WAN
           MAC: MAC
+          mtu: 1500
           dhcp: "no"
           routing: OSPF
           IPv6Mask: "64"
@@ -6660,6 +6662,7 @@ components:
           IPv4: IPv4
           type: WAN
           MAC: MAC
+          mtu: 1500
           dhcp: "yes"
           routing: OSPF
           IPv6Mask: "64"
@@ -6764,6 +6767,7 @@ components:
           type: WAN
           gateway: gateway
           metric: 0
+          mtu: 1500
           MAC: MAC
           dhcp: "no"
           routing: OSPF
@@ -6786,6 +6790,7 @@ components:
           type: WAN
           gateway: gateway
           metric: 0
+          mtu: 1500
           MAC: MAC
           dhcp: "no"
           routing: OSPF
@@ -6919,6 +6924,7 @@ components:
         MAC: MAC
         gateway: gateway
         metric: 0
+        mtu: 1500
         dhcp: "no"
         routing: OSPF
         IPv6Mask: "64"
@@ -6967,6 +6973,8 @@ components:
           type: string
         metric:
           type: string
+        mtu:
+          type: integer
         isAssigned:
           type: boolean
         routing:
