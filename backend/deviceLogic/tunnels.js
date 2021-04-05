@@ -612,6 +612,8 @@ const prepareTunnelAddJob = async (
     key3: tunnel.tunnelKeys.key3,
     key4: tunnel.tunnelKeys.key4
   };
+  const packetHeaderSize = 150; // will be 0 for not encrypted tunnels
+  const tunnelMtu = Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
 
   const tasksDeviceA = [];
   const tasksDeviceB = [];
@@ -622,6 +624,19 @@ const prepareTunnelAddJob = async (
     paramsDeviceB,
     tunnelParams
   } = prepareTunnelParams(tunnel.num, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
+
+  [paramsDeviceA, paramsDeviceB].forEach(({ src, dst, dstPort }) => {
+    if (!src) {
+      throw new Error('Source IP address is empty');
+    }
+    if (!dst) {
+      throw new Error('Destination IP address is empty');
+    }
+    if (!dstPort) {
+      throw new Error('Destination port is empty');
+    }
+  });
+
   const paramsSaAB = {
     spi: tunnelParams.sa1,
     'crypto-key': tunnelKeys.key1,
@@ -642,7 +657,7 @@ const prepareTunnelAddJob = async (
   paramsDeviceA['loopback-iface'] = {
     addr: tunnelParams.ip1 + '/31',
     mac: tunnelParams.mac1,
-    mtu: 1350,
+    mtu: tunnelMtu,
     routing: 'ospf',
     multilink: {
       labels: pathLabel ? [pathLabel] : []
@@ -664,7 +679,7 @@ const prepareTunnelAddJob = async (
   paramsDeviceB['loopback-iface'] = {
     addr: tunnelParams.ip2 + '/31',
     mac: tunnelParams.mac2,
-    mtu: 1350,
+    mtu: tunnelMtu,
     routing: 'ospf',
     multilink: {
       labels: pathLabel ? [pathLabel] : []
