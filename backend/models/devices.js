@@ -145,6 +145,11 @@ const interfacesSchema = new Schema({
     type: Boolean,
     default: true
   },
+  // use port forwarding to define fixed public port
+  useFixedPublicPort: {
+    type: Boolean,
+    default: false
+  },
   // WAN interface default GW
   gateway: {
     type: String,

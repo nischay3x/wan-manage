@@ -71,6 +71,7 @@ const prepareIfcParams = (interfaces, device) => {
       delete newIfc.PublicIP;
       delete newIfc.PublicPort;
       delete newIfc.useStun;
+      delete newIfc.useFixedPublicPort;
       delete newIfc.monitorInternet;
     }
     return newIfc;
@@ -94,6 +95,7 @@ const transformInterfaces = (interfaces) => {
       PublicIP: ifc.PublicIP,
       PublicPort: ifc.PublicPort,
       useStun: ifc.useStun,
+      useFixedPublicPort: ifc.useFixedPublicPort,
       monitorInternet: ifc.monitorInternet,
       gateway: ifc.gateway,
       metric: ifc.metric,
@@ -464,6 +466,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
     return [];
   }
 
+  let tunnelsJobs = [];
   for (const ifc of interfacesIdsSet) {
     // First, remove all active tunnels connected
     // via this interface, on all relevant devices.
@@ -547,7 +550,8 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
           modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
           modifiedIfc.mtu !== origIfc.mtu ||
           modifiedIfc.PublicIP !== origIfc.PublicIP ||
-          modifiedIfc.PublicPort !== origIfc.PublicPort
+          modifiedIfc.PublicPort !== origIfc.PublicPort ||
+          modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
         );
         if (!tunnelParametersModified(ifcA, modifiedIfcA) &&
           !tunnelParametersModified(ifcB, modifiedIfcB)) {
@@ -570,7 +574,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
         }
 
         await setTunnelsPendingInDB([tunnel._id], org, true);
-        await queueTunnel(
+        const removeTunnelJobs = await queueTunnel(
           false,
           // eslint-disable-next-line max-len
           `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
@@ -585,6 +589,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
           num,
           pathlabel
         );
+        tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
         removedTunnels.push(tunnel._id);
       }
     }
@@ -613,8 +618,9 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // skip modify-device job if only PublicIP or PublicPort are modified
       // or if dhcp==='yes' and only IPv4, IPv6, gateway are modified
       // these parameters are set by device
-      const propsToSkip = modifiedIfc.dhcp !== 'yes' ? ['PublicIP', 'PublicPort']
-        : ['PublicIP', 'PublicPort', 'addr', 'addr6', 'gateway'];
+      const propsToSkip = modifiedIfc.dhcp !== 'yes'
+        ? ['PublicIP', 'PublicPort', 'useFixedPublicPort']
+        : ['PublicIP', 'PublicPort', 'addr', 'addr6', 'gateway', 'useFixedPublicPort'];
       return differenceWith(propsModified, propsToSkip, isEqual).length === 0;
     });
 
@@ -623,13 +629,20 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
 
   // Queue tunnel reconstruction jobs
   try {
-    await reconstructTunnels(removedTunnels, org, user.username);
+    const addTunnelJobs = await reconstructTunnels(removedTunnels, org, user.username);
+    tunnelsJobs = tunnelsJobs.concat(addTunnelJobs);
   } catch (err) {
     logger.error('Tunnel reconstruction failed', {
       params: { jobId: job.id, device, err: err.message }
     });
   }
-  return job ? [job] : [];
+
+  let jobs = [];
+  if (job) jobs.push(job);
+  if (tunnelsJobs.length) {
+    jobs = jobs.concat(tunnelsJobs);
+  }
+  return jobs;
 };
 
 /**
@@ -638,9 +651,10 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
  * @param  {Array}   removedTunnels an array of ids of the removed tunnels
  * @param  {string}  org            the organization to which the tunnels belong
  * @param  {string}  username       name of the user that requested the device change
- * @return {Promise}                a promise for reconstructing tunnels
+ * @return {Array}                  array of add-tunnel jobs
  */
 const reconstructTunnels = async (removedTunnels, org, username) => {
+  let jobs = [];
   try {
     const tunnels = await tunnelsModel
       .find({ _id: { $in: removedTunnels }, isActive: true })
@@ -664,7 +678,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
         deviceA,
         deviceB
       );
-      await queueTunnel(
+      const addTunnelsJobs = await queueTunnel(
         true,
         // eslint-disable-next-line max-len
         `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
@@ -679,6 +693,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
         tunnel.num,
         pathlabel
       );
+      jobs = jobs.concat(addTunnelsJobs);
     }
   } catch (err) {
     logger.error('Failed to queue Add tunnel jobs', {
@@ -692,6 +707,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
       params: { err: err.message, removedTunnels }
     });
   }
+  return jobs;
 };
 
 /**

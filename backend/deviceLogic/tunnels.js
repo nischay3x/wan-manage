@@ -1254,8 +1254,9 @@ const prepareTunnelParams = (
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
   paramsDeviceA.src = deviceAIntf.IPv4;
   paramsDeviceA.devId = deviceAIntf.devId;
+
   paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
-  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort)
+  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
     ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
   paramsDeviceA['tunnel-id'] = tunnel.num;
 
@@ -1271,8 +1272,9 @@ const prepareTunnelParams = (
   paramsDeviceB['encryption-mode'] = tunnel.encryptionMethod;
   paramsDeviceB.src = deviceBIntf.IPv4;
   paramsDeviceB.devId = deviceBIntf.devId;
+
   paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
-  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort)
+  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort || deviceAIntf.useFixedPublicPort)
     ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
   paramsDeviceB['tunnel-id'] = tunnel.num;
   paramsDeviceB['loopback-iface'] = {
