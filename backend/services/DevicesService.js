@@ -144,6 +144,7 @@ class DevicesService {
           'monitorInternet',
           'gateway',
           'metric',
+          'mtu',
           'dhcp',
           'IPv4',
           'type',
@@ -839,6 +840,12 @@ class DevicesService {
               }
               updIntf.metric = origIntf.metric;
             };
+            // don't update MTU on an unassigned interface,
+            if (!updIntf.isAssigned && updIntf.mtu && updIntf.mtu !== origIntf.mtu) {
+              throw new Error(
+                `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
+              );
+            }
             if (updIntf.isAssigned !== origIntf.isAssigned ||
               updIntf.type !== origIntf.type ||
               updIntf.dhcp !== origIntf.dhcp ||

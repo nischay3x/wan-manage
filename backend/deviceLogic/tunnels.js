@@ -610,6 +610,8 @@ const prepareTunnelAddJob = async (
     key3: tunnel.tunnelKeys.key3,
     key4: tunnel.tunnelKeys.key4
   };
+  const packetHeaderSize = 150; // will be 0 for not encrypted tunnels
+  const tunnelMtu = Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
 
   const tasksDeviceA = [];
   const tasksDeviceB = [];
@@ -653,7 +655,7 @@ const prepareTunnelAddJob = async (
   paramsDeviceA['loopback-iface'] = {
     addr: tunnelParams.ip1 + '/31',
     mac: tunnelParams.mac1,
-    mtu: 1350,
+    mtu: tunnelMtu,
     routing: 'ospf',
     multilink: {
       labels: pathLabel ? [pathLabel] : []
@@ -677,7 +679,7 @@ const prepareTunnelAddJob = async (
   paramsDeviceB['loopback-iface'] = {
     addr: tunnelParams.ip2 + '/31',
     mac: tunnelParams.mac2,
-    mtu: 1350,
+    mtu: tunnelMtu,
     routing: 'ospf',
     multilink: {
       labels: pathLabel ? [pathLabel] : []
