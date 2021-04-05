@@ -1184,9 +1184,11 @@ const prepareTunnelParams = (
 
   paramsDeviceA.src = deviceAIntf.IPv4;
   paramsDeviceA.devId = deviceAIntf.devId;
+
   paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
-  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort)
+  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
     ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
+
   paramsDeviceA['tunnel-id'] = tunnelnum;
   paramsDeviceA['loopback-iface'] = {
     addr: tunnelParams.ip1 + '/31',
@@ -1194,9 +1196,11 @@ const prepareTunnelParams = (
   };
   paramsDeviceB.src = deviceBIntf.IPv4;
   paramsDeviceB.devId = deviceBIntf.devId;
+
   paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
-  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort)
+  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort || deviceAIntf.useFixedPublicPort)
     ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
+
   paramsDeviceB['tunnel-id'] = tunnelnum;
   paramsDeviceB['loopback-iface'] = {
     addr: tunnelParams.ip2 + '/31',

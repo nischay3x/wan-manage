@@ -139,6 +139,7 @@ class DevicesService {
           'PublicPort',
           'NatType',
           'useStun',
+          'useFixedPublicPort',
           'internetAccess',
           'monitorInternet',
           'gateway',
