@@ -127,7 +127,7 @@ const validateIpList = (list) => {
   return true;
 };
 const isPort = (val) => {
-  return !isEmpty(val) && !(val === '') && validateIsInteger(val) && val >= 0 && val <= 65535;
+  return !isEmpty(val) && !(val === '') && validateIsInteger(+val) && val >= 0 && val <= 65535;
 };
 const validatePort = port => port === '' || isPort(port);
 const validatePortRange = (range) => {
@@ -163,7 +163,7 @@ const validateLabelColor = (color) => { return /^#[0-9A-F]{6}$/i.test(color); };
 const validatePolicyName = (name) => { return /^[a-z0-9-_ .]{3,50}$/i.test(name || ''); };
 const validateRuleName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name || ''); };
 
-const validateMetric = (val) => val && validateIsInteger(val) && +val >= 0;
+const validateMetric = (val) => val === '' || (val && validateIsInteger(val) && +val >= 0);
 const validateMtu = (val) => val && validateIsInteger(val) && +val >= 500 && +val <= 9000;
 
 module.exports = {
