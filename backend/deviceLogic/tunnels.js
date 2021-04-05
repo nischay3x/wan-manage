@@ -637,12 +637,16 @@ const prepareTunnelAddJob = async (
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
+
+  const tasksDeviceA = [];
+  const tasksDeviceB = [];
+
   const {
     paramsDeviceA,
     paramsDeviceB,
     tunnelParams
   } = prepareTunnelParams(
-    tunnel.num,
+    tunnel,
     deviceAIntf,
     deviceA.versions,
     deviceBIntf,
@@ -650,13 +654,20 @@ const prepareTunnelAddJob = async (
     pathLabel
   );
 
-  const tasksDeviceA = [];
-  const tasksDeviceB = [];
+  [paramsDeviceA, paramsDeviceB].forEach(({ src, dst, dstPort }) => {
+    if (!src) {
+      throw new Error('Source IP address is empty');
+    }
+    if (!dst) {
+      throw new Error('Destination IP address is empty');
+    }
+    if (!dstPort) {
+      throw new Error('Destination port is empty');
+    }
+  });
 
   const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
 
-  paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
-  paramsDeviceB['encryption-mode'] = tunnel.encryptionMethod;
   if (tunnel.encryptionMethod === 'ikev2') {
     // construct IKEv2 tunnel
     paramsDeviceA.ikev2 = {
@@ -980,9 +991,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   const deviceBIntf = tunnelResp.deviceB.interfaces
     .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
 
-  const tunnelnum = tunnelResp.num;
-
-  const tunnelJobs = await delTunnel(user, org, tunnelnum, deviceA, deviceB,
+  const tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
     deviceAIntf, deviceBIntf, pathLabel);
 
   logger.info('Deleting tunnels from database');
@@ -1020,20 +1029,20 @@ const completeTunnelDel = (jobId, res) => {
  * Prepares tunnel delete jobs by creating an array that contains
  * the jobs that should be queued for each of the devices connected
  * by the tunnel.
- * @param  {number} tunnelnum    tunnel id
+ * @param  {Object} tunnel      the tunnel object to be deleted
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelRemoveJob = (
-  tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions
+  tunnel, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions
 ) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
   const {
     paramsDeviceA,
     paramsDeviceB
-  } = prepareTunnelParams(tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
+  } = prepareTunnelParams(tunnel, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceA });
@@ -1048,7 +1057,7 @@ const prepareTunnelRemoveJob = (
  * Calls the necessary APIs for deleting a single tunnel
  * @param  {string}   user         user id of requesting user
  * @param  {string}   org          id of the organization of the user
- * @param  {number}   tunnelnum    id of the tunnel to be added
+ * @param  {Object}   tunnel       the tunnel object to be deleted
  * @param  {Object}   deviceA      details of device A
  * @param  {Object}   deviceB      details of device B
  * @param  {Object}   deviceAIntf device A tunnel interface
@@ -1058,7 +1067,7 @@ const prepareTunnelRemoveJob = (
 const delTunnel = async (
   user,
   org,
-  tunnelnum,
+  tunnel,
   deviceA,
   deviceB,
   deviceAIntf,
@@ -1066,7 +1075,7 @@ const delTunnel = async (
   pathLabel
 ) => {
   const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
-    tunnelnum,
+    tunnel,
     deviceAIntf,
     deviceA.versions,
     deviceBIntf,
@@ -1092,7 +1101,7 @@ const delTunnel = async (
       deviceB.machineId,
       deviceA._id,
       deviceB._id,
-      tunnelnum,
+      tunnel.num,
       pathLabel
     );
     logger.debug('Tunnel jobs queued', { params: { jobA: tunnelJobs[0], jobB: tunnelJobs[1] } });
@@ -1221,48 +1230,57 @@ const sync = async (deviceId, org) => {
 
 /*
  * Prepares common parameters for add/remove tunnel jobs
- * @param  {number} tunnelnum    tunnel id
+ * @param  {Object} tunnel      the tunnel object
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
  * @param  {pathLabel} path label used for this tunnel
 */
 const prepareTunnelParams = (
-  tunnelnum, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions, pathLabel = null
+  tunnel, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions, pathLabel = null
 ) => {
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
-  const tunnelParams = generateTunnelParams(tunnelnum);
+  const tunnelParams = generateTunnelParams(tunnel.num);
 
   const paramsDeviceA = {};
   const paramsDeviceB = {};
 
+  // no additional header for not encrypted tunnels
+  const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
+  const mtu = Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
+
   const isLocal = !deviceAIntf.PublicIP || !deviceBIntf.PublicIP ||
       deviceAIntf.PublicIP === deviceBIntf.PublicIP;
 
+  paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
   paramsDeviceA.src = deviceAIntf.IPv4;
   paramsDeviceA.devId = deviceAIntf.devId;
+
   paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
-  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort)
+  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
     ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
-  paramsDeviceA['tunnel-id'] = tunnelnum;
+  paramsDeviceA['tunnel-id'] = tunnel.num;
+
   paramsDeviceA['loopback-iface'] = {
     addr: tunnelParams.ip1 + '/31',
     mac: tunnelParams.mac1,
-    mtu: 1350,
+    mtu: mtu,
     routing: 'ospf',
     multilink: {
       labels: pathLabel ? [pathLabel] : []
     }
   };
+  paramsDeviceB['encryption-mode'] = tunnel.encryptionMethod;
   paramsDeviceB.src = deviceBIntf.IPv4;
   paramsDeviceB.devId = deviceBIntf.devId;
+
   paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
-  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort)
+  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort || deviceAIntf.useFixedPublicPort)
     ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
-  paramsDeviceB['tunnel-id'] = tunnelnum;
+  paramsDeviceB['tunnel-id'] = tunnel.num;
   paramsDeviceB['loopback-iface'] = {
     addr: tunnelParams.ip2 + '/31',
     mac: tunnelParams.mac2,
-    mtu: 1350,
+    mtu: mtu,
     routing: 'ospf',
     multilink: {
       labels: pathLabel ? [pathLabel] : []

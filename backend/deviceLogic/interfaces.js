@@ -47,10 +47,10 @@ const buildInterfaces = (deviceInterfaces) => {
       pathlabels,
       gateway,
       metric,
+      mtu,
       dhcp,
       deviceType,
-      configuration,
-      deviceParams
+      configuration
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -66,12 +66,12 @@ const buildInterfaces = (deviceInterfaces) => {
       dhcp: dhcp || 'no',
       addr: `${(IPv4 && IPv4Mask ? `${IPv4}/${IPv4Mask}` : '')}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
+      mtu,
       routing,
       type,
       multilink: { labels: labels.map((label) => label._id.toString()) },
       deviceType,
-      configuration,
-      deviceParams
+      configuration
     };
     if (ifc.type === 'WAN') {
       ifcInfo.gateway = gateway;

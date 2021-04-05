@@ -146,6 +146,11 @@ const interfacesSchema = new Schema({
     type: Boolean,
     default: true
   },
+  // use port forwarding to define fixed public port
+  useFixedPublicPort: {
+    type: Boolean,
+    default: false
+  },
   // WAN interface default GW
   gateway: {
     type: String,
@@ -161,8 +166,17 @@ const interfacesSchema = new Schema({
     type: String,
     default: '0',
     validate: {
-      validator: validators.validateIsNumber,
+      validator: validators.validateMetric,
       message: 'Metric should be a number'
+    }
+  },
+  // MTU
+  mtu: {
+    type: Number,
+    default: 1500,
+    validate: {
+      validator: validators.validateMtu,
+      message: 'MTU should be a number between 500 and 9000'
     }
   },
   // assigned
@@ -272,7 +286,7 @@ const staticroutesSchema = new Schema({
     type: String,
     default: '',
     validate: {
-      validator: validators.validateIsNumber,
+      validator: validators.validateMetric,
       message: 'Metric should be a number'
     }
   }
