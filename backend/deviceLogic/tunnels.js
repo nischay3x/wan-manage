@@ -22,7 +22,6 @@ const tunnelIDsModel = require('../models/tunnelids');
 const devicesModel = require('../models/devices').devices;
 const mongoose = require('mongoose');
 const randomNum = require('../utils/random-key');
-const { getMajorVersion } = require('../versioning');
 
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
