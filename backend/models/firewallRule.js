@@ -60,7 +60,11 @@ const firewallRuleClassificationSchema = new Schema({
     protocols: [{
       type: String,
       enum: ['tcp', 'udp', 'icmp']
-    }]
+    }],
+    interface: {
+      type: String,
+      maxlength: [25, 'interface must be at most 25']
+    }
   },
   trafficId: {
     type: String,
@@ -103,6 +107,14 @@ const firewallRuleSchema = new Schema({
     enum: ['edgeAccess', 'portForward', 'nat1to1'],
     default: 'edgeAccess',
     required: true
+  },
+  internalIP: {
+    type: String,
+    required: false
+  },
+  internalPortStart: {
+    type: String,
+    required: false
   },
   priority: {
     type: Number,

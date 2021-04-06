@@ -220,6 +220,8 @@ class DevicesService {
           'inbound',
           'classification',
           'action',
+          'internalIP',
+          'internalPortStart',
           'interfaces'
         ]);
         retRule._id = retRule._id.toString();

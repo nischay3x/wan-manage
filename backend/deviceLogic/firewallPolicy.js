@@ -55,24 +55,25 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
         params: {}
       }
     ]];
-
     if (op === 'install') {
+      const firewallRules = [...policy.rules, ...(dev.firewall.rules || [])];
       tasks[0][0].params.id = policy._id;
       tasks[0][0].params.outbound = {
-        rules: policy.rules.filter(rule => rule.direction === 'outbound').map(rule => {
-          const { _id, priority, action, classification } = rule;
+        rules: firewallRules.filter(rule => rule.direction === 'outbound').map(rule => {
+          const { _id, priority, action, classification, interfaces } = rule;
           const jobRule = {
             id: _id,
             priority,
             classification,
             action: {
+              interfaces,
               permit: action === 'allow'
             }
           };
           return jobRule;
         })
       };
-      tasks[0][0].params.inbound = policy.rules.filter(r => r.direction === 'inbound')
+      tasks[0][0].params.inbound = firewallRules.filter(r => r.direction === 'inbound')
         .reduce((result, rule) => {
           const { _id, inbound, priority, action, classification } = rule;
           const jobRule = {
@@ -81,11 +82,14 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
             classification: {
               source: classification.source,
               destination: {
+                interface: classification.destination.ipProtoPort.interface,
                 ports: classification.destination.ipProtoPort.ports,
-                protocol: classification.destination.ipProtoPort.protocol
+                protocols: classification.destination.ipProtoPort.protocols
               }
             },
             action: {
+              internalIP: rule.internalIP,
+              internalPortStart: rule.internalPortStart,
               permit: action === 'allow'
             }
           };

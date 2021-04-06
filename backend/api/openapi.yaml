@@ -8717,6 +8717,10 @@ components:
           - allow
           - deny
           type: string
+        internalIP:
+          type: string
+        internalPortStart:
+          type: string
         interfaces:
           items:
             type: string
@@ -8823,6 +8827,8 @@ components:
               items:
                 $ref: '#/components/schemas/Protocol'
               type: array
+            interface:
+              type: string
           type: object
     FirewallClassTrafficId:
       properties:
