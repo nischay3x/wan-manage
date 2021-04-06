@@ -6442,13 +6442,21 @@ components:
       example:
         name: name
         group: group
+        encryptionMethod: ikev2
       required:
         - name
         - group
+        - encryptionMethod
       properties:
         name:
           type: string
         group:
+          type: string
+        encryptionMethod:
+          enum:
+          - none
+          - pre-shared-key
+          - ikev2
           type: string
       type: object
     Organization:
@@ -6457,6 +6465,7 @@ components:
         _id: _id
         account: account
         group: group
+        encryptionMethod: ikev2
       properties:
         _id:
           maxLength: 24
@@ -6467,6 +6476,12 @@ components:
         group:
           type: string
         account:
+          type: string
+        encryptionMethod:
+          enum:
+          - none
+          - pre-shared-key
+          - ikev2
           type: string
       type: object
     ApplyJobsResponse:

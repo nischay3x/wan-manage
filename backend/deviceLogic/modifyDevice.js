@@ -499,7 +499,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
-        tunnel.num, ifcA, deviceA.versions, ifcB, deviceB.versions);
+        tunnel, ifcA, deviceA.versions, ifcB, deviceB.versions);
       const pathlabels = modifiedIfcsMap[ifc._id] && modifiedIfcsMap[ifc._id].pathlabels
         ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
         : [];
@@ -673,10 +673,10 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
       const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
         tunnel,
         ifcA,
-        deviceA.versions,
         ifcB,
-        deviceB.versions,
-        pathlabel
+        pathlabel,
+        deviceA,
+        deviceB
       );
       const addTunnelsJobs = await queueTunnel(
         true,

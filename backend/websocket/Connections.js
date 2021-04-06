@@ -20,17 +20,14 @@ const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
 const createError = require('http-errors');
+const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
 const Accounts = require('../models/accounts');
 const tunnelsModel = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
 const notificationsMgr = require('../notifications/notifications')();
-const {
-  verifyAgentVersion,
-  isSemVer,
-  isVppVersion,
-  getMajorVersion
-} = require('../versioning');
+const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
+const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 class Connections {
   constructor () {
     this.createConnection = this.createConnection.bind(this);
@@ -365,6 +362,7 @@ class Connections {
       $and: [
         { $or: [{ deviceA: deviceId }, { deviceB: deviceId }] },
         { isActive: true },
+        { encryptionMethod: 'pre-shared-key' },
         {
           $or: [
             { tunnelKeys: { $exists: false } },
@@ -569,7 +567,11 @@ class Connections {
           }),
           network: joi.object().optional(),
           tunnels: joi.array().optional(),
-          reconfig: joi.string().allow('').optional()
+          reconfig: joi.string().allow('').optional(),
+          ikev2: Joi.object({
+            certificateExpiration: Joi.string().allow('').optional(),
+            error: Joi.string().allow('').optional()
+          }).allow({}).optional()
         }),
         name: 'versions',
         language: {
@@ -640,6 +642,44 @@ class Connections {
         { $set: { versions: versions } },
         { new: true, runValidators: true }
       ).populate('interfaces.pathlabels', '_id type');
+      const { expireTime, jobQueued } = origDevice.IKEv2;
+
+      const { encryptionMethod } = await orgModel.findOne({ _id: origDevice.org });
+      const { ikev2 } = deviceInfo.message;
+      let needNewIKEv2Certificate = false;
+      if (encryptionMethod === 'ikev2' && getMajorVersion(deviceInfo.message.device) >= 4) {
+        if (!ikev2) {
+          needNewIKEv2Certificate = true;
+        } else if (ikev2.error) {
+          logger.warn('IKEv2 certificate error on device', {
+            params: { deviceId, err: ikev2.error }
+          });
+          needNewIKEv2Certificate = true;
+        } else {
+          const dbExpireTime = expireTime ? expireTime.getTime() : 0;
+          const devExpireTime = (new Date(ikev2.certificateExpiration)).getTime();
+          // check if expiration is different on agent and management
+          // or certificate is about to expire
+          if (devExpireTime !== dbExpireTime || dbExpireTime < getRenewBeforeExpireTime()) {
+            needNewIKEv2Certificate = true;
+          } else {
+            this.devices.updateDeviceInfo(machineId, 'certificateExpiration', dbExpireTime);
+          }
+        }
+      }
+
+      if (needNewIKEv2Certificate && !jobQueued) {
+        queueCreateIKEv2Jobs(
+          [origDevice],
+          'system',
+          origDevice.org
+        ).then(jobResults => {
+          logger.info('Create a new IKEv2 certificate device job queued', {
+            params: { jobId: jobResults[0].id },
+            job: jobResults[0]
+          });
+        });
+      }
 
       if (!origDevice) {
         logger.warn('Device not found in DB', {

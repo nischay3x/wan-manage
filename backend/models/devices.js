@@ -525,6 +525,27 @@ const deviceSyncSchema = new Schema({
 });
 
 /**
+ * IKEv2 parameters Database Schema
+ */
+const IKEv2Schema = new Schema({
+  // public certificate
+  certificate: {
+    type: String,
+    default: ''
+  },
+  // expiration time
+  expireTime: {
+    type: Date,
+    default: null
+  },
+  // queued or not
+  jobQueued: {
+    type: Boolean,
+    default: false
+  }
+});
+
+/**
  * Device Database Schema
  */
 const deviceSchema = new Schema({
@@ -675,6 +696,11 @@ const deviceSchema = new Schema({
   sync: {
     type: deviceSyncSchema,
     default: deviceSyncSchema
+  },
+  // IKEv2 parameters
+  IKEv2: {
+    type: IKEv2Schema,
+    default: IKEv2Schema
   }
 },
 {
