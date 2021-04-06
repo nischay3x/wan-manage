@@ -20,7 +20,7 @@ const mongoConns = require('../mongoConns.js')();
 const Schema = mongoose.Schema;
 const {
   validatePolicyName,
-  validateDescription,
+  validateDescription
 } = require('./validators');
 const { firewallRuleSchema } = require('./firewallRule');
 

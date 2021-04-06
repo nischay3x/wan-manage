@@ -57,10 +57,10 @@ const firewallRuleClassificationSchema = new Schema({
         message: 'ports should be a valid ports range'
       }
     },
-    protocol: {
+    protocols: [{
       type: String,
-      enum: ['', 'udp', 'tcp']
-    }
+      enum: ['tcp', 'udp', 'icmp']
+    }]
   },
   trafficId: {
     type: String,

@@ -209,8 +209,8 @@ class DevicesService {
       });
     } else retDhcpList = [];
 
-    const retFirewallRules = (item.firewall && item.firewall.rules) ?
-      item.firewall.rules.map(r => {
+    const retFirewallRules = (item.firewall && item.firewall.rules)
+      ? item.firewall.rules.map(r => {
         const retRule = pick(r, [
           '_id',
           'name',
