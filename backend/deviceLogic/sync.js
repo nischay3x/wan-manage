@@ -34,7 +34,6 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
-const { getMajorVersion } = require('../versioning');
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -95,19 +94,11 @@ const toMessageContents = (message) => {
  */
 const setSyncStateOnJobQueue = async (machineId, message) => {
   // Calculate the new configuration hash
-  const { sync, versions } = await devices.findOne(
+  const { sync } = await devices.findOne(
     { machineId: machineId },
     { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
   )
     .lean();
-
-  const majorAgentVersion = getMajorVersion(versions.agent);
-  if (majorAgentVersion < 2) {
-    logger.debug('No update sync status on job queue for this device', {
-      params: { machineId, agentVersion: versions.agent }
-    });
-    return;
-  }
 
   const { hash } = sync || {};
   if (hash === null || hash === undefined) {
@@ -193,17 +184,11 @@ const queueFullSyncJob = async (device, hash, org) => {
   // Queue full sync job
   // Add current hash to message so the device can
   // use it to check if it is already synced
-  const { machineId, hostname, deviceId, versions } = device;
+  const { machineId, hostname, deviceId } = device;
 
   const params = {
     requests: []
   };
-
-  const majorAgentVersion = getMajorVersion(versions.agent);
-  if (majorAgentVersion < 3) {
-    // include hash for compatibility, not needed for version 3 and above
-    params['router-cfg-hash'] = hash;
-  }
 
   // Create sync message tasks
   const tasks = [{ entity: 'agent', message: 'sync-device', params }];
@@ -337,13 +322,9 @@ const updateSyncStatusBasedOnJobResult = async (org, deviceId, machineId, isJobS
     )
       .lean();
 
-    const majorAgentVersion = getMajorVersion(versions.agent);
-    if (majorAgentVersion >= 2) {
-      logger.debug('No job update sync status for this device', {
-        params: { machineId, agentVersion: versions.agent }
-      });
-      return;
-    }
+    logger.debug('No job update sync status for this device', {
+      params: { machineId, agentVersion: versions.agent }
+    });
 
     // only devices version <2 will have the unknown status. This is
     // needed for backward compatibility.
@@ -380,14 +361,6 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       { sync: 1, hostname: 1, versions: 1 }
     )
       .lean();
-
-    const majorAgentVersion = getMajorVersion(versions.agent);
-    if (majorAgentVersion < 2) {
-      logger.debug('No periodic update sync status for this device', {
-        params: { machineId, agentVersion: majorAgentVersion }
-      });
-      return;
-    }
 
     // Calculate the new sync state based on the hash
     // value received from the agent and the current state
@@ -440,10 +413,6 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
 
 const apply = async (device, user, data) => {
   const { _id, machineId, hostname, org, versions } = device[0];
-
-  if (getMajorVersion(versions.agent) < 2) {
-    return;
-  }
 
   // Reset auto sync in database
   await devices.findOneAndUpdate(

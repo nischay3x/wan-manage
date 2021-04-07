@@ -27,7 +27,6 @@ const {
   oneTunnelDel
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg, validateDhcpConfig } = require('./validators');
-const { getDefaultGateway } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -38,8 +37,7 @@ const pullAllWith = require('lodash/pullAllWith');
 const isEqual = require('lodash/isEqual');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
-const { getMajorVersion } = require('../versioning');
-const { buildInterfaces, getOldInterfaceIdentification } = require('./interfaces');
+const { buildInterfaces } = require('./interfaces');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
@@ -49,12 +47,7 @@ const prepareIfcParams = (interfaces, device) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
-    const majorAgentVersion = getMajorVersion(device.versions.agent);
-    if (majorAgentVersion < 3) {
-      newIfc.pci = getOldInterfaceIdentification(newIfc.devId);
-    } else {
-      newIfc.dev_id = newIfc.devId;
-    }
+    newIfc.dev_id = newIfc.devId;
     delete newIfc.devId;
 
     // Device should only be aware of DIA labels.
@@ -111,100 +104,6 @@ const transformInterfaces = (interfaces) => {
 };
 
 /**
- * Composes aggregated device modification message (agent version < 2)
- *
- * @param {*} messageParams
- * @param {Object}  device the device to which the job should be queued
- * @returns object of the following format:
- * {
- *   entity: 'agent',
- *   message: 'modify-device',
- *   params: {
- *     {}
- *   }
- * }
- * where 'params' is an object containing individual device modification
- * commands.
- */
-const prepareModificationMessageV1 = (messageParams, device) => {
-  const modificationMessage = {};
-  modificationMessage.reconnect = false;
-  if (has(messageParams, 'modify_routes')) {
-    modificationMessage.modify_routes = messageParams.modify_routes;
-  }
-  if (has(messageParams, 'modify_router.assign')) {
-    modificationMessage.modify_router = {};
-    modificationMessage.modify_router.assign = prepareIfcParams(
-      messageParams.modify_router.assign, device
-    );
-    modificationMessage.reconnect = true;
-  }
-  if (has(messageParams, 'modify_router.unassign')) {
-    if (!modificationMessage.modify_router) {
-      modificationMessage.modify_router = {};
-    }
-    modificationMessage.modify_router.unassign = prepareIfcParams(
-      messageParams.modify_router.unassign, device
-    );
-    modificationMessage.reconnect = true;
-  }
-  // Check against the old configured interfaces.
-  // If they are the same, do not initiate modify-device job.
-  if (has(messageParams, 'modify_interfaces')) {
-    const oldInterfaces = prepareIfcParams(
-      transformInterfaces(device.interfaces.toObject()), device);
-    const newInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.interfaces, device
-    );
-    const diffInterfaces = differenceWith(
-      newInterfaces,
-      oldInterfaces,
-      (origIfc, newIfc) => {
-        return isEqual(origIfc, newIfc);
-      }
-    );
-    if (diffInterfaces.length > 0) {
-      modificationMessage.modify_interfaces = {};
-      modificationMessage.modify_interfaces.interfaces = diffInterfaces;
-      modificationMessage.reconnect = true;
-    }
-  }
-
-  const tasks = [[]];
-  if (Object.keys(modificationMessage).length !== 0) {
-    tasks[0].push(
-      {
-        entity: 'agent',
-        message: 'modify-device',
-        params: modificationMessage
-      }
-    );
-  }
-
-  if (has(messageParams, 'modify_dhcp_config')) {
-    const { dhcpRemove, dhcpAdd } = messageParams.modify_dhcp_config;
-
-    if (dhcpRemove.length !== 0) {
-      tasks[0].push({
-        entity: 'agent',
-        message: 'remove-dhcp-config',
-        params: dhcpRemove
-      });
-    }
-
-    if (dhcpAdd.length !== 0) {
-      tasks[0].push({
-        entity: 'agent',
-        message: 'add-dhcp-config',
-        params: dhcpAdd
-      });
-    }
-  }
-
-  return tasks;
-};
-
-/**
  * Composes aggregated device modification message (agent version >= 2)
  *
  * @param {*} messageParams input device modification params
@@ -217,26 +116,17 @@ const prepareModificationMessageV1 = (messageParams, device) => {
  * where 'requests' is an array of individual device modification
  * commands.
  */
-const prepareModificationMessageV2 = (messageParams, device) => {
+const prepareModificationMessage = (messageParams, device) => {
   const requests = [];
   const tasks = [];
   // Check against the old configured interfaces.
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
-    const oldInterfaces = prepareIfcParams(
-      transformInterfaces(device.interfaces.toObject()), device);
-    const newInterfaces = prepareIfcParams(
+    const modifiedInterfaces = prepareIfcParams(
       messageParams.modify_interfaces.interfaces, device
     );
-    const diffInterfaces = differenceWith(
-      newInterfaces,
-      oldInterfaces,
-      (origIfc, newIfc) => {
-        return isEqual(origIfc, newIfc);
-      }
-    );
-    if (diffInterfaces.length > 0) {
-      requests.push(...diffInterfaces.map(item => {
+    if (modifiedInterfaces.length > 0) {
+      requests.push(...modifiedInterfaces.map(item => {
         return {
           entity: 'agent',
           message: 'modify-interface',
@@ -307,17 +197,9 @@ const prepareModificationMessageV2 = (messageParams, device) => {
         });
       }
 
-      const majorAgentVersion = getMajorVersion(device.versions.agent);
-      const useOldIntIdentifier = majorAgentVersion < 3;
-
       items = items.map((item) => {
         if (item.params && item.params.devId) {
-          if (useOldIntIdentifier) {
-            item.params.pci = getOldInterfaceIdentification(item.params.devId);
-          } else {
-            item.params.dev_id = item.params.devId;
-          }
-
+          item.params.dev_id = item.params.devId;
           delete item.params.devId;
         }
         return item;
@@ -460,10 +342,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
 
   // Prepare device modification job, if nothing requires modification, return
-  const majorAgentVersion = getMajorVersion(device.versions.agent);
-  const tasks = majorAgentVersion < 2
-    ? prepareModificationMessageV1(messageParams, device)
-    : prepareModificationMessageV2(messageParams, device);
+  const tasks = prepareModificationMessage(messageParams, device);
 
   if (tasks.length === 0 || tasks[0].length === 0) {
     return [];
@@ -756,14 +635,6 @@ const setTunnelsPendingInDB = (tunnelIDs, org, flag) => {
 const prepareModifyRoutes = (origDevice, newDevice) => {
   // Handle changes in default route
   const routes = [];
-  if (origDevice.defaultRoute !== newDevice.defaultRoute) {
-    routes.push({
-      addr: 'default',
-      old_route: origDevice.defaultRoute,
-      new_route: newDevice.defaultRoute
-    });
-  }
-
   // Handle changes in static routes
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
@@ -836,16 +707,10 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
  * @return {Object}            an object containing an array of routes
  */
 const prepareModifyDHCP = (origDevice, newDevice) => {
-  const majorAgentVersion = getMajorVersion(origDevice.versions.agent);
-  const isNeedUseOldIntIdentifier = majorAgentVersion < 3;
-
   // Extract only relevant fields from dhcp database entries
   const [newDHCP, origDHCP] = [
     newDevice.dhcp.map(dhcp => {
-      let intf = dhcp.interface;
-      if (isNeedUseOldIntIdentifier) {
-        intf = getOldInterfaceIdentification(intf);
-      }
+      const intf = dhcp.interface;
       return ({
         interface: intf,
         range_start: dhcp.rangeStart,
@@ -860,10 +725,7 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
     }),
 
     origDevice.dhcp.map(dhcp => {
-      let intf = dhcp.interface;
-      if (isNeedUseOldIntIdentifier) {
-        intf = getOldInterfaceIdentification(intf);
-      }
+      const intf = dhcp.interface;
       return ({
         interface: intf,
         range_start: dhcp.rangeStart,
@@ -933,28 +795,6 @@ const apply = async (device, user, data) => {
   if (modifyDHCP.dhcpRemove.length > 0 ||
       modifyDHCP.dhcpAdd.length > 0) {
     modifyParams.modify_dhcp_config = modifyDHCP;
-  }
-
-  const majorAgentVersion = getMajorVersion(device[0].versions.agent);
-  if (majorAgentVersion < 2) {
-    // Create the default route modification parameters
-    // for old agent version compatibility
-    const oldDefaultGW = getDefaultGateway(device[0]);
-    const newDefaultGW = getDefaultGateway(data.newDevice);
-    if (newDefaultGW && oldDefaultGW && newDefaultGW !== oldDefaultGW) {
-      const defaultRoute = {
-        addr: 'default',
-        old_route: oldDefaultGW,
-        new_route: newDefaultGW
-      };
-      if (modifyParams.modify_routes) {
-        modifyParams.modify_routes.routes.push(defaultRoute);
-      } else {
-        modifyParams.modify_routes = {
-          routes: [defaultRoute]
-        };
-      }
-    }
   }
 
   // Create interfaces modification parameters
@@ -1152,7 +992,7 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const { interfaces, staticroutes, dhcp, versions } = await devices.findOne(
+  const { interfaces, staticroutes, dhcp } = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
@@ -1166,21 +1006,8 @@ const sync = async (deviceId, org) => {
 
   // Prepare add-interface message
   const deviceConfRequests = [];
-  let defaultRouteIfcInfo;
   // build interfaces
-  const deviceInterfaces = buildInterfaces(interfaces);
-
-  const majorAgentVersion = getMajorVersion(versions.agent);
-  const isNeedUseOldInterfaceIdentification = majorAgentVersion < 3;
-
-  deviceInterfaces.forEach(item => {
-    if (isNeedUseOldInterfaceIdentification) {
-      item.pci = getOldInterfaceIdentification(item.devId);
-    } else {
-      item.dev_id = item.devId;
-    }
-    delete item.devId;
-
+  buildInterfaces(interfaces).forEach(item => {
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-interface',
@@ -1205,20 +1032,6 @@ const sync = async (deviceId, org) => {
     });
   }
 
-  // build routes
-  deviceInterfaces.forEach(item => {
-    const { metric, devId, gateway } = item;
-    // If found an interface with gateway metric of "0"
-    // we have to add it's gateway to the static routes
-    // sync requests
-    if (metric === '0') {
-      defaultRouteIfcInfo = {
-        devId,
-        gateway
-      };
-    }
-  });
-
   // Prepare add-route message
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
@@ -1226,16 +1039,9 @@ const sync = async (deviceId, org) => {
     const params = {
       addr: destination,
       via: gateway,
-      devId: ifname || undefined,
+      dev_id: ifname || undefined,
       metric: metric ? parseInt(metric, 10) : undefined
     };
-
-    if (isNeedUseOldInterfaceIdentification) {
-      params.pci = getOldInterfaceIdentification(params.devId);
-      delete params.devId;
-    } else {
-      params.dev_id = params.devId;
-    }
 
     deviceConfRequests.push({
       entity: 'agent',
@@ -1244,34 +1050,15 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  // Add default route if needed
-  if (defaultRouteIfcInfo) {
-    const { devId, gateway } = defaultRouteIfcInfo;
-    deviceConfRequests.push({
-      entity: 'agent',
-      message: 'add-route',
-      params: {
-        addr: 'default',
-        via: gateway,
-        devId: devId,
-        metric: 0
-      }
-    });
-  }
-
   // Prepare add-dhcp-config message
   Array.isArray(dhcp) && dhcp.forEach(entry => {
     const { rangeStart, rangeEnd, dns, macAssign } = entry;
-    let devId = entry.interface;
-    if (isNeedUseOldInterfaceIdentification) {
-      devId = getOldInterfaceIdentification(entry.interface);
-    }
 
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-dhcp-config',
       params: {
-        interface: devId,
+        interface: entry.interface,
         range_start: rangeStart,
         range_end: rangeEnd,
         dns: dns,

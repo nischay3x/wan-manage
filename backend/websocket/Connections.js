@@ -424,16 +424,7 @@ class Connections {
           throw new Error('Failed to apply new config, only one device change is allowed');
         }
 
-        let incomingInterfaces = deviceInfo.message.network.interfaces;
-        if (getMajorVersion(deviceInfo.message.device) < 3) {
-          incomingInterfaces = deviceInfo.message.network.interfaces.map(
-            (inf) => {
-              const devId = 'pci:' + inf.pciaddr;
-              delete inf.pciaddr;
-              return { ...inf, devId };
-            }
-          );
-        }
+        const incomingInterfaces = deviceInfo.message.network.interfaces;
 
         const interfaces = origDevice.interfaces.map(i => {
           const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
