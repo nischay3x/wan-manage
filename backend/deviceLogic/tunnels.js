@@ -30,7 +30,6 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
-const { getOldInterfaceIdentification } = require('./interfaces');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
@@ -1287,18 +1286,10 @@ const prepareTunnelParams = (
     }
   };
 
-  if (getMajorVersion(deviceAVersions.agent) < 3) {
-    paramsDeviceA.pci = getOldInterfaceIdentification(paramsDeviceA.devId);
-  } else {
-    paramsDeviceA.dev_id = paramsDeviceA.devId;
-  }
+  paramsDeviceA.dev_id = paramsDeviceA.devId;
   delete paramsDeviceA.devId;
 
-  if (getMajorVersion(deviceBVersions.agent) < 3) {
-    paramsDeviceB.pci = getOldInterfaceIdentification(paramsDeviceB.devId);
-  } else {
-    paramsDeviceB.dev_id = paramsDeviceB.devId;
-  }
+  paramsDeviceB.dev_id = paramsDeviceB.devId;
   delete paramsDeviceB.devId;
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };

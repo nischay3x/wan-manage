@@ -29,7 +29,6 @@ const mongoose = require('mongoose');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
-const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
@@ -37,7 +36,6 @@ const { validateOperations } = require('../deviceLogic/interfaces');
 const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-const { getMajorVersion } = require('../versioning');
 const wifiChannels = require('../utils/wifi-channels');
 const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
 const deviceQueues = require('../utils/deviceQueue')(
@@ -384,16 +382,10 @@ class DevicesService {
         });
       }
 
-      let api = 'get-device-config';
-      const majorAgentVersion = getMajorVersion(device[0].versions.agent);
-      if (majorAgentVersion < 3) {
-        api = 'get-router-config';
-      }
-
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: api }
+        { entity: 'agent', message: 'get-device-config' }
       );
 
       if (!deviceConf.ok) {
@@ -1597,72 +1589,27 @@ class DevicesService {
       });
       if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
 
-      const majorAgentVersion = getMajorVersion(deviceObject.versions.agent);
+      const dhcpData = {
+        _id: dhcpId,
+        interface: dhcpRequest.interface,
+        rangeStart: dhcpRequest.rangeStart,
+        rangeEnd: dhcpRequest.rangeEnd,
+        dns: dhcpRequest.dns,
+        macAssign: dhcpRequest.macAssign
+      };
 
-      if (majorAgentVersion < 2) {
-        const origDhcp = dhcpFiltered[0].toObject();
-        const origCmpDhcp = {
-          _id: origDhcp._id.toString(),
-          dns: origDhcp.dns,
-          interface: origDhcp.interface,
-          macAssign: origDhcp.macAssign.map(m => ({ host: m.host, mac: m.mac, ipv4: m.ipv4 })),
-          rangeStart: origDhcp.rangeStart,
-          rangeEnd: origDhcp.rangeEnd
-        };
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: deviceObject._id },
+        { $set: { 'dhcp.$[elem]': dhcpData } },
+        { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }], new: true }
+      );
 
-        // Check if any difference exists between request to current dhcp,
-        // in that case no need to resend data
-        if (!isEqual(dhcpRequest, origCmpDhcp)) {
-          DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
-          const copy = Object.assign({}, dhcpRequest);
-          copy.org = orgList[0];
-          copy.method = 'dhcp';
-          copy.action = 'modify';
-          copy.origDhcp = origCmpDhcp;
-          const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-          response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
-          const dhcpData = {
-            _id: dhcpId,
-            interface: dhcpRequest.interface,
-            rangeStart: dhcpRequest.rangeStart,
-            rangeEnd: dhcpRequest.rangeEnd,
-            dns: dhcpRequest.dns,
-            macAssign: dhcpRequest.macAssign,
-            status: 'add-wait'
-          };
-
-          await devices.findOneAndUpdate(
-            { _id: deviceObject._id },
-            { $set: { 'dhcp.$[elem]': dhcpData } },
-            { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }] });
-          return Service.successResponse(dhcpData, 202);
-        }
-      }
-
-      if (majorAgentVersion >= 2) {
-        const dhcpData = {
-          _id: dhcpId,
-          interface: dhcpRequest.interface,
-          rangeStart: dhcpRequest.rangeStart,
-          rangeEnd: dhcpRequest.rangeEnd,
-          dns: dhcpRequest.dns,
-          macAssign: dhcpRequest.macAssign
-        };
-
-        const updDevice = await devices.findOneAndUpdate(
-          { _id: deviceObject._id },
-          { $set: { 'dhcp.$[elem]': dhcpData } },
-          { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcpId) }], new: true }
-        );
-
-        const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
-          org: orgList[0],
-          newDevice: updDevice
-        });
-        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-        return Service.successResponse(dhcpData, 202);
-      }
+      const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+        org: orgList[0],
+        newDevice: updDevice
+      });
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      return Service.successResponse(dhcpData, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

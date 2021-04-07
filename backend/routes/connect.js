@@ -24,7 +24,7 @@ const tokens = require('../models/tokens');
 const { devices } = require('../models/devices');
 const jwt = require('jsonwebtoken');
 const mongoConns = require('../mongoConns.js')();
-const { getMajorVersion, verifyAgentVersion } = require('../versioning');
+const { verifyAgentVersion } = require('../versioning');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -155,14 +155,6 @@ connectRouter.route('/register')
                   intf.metric = '';
                 }
               });
-
-              if (getMajorVersion(req.body.fwagent_version) < 3) {
-                ifs = ifs.map((inf) => {
-                  inf.devId = 'pci:' + inf.pciaddr;
-                  delete inf.pciaddr;
-                  return { ...inf };
-                });
-              }
 
               // Prepare device versions array
               const versions = {
