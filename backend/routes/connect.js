@@ -109,7 +109,7 @@ connectRouter.route('/register')
               });
 
               // Try to auto populate interfaces parameters
-              let ifs = JSON.parse(req.body.interfaces);
+              const ifs = JSON.parse(req.body.interfaces);
 
               // Get an interface with gateway and the lowest metric
               const defaultIntf = ifs ? ifs.reduce((res, intf) =>
