@@ -51,8 +51,8 @@ const buildInterfaces = (deviceInterfaces) => {
       dhcp,
       deviceType,
       configuration,
-      staticDnsServers,
-      staticDnsDomains
+      dnsServers,
+      dnsDomains
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -82,8 +82,8 @@ const buildInterfaces = (deviceInterfaces) => {
       ifcInfo.PublicPort = PublicPort;
       ifcInfo.useStun = useStun;
       ifcInfo.monitorInternet = monitorInternet;
-      ifcInfo.staticDnsServers = staticDnsServers;
-      ifcInfo.staticDnsDomains = staticDnsDomains;
+      ifcInfo.dnsServers = dnsServers;
+      ifcInfo.dnsDomains = dnsDomains;
     }
     interfaces.push(ifcInfo);
   }

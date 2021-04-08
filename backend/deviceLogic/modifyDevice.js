@@ -99,8 +99,8 @@ const transformInterfaces = (interfaces) => {
       pathlabels: ifc.pathlabels,
       configuration: ifc.configuration,
       deviceType: ifc.deviceType,
-      staticDnsServers: ifc.staticDnsServers,
-      staticDnsDomains: ifc.staticDnsDomains
+      dnsServers: ifc.dnsServers,
+      dnsDomains: ifc.dnsDomains
     };
   });
 };

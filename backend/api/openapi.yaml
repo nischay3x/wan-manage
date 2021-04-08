@@ -6634,8 +6634,8 @@ components:
           devId: devId
           _id: _id
           deviceType: dpdk
-          staticDnsServers: [8.8.8.8, 8.8.4.4]
-          staticDnsDomains: [subdomain.maindomain]
+          dnsServers: [8.8.8.8, 8.8.4.4]
+          dnsDomains: [subdomain.maindomain]
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
@@ -6940,8 +6940,8 @@ components:
         devId: devId
         _id: _id
         pathlabels: path labels list
-        staticDnsServers: [8.8.8.8, 8.8.4.4]
-        staticDnsDomains: [subdomain.maindomain]
+        dnsServers: [8.8.8.8, 8.8.4.4]
+        dnsDomains: [subdomain.maindomain]
       properties:
         _id:
           maxLength: 24
@@ -7017,13 +7017,13 @@ components:
               minProperties: 0
               maxProperties: 0
           type: object
-        staticDnsServers:
+        dnsServers:
           description: List of DNS address
           items:
             type: string
             maxLength: 20
           type: array
-        staticDnsDomains:
+        dnsDomains:
           description: List of DNS search domains
           items:
             type: string
