@@ -50,7 +50,7 @@ const validateIKEv2 = (device) => {
       reason: 'IKEv2 encryption method not supported'
     };
   };
-  if (!device.IKEv2.certificate || !device.IKEv2.expireTime) {
+  if (!device.IKEv2 || !device.IKEv2.certificate || !device.IKEv2.expireTime) {
     return {
       valid: false,
       reason: 'No valid IKEv2 certificate'

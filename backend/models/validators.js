@@ -127,7 +127,7 @@ const validateIpList = (list) => {
   return true;
 };
 const isPort = (val) => {
-  return !isEmpty(val) && !(val === '') && validateIsInteger(val) && val >= 0 && val <= 65535;
+  return !isEmpty(val) && !(val === '') && validateIsInteger(+val) && val >= 0 && val <= 65535;
 };
 const validatePort = port => port === '' || isPort(port);
 const validatePortRange = (range) => {
