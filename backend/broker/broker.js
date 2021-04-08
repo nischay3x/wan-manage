@@ -138,7 +138,11 @@ const deviceProcessor = async (job) => {
         // Dispatch the response for Job completion
         // In the past this was called from job complete event but there were some missing events
         // So moved the dispatcher to here
-        dispatcher.complete(job.id, job.data.response);
+        const response = {
+          ...job.data.response,
+          data: { ...job.data.response.data, agentMessage: results.message }
+        };
+        dispatcher.complete(job.id, response);
         // Device configuration hash is included in every job
         // response. Use it to update the device's sync status
         try {

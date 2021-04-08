@@ -111,7 +111,7 @@ const configEnv = {
     // Client static root directory
     clientStaticDir: 'public',
     // Mgmt-Agent protocol version
-    agentApiVersion: '3.0.0',
+    agentApiVersion: '4.0.0',
     // Mgmt log files
     logFilePath: './logs/app.log',
     reqLogFilePath: './logs/req.log',
@@ -159,7 +159,13 @@ const configEnv = {
     // This value is for storing in the database, it's not impacting the interval presented in the UI
     analyticsUpdateTime: 300,
     // Do not allow organization LAN subnet overlaps for running devices flag. Default = true
-    forbidLanSubnetOverlaps: true
+    forbidLanSubnetOverlaps: true,
+    // Expiration period in days for generated IKEv2 keys on the devices. Default = 360 days
+    ikev2ExpireDays: 360,
+    // Number of days before expiration to renew IKEv2 keys. Default = 30 days
+    ikev2RenewBeforeExpireDays: 30,
+    // IKEv2 lifetime parameter in seconds.
+    ikev2Lifetime: 3600
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -172,7 +178,7 @@ const configEnv = {
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
-    agentApiVersion: '3.0.0',
+    agentApiVersion: '4.0.0',
     // Kue prefix
     kuePrefix: 'testq'
   },
