@@ -29,6 +29,8 @@ const mongoose = require('mongoose');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
+const omit = require('lodash/omit');
+const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
@@ -962,7 +964,7 @@ class DevicesService {
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      let modifyDevResult = [];
+      let modifyDevResult = { ids: [] };
       if (origDevice) {
         modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
           org: orgList[0],
@@ -970,7 +972,39 @@ class DevicesService {
         });
       }
 
-      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
+      // If firewall rules modified then need to send install firewall policy job to the device
+      let modifyFirewallResult = { ids: [] };
+      const { firewall } = updDevice.policies;
+      if (firewall && firewall.status && firewall.status.search('uninst') === -1) {
+        const updRules = updDevice.firewall.rules.toObject();
+        const origRules = origDevice.firewall.rules.toObject();
+        const rulesModified = !(updRules.length === origRules.length &&
+          updRules.every((updatedRule, index) =>
+            isEqual(
+              omit(updatedRule, ['_id', 'name', 'classification']),
+              omit(origRules[index], ['_id', 'name', 'classification'])
+            ) &&
+            isEqual(
+              omit(updatedRule.classification.source, ['_id']),
+              omit(origRules[index].classification.source, ['_id'])
+            ) &&
+            isEqual(
+              omit(updatedRule.classification.destination, ['_id']),
+              omit(origRules[index].classification.destination, ['_id'])
+            )
+          )
+        );
+        if (rulesModified) {
+          modifyFirewallResult = await dispatcher.apply([origDevice], 'firewallPolicy', user, {
+            org: orgList[0],
+            meta: {
+              op: 'install',
+              id: firewall.policy
+            }
+          });
+        }
+      }
+      const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
       const ids = [modifyDevResult.ids[0]];
       response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
       const deviceObj = DevicesService.selectDeviceParams(updDevice);

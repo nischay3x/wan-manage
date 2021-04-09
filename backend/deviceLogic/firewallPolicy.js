@@ -30,6 +30,7 @@ const { getDevicesAppIdentificationJobInfo } = require('./appIdentification');
 const appComplete = require('./appIdentification').complete;
 const appError = require('./appIdentification').error;
 const appRemove = require('./appIdentification').remove;
+const isEmpty = require('lodash/isEmpty');
 
 const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
@@ -56,11 +57,30 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
       }
     ]];
     if (op === 'install') {
-      const firewallRules = [...policy.rules, ...(dev.firewall.rules || [])];
+      const firewallRules = [...policy.rules.toObject(), ...dev.firewall.rules.toObject()];
       tasks[0][0].params.id = policy._id;
       tasks[0][0].params.outbound = {
         rules: firewallRules.filter(rule => rule.direction === 'outbound').map(rule => {
-          const { _id, priority, action, classification, interfaces } = rule;
+          const { _id, priority, action, interfaces } = rule;
+          const classification = {};
+          if (rule.classification) {
+            if (!isEmpty(rule.classification.source)) {
+              classification.source = {};
+              ['trafficId', 'ipPort'].forEach(item => {
+                if (!isEmpty(rule.classification.source[item])) {
+                  classification.source[item] = rule.classification.source[item];
+                }
+              });
+            }
+            if (!isEmpty(rule.classification.destination)) {
+              classification.destination = {};
+              ['trafficId', 'trafficTags', 'ipProtoPort'].forEach(item => {
+                if (!isEmpty(rule.classification.destination[item])) {
+                  classification.destination[item] = rule.classification.destination[item];
+                }
+              });
+            }
+          }
           const jobRule = {
             id: _id,
             priority,
@@ -75,18 +95,29 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
       };
       tasks[0][0].params.inbound = firewallRules.filter(r => r.direction === 'inbound')
         .reduce((result, rule) => {
-          const { _id, inbound, priority, action, classification } = rule;
+          const { _id, inbound, priority, action } = rule;
+          const classification = {};
+          if (!isEmpty(rule.classification.source)) {
+            classification.source = {};
+            ['trafficId', 'ipPort'].forEach(item => {
+              if (!isEmpty(rule.classification.source[item])) {
+                classification.source[item] = rule.classification.source[item];
+              }
+            });
+          }
+          const { ipProtoPort } = rule.classification.destination;
+          if (!isEmpty(ipProtoPort)) {
+            classification.destination = {};
+            ['interface', 'ports', 'protocols'].forEach(item => {
+              if (!isEmpty(ipProtoPort[item])) {
+                classification.destination[item] = ipProtoPort[item];
+              }
+            });
+          }
           const jobRule = {
             id: _id,
             priority,
-            classification: {
-              source: classification.source,
-              destination: {
-                interface: classification.destination.ipProtoPort.interface,
-                ports: classification.destination.ipProtoPort.ports,
-                protocols: classification.destination.ipProtoPort.protocols
-              }
-            },
+            classification,
             action: {
               internalIP: rule.internalIP,
               internalPortStart: rule.internalPortStart,
@@ -177,7 +208,7 @@ const getOpDevices = async (devicesObj, org, policy) => {
 
 const filterDevices = (devices, deviceIds, op) => {
   const filteredDevices = devices.filter(device => {
-    const { status, policy } = device.policies.firewall;
+    const { status, policy } = device.policies.firewall || {};
     // Don't attempt to uninstall a policy if the device
     // doesn't have one, or if its policy is already in
     // the process of being uninstalled.

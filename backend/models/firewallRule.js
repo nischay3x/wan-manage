@@ -22,8 +22,8 @@ const {
   validatePortRange
 } = require('./validators');
 
-// Rule classification schema
-const firewallRuleClassificationSchema = new Schema({
+// Source classification schema
+const sourceClassificationSchema = new Schema({
   ipPort: {
     ip: {
       type: String,
@@ -41,6 +41,14 @@ const firewallRuleClassificationSchema = new Schema({
       }
     }
   },
+  trafficId: {
+    type: String,
+    maxlength: [25, 'trafficId must be at most 25']
+  }
+});
+
+// Destination classification schema
+const destinationClassificationSchema = new Schema({
   ipProtoPort: {
     ip: {
       type: String,
@@ -129,8 +137,8 @@ const firewallRuleSchema = new Schema({
     required: true
   },
   classification: {
-    source: firewallRuleClassificationSchema,
-    destination: firewallRuleClassificationSchema
+    source: sourceClassificationSchema,
+    destination: destinationClassificationSchema
   },
   action: {
     type: String,

@@ -24,10 +24,40 @@ const { ObjectId } = require('mongoose').Types;
 
 class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org) {
+    const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
     const { _id, name, rules } = firewallPolicyRequest;
     for (const rule of rules) {
+      const { direction, inbound } = rule;
+      // Inbound rule type must be specified
+      if (direction === 'inbound' && !inboundRuleTypes.includes(inbound)) {
+        return {
+          valid: false,
+          message: 'Wrong inbound rule type'
+        };
+      }
       for (const [side, { trafficTags, ipPort, ipProtoPort }]
         of Object.entries(rule.classification)) {
+        // Only ip, ports and protocols allowed for inbound rule destination
+        if (!ipProtoPort && side === 'destination' && direction === 'inbound') {
+          return {
+            valid: false,
+            message: 'Only ip, ports and protocols allowed for inbound rule destination'
+          };
+        }
+        // Ip, ports and protocols must be specified for the destination
+        if (ipPort && side === 'destination') {
+          return {
+            valid: false,
+            message: 'Ip, ports and protocols must be specified for the destination'
+          };
+        }
+        // Only ip and ports without protocols can be specified for the source
+        if (ipProtoPort && side === 'source') {
+          return {
+            valid: false,
+            message: 'Only IP and ports without protocols can be specified for the source'
+          };
+        }
         // Empty (ip, ports, protocol) not allowed
         if (ipPort) {
           const { ip, ports } = ipPort;
