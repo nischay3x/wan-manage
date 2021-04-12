@@ -26,6 +26,8 @@ const { deviceStats } = require('../models/analytics/deviceStats');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
+const validator = require('validator');
+const net = require('net');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
@@ -840,6 +842,29 @@ class DevicesService {
                 `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
               );
             }
+
+            if (updIntf.isAssigned && updIntf.dhcp === 'no' && updIntf.type === 'WAN') {
+              const isValidIpList = updIntf.dnsServers.every((ip) => {
+                return net.isIPv4(ip);
+              });
+
+              if (!isValidIpList) {
+                throw new Error(
+                  `DNS ip addresses are not valid for (${origIntf.name})`
+                );
+              }
+
+              const isValidDomainList = updIntf.dnsDomains.every((domain) => {
+                return validator.isFQDN(domain);
+              });
+
+              if (!isValidDomainList) {
+                throw new Error(
+                  `DNS domain list is not valid for (${origIntf.name})`
+                );
+              }
+            }
+
             if (updIntf.isAssigned !== origIntf.isAssigned ||
               updIntf.type !== origIntf.type ||
               updIntf.dhcp !== origIntf.dhcp ||
