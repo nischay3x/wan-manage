@@ -32,6 +32,92 @@ const appError = require('./appIdentification').error;
 const appRemove = require('./appIdentification').remove;
 const isEmpty = require('lodash/isEmpty');
 
+const prepareParameters = (policy, device) => {
+  const params = {};
+  const firewallRules = [...policy.rules, ...device.firewall.rules];
+  params.id = policy._id;
+  params.outbound = {
+    rules: firewallRules.filter(rule => rule.direction === 'outbound').map(rule => {
+      const { _id, priority, action, interfaces } = rule;
+      const classification = {};
+      if (rule.classification) {
+        if (!isEmpty(rule.classification.source)) {
+          classification.source = {};
+          ['trafficId', 'ipPort'].forEach(item => {
+            if (!isEmpty(rule.classification.source[item])) {
+              classification.source[item] = rule.classification.source[item];
+            }
+          });
+        }
+        if (!isEmpty(rule.classification.destination)) {
+          classification.destination = {};
+          ['trafficId', 'trafficTags', 'ipProtoPort'].forEach(item => {
+            if (!isEmpty(rule.classification.destination[item])) {
+              classification.destination[item] = rule.classification.destination[item];
+            }
+          });
+        }
+      }
+      const jobRule = {
+        id: _id,
+        priority,
+        classification,
+        action: {
+          interfaces,
+          permit: action === 'allow'
+        }
+      };
+      return jobRule;
+    })
+  };
+  params.inbound = firewallRules.filter(r => r.direction === 'inbound')
+    .reduce((result, rule) => {
+      const { _id, inbound, priority, action } = rule;
+      const classification = {};
+      if (!isEmpty(rule.classification.source) && inbound !== 'nat1to1') {
+        classification.source = {};
+        ['trafficId', 'ipPort'].forEach(item => {
+          if (!isEmpty(rule.classification.source[item])) {
+            classification.source[item] = rule.classification.source[item];
+          }
+        });
+      }
+      const { ipProtoPort } = rule.classification.destination;
+      if (!isEmpty(ipProtoPort)) {
+        classification.destination = {};
+        const inboundParams = inbound === 'nat1to1' ? ['interface']
+          : ['interface', 'ports', 'protocols'];
+        inboundParams.forEach(item => {
+          if (!isEmpty(ipProtoPort[item])) {
+            classification.destination[item] = ipProtoPort[item];
+          }
+        });
+      }
+      const ruleAction = {};
+      switch (inbound) {
+        case 'nat1to1':
+          ruleAction.internalIP = rule.internalIP;
+          break;
+        case 'portForward':
+          ruleAction.internalIP = rule.internalIP;
+          ruleAction.internalPortStart = +rule.internalPortStart;
+          break;
+        default:
+          ruleAction.permit = action === 'allow';
+      }
+      const jobRule = {
+        id: _id,
+        priority,
+        classification,
+        action: ruleAction
+      };
+      result[inbound] = result[inbound] || { rules: [] };
+      result[inbound].rules.push(jobRule);
+      return result;
+    }, {});
+  return params;
+};
+
 const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
   const jobTitle = op === 'install'
@@ -49,86 +135,13 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
 
   deviceList.forEach(dev => {
     const { _id, machineId, policies } = dev;
-    const tasks = [[
+    const tasks = [
       {
         entity: 'agent',
         message: `${op === 'install' ? 'add' : 'remove'}-firewall-policy`,
-        params: {}
+        params: op === 'install' ? prepareParameters(policy, dev) : {}
       }
-    ]];
-    if (op === 'install') {
-      const firewallRules = [...policy.rules.toObject(), ...dev.firewall.rules.toObject()];
-      tasks[0][0].params.id = policy._id;
-      tasks[0][0].params.outbound = {
-        rules: firewallRules.filter(rule => rule.direction === 'outbound').map(rule => {
-          const { _id, priority, action, interfaces } = rule;
-          const classification = {};
-          if (rule.classification) {
-            if (!isEmpty(rule.classification.source)) {
-              classification.source = {};
-              ['trafficId', 'ipPort'].forEach(item => {
-                if (!isEmpty(rule.classification.source[item])) {
-                  classification.source[item] = rule.classification.source[item];
-                }
-              });
-            }
-            if (!isEmpty(rule.classification.destination)) {
-              classification.destination = {};
-              ['trafficId', 'trafficTags', 'ipProtoPort'].forEach(item => {
-                if (!isEmpty(rule.classification.destination[item])) {
-                  classification.destination[item] = rule.classification.destination[item];
-                }
-              });
-            }
-          }
-          const jobRule = {
-            id: _id,
-            priority,
-            classification,
-            action: {
-              interfaces,
-              permit: action === 'allow'
-            }
-          };
-          return jobRule;
-        })
-      };
-      tasks[0][0].params.inbound = firewallRules.filter(r => r.direction === 'inbound')
-        .reduce((result, rule) => {
-          const { _id, inbound, priority, action } = rule;
-          const classification = {};
-          if (!isEmpty(rule.classification.source)) {
-            classification.source = {};
-            ['trafficId', 'ipPort'].forEach(item => {
-              if (!isEmpty(rule.classification.source[item])) {
-                classification.source[item] = rule.classification.source[item];
-              }
-            });
-          }
-          const { ipProtoPort } = rule.classification.destination;
-          if (!isEmpty(ipProtoPort)) {
-            classification.destination = {};
-            ['interface', 'ports', 'protocols'].forEach(item => {
-              if (!isEmpty(ipProtoPort[item])) {
-                classification.destination[item] = ipProtoPort[item];
-              }
-            });
-          }
-          const jobRule = {
-            id: _id,
-            priority,
-            classification,
-            action: {
-              internalIP: rule.internalIP,
-              internalPortStart: rule.internalPortStart,
-              permit: action === 'allow'
-            }
-          };
-          result[inbound] = result[inbound] || { rules: [] };
-          result[inbound].rules.push(jobRule);
-          return result;
-        }, {});
-    }
+    ];
     const data = {
       policy: {
         device: { _id: _id, firewallPolicy: policies.firewall },
@@ -148,7 +161,7 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
         message: message,
         params: params
       };
-      op === 'install' ? tasks[0].unshift(task) : tasks[0].push(task);
+      op === 'install' ? tasks.unshift(task) : tasks.push(task);
 
       data.appIdentification = {
         deviceId: _id,
@@ -499,13 +512,13 @@ const remove = async (job) => {
  * @return Object
  */
 const sync = async (deviceId, org) => {
-  const { policies } = await devices.findOne(
+  const device = await devices.findOne(
     { _id: deviceId },
-    { 'policies.firewall': 1 }
+    { 'policies.firewall': 1, 'firewall.rules': 1 }
   )
     .lean();
 
-  const { policy, status } = policies.firewall;
+  const { policy, status } = device.policies.firewall;
 
   // No need to take care of no policy cases,
   // as the device removes the policy in the
@@ -528,15 +541,7 @@ const sync = async (deviceId, org) => {
     // The policy will be removed by the device
     // at the beginning of the sync process
     if (firewallPolicy) {
-      const params = {};
-      params.id = policy;
-      params.rules = [];
-      firewallPolicy.rules.forEach(rule => {
-        const { _id, priority, action, classification, status } = rule;
-        if (status === 'enabled') {
-          params.rules.push({ id: _id, priority, action, classification });
-        }
-      });
+      const params = prepareParameters(firewallPolicy, device);
       // Push policy task and relevant data for sync complete handler
       requests.push({ entity: 'agent', message: 'add-firewall-policy', params });
       completeCbData.push({

@@ -19,6 +19,8 @@ const { Schema } = require('mongoose');
 const {
   validateRuleName,
   validateIPv4WithMask,
+  validateIPv4,
+  validatePort,
   validatePortRange
 } = require('./validators');
 
@@ -118,10 +120,18 @@ const firewallRuleSchema = new Schema({
   },
   internalIP: {
     type: String,
+    validate: {
+      validator: validateIPv4,
+      message: 'Internal IP should be a valid ip address'
+    },
     required: false
   },
   internalPortStart: {
     type: String,
+    validate: {
+      validator: validatePort,
+      message: 'Port format is invalid'
+    },
     required: false
   },
   priority: {
