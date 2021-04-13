@@ -33,9 +33,14 @@ const appRemove = require('./appIdentification').remove;
 const isEmpty = require('lodash/isEmpty');
 
 const prepareParameters = (policy, device) => {
+  const policyRules = policy ? policy.rules.toObject() : [];
+  const deviceRules = device.firewall ? device.firewall.rules.toObject() : [];
+  const firewallRules = [...policyRules, ...deviceRules];
+  if (firewallRules.length === 0) {
+    return null;
+  }
   const params = {};
-  const firewallRules = [...policy.rules.toObject(), ...device.firewall.rules.toObject()];
-  params.id = policy._id;
+  params.id = policy ? policy._id : 'device-specific';
   params.outbound = {
     rules: firewallRules.filter(rule => rule.direction === 'outbound').map(rule => {
       const { _id, priority, action, interfaces } = rule;
@@ -121,7 +126,7 @@ const prepareParameters = (policy, device) => {
 const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
   const jobTitle = op === 'install'
-    ? `Install policy ${policy.name}`
+    ? policy ? `Install policy ${policy.name}` : 'Install device specific policy'
     : 'Uninstall policy';
 
   // Extract applications information
@@ -525,8 +530,9 @@ const sync = async (deviceId, org) => {
   const requests = [];
   const completeCbData = [];
   let callComplete = false;
+  let firewallPolicy;
   if (status.startsWith('install')) {
-    const firewallPolicy = await firewallPoliciesModel.findOne(
+    firewallPolicy = await firewallPoliciesModel.findOne(
       {
         _id: policy
       },
@@ -535,21 +541,18 @@ const sync = async (deviceId, org) => {
         name: 1
       }
     );
-
-    // Nothing to do if the policy was not found.
-    // The policy will be removed by the device
-    // at the beginning of the sync process
-    if (firewallPolicy) {
-      const params = prepareParameters(firewallPolicy, device);
-      // Push policy task and relevant data for sync complete handler
-      requests.push({ entity: 'agent', message: 'add-firewall-policy', params });
-      completeCbData.push({
-        org,
-        deviceId,
-        op: 'install'
-      });
-      callComplete = true;
-    }
+  }
+  // if no firewall policy then device specific rules will be sent
+  const params = prepareParameters(firewallPolicy, device);
+  if (!isEmpty(params)) {
+    // Push policy task and relevant data for sync complete handler
+    requests.push({ entity: 'agent', message: 'add-firewall-policy', params });
+    completeCbData.push({
+      org,
+      deviceId,
+      op: 'install'
+    });
+    callComplete = true;
   }
 
   return {
@@ -565,5 +568,6 @@ module.exports = {
   completeSync: completeSync,
   error: error,
   remove: remove,
-  sync: sync
+  sync: sync,
+  queueFirewallPolicyJob
 };

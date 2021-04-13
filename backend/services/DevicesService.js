@@ -20,6 +20,7 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
+const firewallPoliciesModel = require('../models/firewallPolicies');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -34,6 +35,7 @@ const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
+const { queueFirewallPolicyJob } = require('../deviceLogic/firewallPolicy');
 const { validateOperations } = require('../deviceLogic/interfaces');
 const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
@@ -973,36 +975,53 @@ class DevicesService {
       }
 
       // If firewall rules modified then need to send install firewall policy job to the device
-      let modifyFirewallResult = { ids: [] };
-      const { firewall } = updDevice.policies;
-      if (firewall && firewall.status && firewall.status.search('uninst') === -1) {
-        const updRules = updDevice.firewall.rules.toObject();
-        const origRules = origDevice.firewall.rules.toObject();
-        const rulesModified = !(updRules.length === origRules.length &&
-          updRules.every((updatedRule, index) =>
-            isEqual(
-              omit(updatedRule, ['_id', 'name', 'classification']),
-              omit(origRules[index], ['_id', 'name', 'classification'])
-            ) &&
-            isEqual(
-              omit(updatedRule.classification.source, ['_id']),
-              omit(origRules[index].classification.source, ['_id'])
-            ) &&
-            isEqual(
-              omit(updatedRule.classification.destination, ['_id']),
-              omit(origRules[index].classification.destination, ['_id'])
-            )
+      const modifyFirewallResult = { ids: [] };
+      const updRules = updDevice.firewall.rules.toObject();
+      const origRules = origDevice.firewall.rules.toObject();
+      const rulesModified = !(updRules.length === origRules.length &&
+        updRules.every((updatedRule, index) =>
+          isEqual(
+            omit(updatedRule, ['_id', 'name', 'classification']),
+            omit(origRules[index], ['_id', 'name', 'classification'])
+          ) &&
+          isEqual(
+            omit(updatedRule.classification.source, ['_id']),
+            omit(origRules[index].classification.source, ['_id'])
+          ) &&
+          isEqual(
+            omit(updatedRule.classification.destination, ['_id']),
+            omit(origRules[index].classification.destination, ['_id'])
           )
+        )
+      );
+      if (rulesModified) {
+        const requestTime = Date.now();
+        const { firewall } = updDevice.policies;
+        let firewallPolicy;
+        if (firewall && firewall.status && firewall.status.startsWith('install')) {
+          firewallPolicy = await firewallPoliciesModel.findOne(
+            { org: orgList[0], _id: firewall.policy },
+            { rules: 1, name: 1 }
+          ).session(session);
+        };
+        const jobs = await queueFirewallPolicyJob(
+          [origDevice],
+          'install',
+          requestTime,
+          firewallPolicy,
+          user,
+          orgList[0]
         );
-        if (rulesModified) {
-          modifyFirewallResult = await dispatcher.apply([origDevice], 'firewallPolicy', user, {
-            org: orgList[0],
-            meta: {
-              op: 'install',
-              id: firewall.policy
-            }
-          });
-        }
+        modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
+        /*
+        modifyFirewallResult = await dispatcher.apply([origDevice], 'firewallPolicy', user, {
+          org: orgList[0],
+          meta: {
+            op: 'install',
+            id: firewall.policy
+          }
+        });
+        */
       }
       const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
       const ids = [modifyDevResult.ids[0]];
