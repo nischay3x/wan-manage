@@ -71,7 +71,6 @@ const prepareIfcParams = (interfaces, device) => {
         // Don't send unnecessary info for WAN interfaces
         delete newIfc.useFixedPublicPort;
       }
-
     }
     return newIfc;
   });
