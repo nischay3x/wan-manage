@@ -1005,7 +1005,7 @@ class DevicesService {
           ).session(session);
         };
         const jobs = await queueFirewallPolicyJob(
-          [origDevice],
+          [updDevice],
           'install',
           requestTime,
           firewallPolicy,
@@ -1013,15 +1013,6 @@ class DevicesService {
           orgList[0]
         );
         modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
-        /*
-        modifyFirewallResult = await dispatcher.apply([origDevice], 'firewallPolicy', user, {
-          org: orgList[0],
-          meta: {
-            op: 'install',
-            id: firewall.policy
-          }
-        });
-        */
       }
       const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
       const ids = [modifyDevResult.ids[0]];
