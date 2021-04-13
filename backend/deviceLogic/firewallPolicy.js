@@ -34,7 +34,7 @@ const isEmpty = require('lodash/isEmpty');
 
 const prepareParameters = (policy, device) => {
   const params = {};
-  const firewallRules = [...policy.rules, ...device.firewall.rules];
+  const firewallRules = [...policy.rules.toObject(), ...device.firewall.rules.toObject()];
   params.id = policy._id;
   params.outbound = {
     rules: firewallRules.filter(rule => rule.direction === 'outbound').map(rule => {
@@ -515,8 +515,7 @@ const sync = async (deviceId, org) => {
   const device = await devices.findOne(
     { _id: deviceId },
     { 'policies.firewall': 1, 'firewall.rules': 1 }
-  )
-    .lean();
+  );
 
   const { policy, status } = device.policies.firewall;
 
