@@ -6455,7 +6455,7 @@ components:
         encryptionMethod:
           enum:
           - none
-          - pre-shared-key
+          - psk
           - ikev2
           type: string
       type: object
@@ -6480,7 +6480,7 @@ components:
         encryptionMethod:
           enum:
           - none
-          - pre-shared-key
+          - psk
           - ikev2
           type: string
       type: object

@@ -21,10 +21,10 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'm
 
 async function up () {
   try {
-    // Add encryptionMethod field, set as 'pre-shared-key' to all existing organizations
+    // Add encryptionMethod field, set as 'psk' to all existing organizations
     await orgModel.updateMany(
       { encryptionMethod: { $exists: false } },
-      { $set: { encryptionMethod: 'pre-shared-key' } },
+      { $set: { encryptionMethod: 'psk' } },
       { upsert: false }
     );
   } catch (err) {
