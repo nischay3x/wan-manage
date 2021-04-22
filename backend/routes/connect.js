@@ -24,7 +24,8 @@ const tokens = require('../models/tokens');
 const { devices } = require('../models/devices');
 const jwt = require('jsonwebtoken');
 const mongoConns = require('../mongoConns.js')();
-const { checkDeviceVersion, getMajorVersion } = require('../versioning');
+const { verifyAgentVersion } = require('../versioning');
+const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
@@ -54,8 +55,41 @@ const genToken = function (data) {
   return jwt.sign(data, configs.get('deviceTokenSecretKey'));
 };
 
+// Express middleware for /register API
+const checkDeviceVersion = async (req, res, next) => {
+  const agentVer = req.body.fwagent_version;
+  const { valid, statusCode, err } = verifyAgentVersion(agentVer);
+  if (!valid) {
+    logger.warn('Device version validation failed', {
+      params: {
+        agentVersion: agentVer,
+        reason: err,
+        machineId: req.body.machine_id
+      },
+      req: req
+    });
+    const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
+    const { versions } = await swUpdater.getLatestSwVersions();
+    console.log('versions=' + versions);
+    res.setHeader('latestVersion', versions.device); // set last device version
+    return next(createError(statusCode, err));
+  }
+  next();
+};
+
 // Register device. When device connects for the first
 // time, it tries to authenticate by accessing this URL
+// Register Error Codes:
+// 400 - Wrong version or Too high Agent version
+// 401 - Invalid token
+// 402 - Maximum number of free devices reached
+// 403 - Too low Agent version
+// 404 - Token not found
+// 405 -
+// 406 -
+// 407 - Device Already Exists
+// 408 - Mongo error
+// 500 - General Error
 connectRouter.route('/register')
   .post(cors.cors, checkDeviceVersion, (req, res, next) => {
     var sourceIP = req.ip || 'Unknown';
@@ -75,7 +109,7 @@ connectRouter.route('/register')
               });
 
               // Try to auto populate interfaces parameters
-              let ifs = JSON.parse(req.body.interfaces);
+              const ifs = JSON.parse(req.body.interfaces);
 
               // Get an interface with gateway and the lowest metric
               const defaultIntf = ifs ? ifs.reduce((res, intf) =>
@@ -88,6 +122,7 @@ connectRouter.route('/register')
               ifs.forEach((intf) => {
                 intf.isAssigned = false;
                 intf.useStun = true;
+                intf.useFixedPublicPort = false;
                 intf.internetAccess = intf.internetAccess === undefined ? ''
                   : intf.internetAccess ? 'yes' : 'no';
                 if (!defaultIntf && intf.name === req.body.default_dev) {
@@ -120,14 +155,6 @@ connectRouter.route('/register')
                   intf.metric = '';
                 }
               });
-
-              if (getMajorVersion(req.body.fwagent_version) < 3) {
-                ifs = ifs.map((inf) => {
-                  inf.devId = 'pci:' + inf.pciaddr;
-                  delete inf.pciaddr;
-                  return { ...inf };
-                });
-              }
 
               // Prepare device versions array
               const versions = {
@@ -255,4 +282,7 @@ connectRouter.route('/register')
   });
 
 // Default exports
-module.exports = connectRouter;
+module.exports = {
+  connectRouter: connectRouter,
+  checkDeviceVersion: checkDeviceVersion
+};

@@ -145,6 +145,11 @@ const interfacesSchema = new Schema({
     type: Boolean,
     default: true
   },
+  // use port forwarding to define fixed public port
+  useFixedPublicPort: {
+    type: Boolean,
+    default: false
+  },
   // WAN interface default GW
   gateway: {
     type: String,
@@ -160,8 +165,17 @@ const interfacesSchema = new Schema({
     type: String,
     default: '0',
     validate: {
-      validator: validators.validateIsNumber,
+      validator: validators.validateMetric,
       message: 'Metric should be a number'
+    }
+  },
+  // MTU
+  mtu: {
+    type: Number,
+    default: 1500,
+    validate: {
+      validator: validators.validateMtu,
+      message: 'MTU should be a number between 500 and 9000'
     }
   },
   // assigned
@@ -271,7 +285,7 @@ const staticroutesSchema = new Schema({
     type: String,
     default: '',
     validate: {
-      validator: validators.validateIsNumber,
+      validator: validators.validateMetric,
       message: 'Metric should be a number'
     }
   }
@@ -511,6 +525,27 @@ const deviceSyncSchema = new Schema({
 });
 
 /**
+ * IKEv2 parameters Database Schema
+ */
+const IKEv2Schema = new Schema({
+  // public certificate
+  certificate: {
+    type: String,
+    default: ''
+  },
+  // expiration time
+  expireTime: {
+    type: Date,
+    default: null
+  },
+  // queued or not
+  jobQueued: {
+    type: Boolean,
+    default: false
+  }
+});
+
+/**
  * Device Database Schema
  */
 const deviceSchema = new Schema({
@@ -661,6 +696,11 @@ const deviceSchema = new Schema({
   sync: {
     type: deviceSyncSchema,
     default: deviceSyncSchema
+  },
+  // IKEv2 parameters
+  IKEv2: {
+    type: IKEv2Schema,
+    default: IKEv2Schema
   }
 },
 {

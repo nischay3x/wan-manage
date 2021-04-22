@@ -27,6 +27,7 @@ const mlpolicy = require('./mlpolicy');
 const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
 const sync = require('./sync');
+const IKEv2 = require('./IKEv2');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -110,6 +111,12 @@ const methods = {
     complete: sync.complete,
     error: sync.error,
     remove: errorNOOP
+  },
+  ikev2: {
+    apply: IKEv2.apply,
+    complete: IKEv2.complete,
+    error: IKEv2.error,
+    remove: IKEv2.remove
   }
 };
 

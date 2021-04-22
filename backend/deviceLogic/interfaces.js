@@ -47,10 +47,10 @@ const buildInterfaces = (deviceInterfaces) => {
       pathlabels,
       gateway,
       metric,
+      mtu,
       dhcp,
       deviceType,
-      configuration,
-      deviceParams
+      configuration
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -62,16 +62,16 @@ const buildInterfaces = (deviceInterfaces) => {
     if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'wifi') continue;
 
     const ifcInfo = {
-      devId: devId,
+      dev_id: devId,
       dhcp: dhcp || 'no',
       addr: `${(IPv4 && IPv4Mask ? `${IPv4}/${IPv4Mask}` : '')}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
+      mtu,
       routing,
       type,
       multilink: { labels: labels.map((label) => label._id.toString()) },
       deviceType,
-      configuration,
-      deviceParams
+      configuration
     };
     if (ifc.type === 'WAN') {
       ifcInfo.gateway = gateway;
@@ -283,19 +283,8 @@ const validateOperations = (deviceInterfaces, operationReq) => {
   return { valid: false, err: 'You can\'t perform requested operation for this interface' };
 };
 
-const getOldInterfaceIdentification = devId => {
-  if (devId && devId.startsWith('pci:')) {
-    const splitted = devId.split(':');
-    splitted.shift();
-    return splitted.join(':');
-  }
-
-  return null;
-};
-
 module.exports = {
   buildInterfaces,
   validateConfiguration,
-  validateOperations,
-  getOldInterfaceIdentification
+  validateOperations
 };

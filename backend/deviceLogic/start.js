@@ -19,7 +19,7 @@
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { validateDevice } = require('./validators');
-const { getAllOrganizationLanSubnets, getDefaultGateway } = require('../utils/deviceUtils');
+const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -27,8 +27,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { getMajorVersion } = require('../versioning');
-const { buildInterfaces, getOldInterfaceIdentification } = require('./interfaces');
+const { buildInterfaces } = require('./interfaces');
 
 /**
  * Creates and queues the start-router job.
@@ -59,61 +58,8 @@ const apply = async (device, user, data) => {
   }
 
   deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
-  const majorAgentVersion = getMajorVersion(device[0].versions.agent);
   const startParams = {};
-  let ifnum = 0;
-  const defaultGateway = getDefaultGateway(device[0]);
-
-  if (majorAgentVersion === 0) { // version 0.X.X
-    for (let idx = 0; idx < device[0].interfaces.length; idx++) {
-      const intf = device[0].interfaces[idx];
-      const ifParams = {};
-      if (intf.isAssigned === true) {
-        ifnum++;
-        ifParams.devId = intf.devId;
-        ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
-        ifParams.addr = intf.IPv4 ? `${intf.IPv4}/${intf.IPv4Mask}` : '';
-        if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        startParams['iface' + (ifnum)] = ifParams;
-      }
-    }
-    startParams['default-route'] = defaultGateway || '';
-  } else if (majorAgentVersion >= 1) { // version 1.X.X+
-    let deviceInterfaces = buildInterfaces(device[0].interfaces);
-    // Send route for backward compatibility (agent version < 1.2.15)
-    const routes = [];
-    if (defaultGateway && majorAgentVersion < 2) {
-      routes.push({
-        addr: 'default',
-        via: defaultGateway
-      });
-    }
-
-    const isNeedUseOldIntIdentifier = majorAgentVersion < 3;
-    deviceInterfaces = deviceInterfaces.map(devInt => {
-      const ret = { ...devInt };
-      if (isNeedUseOldIntIdentifier) {
-        ret.pci = getOldInterfaceIdentification(devInt.devId);
-      } else {
-        ret.dev_id = devInt.devId;
-      }
-
-      delete ret.devId;
-      return ret;
-    });
-
-    startParams.interfaces = deviceInterfaces;
-    if (routes.length > 0) {
-      startParams.routes = routes;
-    }
-  }
-
-  if (majorAgentVersion < 2) {
-    // Start router command might change IP address of the
-    // interface connected to the MGMT. Tell the agent to
-    // reconnect to the MGMT after processing this command.
-    startParams.reconnect = true;
-  }
+  startParams.interfaces = buildInterfaces(device[0].interfaces);
 
   const tasks = [];
   const userName = user.username;
@@ -135,8 +81,7 @@ const apply = async (device, user, data) => {
           method: 'start',
           data: {
             device: device[0]._id,
-            org: org,
-            shouldUpdateTunnel: majorAgentVersion === 0
+            org: org
           }
         },
         // Metadata
