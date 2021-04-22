@@ -75,8 +75,8 @@ const applyTunnelAdd = async (devices, user, data) => {
     const org = data.org;
     const { encryptionMethod } = await orgModel.findOne({ _id: org });
 
-    // for now only 'none', 'ikev2' and 'pre-shared-key' encryption methods are supported
-    if (!['none', 'ikev2', 'pre-shared-key'].includes(encryptionMethod)) {
+    // for now only 'none', 'ikev2' and 'psk' encryption methods are supported
+    if (!['none', 'ikev2', 'psk'].includes(encryptionMethod)) {
       logger.error('Tunnel creation failed',
         { params: { reason: 'Not supported encryption method', encryptionMethod } }
       );
@@ -385,7 +385,7 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB) => {
  * @param  {Object}   deviceB      device B details
  * @param  {Object}   deviceAIntf device A tunnel interface
  * @param  {Object}   deviceBIntf device B tunnel interface
- * @param  {string}   encryptionMethod encryption method [ikev2|pre-shared-key]
+ * @param  {string}   encryptionMethod encryption method [none|ikev2|psk]
  */
 const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
   deviceAIntf, deviceBIntf, encryptionMethod) => {
@@ -693,7 +693,7 @@ const prepareTunnelAddJob = async (
       'remote-device-id': deviceA.machineId,
       certificate: deviceA.IKEv2.certificate
     };
-  } else if (tunnel.encryptionMethod === 'pre-shared-key') {
+  } else if (tunnel.encryptionMethod === 'psk') {
     // construct static ipsec tunnel
     if (!tunnel.tunnelKeys) {
       // Generate new IPsec Keys and store them in the database
@@ -775,7 +775,7 @@ const prepareTunnelAddJob = async (
  * @param  {string}   user         user id of requesting user
  * @param  {string}   org          id of the organization of the user
  * @param  {number}   tunnelnum    id of the tunnel to be added
- * @param  {string}   encryptionMethod encryption method [ikev2|pre-shared-key]
+ * @param  {string}   encryptionMethod encryption method [none|ikev2|psk]
  * @param  {Object}   deviceA      details of device A
  * @param  {Object}   deviceB      details of device B
  * @param  {Object}   deviceAIntf device A tunnel interface
@@ -806,7 +806,7 @@ const addTunnel = async (
   });
 
   // Generate IPsec Keys and store them in the database
-  const tunnelKeys = encryptionMethod === 'pre-shared-key' ? generateRandomKeys() : null;
+  const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
   const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
@@ -1185,7 +1185,7 @@ const sync = async (deviceId, org) => {
     const ifcB = deviceB.interfaces.find(
       (ifc) => ifc._id.toString() === interfaceB.toString()
     );
-    if (!tunnelKeys && encryptionMethod === 'pre-shared-key') {
+    if (!tunnelKeys && encryptionMethod === 'psk') {
       // No keys for some reason, probably version 2 upgraded.
       // Tunnel keys will be generated in prepareTunnelAddJob.
       // Need to sync another side as well.
