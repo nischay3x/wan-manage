@@ -33,10 +33,10 @@ async function up () {
     });
   }
   try {
-    // Add encryptionMethod field, set as 'pre-shared-key' to all existing tunnels
+    // Add encryptionMethod field, set as 'psk' to all existing tunnels
     await tunnelsModel.updateMany(
       { encryptionMethod: { $exists: false } },
-      { $set: { encryptionMethod: 'pre-shared-key' } },
+      { $set: { encryptionMethod: 'psk' } },
       { upsert: false }
     );
   } catch (err) {
