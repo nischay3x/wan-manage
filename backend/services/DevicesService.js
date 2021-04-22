@@ -26,6 +26,8 @@ const { deviceStats } = require('../models/analytics/deviceStats');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
+const validator = require('validator');
+const net = require('net');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
@@ -33,7 +35,11 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
 const { validateOperations } = require('../deviceLogic/interfaces');
-const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
+const {
+  validateDevice,
+  validateDhcpConfig,
+  validateStaticRoute
+} = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const wifiChannels = require('../utils/wifi-channels');
@@ -42,6 +48,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const cidr = require('cidr-tools');
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -158,7 +165,9 @@ class DevicesService {
           'pathlabels',
           'deviceType',
           'configuration',
-          'deviceParams'
+          'deviceParams',
+          'dnsServers',
+          'dnsDomains'
         ]);
         retIf._id = retIf._id.toString();
         return retIf;
@@ -838,6 +847,29 @@ class DevicesService {
                 `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
               );
             }
+
+            if (updIntf.isAssigned && updIntf.dhcp === 'no' && updIntf.type === 'WAN') {
+              const isValidIpList = updIntf.dnsServers.every((ip) => {
+                return net.isIPv4(ip);
+              });
+
+              if (!isValidIpList) {
+                throw new Error(
+                  `DNS ip addresses are not valid for (${origIntf.name})`
+                );
+              }
+
+              const isValidDomainList = updIntf.dnsDomains.every((domain) => {
+                return validator.isFQDN(domain);
+              });
+
+              if (!isValidDomainList) {
+                throw new Error(
+                  `DNS domain list is not valid for (${origIntf.name})`
+                );
+              }
+            }
+
             if (updIntf.isAssigned !== origIntf.isAssigned ||
               updIntf.type !== origIntf.type ||
               updIntf.dhcp !== origIntf.dhcp ||
@@ -867,6 +899,24 @@ class DevicesService {
       if (Array.isArray(deviceRequest.dhcp)) {
         for (const dhcpRequest of deviceRequest.dhcp) {
           DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
+        }
+      }
+
+      // validate static routes
+      if (Array.isArray(deviceRequest.staticroutes)) {
+        const tunnels = await tunnelsModel.find({
+          isActive: true,
+          $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+        }, { num: 1 }).lean();
+        for (const route of deviceRequest.staticroutes) {
+          const { valid, err } = validateStaticRoute(deviceToValidate, tunnels, route);
+          if (!valid) {
+            logger.warn('Wrong static route parameters',
+              {
+                params: { route, err }
+              });
+            throw new Error(err);
+          }
         }
       }
 
@@ -1133,6 +1183,19 @@ class DevicesService {
         ifname: staticRouteRequest.ifname,
         metric: staticRouteRequest.metric
       });
+
+      const tunnels = await tunnelsModel.find({
+        isActive: true,
+        $or: [{ deviceA: device._id }, { deviceB: device._id }]
+      }, { num: 1 });
+      const { valid, err } = validateStaticRoute(device, tunnels, route);
+      if (!valid) {
+        logger.warn('Adding a new static route failed',
+          {
+            params: { staticRouteRequest, err }
+          });
+        throw new Error(err);
+      }
 
       await devices.findOneAndUpdate(
         { _id: device._id },
@@ -1749,7 +1812,19 @@ class DevicesService {
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
-
+    // check that DHCP Range Start/End IP are on the same subnet with interface IP
+    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
+      throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
+    }
+    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeEnd)) {
+      throw new Error('DHCP Range End IP address is not on the same subnet with interface IP');
+    }
+    // check that DHCP range End address IP is greater than Start IP address
+    const ip2int = IP => IP.split('.')
+      .reduce((res, val, idx) => res + (+val) * 256 ** (3 - idx), 0);
+    if (ip2int(dhcpRequest.rangeStart) > ip2int(dhcpRequest.rangeEnd)) {
+      throw new Error('DHCP Range End IP address must be greater than Start IP address');
+    }
     // Check that no repeated mac, host or IP
     const macLen = dhcpRequest.macAssign.length;
     const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
