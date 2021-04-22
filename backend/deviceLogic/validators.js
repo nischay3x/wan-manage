@@ -17,7 +17,7 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
-const { devices } = require('../models/devices');
+const { generateTunnelParams } = require('../utils/tunnelUtils');
 const maxMetric = 2 * 10 ** 9;
 /**
  * Checks whether a value is empty
@@ -311,55 +311,64 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   return { valid: true, err: '' };
 };
 
-/**
- * Get all LAN subnets in the same organization
- * @param  {string} orgId         the id of the organization
- * @return {[_id: objectId, name: string, subnet: string]} array of LAN subnets with router name
- */
-const getAllOrganizationLanSubnets = async orgId => {
-  const subnets = await devices.aggregate([
-    { $match: { org: orgId } },
-    {
-      $project: {
-        'interfaces.IPv4': 1,
-        'interfaces.IPv4Mask': 1,
-        'interfaces.type': 1,
-        'interfaces.isAssigned': 1,
-        name: 1,
-        _id: 1
-      }
-    },
-    { $unwind: '$interfaces' },
-    {
-      $match: {
-        'interfaces.type': 'LAN',
-        'interfaces.isAssigned': true,
-        'interfaces.IPv4': { $ne: '' },
-        'interfaces.IPv4Mask': { $ne: '' }
-      }
-    },
-    {
-      $project: {
-        _id: 1,
-        name: 1,
-        subnet: {
-          $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
-        }
-      }
-    }
-  ]);
-
-  return subnets;
-};
-
 const isIPv4Address = (ip, mask) => {
   return net.isIPv4(ip) && !isEmpty(mask);
+};
+
+/**
+ * Checks whether static route is valid
+ * @param {Object} device - the device to validate
+ * @param {List} tunnels - list of tunnels nums of the device
+ * @param {Object} route - the added/modified route
+ * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
+ */
+const validateStaticRoute = (device, tunnels, route) => {
+  const { ifname, gateway } = route;
+  const gatewaySubnet = `${gateway}/32`;
+  if (ifname) {
+    const ifc = device.interfaces.find(i => i.devId === ifname);
+    if (ifc === undefined) {
+      return {
+        valid: false,
+        err: `Static route interface not found '${ifname}'`
+      };
+    };
+    if (!ifc.isAssigned) {
+      return {
+        valid: false,
+        err: `Static routes not allowed on unassigned interfaces '${ifname}'`
+      };
+    }
+    if (!cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
+      return {
+        valid: false,
+        err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+      };
+    }
+  } else {
+    let valid = device.interfaces.some(ifc =>
+      cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)
+    );
+    if (!valid) {
+      valid = tunnels.some(tunnel => {
+        const { ip1 } = generateTunnelParams(tunnel.num);
+        return cidr.overlap(`${ip1}/31`, gatewaySubnet);
+      });
+    }
+    if (!valid) {
+      return {
+        valid: false,
+        err: `Static route gateway ${gateway} not overlapped with any interface or tunnel`
+      };
+    }
+  }
+  return { valid: true, err: '' };
 };
 
 module.exports = {
   isIPv4Address,
   validateDevice,
   validateDhcpConfig,
-  validateModifyDeviceMsg: validateModifyDeviceMsg,
-  getAllOrganizationLanSubnets: getAllOrganizationLanSubnets
+  validateStaticRoute,
+  validateModifyDeviceMsg: validateModifyDeviceMsg
 };
