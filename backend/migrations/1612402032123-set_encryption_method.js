@@ -16,13 +16,14 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const orgModel = require('../models/organizations');
+const tunnelsModel = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
 
 async function up () {
   try {
     // Add encryptionMethod field, set as 'pre-shared-key' to all existing organizations
     await orgModel.updateMany(
-      {},
+      { encryptionMethod: { $exists: false } },
       { $set: { encryptionMethod: 'pre-shared-key' } },
       { upsert: false }
     );
@@ -31,19 +32,43 @@ async function up () {
       params: { collections: ['organizations'], operation: 'up', err: err.message }
     });
   }
+  try {
+    // Add encryptionMethod field, set as 'pre-shared-key' to all existing tunnels
+    await tunnelsModel.updateMany(
+      { encryptionMethod: { $exists: false } },
+      { $set: { encryptionMethod: 'pre-shared-key' } },
+      { upsert: false }
+    );
+  } catch (err) {
+    logger.error('Database migration failed', {
+      params: { collections: ['tunnels'], operation: 'up', err: err.message }
+    });
+  }
 }
 
 async function down () {
   try {
-    // Unset tunnelKeys field
+    // Unset encryptionMethod field
     await orgModel.updateMany(
-      {},
+      { encryptionMethod: { $exists: true } },
       { $unset: { encryptionMethod: '' } },
       { upsert: false }
     );
   } catch (err) {
     logger.error('Database migration failed', {
       params: { collections: ['organizations'], operation: 'down', err: err.message }
+    });
+  }
+  try {
+    // Unset encryptionMethod field
+    await tunnelsModel.updateMany(
+      { encryptionMethod: { $exists: true } },
+      { $unset: { encryptionMethod: '' } },
+      { upsert: false }
+    );
+  } catch (err) {
+    logger.error('Database migration failed', {
+      params: { collections: ['tunnels'], operation: 'down', err: err.message }
     });
   }
 }
