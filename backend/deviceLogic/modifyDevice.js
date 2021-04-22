@@ -57,6 +57,11 @@ const prepareIfcParams = (interfaces, device) => {
     });
     newIfc.multilink = { labels };
 
+    // Check if need to flag it as bridge
+    newIfc.bridge_addr = ifc.type === 'LAN' && interfaces.some(i => {
+      return newIfc.dev_id !== i.devId && newIfc.addr === i.addr;
+    }) ? newIfc.addr : null;
+
     if (ifc.isAssigned) {
       if (ifc.type !== 'WAN') {
         // Don't send default GW and public info for LAN interfaces
@@ -216,6 +221,29 @@ const prepareModificationMessage = (messageParams, device) => {
     if (routeRequests) {
       requests.push(...routeRequests);
     }
+  }
+
+  if (has(messageParams, 'modify_router.assignBridges')) {
+    requests.push(...messageParams.modify_router.assignBridges.map(item => {
+      return {
+        entity: 'agent',
+        message: 'add-bridge',
+        params: {
+          addr: item
+        }
+      };
+    }));
+  }
+  if (has(messageParams, 'modify_router.unassignBridges')) {
+    requests.push(...messageParams.modify_router.unassignBridges.map(item => {
+      return {
+        entity: 'agent',
+        message: 'remove-bridge',
+        params: {
+          addr: item
+        }
+      };
+    }));
   }
 
   if (has(messageParams, 'modify_router.assign')) {
@@ -775,6 +803,35 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
   return { dhcpRemove, dhcpAdd };
 };
 
+const getBridges = interfaces => {
+  const bridges = {};
+
+  for (const ifc of interfaces) {
+    const devId = ifc.devId;
+
+    if (ifc.IPv4 === '' && ifc.IPv4Mask === '') {
+      continue;
+    }
+    const addr = ifc.IPv4 + '/' + ifc.IPv4Mask;
+
+    const needsToBridge = interfaces.some(i => {
+      return devId !== i.devId && addr === i.IPv4 + '/' + i.IPv4Mask;
+    });
+
+    if (!needsToBridge) {
+      continue;
+    }
+
+    if (!bridges.hasOwnProperty(addr)) {
+      bridges[addr] = [];
+    }
+
+    bridges[addr].push(ifc.devId);
+  };
+
+  return bridges;
+};
+
 /**
  * Creates and queues the modify-device job. It compares
  * the current view of the device in the database with
@@ -800,6 +857,35 @@ const apply = async (device, user, data) => {
   if (modifyDHCP.dhcpRemove.length > 0 ||
       modifyDHCP.dhcpAdd.length > 0) {
     modifyParams.modify_dhcp_config = modifyDHCP;
+  }
+
+  modifyParams.modify_router = {};
+  const oldBridges = getBridges(device[0].interfaces.filter(i => i.isAssigned));
+  const newBridges = getBridges(data.newDevice.interfaces.filter(i => i.isAssigned));
+
+  const assignBridges = [];
+  const unassignBridges = [];
+
+  // Check add-bridge
+  for (const newBridge in newBridges) {
+    // if new bridges doesn't exists in old bridges, we need to add-bridge
+    if (!oldBridges.hasOwnProperty(newBridge)) {
+      assignBridges.push(newBridge);
+    }
+  }
+  if (assignBridges.length) {
+    modifyParams.modify_router.assignBridges = assignBridges;
+  }
+
+  // Check remove-bridge
+  for (const oldBridge in oldBridges) {
+    // if old bridges doesn't exists in new bridges, we need to remove-bridge
+    if (!newBridges.hasOwnProperty(oldBridge)) {
+      unassignBridges.push(oldBridge);
+    }
+  }
+  if (unassignBridges.length) {
+    modifyParams.modify_router.unassignBridges = unassignBridges;
   }
 
   // Create interfaces modification parameters
@@ -838,7 +924,6 @@ const apply = async (device, user, data) => {
   );
 
   if (assignedDiff.length > 0) {
-    modifyParams.modify_router = {};
     const toAssign = [];
     const toUnAssign = [];
     // Split interfaces into two arrays: one for the interfaces that
@@ -1011,6 +1096,19 @@ const sync = async (deviceId, org) => {
 
   // Prepare add-interface message
   const deviceConfRequests = [];
+
+  // build bridges
+  const bridges = getBridges(interfaces.filter(i => i.isAssigned));
+  Object.keys(bridges).forEach(item => {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-bridge',
+      params: {
+        addr: item
+      }
+    });
+  });
+
   // build interfaces
   buildInterfaces(interfaces).forEach(item => {
     deviceConfRequests.push({
