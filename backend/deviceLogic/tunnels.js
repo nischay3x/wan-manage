@@ -22,7 +22,7 @@ const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
 const devicesModel = require('../models/devices').devices;
 const mongoose = require('mongoose');
-const randomNum = require('../utils/random-key');
+const { generateTunnelParams, generateRandomKeys } = require('../utils/tunnelUtils');
 const { validateIKEv2 } = require('./IKEv2');
 
 const deviceQueues = require('../utils/deviceQueue')(
@@ -75,8 +75,8 @@ const applyTunnelAdd = async (devices, user, data) => {
     const org = data.org;
     const { encryptionMethod } = await orgModel.findOne({ _id: org });
 
-    // for now only 'none', 'ikev2' and 'pre-shared-key' encryption methods are supported
-    if (!['none', 'ikev2', 'pre-shared-key'].includes(encryptionMethod)) {
+    // for now only 'none', 'ikev2' and 'psk' encryption methods are supported
+    if (!['none', 'ikev2', 'psk'].includes(encryptionMethod)) {
       logger.error('Tunnel creation failed',
         { params: { reason: 'Not supported encryption method', encryptionMethod } }
       );
@@ -385,7 +385,7 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB) => {
  * @param  {Object}   deviceB      device B details
  * @param  {Object}   deviceAIntf device A tunnel interface
  * @param  {Object}   deviceBIntf device B tunnel interface
- * @param  {string}   encryptionMethod encryption method [ikev2|pre-shared-key]
+ * @param  {string}   encryptionMethod encryption method [none|ikev2|psk]
  */
 const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
   deviceAIntf, deviceBIntf, encryptionMethod) => {
@@ -693,7 +693,7 @@ const prepareTunnelAddJob = async (
       'remote-device-id': deviceA.machineId,
       certificate: deviceA.IKEv2.certificate
     };
-  } else if (tunnel.encryptionMethod === 'pre-shared-key') {
+  } else if (tunnel.encryptionMethod === 'psk') {
     // construct static ipsec tunnel
     if (!tunnel.tunnelKeys) {
       // Generate new IPsec Keys and store them in the database
@@ -775,7 +775,7 @@ const prepareTunnelAddJob = async (
  * @param  {string}   user         user id of requesting user
  * @param  {string}   org          id of the organization of the user
  * @param  {number}   tunnelnum    id of the tunnel to be added
- * @param  {string}   encryptionMethod encryption method [ikev2|pre-shared-key]
+ * @param  {string}   encryptionMethod encryption method [none|ikev2|psk]
  * @param  {Object}   deviceA      details of device A
  * @param  {Object}   deviceB      details of device B
  * @param  {Object}   deviceAIntf device A tunnel interface
@@ -806,7 +806,7 @@ const addTunnel = async (
   });
 
   // Generate IPsec Keys and store them in the database
-  const tunnelKeys = encryptionMethod === 'pre-shared-key' ? generateRandomKeys() : null;
+  const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
   const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
@@ -946,17 +946,22 @@ const applyTunnelDel = async (devices, user, data) => {
     });
 
     const promiseStatus = await Promise.allSettled(delPromises);
-    const fulfilled = promiseStatus.reduce((arr, elem) => {
+    const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
         const job = elem.value;
-        arr.push(job);
-      }
-      return arr;
-    }, []);
+        fulfilled.push(job);
+      } else {
+        if (!reasons.includes(elem.reason.message)) {
+          reasons.push(elem.reason.message);
+        }
+      };
+      return { fulfilled, reasons };
+    }, { fulfilled: [], reasons: [] });
     const status = fulfilled.length < tunnelIds.length
       ? 'partially completed' : 'completed';
     const message = fulfilled.length < tunnelIds.length
-      ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added` : '';
+      ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added.
+      ${reasons.join('. ')}` : '';
     return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found',
@@ -979,10 +984,24 @@ const oneTunnelDel = async (tunnelID, user, org) => {
 
   logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
 
+  if (!tunnelResp) {
+    throw new Error('Tunnel not found');
+  };
+
   // Define devices
-  const deviceA = tunnelResp.deviceA;
-  const deviceB = tunnelResp.deviceB;
-  const pathLabel = tunnelResp.pathlabel;
+  const { num, deviceA, deviceB, pathLabel } = tunnelResp;
+
+  // Check is tunnel used by any static route
+  const { ip1, ip2 } = generateTunnelParams(num);
+  const tunnelUsedByStaticRoute = (Array.isArray(deviceA.staticroutes) &&
+    deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
+    (Array.isArray(deviceB.staticroutes) &&
+    deviceB.staticroutes.some(s => [ip1, ip2].includes(s.gateway)));
+  if (tunnelUsedByStaticRoute) {
+    throw new Error(
+      'Some static routes defined via removed tunnel, please remove static routes first'
+    );
+  };
 
   // Populate interface details
   const deviceAIntf = tunnelResp.deviceA.interfaces
@@ -1166,7 +1185,7 @@ const sync = async (deviceId, org) => {
     const ifcB = deviceB.interfaces.find(
       (ifc) => ifc._id.toString() === interfaceB.toString()
     );
-    if (!tunnelKeys && encryptionMethod === 'pre-shared-key') {
+    if (!tunnelKeys && encryptionMethod === 'psk') {
       // No keys for some reason, probably version 2 upgraded.
       // Tunnel keys will be generated in prepareTunnelAddJob.
       // Need to sync another side as well.
@@ -1293,54 +1312,6 @@ const prepareTunnelParams = (
   delete paramsDeviceB.devId;
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
-};
-
-/**
- * Generates various tunnel parameters that will
- * be used for creating the tunnel.
- * @param  {number} tunnelNum tunnel id
- * @return
- * {{
-        ip1: string,
-        ip2: string,
-        mac1: string,
-        mac2: string,
-        sa1: number,
-        sa2: number
-    }}
- */
-const generateTunnelParams = (tunnelNum) => {
-  const d2h = (d) => (('00' + (+d).toString(16)).substr(-2));
-
-  const h = (tunnelNum % 127 + 1) * 2;
-  const l = Math.floor(tunnelNum / 127);
-  const ip1 = '10.100.' + (+l).toString(10) + '.' + (+h).toString(10);
-  const ip2 = '10.100.' + (+l).toString(10) + '.' + (+(h + 1)).toString(10);
-  const mac1 = '02:00:27:fd:' + d2h(l) + ':' + d2h(h);
-  const mac2 = '02:00:27:fd:' + d2h(l) + ':' + d2h(h + 1);
-  const sa1 = (l * 256 + h);
-  const sa2 = (l * 256 + h + 1);
-
-  return {
-    ip1: ip1,
-    ip2: ip2,
-    mac1: mac1,
-    mac2: mac2,
-    sa1: sa1,
-    sa2: sa2
-  };
-};
-/**
- * Generates random keys that will be used for tunnels creation
- * @return {{key1: number, key2: number, key3: number, key4: number}}
- */
-const generateRandomKeys = () => {
-  return {
-    key1: randomNum(32, 16),
-    key2: randomNum(32, 16),
-    key3: randomNum(32, 16),
-    key4: randomNum(32, 16)
-  };
 };
 
 module.exports = {
