@@ -43,7 +43,7 @@ const { buildInterfaces } = require('./interfaces');
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
  * @return {Array}            the same array after removing unnecessary fields
  */
-const prepareIfcParams = (interfaces, device) => {
+const prepareIfcParams = (interfaces, device, newDevice) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
@@ -57,9 +57,16 @@ const prepareIfcParams = (interfaces, device) => {
     });
     newIfc.multilink = { labels };
 
-    // Check if need to flag it as bridge
-    newIfc.bridge_addr = ifc.type === 'LAN' && interfaces.some(i => {
-      return newIfc.dev_id !== i.devId && newIfc.addr === i.addr;
+    // The agent should know if this interface should add to the bridge or removed from it, etc.
+    // So, we indicate it with the bridge_addr field.
+    // If this field is null, it means that this interface has no relation to a bridge.
+    // If this field should be in a bridge, we set in this field the bridge IP.
+    // We use the ip as key since it's the unique differentiate
+    // between bridges from the "flexiManage" perspective.
+    // We put this field only if the interface is LAN
+    // and other assigned interfaces have the same IP.
+    newIfc.bridge_addr = ifc.type === 'LAN' && ifc.isAssigned && newDevice.interfaces.some(i => {
+      return newIfc.dev_id !== i.devId && i.isAssigned && newIfc.addr === i.IPv4 + '/' + i.IPv4Mask;
     }) ? newIfc.addr : null;
 
     if (ifc.isAssigned) {
@@ -128,14 +135,14 @@ const transformInterfaces = (interfaces) => {
  * where 'requests' is an array of individual device modification
  * commands.
  */
-const prepareModificationMessage = (messageParams, device) => {
+const prepareModificationMessage = (messageParams, device, newDevice) => {
   const requests = [];
   const tasks = [];
   // Check against the old configured interfaces.
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
     const modifiedInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.interfaces, device
+      messageParams.modify_interfaces.interfaces, device, newDevice
     );
     if (modifiedInterfaces.length > 0) {
       requests.push(...modifiedInterfaces.map(item => {
@@ -148,10 +155,10 @@ const prepareModificationMessage = (messageParams, device) => {
     }
 
     const oldLteInterfaces = prepareIfcParams(
-      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device);
+      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device, newDevice);
 
     const newLteInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.lte_enable_disable, device
+      messageParams.modify_interfaces.lte_enable_disable, device, newDevice
     );
 
     // we send lte job if configuration or interface metric was changed
@@ -249,7 +256,7 @@ const prepareModificationMessage = (messageParams, device) => {
   }
 
   if (has(messageParams, 'modify_router.assign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, device);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, device, newDevice);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -259,7 +266,7 @@ const prepareModificationMessage = (messageParams, device) => {
     }));
   }
   if (has(messageParams, 'modify_router.unassign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, device);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, device, newDevice);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -348,7 +355,7 @@ const queueJob = async (org, username, tasks, device) => {
  * @param  {string}  org           organization to which the user belongs
  * @return {Job}                   The queued modify-device job
  */
-const queueModifyDeviceJob = async (device, messageParams, user, org) => {
+const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org) => {
   const removedTunnels = [];
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
@@ -377,7 +384,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
 
   // Prepare device modification job, if nothing requires modification, return
-  const tasks = prepareModificationMessage(messageParams, device);
+  const tasks = prepareModificationMessage(messageParams, device, newDevice);
 
   if (tasks.length === 0 || tasks[0].length === 0) {
     return [];
@@ -964,6 +971,31 @@ const apply = async (device, user, data) => {
     return ifc.isAssigned === true;
   });
 
+  // If there are bridge changes, we need to check if we need to send a modify-interface message.
+  // For example:
+  // Suppose there is already an interface with some IP.
+  // Now, the user configures another interface with the same IP address.
+  // In this case, we need to send an add-bridge job with the new interface,
+  // but we need to add the existing interface to this bridge,
+  // even if there are no changes in this interface.
+  const bridgeChanges = [...assignBridges, ...unassignBridges];
+  if (bridgeChanges.length) {
+    for (const changedBridge of bridgeChanges) {
+      const bridgeAddr = changedBridge;
+
+      // "newInterfaces" at this point contains only interfaces that do not assign now,
+      // but already assigned before.
+      // look at "pullAllWith(newInterfaces, [ifcInfo], isEqual);" above
+      const bridgedInterfaces = newInterfaces.filter(ni => ni.addr === bridgeAddr && ni.isAssigned);
+      bridgedInterfaces.forEach(ifc => {
+        // if interface doesn't exists in the assignedInterfacesDiff array, we push it
+        if (!assignedInterfacesDiff.some(i => i.devId === ifc.devId)) {
+          assignedInterfacesDiff.push(ifc);
+        };
+      });
+    }
+  }
+
   // add-lte job should be submitted even if unassigned interface
   // we send this job if configuration or interface metric was changed
   const oldLteInterfaces = device[0].interfaces.filter(item => item.deviceType === 'lte');
@@ -1030,7 +1062,7 @@ const apply = async (device, user, data) => {
       if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
       await setJobPendingInDB(device[0]._id, org, true);
       // Queue device modification job
-      const jobs = await queueModifyDeviceJob(device[0], modifyParams, user, org);
+      const jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
       return {
         ids: jobs.flat().map(job => job.id),
         status: 'completed',
