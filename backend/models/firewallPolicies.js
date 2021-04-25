@@ -57,7 +57,7 @@ const firewallPolicySchema = new Schema({
   isDefault: {
     type: Boolean,
     default: false,
-    required: true
+    required: false
   },
   version: {
     type: Number,
