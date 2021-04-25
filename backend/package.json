@@ -1,6 +1,6 @@
 {
   "name": "flexiwansite",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "private": true,
   "license": "GNU Affero General Public License",
   "scripts": {
@@ -53,6 +53,7 @@
     "swagger-ui-express": "^4.0.2",
     "uuid": "^3.3.2",
     "valid-url": "^1.0.9",
+    "validator": "^13.5.2",
     "winston": "^3.2.1",
     "winston-mongodb": "^5.0.0",
     "ws": "^6.1.0",

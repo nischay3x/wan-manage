@@ -46,10 +46,10 @@ const OrgSchema = new Schema({
     type: String,
     enum: [
       'none',
-      'pre-shared-key',
+      'psk',
       'ikev2'
     ],
-    default: 'pre-shared-key'
+    default: 'psk'
   }
 });
 

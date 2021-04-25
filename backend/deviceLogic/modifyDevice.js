@@ -108,7 +108,9 @@ const transformInterfaces = (interfaces) => {
       isAssigned: ifc.isAssigned,
       pathlabels: ifc.pathlabels,
       configuration: ifc.configuration,
-      deviceType: ifc.deviceType
+      deviceType: ifc.deviceType,
+      dnsServers: ifc.dnsServers,
+      dnsDomains: ifc.dnsDomains
     };
   });
 };
