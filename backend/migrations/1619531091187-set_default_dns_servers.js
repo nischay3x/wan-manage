@@ -22,7 +22,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'm
 async function up () {
   try {
     await devices.updateMany(
-      { 'interfaces.dnsServers': { $size: 0 } },
+      { },
       { $set: { 'interfaces.$[].dnsServers': ['8.8.8.8', '4.4.4.4'] } },
       { upsert: false }
     );
@@ -40,9 +40,9 @@ async function up () {
 async function down () {
   try {
     await devices.updateMany(
-      { 'interfaces.dnsServers': { $exists: true } },
+      { },
       { $set: { 'interfaces.$[].dnsServers': [] } },
-      { upsert: false, bypassDocumentValidation: true }
+      { upsert: false }
     );
   } catch (err) {
     logger.error('Database migration failed', {
