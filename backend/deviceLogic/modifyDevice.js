@@ -491,6 +491,11 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
       const propsModified = Object.keys(modifiedIfc).filter(prop => {
+        // There is a case that origIfc.IPv6 is an empty string and origIfc.IPv6Mask is undefined,
+        // So the result of the combination of them is "/".
+        // If modifiedIfc.addr6 is an empty string, it always different than "/", and
+        // we send unnecessary modify-interface job.
+        // So if the origIfc.IPv6 is empty, we ignore the IPv6 undefined.
         const origIPv6 = origIfc.IPv6 === '' ? '' : `${origIfc.IPv6}/${origIfc.IPv6Mask}`;
         switch (prop) {
           case 'pathlabels':
