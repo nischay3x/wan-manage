@@ -849,6 +849,12 @@ class DevicesService {
             }
 
             if (updIntf.isAssigned && updIntf.dhcp === 'no' && updIntf.type === 'WAN') {
+              if (updIntf.dnsServers.length === 0) {
+                throw new Error(
+                  `DNS ip address is required for ${origIntf.name}`
+                );
+              }
+
               const isValidIpList = updIntf.dnsServers.every((ip) => {
                 return net.isIPv4(ip);
               });
