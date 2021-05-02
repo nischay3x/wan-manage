@@ -82,8 +82,12 @@ const buildInterfaces = (deviceInterfaces) => {
       ifcInfo.PublicPort = PublicPort;
       ifcInfo.useStun = useStun;
       ifcInfo.monitorInternet = monitorInternet;
-      ifcInfo.dnsServers = dnsServers;
-      ifcInfo.dnsDomains = dnsDomains;
+
+      // send dns servers only for WAN interfaces with static IP
+      if (ifcInfo.dhcp === 'no') {
+        ifcInfo.dnsServers = dnsServers;
+        ifcInfo.dnsDomains = dnsDomains;
+      }
     }
     interfaces.push(ifcInfo);
   }
