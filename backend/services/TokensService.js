@@ -139,11 +139,28 @@ class TokensService {
   static async tokensPOST ({ org, tokenRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const body = jwt.sign({
+      const tokenData = {
         org: orgList[0].toString(),
         account: user.defaultAccount._id,
         server: configs.get('restServerUrl')
-      }, configs.get('deviceTokenSecretKey'));
+      };
+      // Update token with repo if needed
+      const repoUrl = configs.get('SwRepositoryUrl');
+      const strippedUrl = repoUrl.split('/');
+      if (strippedUrl.length < 6) {
+        throw new Error('Token error: wrong configuration of repository url');
+      }
+      const repoServer = strippedUrl.slice(0, 3).join('/');
+      let repoName = strippedUrl[3];
+      if (repoName === 'info') repoName = 'flexiWAN'; // no repo specified, use default as flexiWAN
+      const typeSplit = strippedUrl[strippedUrl.length - 1].split('-');
+      let repoType = 'main';
+      if (typeSplit.length === 2) repoType = typeSplit[1];
+
+      if (repoName !== 'flexiWAN') { // Only set non default repo
+        tokenData.repo = `${repoServer}|${repoName}|${repoType}`;
+      }
+      const body = jwt.sign(tokenData, configs.get('deviceTokenSecretKey'));
 
       const token = await Tokens.create({
         name: tokenRequest.name,
