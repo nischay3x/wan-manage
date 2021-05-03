@@ -1955,7 +1955,18 @@ class DevicesService {
           },
           pin: {
             job: false,
-            message: 'modify-lte-pin'
+            message: 'modify-lte-pin',
+            onComplete: async (jobId, response) => {
+              const params = interfaceOperationReq.params || null;
+              const isPinChanged = params.newPin && params.newPin !== params.currentPin;
+              if (isPinChanged && response.ok) {
+                // update new pin in the database
+                await devices.updateOne(
+                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+                  { $set: { 'interfaces.$.configuration.pin': params.newPin } }
+                );
+              }
+            }
           }
         }
       };
@@ -1982,6 +1993,7 @@ class DevicesService {
 
         if (agentAction.job) {
           const tasks = [{ entity: 'agent', message: agentAction.message, params: params }];
+          const callback = agentAction.onComplete ? agentAction.onComplete : null;
           try {
             const job = await deviceQueues
               .addJob(
@@ -2005,7 +2017,7 @@ class DevicesService {
                 // Metadata
                 { priority: 'medium', attempts: 1, removeOnComplete: false },
                 // Complete callback
-                null
+                callback
               );
             logger.info('Interface action job queued', { params: { job } });
           } catch (err) {
@@ -2039,6 +2051,10 @@ class DevicesService {
             const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
             const err = response.message.match(regex).join(',');
             return Service.rejectResponse(err, 500);
+          }
+
+          if (agentAction.onComplete) {
+            await agentAction.onComplete(null, response);
           }
         }
       }
