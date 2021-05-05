@@ -1955,18 +1955,7 @@ class DevicesService {
           },
           pin: {
             job: false,
-            message: 'modify-lte-pin',
-            onComplete: async (jobId, response) => {
-              const params = interfaceOperationReq.params || null;
-              const isPinChanged = params.newPin && params.newPin !== params.currentPin;
-              if (isPinChanged && response.ok) {
-                // update new pin in the database
-                await devices.updateOne(
-                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-                  { $set: { 'interfaces.$.configuration.pin': params.newPin } }
-                );
-              }
-            }
+            message: 'modify-lte-pin'
           }
         }
       };
