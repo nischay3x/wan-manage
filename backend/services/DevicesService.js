@@ -1135,7 +1135,7 @@ class DevicesService {
    * route String Numeric ID of the Route to delete
    * no response value expected for this operation
    **/
-  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }) {
+  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const device = await devices.findOne(
@@ -1156,7 +1156,8 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy._id = route;
       copy.action = 'del';
-      await dispatcher.apply(device, copy.method, user, copy);
+      const { ids } = await dispatcher.apply(device, copy.method, user, copy);
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -1173,7 +1174,8 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns DeviceStaticRouteInformation
    **/
-  static async devicesIdStaticroutesPOST ({ id, org, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesPOST (request, { user }, response) {
+    const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.find({
@@ -1223,7 +1225,8 @@ class DevicesService {
       copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy._id = route.id;
-      await dispatcher.apply(device, copy.method, user, copy);
+      const { ids } = await dispatcher.apply(device, copy.method, user, copy);
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
 
       const result = {
         _id: route._id.toString(),
@@ -1250,7 +1253,8 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesRoutePATCH ({ id, org, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesRoutePATCH (request, { user }, response) {
+    const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.find({
@@ -1269,7 +1273,8 @@ class DevicesService {
       copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
-      await dispatcher.apply(device, copy.method, user, copy);
+      const { ids } = await dispatcher.apply(device, copy.method, user, copy);
+      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
       return Service.successResponse({ deviceId: device.id });
     } catch (e) {
       return Service.rejectResponse(
