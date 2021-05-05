@@ -814,8 +814,11 @@ class DevicesService {
             }
 
             // Unassigned interfaces are not controlled from manage
-            // we only get these parameters from the device itself
-            if (!updIntf.isAssigned) {
+            // we only get these parameters from the device itself.
+            // It might be that the IP of the LTE interface is changed when a user
+            // changes the unassigned LTE configuration.
+            // In this case, we don't want to throw the below error
+            if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
               if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
                 (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
                 (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
@@ -1955,7 +1958,33 @@ class DevicesService {
           },
           pin: {
             job: false,
-            message: 'modify-lte-pin'
+            message: 'modify-lte-pin',
+            onError: async (jobId, err) => {
+              try {
+                err = JSON.parse(err.replace(/'/g, '"'));
+                await devices.updateOne(
+                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+                  {
+                    $set: {
+                      'interfaces.$.deviceParams.initial_pin1_state': err.data
+                    }
+                  }
+                );
+              } catch (err) { }
+            },
+            onComplete: async (jobId, response) => {
+              if (response.message && response.message.data) {
+                // update pin state
+                await devices.updateOne(
+                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+                  {
+                    $set: {
+                      'interfaces.$.deviceParams.initial_pin1_state': response.message.data
+                    }
+                  }
+                );
+              }
+            }
           }
         }
       };
@@ -2039,6 +2068,11 @@ class DevicesService {
 
             const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
             const err = response.message.match(regex).join(',');
+
+            if (agentAction.onError) {
+              await agentAction.onError(null, err);
+            }
+
             return Service.rejectResponse(err, 500);
           }
 
