@@ -131,7 +131,10 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     if (!isIPv4Address(ifc.IPv4, ifc.IPv4Mask) && ifc.dhcp !== 'yes') {
       return {
         valid: false,
-        err: `Invalid IPv4 address for ${ifc.name}: ${ifc.IPv4}/${ifc.IPv4Mask}`
+        err: ifc.IPv4 && ifc.IPv4Mask
+          ? `Invalid IP address for ${ifc.name}: ${ifc.IPv4}/${ifc.IPv4Mask}`
+          : `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
+                      ? 'IPv4 mask' : 'IP address'}`
       };
     }
 
