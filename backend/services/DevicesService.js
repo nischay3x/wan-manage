@@ -2045,6 +2045,8 @@ class DevicesService {
           if (agentAction.onComplete) {
             await agentAction.onComplete(null, response);
           }
+
+          return Service.successResponse(response, 200);
         }
       }
 
