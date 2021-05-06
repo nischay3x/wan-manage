@@ -818,7 +818,7 @@ class DevicesService {
             // It might be that the IP of the LTE interface is changed when a user
             // changes the unassigned LTE configuration.
             // In this case, we don't want to throw the below error
-            if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
+            if (!updIntf.isAssigned) {
               if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
                 (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
                 (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
