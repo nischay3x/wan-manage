@@ -74,15 +74,22 @@ const prepareIfcParams = (interfaces, device, newDevice) => {
         // Don't send default GW and public info for LAN interfaces
         delete newIfc.gateway;
         delete newIfc.metric;
-        delete newIfc.PublicIP;
-        delete newIfc.PublicPort;
         delete newIfc.useStun;
-        delete newIfc.useFixedPublicPort;
         delete newIfc.monitorInternet;
-      } else if (ifc.type === 'WAN') {
-        // Don't send unnecessary info for WAN interfaces
-        delete newIfc.useFixedPublicPort;
+        delete newIfc.dnsServers;
+        delete newIfc.dnsDomains;
       }
+
+      // Don't send dns servers which use for wan interfaces with static IP
+      if (ifc.type === 'WAN' && newIfc.dhcp === 'yes') {
+        delete newIfc.dnsServers;
+        delete newIfc.dnsDomains;
+      }
+
+      // Don't send unnecessary info for both types of interfaces
+      delete newIfc.useFixedPublicPort; // used by flexiManage only for tunnels creation
+      delete newIfc.PublicIP; // used by flexiManage only for tunnels creation
+      delete newIfc.PublicPort; // used by flexiManage only for tunnels creation
     }
     return newIfc;
   });
@@ -525,6 +532,12 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
       const propsModified = Object.keys(modifiedIfc).filter(prop => {
+        // There is a case that origIfc.IPv6 is an empty string and origIfc.IPv6Mask is undefined,
+        // So the result of the combination of them is "/".
+        // If modifiedIfc.addr6 is an empty string, it always different than "/", and
+        // we send unnecessary modify-interface job.
+        // So if the origIfc.IPv6 is empty, we ignore the IPv6 undefined.
+        const origIPv6 = origIfc.IPv6 === '' ? '' : `${origIfc.IPv6}/${origIfc.IPv6Mask}`;
         switch (prop) {
           case 'pathlabels':
             return !isEqual(
@@ -534,7 +547,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           case 'addr':
             return modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
           case 'addr6':
-            return modifiedIfc.addr6 !== `${origIfc.IPv6}/${origIfc.IPv6Mask}`;
+            return modifiedIfc.addr6 !== origIPv6;
           default:
             return !isEqual(modifiedIfc[prop], origIfc[prop]);
         }
