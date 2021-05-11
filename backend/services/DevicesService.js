@@ -1690,6 +1690,8 @@ class DevicesService {
       });
       if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
 
+      DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
+
       const dhcpData = {
         _id: dhcpId,
         interface: dhcpRequest.interface,
