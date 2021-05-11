@@ -912,6 +912,24 @@ class DevicesService {
 
       // validate DHCP info if it exists
       if (Array.isArray(deviceRequest.dhcp)) {
+        deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
+          const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
+          if (!ifc) return d;
+          if (ifc.isAssigned) return d;
+          // Check if it was assign in the orig device
+          if (!origDevice.interfaces.find(i => i.devId === ifc.devId && i.isAssigned)) return d;
+
+          // if the interface is unassigned now but it was assigned and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned interface in the bridge
+          const sameAddr = deviceRequest.interfaces.find(i =>
+            i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned);
+          if (sameAddr) {
+            return { ...d, interface: sameAddr.devId };
+          }
+
+          return d;
+        });
+
         for (const dhcpRequest of deviceRequest.dhcp) {
           DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
         }
