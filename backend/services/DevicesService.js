@@ -242,7 +242,10 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
-    retDevice.firewall = { rules: retFirewallRules };
+    retDevice.firewall = {
+      applied: item.firewall.applied,
+      rules: retFirewallRules
+    };
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
@@ -978,8 +981,8 @@ class DevicesService {
       const modifyFirewallResult = { ids: [] };
       const updRules = updDevice.firewall.rules.toObject();
       const origRules = origDevice.firewall.rules.toObject();
-      const rulesModified = !(updRules.length === origRules.length &&
-        updRules.every((updatedRule, index) =>
+      const rulesModified = origDevice.firewall.applied !== updDevice.firewall.applied ||
+        !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
           isEqual(
             omit(updatedRule, ['_id', 'name', 'classification']),
             omit(origRules[index], ['_id', 'name', 'classification'])
@@ -992,8 +995,8 @@ class DevicesService {
             omit(updatedRule.classification.destination, ['_id']),
             omit(origRules[index].classification.destination, ['_id'])
           )
-        )
-      );
+        ));
+
       if (rulesModified) {
         const requestTime = Date.now();
         const { firewall } = updDevice.policies;

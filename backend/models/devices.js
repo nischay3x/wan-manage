@@ -729,6 +729,10 @@ const deviceSchema = new Schema({
     }
   },
   firewall: {
+    applied: {
+      type: Boolean,
+      default: false
+    },
     rules: [firewallRuleSchema]
   },
   sync: {

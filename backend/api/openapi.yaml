@@ -7174,7 +7174,8 @@ components:
         - destination: destination
           interface: interface
           gateway: gateway
-        firewallrules:
+        firewallApplied: true
+        firewallRules:
         - name: name
           direction: direction
           status: status
@@ -7232,7 +7233,9 @@ components:
           items:
             $ref: '#/components/schemas/Interface'
           type: array
-        firewallrules:
+        firewallApplied:
+          type: boolean
+        firewallRules:
           items:
             $ref: '#/components/schemas/FirewallRuleRequest'
           type: array
@@ -7323,7 +7326,8 @@ components:
           destination: 10.10.0.0
           gateway: 10.10.0.1
           interface: eth1
-        firewallrules:
+        firewallApplied: true
+        firewallRules:
         - name: name
           direction: outbound
           status: enabled
@@ -7386,7 +7390,9 @@ components:
           items:
             $ref: '#/components/schemas/Interface'
           type: array
-        firewallrules:
+        firewallApplied:
+          type: boolean
+        firewallRules:
           items:
             $ref: '#/components/schemas/FirewallRule'
           type: array

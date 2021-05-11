@@ -35,7 +35,7 @@ const isEmpty = require('lodash/isEmpty');
 const prepareParameters = (policy, device) => {
   const policyRules = policy ? policy.rules.toObject()
     .filter(r => r.status === 'enabled') : [];
-  const deviceRules = device.firewall ? device.firewall.rules.toObject()
+  const deviceRules = device.firewall.applied ? device.firewall.rules.toObject()
     .filter(r => r.status === 'enabled') : [];
   const firewallRules = [...policyRules, ...deviceRules];
   if (firewallRules.length === 0) {
