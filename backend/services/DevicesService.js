@@ -1852,6 +1852,7 @@ class DevicesService {
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
+
     // check that DHCP Range Start/End IP are on the same subnet with interface IP
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
       throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
@@ -1906,6 +1907,22 @@ class DevicesService {
         return (s.interface === dhcpRequest.interface);
       });
       if (dhcpObject.length > 0) throw new Error('DHCP already configured for that interface');
+
+      // for bridge feature we allow to set only one dhcp config
+      // for one of the interface in the bridge
+      const interfaceObj = deviceObject.interfaces.find(i => i.devId === dhcpRequest.interface);
+      const addr = interfaceObj.IPv4;
+      const bridgedInterfacesIds = deviceObject.interfaces.filter(i => {
+        return i.devId !== dhcpRequest.interface && i.isAssigned && i.IPv4 === addr;
+      }).map(i => i.devId);
+
+      if (bridgedInterfacesIds.length) {
+        const dhcp = deviceObject.dhcp.map(d => d.interface);
+        const dhcpConfigured = bridgedInterfacesIds.some(i => dhcp.includes(i));
+        if (dhcpConfigured) {
+          throw new Error(`DHCP already configured for an interface in ${addr} bridge`);
+        }
+      }
 
       const dhcpData = {
         interface: dhcpRequest.interface,
