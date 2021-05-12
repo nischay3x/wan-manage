@@ -728,11 +728,11 @@ const deviceSchema = new Schema({
       default: deviceFirewallPolicySchema
     }
   },
+  firewallApplied: {
+    type: Boolean,
+    default: false
+  },
   firewall: {
-    applied: {
-      type: Boolean,
-      default: false
-    },
     rules: [firewallRuleSchema]
   },
   sync: {

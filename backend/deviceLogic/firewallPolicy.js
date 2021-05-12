@@ -35,7 +35,7 @@ const isEmpty = require('lodash/isEmpty');
 const prepareParameters = (policy, device) => {
   const policyRules = policy ? policy.rules.toObject()
     .filter(r => r.status === 'enabled') : [];
-  const deviceRules = device.firewall.applied ? device.firewall.rules.toObject()
+  const deviceRules = device.firewallApplied ? device.firewall.rules.toObject()
     .filter(r => r.status === 'enabled') : [];
   const firewallRules = [...policyRules, ...deviceRules];
   if (firewallRules.length === 0) {
@@ -127,9 +127,6 @@ const prepareParameters = (policy, device) => {
 
 const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
-  const jobTitle = op === 'install'
-    ? policy ? `Install policy ${policy.name}` : 'Install device specific policy'
-    : 'Uninstall policy';
 
   // Extract applications information
   const { message, params, installIds, deviceJobResp } =
@@ -142,18 +139,23 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
 
   deviceList.forEach(dev => {
     const { _id, machineId, policies } = dev;
+    const policyParams = prepareParameters(policy, dev);
+    const jobTitle = policyParams
+      ? policy ? `Install policy ${policy.name}` : 'Install device specific policy'
+      : 'Uninstall policy';
+
     const tasks = [
       {
         entity: 'agent',
-        message: `${op === 'install' ? 'add' : 'remove'}-firewall-policy`,
-        params: op === 'install' ? prepareParameters(policy, dev) : {}
+        message: `${policyParams ? 'add' : 'remove'}-firewall-policy`,
+        params: policyParams
       }
     ];
     const data = {
       policy: {
         device: { _id: _id, firewallPolicy: policies.firewall },
         requestTime: requestTime,
-        op: op,
+        op: policyParams ? 'install' : op,
         org: org
       }
     };
@@ -168,7 +170,7 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
         message: message,
         params: params
       };
-      op === 'install' ? tasks.unshift(task) : tasks.push(task);
+      op === 'install' && policyParams ? tasks.unshift(task) : tasks.push(task);
 
       data.appIdentification = {
         deviceId: _id,

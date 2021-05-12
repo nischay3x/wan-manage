@@ -242,8 +242,8 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
+    retDevice.firewallApplied = item.firewallApplied;
     retDevice.firewall = {
-      applied: item.firewall.applied,
       rules: retFirewallRules
     };
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -981,7 +981,7 @@ class DevicesService {
       const modifyFirewallResult = { ids: [] };
       const updRules = updDevice.firewall.rules.toObject();
       const origRules = origDevice.firewall.rules.toObject();
-      const rulesModified = origDevice.firewall.applied !== updDevice.firewall.applied ||
+      const rulesModified = origDevice.firewallApplied !== updDevice.firewallApplied ||
         !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
           isEqual(
             omit(updatedRule, ['_id', 'name', 'classification']),
