@@ -66,7 +66,9 @@ class DevicesService {
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      if (ids.length) {
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -96,7 +98,9 @@ class DevicesService {
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      if (ids.length) {
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -1015,8 +1019,10 @@ class DevicesService {
       }
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;
-      const ids = [modifyDevResult.ids[0]];
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      if (modifyDevResult.ids.length > 0) {
+        const ids = [modifyDevResult.ids[0]];
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       const deviceObj = DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
@@ -1160,7 +1166,9 @@ class DevicesService {
       copy._id = route;
       copy.action = 'del';
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      if (ids.length) {
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -1229,8 +1237,9 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy._id = route.id;
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
+      if (ids.length) {
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       const result = {
         _id: route._id.toString(),
         gateway: route.gateway,
@@ -1277,7 +1286,9 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      if (ids.length) {
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       return Service.successResponse({ deviceId: device.id });
     } catch (e) {
       return Service.rejectResponse(
@@ -1572,7 +1583,9 @@ class DevicesService {
         copy._id = dhcpId;
         copy.action = 'del';
         const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+        if (ids.length) {
+          response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+        }
       }
 
       // If force delete specified, delete the entry regardless of the job status
@@ -1691,7 +1704,9 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      if (ids.length) {
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       return Service.successResponse(dhcpData, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -1743,8 +1758,9 @@ class DevicesService {
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
+      if (ids.length) {
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       const dhcpData = {
         _id: dhcpObject.id,
         interface: dhcpObject.interface,
@@ -1920,8 +1936,9 @@ class DevicesService {
       copy.org = orgList[0];
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
+      if (ids.length) {
+        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      }
       return Service.successResponse(result, 202);
     } catch (e) {
       if (session) session.abortTransaction();
