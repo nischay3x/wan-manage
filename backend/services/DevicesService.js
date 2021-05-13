@@ -910,26 +910,44 @@ class DevicesService {
         deviceToValidate.interfaces = origDevice.interfaces;
       }
 
-      // validate DHCP info if it exists
+      // Map dhcp config if needed
       if (Array.isArray(deviceRequest.dhcp)) {
         deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
           const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
           if (!ifc) return d;
-          if (ifc.isAssigned) return d;
-          // Check if it was assign in the orig device
-          if (!origDevice.interfaces.find(i => i.devId === ifc.devId && i.isAssigned)) return d;
+          const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
+          if (!origIfc) return d;
 
-          // if the interface is unassigned now but it was assigned and it was in a bridge,
-          // we check if we can reassociate the dhcp to another assigned interface in the bridge
-          const sameAddr = deviceRequest.interfaces.find(i =>
-            i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned);
-          if (sameAddr) {
-            return { ...d, interface: sameAddr.devId };
+          // if the interface is going to be unassigned now but it was assigned
+          // and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned interface in the bridge.
+          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
+          // now, the user unassigned the eth3. In this case we reassociate the dhcp to the eth4.
+          if (!ifc.isAssigned && origIfc.isAssigned) {
+            const anotherBridgedIfc = deviceRequest.interfaces.find(i =>
+              i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned);
+            if (anotherBridgedIfc) {
+              return { ...d, interface: anotherBridgedIfc.devId };
+            }
+          }
+
+          // if the IP of the interface is changed and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned
+          // interface which has the orig IP.
+          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
+          // now, the user changed the IP of eth3. In this case we reassociate the dhcp to the eth4.
+          if (ifc.isAssigned && ifc.IPv4 !== origIfc.IPv4) {
+            const anotherAssignWithSameIp = deviceRequest.interfaces.find(i =>
+              i.devId !== ifc.devId && i.IPv4 === origIfc.IPv4 && i.isAssigned);
+            if (anotherAssignWithSameIp) {
+              return { ...d, interface: anotherAssignWithSameIp.devId };
+            }
           }
 
           return d;
         });
 
+        // validate DHCP info if it exists
         for (const dhcpRequest of deviceRequest.dhcp) {
           DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
         }
