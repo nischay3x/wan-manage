@@ -33,11 +33,16 @@ const appRemove = require('./appIdentification').remove;
 const isEmpty = require('lodash/isEmpty');
 
 const prepareParameters = (policy, device) => {
+  // global rules must be applied after device specific rules
+  // assuming there will be not more than 10000 local rules
+  const globalShift = 10000;
   const policyRules = policy ? policy.rules.toObject()
-    .filter(r => r.status === 'enabled') : [];
+    .filter(r => r.status === 'enabled')
+    .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
   const deviceRules = device.firewallApplied ? device.firewall.rules.toObject()
     .filter(r => r.status === 'enabled') : [];
-  const firewallRules = [...policyRules, ...deviceRules];
+  const firewallRules = [...policyRules, ...deviceRules]
+    .sort((r1, r2) => r1.priority - r2.priority);
   if (firewallRules.length === 0) {
     return null;
   }

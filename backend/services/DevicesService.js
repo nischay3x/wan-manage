@@ -373,7 +373,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type')
-        .populate('policies.firewall.policy', '_id name description')
+        .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description');
       const device = DevicesService.selectDeviceParams(result);
 
