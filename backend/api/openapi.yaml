@@ -7458,7 +7458,7 @@ components:
       example:
         _id: _id
         destination: destination
-        interface: interface
+        ifname: ifname
         gateway: gateway
         metric: metric
       properties:
@@ -7474,7 +7474,7 @@ components:
           description: Gateway to use
           maxLength: 24
           type: string
-        interface:
+        ifname:
           description: Interface name
           maxLength: 24
           type: string

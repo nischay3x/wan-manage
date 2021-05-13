@@ -355,10 +355,22 @@ const validateStaticRoute = (device, tunnels, route) => {
         err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
       };
     }
+
+    // Don't allow putting static route on a bridged interface
+    const anotherBridgedIfc = device.interfaces.some(i => {
+      return i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned;
+    });
+    if (anotherBridgedIfc) {
+      return {
+        valid: false,
+        err: 'Specify interface in static route is not allowed on a bridged interface'
+      };
+    }
   } else {
-    let valid = device.interfaces.some(ifc =>
-      cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)
-    );
+    let valid = device.interfaces.some(ifc => {
+      if (ifc.IPv4 === '') return false;
+      return cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
+    });
     if (!valid) {
       valid = tunnels.some(tunnel => {
         const { ip1 } = generateTunnelParams(tunnel.num);

@@ -1237,6 +1237,15 @@ class DevicesService {
         metric: staticRouteRequest.metric
       });
 
+      const error = route.validateSync();
+      if (error) {
+        logger.warn('static route validation failed',
+          {
+            params: { staticRouteRequest, error }
+          });
+        throw new Error(error.message);
+      }
+
       const tunnels = await tunnelsModel.find({
         isActive: true,
         $or: [{ deviceA: device._id }, { deviceB: device._id }]
