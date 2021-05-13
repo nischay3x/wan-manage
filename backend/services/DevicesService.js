@@ -963,7 +963,9 @@ class DevicesService {
         { new: true, upsert: false, runValidators: true }
       )
         .session(session)
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.firewall.policy', '_id name description rules')
+        .populate('policies.multilink.policy', '_id name description');
       await session.commitTransaction();
       session = null;
 
