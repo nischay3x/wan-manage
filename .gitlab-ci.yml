@@ -50,7 +50,7 @@ backend_npm_audit:
   script:
    - cd backend
     ## temp fix: change to 'npm ci audit-ci' when mongo-express is fixed
-   - npm install mongo-express --ignore-scripts && npm install
+   - npm install audit-ci
    - npx audit-ci --moderate --package-manager npm --whitelist $BACKEND_PACKAGE_WHITE_LIST >> backend_npm_audit.log
   timeout: 5m
   artifacts:
