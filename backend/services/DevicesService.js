@@ -466,7 +466,7 @@ class DevicesService {
                 deviceId: id, response: response.message
               }
             });
-            return Service.rejectResponse("Failed to get interface status", 500);
+            return Service.rejectResponse('Failed to get interface status', 500);
           } else {
             interfaceInfo = response.message;
           }
