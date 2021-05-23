@@ -88,7 +88,7 @@ class ExpressServer {
     this.setupMiddleware();
   }
 
-  setupMiddleware () {
+  async setupMiddleware () {
     // this.setupAllowedMedia();
     this.app.use((req, res, next) => {
       console.log(`${req.method}: ${req.url}`);
@@ -194,7 +194,8 @@ class ExpressServer {
     // Enable db admin only in development mode
     if (configs.get('environment') === 'development') {
       logger.warn('Warning: Enabling UI database access');
-      this.app.use('/admindb', mongoExpress(mongoExpressConfig));
+      const expressApp = await mongoExpress(mongoExpressConfig);
+      this.app.use('/admindb', expressApp);
     }
 
     // Enable routes for non-authorized links
