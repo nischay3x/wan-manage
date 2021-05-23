@@ -38,6 +38,7 @@
     "kue": "^0.11.6",
     "lodash": "^4.17.21",
     "math-random": "^1.0.4",
+    "migrate-mongoose": "^4.0.0",
     "mongodb": "^3.1.8",
     "mongoose": "^5.7.1",
     "morgan": "^1.9.1",
@@ -68,7 +69,6 @@
     "eslint-plugin-standard": "^4.0.1",
     "jest": "^26.6.3",
     "jest-each": "^26.6.2",
-    "migrate-mongoose": "^4.0.0",
     "mongo-express": "^1.0.0-alpha.2",
     "node-mocks-http": "^1.7.6"
   }
