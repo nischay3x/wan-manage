@@ -22,7 +22,6 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const devUtils = require('./utils');
-const async = require('async');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const dispatcher = require('../deviceLogic/dispatcher');
 const { updateSyncStatus, updateSyncStatusBasedOnJobResult } =
