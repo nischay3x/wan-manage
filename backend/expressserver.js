@@ -50,10 +50,6 @@ const appRules = require('./periodic/appRules')();
 const rateLimit = require('express-rate-limit');
 const RateLimitStore = require('./rateLimitStore');
 
-// mongo database UI
-const mongoExpress = require('mongo-express/lib/middleware');
-const mongoExpressConfig = require('./mongo_express_config');
-
 // Internal routers definition
 const adminRouter = require('./routes/admin');
 
@@ -194,6 +190,9 @@ class ExpressServer {
     // Enable db admin only in development mode
     if (configs.get('environment') === 'development') {
       logger.warn('Warning: Enabling UI database access');
+      // mongo database UI
+      const mongoExpress = require('mongo-express/lib/middleware');
+      const mongoExpressConfig = require('./mongo_express_config');
       const expressApp = await mongoExpress(mongoExpressConfig);
       this.app.use('/admindb', expressApp);
     }
