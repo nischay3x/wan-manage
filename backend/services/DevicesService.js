@@ -1827,6 +1827,9 @@ class DevicesService {
     if (!interfaceObj) {
       throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
     }
+    if (!interfaceObj.isAssigned) {
+      throw new Error('DHCP can be defined only for assigned interfaces');
+    }
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
