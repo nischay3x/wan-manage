@@ -27,6 +27,8 @@ const { deviceStats } = require('../models/analytics/deviceStats');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
+const validator = require('validator');
+const net = require('net');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
@@ -37,7 +39,11 @@ const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
 const { queueFirewallPolicyJob } = require('../deviceLogic/firewallPolicy');
 const { validateOperations } = require('../deviceLogic/interfaces');
-const { validateDevice, validateDhcpConfig } = require('../deviceLogic/validators');
+const {
+  validateDevice,
+  validateDhcpConfig,
+  validateStaticRoute
+} = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const wifiChannels = require('../utils/wifi-channels');
@@ -46,6 +52,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const cidr = require('cidr-tools');
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -63,7 +70,7 @@ class DevicesService {
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -93,7 +100,7 @@ class DevicesService {
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -162,7 +169,9 @@ class DevicesService {
           'pathlabels',
           'deviceType',
           'configuration',
-          'deviceParams'
+          'deviceParams',
+          'dnsServers',
+          'dnsDomains'
         ]);
         retIf._id = retIf._id.toString();
         return retIf;
@@ -485,6 +494,7 @@ class DevicesService {
                 deviceId: id, response: response.message
               }
             });
+            return Service.rejectResponse('Failed to get interface status', 500);
           } else {
             interfaceInfo = response.message;
           }
@@ -596,6 +606,12 @@ class DevicesService {
             break;
           case 'ospf':
             errorMessage = 'Failed to get OSPF logs';
+            break;
+          case 'hostapd':
+            errorMessage = 'Failed to get Hostapd logs';
+            break;
+          case 'agentui':
+            errorMessage = 'Failed to get flexiEdge UI logs';
             break;
           default:
             errorMessage = 'Failed to get device logs';
@@ -833,8 +849,11 @@ class DevicesService {
             }
 
             // Unassigned interfaces are not controlled from manage
-            // we only get these parameters from the device itself
-            if (!updIntf.isAssigned) {
+            // we only get these parameters from the device itself.
+            // It might be that the IP of the LTE interface is changed when a user
+            // changes the unassigned LTE configuration.
+            // In this case, we don't want to throw the below error
+            if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
               if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
                 (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
                 (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
@@ -866,6 +885,35 @@ class DevicesService {
                 `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
               );
             }
+
+            if (updIntf.isAssigned && updIntf.dhcp === 'no' && updIntf.type === 'WAN') {
+              if (updIntf.dnsServers.length === 0) {
+                throw new Error(
+                  `DNS ip address is required for ${origIntf.name}`
+                );
+              }
+
+              const isValidIpList = updIntf.dnsServers.every((ip) => {
+                return net.isIPv4(ip);
+              });
+
+              if (!isValidIpList) {
+                throw new Error(
+                  `DNS ip addresses are not valid for (${origIntf.name})`
+                );
+              }
+
+              const isValidDomainList = updIntf.dnsDomains.every((domain) => {
+                return validator.isFQDN(domain);
+              });
+
+              if (!isValidDomainList) {
+                throw new Error(
+                  `DNS domain list is not valid for (${origIntf.name})`
+                );
+              }
+            }
+
             if (updIntf.isAssigned !== origIntf.isAssigned ||
               updIntf.type !== origIntf.type ||
               updIntf.dhcp !== origIntf.dhcp ||
@@ -895,6 +943,24 @@ class DevicesService {
       if (Array.isArray(deviceRequest.dhcp)) {
         for (const dhcpRequest of deviceRequest.dhcp) {
           DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
+        }
+      }
+
+      // validate static routes
+      if (Array.isArray(deviceRequest.staticroutes)) {
+        const tunnels = await tunnelsModel.find({
+          isActive: true,
+          $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+        }, { num: 1 }).lean();
+        for (const route of deviceRequest.staticroutes) {
+          const { valid, err } = validateStaticRoute(deviceToValidate, tunnels, route);
+          if (!valid) {
+            logger.warn('Wrong static route parameters',
+              {
+                params: { route, err }
+              });
+            throw new Error(err);
+          }
         }
       }
 
@@ -1020,8 +1086,7 @@ class DevicesService {
         modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
       }
       const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
-      const ids = [modifyDevResult.ids[0]];
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      DevicesService.setLocationHeader(response, modifyDevResult.ids, orgList[0]);
       const deviceObj = DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
@@ -1143,7 +1208,7 @@ class DevicesService {
    * route String Numeric ID of the Route to delete
    * no response value expected for this operation
    **/
-  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }) {
+  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const device = await devices.findOne(
@@ -1164,7 +1229,8 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy._id = route;
       copy.action = 'del';
-      await dispatcher.apply(device, copy.method, user, copy);
+      const { ids } = await dispatcher.apply(device, copy.method, user, copy);
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -1181,7 +1247,8 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns DeviceStaticRouteInformation
    **/
-  static async devicesIdStaticroutesPOST ({ id, org, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesPOST (request, { user }, response) {
+    const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.find({
@@ -1204,6 +1271,19 @@ class DevicesService {
         metric: staticRouteRequest.metric
       });
 
+      const tunnels = await tunnelsModel.find({
+        isActive: true,
+        $or: [{ deviceA: device._id }, { deviceB: device._id }]
+      }, { num: 1 });
+      const { valid, err } = validateStaticRoute(device, tunnels, route);
+      if (!valid) {
+        logger.warn('Adding a new static route failed',
+          {
+            params: { staticRouteRequest, err }
+          });
+        throw new Error(err);
+      }
+
       await devices.findOneAndUpdate(
         { _id: device._id },
         {
@@ -1218,8 +1298,8 @@ class DevicesService {
       copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy._id = route.id;
-      await dispatcher.apply(device, copy.method, user, copy);
-
+      const { ids } = await dispatcher.apply(device, copy.method, user, copy);
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
       const result = {
         _id: route._id.toString(),
         gateway: route.gateway,
@@ -1245,7 +1325,8 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesRoutePATCH ({ id, org, staticRouteRequest }, { user }) {
+  static async devicesIdStaticroutesRoutePATCH (request, { user }, response) {
+    const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.find({
@@ -1264,7 +1345,8 @@ class DevicesService {
       copy.org = orgList[0];
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
-      await dispatcher.apply(device, copy.method, user, copy);
+      const { ids } = await dispatcher.apply(device, copy.method, user, copy);
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
       return Service.successResponse({ deviceId: device.id });
     } catch (e) {
       return Service.rejectResponse(
@@ -1559,7 +1641,7 @@ class DevicesService {
         copy._id = dhcpId;
         copy.action = 'del';
         const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-        response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+        DevicesService.setLocationHeader(response, ids, orgList[0]);
       }
 
       // If force delete specified, delete the entry regardless of the job status
@@ -1678,7 +1760,7 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
       return Service.successResponse(dhcpData, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -1730,8 +1812,7 @@ class DevicesService {
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
       const dhcpData = {
         _id: dhcpObject.id,
         interface: dhcpObject.interface,
@@ -1819,7 +1900,19 @@ class DevicesService {
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
-
+    // check that DHCP Range Start/End IP are on the same subnet with interface IP
+    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
+      throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
+    }
+    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeEnd)) {
+      throw new Error('DHCP Range End IP address is not on the same subnet with interface IP');
+    }
+    // check that DHCP range End address IP is greater than Start IP address
+    const ip2int = IP => IP.split('.')
+      .reduce((res, val, idx) => res + (+val) * 256 ** (3 - idx), 0);
+    if (ip2int(dhcpRequest.rangeStart) > ip2int(dhcpRequest.rangeEnd)) {
+      throw new Error('DHCP Range End IP address must be greater than Start IP address');
+    }
     // Check that no repeated mac, host or IP
     const macLen = dhcpRequest.macAssign.length;
     const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
@@ -1895,8 +1988,7 @@ class DevicesService {
       copy.org = orgList[0];
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      response.setHeader('Location', DevicesService.jobsListUrl(ids, orgList[0]));
-
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
       return Service.successResponse(result, 202);
     } catch (e) {
       if (session) session.abortTransaction();
@@ -1944,7 +2036,33 @@ class DevicesService {
           },
           pin: {
             job: false,
-            message: 'modify-lte-pin'
+            message: 'modify-lte-pin',
+            onError: async (jobId, err) => {
+              try {
+                err = JSON.parse(err.replace(/'/g, '"'));
+                await devices.updateOne(
+                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+                  {
+                    $set: {
+                      'interfaces.$.deviceParams.initial_pin1_state': err.data
+                    }
+                  }
+                );
+              } catch (err) { }
+            },
+            onComplete: async (jobId, response) => {
+              if (response.message && response.message.data) {
+                // update pin state
+                await devices.updateOne(
+                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+                  {
+                    $set: {
+                      'interfaces.$.deviceParams.initial_pin1_state': response.message.data
+                    }
+                  }
+                );
+              }
+            }
           }
         }
       };
@@ -1971,6 +2089,7 @@ class DevicesService {
 
         if (agentAction.job) {
           const tasks = [{ entity: 'agent', message: agentAction.message, params: params }];
+          const callback = agentAction.onComplete ? agentAction.onComplete : null;
           try {
             const job = await deviceQueues
               .addJob(
@@ -1994,7 +2113,7 @@ class DevicesService {
                 // Metadata
                 { priority: 'medium', attempts: 1, removeOnComplete: false },
                 // Complete callback
-                null
+                callback
               );
             logger.info('Interface action job queued', { params: { job } });
           } catch (err) {
@@ -2027,8 +2146,19 @@ class DevicesService {
 
             const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
             const err = response.message.match(regex).join(',');
+
+            if (agentAction.onError) {
+              await agentAction.onError(null, err);
+            }
+
             return Service.rejectResponse(err, 500);
           }
+
+          if (agentAction.onComplete) {
+            await agentAction.onComplete(null, response);
+          }
+
+          return Service.successResponse(response, 200);
         }
       }
 
@@ -2122,13 +2252,17 @@ class DevicesService {
   }
 
   /**
-   * Returns an URL of jobs list request
+   * Sets Location header of the response, used in some integrations
+   * @param {Object} response - response to http request
    * @param {Array} jobsIds - array of jobs ids
    * @param {string} orgId - ID of the organzation
    */
-  static jobsListUrl (jobsIds, orgId) {
-    return `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
-      jobsIds.join('%2C')}&org=${orgId}`;
+  static setLocationHeader (response, jobsIds, orgId) {
+    if (jobsIds.length) {
+      const locationHeader = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
+        jobsIds.join('%2C')}&org=${orgId}`;
+      response.setHeader('Location', locationHeader);
+    }
   }
 }
 

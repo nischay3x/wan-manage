@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { ObjectId } = require('mongoose').Types;
-const { validateDevice, validateModifyDeviceMsg } = require('../validators');
+const { validateDevice, validateModifyDeviceMsg, validateStaticRoute } = require('../validators');
 const { validateConfiguration } = require('../interfaces');
 const maxMetric = 2 * 10 ** 9;
 
@@ -142,6 +142,24 @@ describe('validateDevice', () => {
     device.interfaces[0].IPv4 = '';
     device.interfaces[0].IPv4Mask = '';
     failureObject.err = `Interface ${device.interfaces[0].name} does not have an IPv4 mask`;
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if LAN IPv4 address ends with .0', () => {
+    device.interfaces[0].IPv4 = '192.168.111.0';
+    device.interfaces[0].IPv4Mask = '24';
+    failureObject.err = `Invalid IP address for ${device.interfaces[0].name}: ` +
+      `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if LAN IPv4 address ends with .255', () => {
+    device.interfaces[0].IPv4 = '192.168.111.255';
+    device.interfaces[0].IPv4Mask = '24';
+    failureObject.err = `Invalid IP address for ${device.interfaces[0].name}: ` +
+      `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
@@ -601,6 +619,120 @@ describe('validateWiFiInterfaceConfiguration', () => {
     configuration['5GHz'].region = 'NO';
     failureObject.err = 'Channel 110 is not valid number for country NO';
     const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+});
+
+describe('validateStaticRoute', () => {
+  let device;
+  const route = {
+    destination: '1.1.1.1',
+    gateway: '192.168.100.2',
+    ifname: 'pci:0000:00:01.00',
+    metric: '10'
+  };
+  const tunnels = [{ num: 2 }];
+
+  const successObject = {
+    valid: true,
+    err: ''
+  };
+  const failureObject = {
+    valid: false,
+    err: ''
+  };
+
+  beforeEach(() => {
+    device = {
+      interfaces: [{
+        name: 'eth0',
+        devId: 'pci:0000:00:01.00',
+        driver: 'igb-1000',
+        MAC: 'ab:45:90:ed:89:16',
+        dhcp: 'no',
+        IPv4: '192.168.100.1',
+        IPv4Mask: '24',
+        IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7348',
+        IPv6Mask: '64',
+        PublicIP: '72.168.10.30',
+        PublicPort: '4789',
+        NatType: '',
+        useStun: true,
+        gateway: '',
+        metric: '',
+        isAssigned: true,
+        routing: 'OSPF',
+        type: 'LAN',
+        pathlabels: []
+      },
+      {
+        name: 'eth1',
+        devId: 'pci:0000:00:02.00',
+        driver: 'igb-1000',
+        MAC: 'ab:45:90:ed:89:17',
+        dhcp: 'no',
+        IPv4: '172.23.100.1',
+        IPv4Mask: '24',
+        IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7346',
+        IPv6Mask: '64',
+        PublicIP: '172.23.100.1',
+        PublicPort: '4789',
+        NatType: '',
+        useStun: true,
+        gateway: '172.23.100.10',
+        metric: '0',
+        isAssigned: true,
+        routing: 'None',
+        type: 'WAN',
+        pathlabels: [ObjectId('5e65290fbe66a2335718e081')]
+      }]
+    };
+  });
+
+  // Happy path
+  it('Should be valid if route gateway on the same subnet with interface', () => {
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be valid if route gateway match tunnel loopback interface IP', () => {
+    route.gateway = '10.100.0.6';
+    route.ifname = '';
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid static route config if unknown interface used', () => {
+    route.ifname = 'pci:0000:00:03.00';
+    failureObject.err = `Static route interface not found '${route.ifname}'`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid static route config if unassigned interface used', () => {
+    device.interfaces.push({ name: 'eth3', devId: 'pci:0000:00:03.00', isAssigned: false });
+    route.ifname = 'pci:0000:00:03.00';
+    failureObject.err = `Static routes not allowed on unassigned interfaces '${route.ifname}'`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid route if interface IP and gateway not on the same subnet', () => {
+    const ifc = device.interfaces[0];
+    route.ifname = 'pci:0000:00:01.00';
+    route.gateway = '192.168.101.1';
+    failureObject.err =
+      `Interface IP ${ifc.IPv4} and gateway ${route.gateway} are not on the same subnet`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid route if interface IP and gateway not on the same subnet', () => {
+    route.ifname = '';
+    route.gateway = '10.100.0.1';
+    failureObject.err =
+      `Static route gateway ${route.gateway} not overlapped with any interface or tunnel`;
+    const result = validateStaticRoute(device, tunnels, route);
     expect(result).toMatchObject(failureObject);
   });
 });

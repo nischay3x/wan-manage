@@ -362,7 +362,7 @@ class Connections {
       $and: [
         { $or: [{ deviceA: deviceId }, { deviceB: deviceId }] },
         { isActive: true },
-        { encryptionMethod: 'pre-shared-key' },
+        { encryptionMethod: 'psk' },
         {
           $or: [
             { tunnelKeys: { $exists: false } },

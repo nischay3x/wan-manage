@@ -38,8 +38,6 @@ const buildInterfaces = (deviceInterfaces) => {
       IPv6,
       IPv4Mask,
       IPv6Mask,
-      PublicIP,
-      PublicPort,
       useStun,
       monitorInternet,
       routing,
@@ -50,7 +48,9 @@ const buildInterfaces = (deviceInterfaces) => {
       mtu,
       dhcp,
       deviceType,
-      configuration
+      configuration,
+      dnsServers,
+      dnsDomains
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -76,10 +76,14 @@ const buildInterfaces = (deviceInterfaces) => {
     if (ifc.type === 'WAN') {
       ifcInfo.gateway = gateway;
       ifcInfo.metric = metric;
-      ifcInfo.PublicIP = PublicIP;
-      ifcInfo.PublicPort = PublicPort;
       ifcInfo.useStun = useStun;
       ifcInfo.monitorInternet = monitorInternet;
+
+      // send dns servers only for WAN interfaces with static IP
+      if (ifcInfo.dhcp === 'no') {
+        ifcInfo.dnsServers = dnsServers;
+        ifcInfo.dnsDomains = dnsDomains;
+      }
     }
     interfaces.push(ifcInfo);
   }

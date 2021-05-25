@@ -6927,7 +6927,7 @@ components:
         encryptionMethod:
           enum:
           - none
-          - pre-shared-key
+          - psk
           - ikev2
           type: string
       type: object
@@ -6952,7 +6952,7 @@ components:
         encryptionMethod:
           enum:
           - none
-          - pre-shared-key
+          - psk
           - ikev2
           type: string
       type: object
@@ -7106,6 +7106,8 @@ components:
           devId: devId
           _id: _id
           deviceType: dpdk
+          dnsServers: [8.8.8.8, 8.8.4.4]
+          dnsDomains: [subdomain.maindomain]
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
@@ -7442,6 +7444,8 @@ components:
         devId: devId
         _id: _id
         pathlabels: path labels list
+        dnsServers: [8.8.8.8, 8.8.4.4]
+        dnsDomains: [subdomain.maindomain]
       properties:
         _id:
           maxLength: 24
@@ -7517,6 +7521,17 @@ components:
               minProperties: 0
               maxProperties: 0
           type: object
+        dnsServers:
+          description: List of DNS address
+          items:
+            type: string
+            maxLength: 20
+          type: array
+        dnsDomains:
+          description: List of DNS search domains
+          items:
+            type: string
+          type: array
       type: object
     DeviceVersion:
       example:

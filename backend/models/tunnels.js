@@ -66,8 +66,8 @@ const tunnelSchema = new Schema({
   },
   encryptionMethod: {
     type: String,
-    enum: ['none', 'pre-shared-key', 'ikev2'],
-    default: 'pre-shared-key'
+    enum: ['none', 'psk', 'ikev2'],
+    default: 'psk'
   },
   // device A participate in the tunnel
   deviceA: {
