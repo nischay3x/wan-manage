@@ -85,7 +85,6 @@ const buildInterfaces = (deviceInterfaces) => {
       // if useDhcpDnsServers is true, we set empty array to the agent
       if (ifcInfo.dhcp === 'yes' && useDhcpDnsServers === true) {
         ifcInfo.dnsServers = [];
-        ifcInfo.dnsDomains = [];
       }
     }
     interfaces.push(ifcInfo);
