@@ -68,11 +68,9 @@ const prepareIfcParams = (interfaces, device) => {
         delete newIfc.dnsDomains;
       }
 
-      // Don't send dns servers which use for wan interfaces with static IP
-      // or fpr dhcp interfaces but a user is override the dns servers
+      // If a user wants to use the DNS from DHCP server, we send empty array to the device
       if (ifc.type === 'WAN' && newIfc.dhcp === 'yes' && ifc.useDhcpDnsServers) {
         newIfc.dnsServers = [];
-        newIfc.dnsDomains = [];
       }
 
       // Don't send unnecessary info for both types of interfaces
