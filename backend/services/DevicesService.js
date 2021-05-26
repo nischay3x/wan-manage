@@ -879,7 +879,9 @@ class DevicesService {
                 throw new Error(`DNS ip addresses are not valid for (${origIntf.name})`);
               }
 
-              const isValidDomainList = domains.every(domain => validator.isFQDN(domain));
+              const isValidDomainList = domains.every(domain => {
+                return validator.isFQDN(domain, { require_tld: false });
+              });
               if (!isValidDomainList) {
                 throw new Error(`DNS domain list is not valid for (${origIntf.name})`);
               }
