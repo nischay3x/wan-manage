@@ -167,7 +167,8 @@ class DevicesService {
           'configuration',
           'deviceParams',
           'dnsServers',
-          'dnsDomains'
+          'dnsDomains',
+          'useDhcpDnsServers'
         ]);
         retIf._id = retIf._id.toString();
         return retIf;
@@ -858,31 +859,31 @@ class DevicesService {
               );
             }
 
-            if (updIntf.isAssigned && updIntf.dhcp === 'no' && updIntf.type === 'WAN') {
-              if (updIntf.dnsServers.length === 0) {
-                throw new Error(
-                  `DNS ip address is required for ${origIntf.name}`
-                );
+            if (updIntf.isAssigned && updIntf.type === 'WAN') {
+              const dhcp = updIntf.dhcp;
+              const servers = updIntf.dnsServers;
+              const domains = updIntf.dnsDomains;
+
+              // Prevent static IP without dns servers
+              if (dhcp === 'no' && servers.length === 0) {
+                throw new Error(`DNS ip address is required for ${origIntf.name}`);
               }
 
-              const isValidIpList = updIntf.dnsServers.every((ip) => {
-                return net.isIPv4(ip);
-              });
+              // Prevent override dhcp DNS info without dns servers
+              if (dhcp === 'yes' && !updIntf.useDhcpDnsServers && servers.length === 0) {
+                throw new Error(`DNS ip address is required for ${origIntf.name}`);
+              }
 
+              const isValidIpList = servers.every(ip => net.isIPv4(ip));
               if (!isValidIpList) {
-                throw new Error(
-                  `DNS ip addresses are not valid for (${origIntf.name})`
-                );
+                throw new Error(`DNS ip addresses are not valid for (${origIntf.name})`);
               }
 
-              const isValidDomainList = updIntf.dnsDomains.every((domain) => {
-                return validator.isFQDN(domain);
+              const isValidDomainList = domains.every(domain => {
+                return validator.isFQDN(domain, { require_tld: false });
               });
-
               if (!isValidDomainList) {
-                throw new Error(
-                  `DNS domain list is not valid for (${origIntf.name})`
-                );
+                throw new Error(`DNS domain list is not valid for (${origIntf.name})`);
               }
             }
 
@@ -1873,6 +1874,9 @@ class DevicesService {
     });
     if (!interfaceObj) {
       throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
+    }
+    if (!interfaceObj.isAssigned) {
+      throw new Error('DHCP can be defined only for assigned interfaces');
     }
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
