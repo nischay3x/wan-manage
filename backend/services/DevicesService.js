@@ -132,7 +132,8 @@ class DevicesService {
       'labels',
       'upgradeSchedule',
       'sync']);
-    retDevice.deviceStatus = (retDevice.deviceStatus === '1');
+
+    retDevice.isConnected = connections.isConnected(retDevice.machineId);
 
     // pick interfaces
     let retInterfaces;
@@ -171,6 +172,8 @@ class DevicesService {
           'useDhcpDnsServers'
         ]);
         retIf._id = retIf._id.toString();
+        // if device is not connected then internet access status is unknown
+        retIf.internetAccess = retDevice.isConnected ? retIf.internetAccess : '';
         return retIf;
       });
     } else retInterfaces = [];
@@ -229,7 +232,6 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
-    retDevice.isConnected = connections.isConnected(retDevice.machineId);
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
       ? deviceStatus.getDeviceStatus(retDevice.machineId) || {} : {};
