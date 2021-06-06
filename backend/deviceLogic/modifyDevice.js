@@ -245,7 +245,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     requests.push(...messageParams.modify_router.assignBridges.map(item => {
       return {
         entity: 'agent',
-        message: 'add-bridge',
+        message: 'add-switch',
         params: {
           addr: item
         }
@@ -256,7 +256,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     requests.push(...messageParams.modify_router.unassignBridges.map(item => {
       return {
         entity: 'agent',
-        message: 'remove-bridge',
+        message: 'remove-switch',
         params: {
           addr: item
         }
@@ -890,9 +890,9 @@ const apply = async (device, user, data) => {
   const assignBridges = [];
   const unassignBridges = [];
 
-  // Check add-bridge
+  // Check add-switch
   for (const newBridge in newBridges) {
-    // if new bridges doesn't exists in old bridges, we need to add-bridge
+    // if new bridges doesn't exists in old bridges, we need to add-switch
     if (!oldBridges.hasOwnProperty(newBridge)) {
       assignBridges.push(newBridge);
     }
@@ -901,9 +901,9 @@ const apply = async (device, user, data) => {
     modifyParams.modify_router.assignBridges = assignBridges;
   }
 
-  // Check remove-bridge
+  // Check remove-switch
   for (const oldBridge in oldBridges) {
-    // if old bridges doesn't exists in new bridges, we need to remove-bridge
+    // if old bridges doesn't exists in new bridges, we need to remove-switch
     if (!newBridges.hasOwnProperty(oldBridge)) {
       unassignBridges.push(oldBridge);
     }
@@ -990,7 +990,7 @@ const apply = async (device, user, data) => {
   // For example:
   // Suppose there is already an interface with some IP.
   // Now, the user configures another interface with the same IP address.
-  // In this case, we need to send an add-bridge job with the new interface,
+  // In this case, we need to send an add-switch job with the new interface,
   // but we need to add the existing interface to this bridge,
   // even if there are no changes in this interface.
   const bridgeChanges = [...assignBridges, ...unassignBridges];
@@ -1151,7 +1151,7 @@ const sync = async (deviceId, org) => {
   Object.keys(bridges).forEach(item => {
     deviceConfRequests.push({
       entity: 'agent',
-      message: 'add-bridge',
+      message: 'add-switch',
       params: {
         addr: item
       }
