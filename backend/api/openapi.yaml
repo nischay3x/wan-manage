@@ -7330,13 +7330,13 @@ components:
           interface: eth1
         firewallApplied: true
         firewallRules:
-        - name: name
+        - description: description
           direction: outbound
-          status: enabled
+          enabled: true
           action: allow
-        - name: name
+        - description: description
           direction: inbound
-          status: disabled
+          enabled: false
           action: deny
         fromToken: fromToken
         account: account
@@ -8687,15 +8687,14 @@ components:
           type: array
       required:
       - name
-      - description
       - rules
       type: object
     FirewallRule:
       example:
         _id: id
-        name: name
+        description: description
         priority: priority
-        status: enabled
+        enabled: true
         direction: inbound
         inbound: edgeAccess
         classification: classification
@@ -8706,17 +8705,15 @@ components:
           maxLength: 24
           minLength: 24
           type: string
-        name:
+        description:
+          maxLength: 100
           type: string
         priority:
           type: integer
           minimum: 0
           maximum: 1000
-        status:
-          enum:
-          - enabled
-          - disabled
-          type: string
+        enabled:
+          type: boolean
         direction:
           enum:
           - inbound
@@ -8746,35 +8743,32 @@ components:
           type: array
       required:
       - _id
-      - name
       - priority
-      - status
+      - enabled
       - direction
       - classification
       - action
       type: object
     FirewallRuleRequest:
       example:
-        name: name
+        description: description
         priority: priority
-        status: enabled
+        enabled: true
         direction: inbound
         inbound: edgeAccess
         classification: classification
         action: allow
         interfaces: interfaces
       properties:
-        name:
+        description:
+          maxLength: 100
           type: string
         priority:
           type: integer
           minimum: 0
           maximum: 1000
-        status:
-          enum:
-          - enabled
-          - disabled
-          type: string
+        enabled:
+          type: boolean
         direction:
           enum:
           - inbound
@@ -8799,9 +8793,8 @@ components:
             type: string
           type: array
       required:
-      - name
       - priority
-      - status
+      - enabled
       - direction
       - classification
       - action

@@ -17,7 +17,6 @@
 
 const { Schema } = require('mongoose');
 const {
-  validateRuleName,
   validateIPv4WithMask,
   validateIPv4,
   validatePort,
@@ -98,13 +97,10 @@ const destinationClassificationSchema = new Schema({
 
 // Rule schema
 const firewallRuleSchema = new Schema({
-  name: {
+  description: {
     type: String,
-    required: true,
-    validate: {
-      validator: validateRuleName,
-      message: 'Firewall rule name format is invalid'
-    }
+    required: false,
+    maxlength: [100, 'Rule description length must be at most 100']
   },
   direction: {
     type: String,
@@ -140,10 +136,9 @@ const firewallRuleSchema = new Schema({
     max: [1000, 'priority should be a number between 0-1000'],
     required: true
   },
-  status: {
-    type: String,
-    enum: ['enabled', 'disabled'],
-    default: 'enabled',
+  enabled: {
+    type: Boolean,
+    default: true,
     required: true
   },
   classification: {

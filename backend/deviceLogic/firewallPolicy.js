@@ -37,10 +37,10 @@ const prepareParameters = (policy, device) => {
   // assuming there will be not more than 10000 local rules
   const globalShift = 10000;
   const policyRules = policy ? policy.rules.toObject()
-    .filter(r => r.status === 'enabled')
+    .filter(r => r.enabled)
     .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
   const deviceRules = device.firewallApplied ? device.firewall.rules.toObject()
-    .filter(r => r.status === 'enabled') : [];
+    .filter(r => r.enabled) : [];
   const firewallRules = [...policyRules, ...deviceRules]
     .sort((r1, r2) => r1.priority - r2.priority);
   if (firewallRules.length === 0) {
@@ -283,7 +283,7 @@ const apply = async (deviceList, user, data) => {
           throw createError(404, `policy ${id} does not exist`);
         }
         // Disabled rules should not be sent to the device
-        firewallPolicy.rules = firewallPolicy.rules.filter(rule => rule.status === 'enabled');
+        firewallPolicy.rules = firewallPolicy.rules.filter(rule => rule.enabled);
         if (firewallPolicy.rules.length === 0) {
           throw createError(400, 'Policy must have at least one enabled rule');
         }

@@ -224,9 +224,9 @@ class DevicesService {
       ? item.firewall.rules.map(r => {
         const retRule = pick(r, [
           '_id',
-          'name',
+          'description',
           'priority',
-          'status',
+          'enabled',
           'direction',
           'inbound',
           'classification',
