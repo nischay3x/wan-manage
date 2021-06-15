@@ -151,7 +151,7 @@ paths:
         explode: true
         in: query
         name: org
-        required: false
+        required: true
         schema:
           type: string
       requestBody:
@@ -6301,6 +6301,8 @@ components:
         name:
           type: string
         description:
+          type: string
+        server:
           type: string
       type: object
     AppIdentificationRules:

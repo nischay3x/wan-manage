@@ -49,6 +49,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const cidr = require('cidr-tools');
+const { getCurrentServer } = require('../utils/httpUtils');
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -57,8 +58,9 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ org, deviceCommand }, { user }, response) {
+  static async devicesApplyPOST ({ org, deviceCommand }, request, response) {
     try {
+      const { user } = request;
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevices = await devices.find({ org: { $in: orgList } })
@@ -66,7 +68,7 @@ class DevicesService {
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(request, response, ids, orgList[0]);
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -83,8 +85,9 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }, response) {
+  static async devicesIdApplyPOST ({ id, org, deviceCommand }, request, response) {
     try {
+      const { user } = request;
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
@@ -96,7 +99,7 @@ class DevicesService {
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(request, response, ids, orgList[0]);
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -734,8 +737,9 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user }, response) {
+  static async devicesIdPUT ({ id, org, deviceRequest }, request, response) {
     let session;
+    const { user } = request;
     try {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
@@ -1019,7 +1023,7 @@ class DevicesService {
       }
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;
-      DevicesService.setLocationHeader(response, modifyDevResult.ids, orgList[0]);
+      DevicesService.setLocationHeader(request, response, modifyDevResult.ids, orgList[0]);
       const deviceObj = DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
@@ -1141,8 +1145,9 @@ class DevicesService {
    * route String Numeric ID of the Route to delete
    * no response value expected for this operation
    **/
-  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }, response) {
+  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, request, response) {
     try {
+      const { user } = request;
       const orgList = await getAccessTokenOrgList(user, org, true);
       const device = await devices.findOne(
         {
@@ -1163,7 +1168,7 @@ class DevicesService {
       copy._id = route;
       copy.action = 'del';
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(request, response, ids, orgList[0]);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -1180,8 +1185,9 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns DeviceStaticRouteInformation
    **/
-  static async devicesIdStaticroutesPOST (request, { user }, response) {
+  static async devicesIdStaticroutesPOST (request, httpRequest, response) {
     const { id, org, staticRouteRequest } = request;
+    const { user } = httpRequest;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.find({
@@ -1232,7 +1238,7 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy._id = route.id;
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(httpRequest, response, ids, orgList[0]);
       const result = {
         _id: route._id.toString(),
         gateway: route.gateway,
@@ -1258,8 +1264,9 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesRoutePATCH (request, { user }, response) {
+  static async devicesIdStaticroutesRoutePATCH (request, httpRequest, response) {
     const { id, org, staticRouteRequest } = request;
+    const { user } = httpRequest;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.find({
@@ -1279,7 +1286,7 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(httpRequest, response, ids, orgList[0]);
       return Service.successResponse({ deviceId: device.id });
     } catch (e) {
       return Service.rejectResponse(
@@ -1541,8 +1548,9 @@ class DevicesService {
    * org String Organization to be filtered by (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdDhcpDhcpIdDELETE ({ id, dhcpId, force, org }, { user }, response) {
+  static async devicesIdDhcpDhcpIdDELETE ({ id, dhcpId, force, org }, request, response) {
     try {
+      const { user } = request;
       const isForce = (force === 'yes');
       const orgList = await getAccessTokenOrgList(user, org, true);
       const device = await devices.findOneAndUpdate(
@@ -1574,7 +1582,7 @@ class DevicesService {
         copy._id = dhcpId;
         copy.action = 'del';
         const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-        DevicesService.setLocationHeader(response, ids, orgList[0]);
+        DevicesService.setLocationHeader(request, response, ids, orgList[0]);
       }
 
       // If force delete specified, delete the entry regardless of the job status
@@ -1652,8 +1660,9 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, { user }, response) {
+  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, request, response) {
     try {
+      const { user } = request;
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
@@ -1693,7 +1702,7 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(request, response, ids, orgList[0]);
       return Service.successResponse(dhcpData, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -1712,8 +1721,9 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org }, { user }, response) {
+  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org }, request, response) {
     try {
+      const { user } = request;
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
@@ -1745,7 +1755,7 @@ class DevicesService {
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(request, response, ids, orgList[0]);
       const dhcpData = {
         _id: dhcpObject.id,
         interface: dhcpObject.interface,
@@ -1867,8 +1877,9 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user }, response) {
+  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, request, response) {
     let session;
+    const { user } = request;
     try {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
@@ -1924,7 +1935,7 @@ class DevicesService {
       copy.org = orgList[0];
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(request, response, ids, orgList[0]);
       return Service.successResponse(result, 202);
     } catch (e) {
       if (session) session.abortTransaction();
@@ -2193,9 +2204,11 @@ class DevicesService {
    * @param {Array} jobsIds - array of jobs ids
    * @param {string} orgId - ID of the organzation
    */
-  static setLocationHeader (response, jobsIds, orgId) {
+  static setLocationHeader (request, response, jobsIds, orgId) {
+    const server = getCurrentServer(request);
+
     if (jobsIds.length) {
-      const locationHeader = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
+      const locationHeader = `${server}/api/jobs?status=all&ids=${
         jobsIds.join('%2C')}&org=${orgId}`;
       response.setHeader('Location', locationHeader);
     }
