@@ -189,7 +189,9 @@ class DevicesService {
           'destination',
           'gateway',
           'ifname',
-          'metric'
+          'metric',
+          'redistributeViaOSPF',
+          'redistributeViaBGP'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;

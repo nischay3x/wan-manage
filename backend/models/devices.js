@@ -323,6 +323,14 @@ const staticroutesSchema = new Schema({
       validator: validators.validateMetric,
       message: 'Metric should be a number'
     }
+  },
+  redistributeViaOSPF: {
+    type: Boolean,
+    default: false
+  },
+  redistributeViaBGP: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true
