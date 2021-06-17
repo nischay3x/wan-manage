@@ -245,6 +245,29 @@ const interfacesSchema = new Schema({
   deviceParams: {
     type: Object,
     default: {}
+  },
+  ospf: {
+    area: {
+      type: String,
+      default: '0',
+      required: true,
+      validate: {
+        validator: validators.validateOSPFArea
+      }
+    },
+    keyId: {
+      type: String
+    },
+    key: {
+      type: String
+    },
+    cost: {
+      type: String,
+      default: '',
+      validate: {
+        validator: validators.validateOSPFCost
+      }
+    }
   }
 }, {
   timestamps: true,

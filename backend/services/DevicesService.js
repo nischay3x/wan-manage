@@ -169,7 +169,8 @@ class DevicesService {
           'deviceParams',
           'dnsServers',
           'dnsDomains',
-          'useDhcpDnsServers'
+          'useDhcpDnsServers',
+          'ospf'
         ]);
         retIf._id = retIf._id.toString();
         // if device is not connected then internet access status is unknown
