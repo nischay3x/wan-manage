@@ -20,9 +20,16 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'm
  * Make any changes you need to make to the database here
  */
 async function up () {
-  const defaultSettings = {
+  const defaultLinkSettings = {
     area: '0',
     cost: ''
+  };
+
+  const defaultGlobalSettings = {
+    routerId: '',
+    redistributeStaticRoutes: false,
+    helloInterval: '10',
+    deadInterval: '40'
   };
 
   try {
@@ -30,16 +37,17 @@ async function up () {
       { },
       {
         $set: {
-          'interfaces.$[].ospf': defaultSettings
+          'interfaces.$[].ospf': defaultLinkSettings,
+          ospf: defaultGlobalSettings
         }
       },
-      { upsert: false }
+      { upsert: false, runValidators: true }
     );
   } catch (err) {
     logger.error('Database migration failed', {
       params: { collections: ['devices'], operation: 'up', err: err.message }
     });
-    return false;
+    throw new Error(err.message);
   }
 }
 
@@ -52,7 +60,8 @@ async function down () {
       { },
       {
         $unset: {
-          'interfaces.$[].ospf': ''
+          'interfaces.$[].ospf': '',
+          ospf: ''
         }
       },
       { upsert: false }

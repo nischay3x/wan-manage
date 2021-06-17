@@ -131,7 +131,9 @@ class DevicesService {
       // Internal array, objects
       'labels',
       'upgradeSchedule',
-      'sync']);
+      'sync',
+      'ospf'
+    ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
 

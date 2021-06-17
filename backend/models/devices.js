@@ -252,7 +252,8 @@ const interfacesSchema = new Schema({
       default: '0',
       required: true,
       validate: {
-        validator: validators.validateOSPFArea
+        validator: validators.validateOSPFArea,
+        message: 'area should be a vaild number'
       }
     },
     keyId: {
@@ -735,6 +736,36 @@ const deviceSchema = new Schema({
   IKEv2: {
     type: IKEv2Schema,
     default: IKEv2Schema
+  },
+  ospf: {
+    routerId: {
+      type: String,
+      required: false,
+      validate: {
+        validator: validators.validateIPv4,
+        message: props => `${props.value} should be a vaild ip address`
+      }
+    },
+    redistributeStaticRoutes: {
+      type: Boolean,
+      default: false
+    },
+    helloInterval: {
+      type: String,
+      default: '10',
+      validate: {
+        validator: validators.validateOSPFInterval,
+        message: props => `${props.value} should be a vaild integer`
+      }
+    },
+    deadInterval: {
+      type: String,
+      default: '40',
+      validate: {
+        validator: validators.validateOSPFInterval,
+        message: props => `${props.value} should be a vaild integer`
+      }
+    }
   }
 },
 {

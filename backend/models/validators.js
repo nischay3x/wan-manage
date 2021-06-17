@@ -167,6 +167,7 @@ const validateMetric = (val) => val === '' || (val && validateIsInteger(val) && 
 const validateMtu = (val) => val && validateIsInteger(val) && +val >= 500 && +val <= 9000;
 const validateOSPFArea = (val) => val && validateIsInteger(val) && +val >= 0;
 const validateOSPFCost = (val) => val === '' || (val && validateIsInteger(val) && +val >= 0 && +val < 65535);
+const validateOSPFInterval = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
 
 module.exports = {
   validateDHCP,
@@ -207,5 +208,6 @@ module.exports = {
   validateMtu,
   validateIsInteger,
   validateOSPFArea,
-  validateOSPFCost
+  validateOSPFCost,
+  validateOSPFInterval
 };
