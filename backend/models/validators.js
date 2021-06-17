@@ -166,7 +166,7 @@ const validateRuleName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name ||
 const validateMetric = (val) => val === '' || (val && validateIsInteger(val) && +val >= 0);
 const validateMtu = (val) => val && validateIsInteger(val) && +val >= 500 && +val <= 9000;
 const validateOSPFArea = (val) => val && validateIsInteger(val) && +val >= 0;
-const validateOSPFCost = (val) => val && validateIsInteger(val) && +val >= 0 && +val < 65535;
+const validateOSPFCost = (val) => val === '' || (val && validateIsInteger(val) && +val >= 0 && +val < 65535);
 
 module.exports = {
   validateDHCP,
