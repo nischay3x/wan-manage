@@ -313,7 +313,11 @@ const staticroutesSchema = new Schema({
   },
   // interface name
   ifname: {
-    type: String
+    type: String,
+    validate: {
+      validator: validators.validateDevId,
+      message: 'ifname should be a vaild interface devId'
+    }
   },
   // metric
   metric: {

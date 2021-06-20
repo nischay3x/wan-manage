@@ -1119,6 +1119,8 @@ class DevicesService {
       if (device.staticroutes.length) {
         routes = device.staticroutes;
       }
+      // Indicate if a route should be redistributed due to a global setting
+      const redistributeViaOSPF = device.ospf.redistributeStaticRoutes;
 
       routes = routes.map(value => {
         return {
@@ -1127,7 +1129,8 @@ class DevicesService {
           gateway: value.gateway,
           ifname: value.ifname,
           metric: value.metric,
-          status: value.status
+          status: value.status,
+          redistributeViaOSPF: redistributeViaOSPF || value.redistributeViaOSPF
         };
       });
       return Service.successResponse(routes);
@@ -1189,17 +1192,16 @@ class DevicesService {
     const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const deviceObject = await devices.find({
+      let device = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
       });
-      if (!deviceObject || deviceObject.length === 0) {
+      if (!device) {
         return Service.rejectResponse('Device not found');
       }
-      if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
+      if (!device.isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
       }
-      const device = deviceObject[0];
 
       // eslint-disable-next-line new-cap
       const route = new staticroutes({
@@ -1222,14 +1224,14 @@ class DevicesService {
         throw new Error(err);
       }
 
-      await devices.findOneAndUpdate(
+      device = await devices.findOneAndUpdate(
         { _id: device._id },
         {
           $push: {
             staticroutes: route
           }
         },
-        { new: true }
+        { new: true, runValidators: true }
       );
 
       const copy = Object.assign({}, staticRouteRequest);

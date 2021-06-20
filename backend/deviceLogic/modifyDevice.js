@@ -196,7 +196,8 @@ const prepareModificationMessage = (messageParams, device) => {
             addr: item.addr,
             via: item.old_route,
             devId: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
+            metric: item.metric ? parseInt(item.metric, 10) : undefined,
+            redistributeViaOSPF: item.redistributeViaOSPF
           }
         });
       }
@@ -208,7 +209,8 @@ const prepareModificationMessage = (messageParams, device) => {
             addr: item.addr,
             via: item.new_route,
             devId: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
+            metric: item.metric ? parseInt(item.metric, 10) : undefined,
+            redistributeViaOSPF: item.redistributeViaOSPF
           }
         });
       }
@@ -657,15 +659,22 @@ const setTunnelsPendingInDB = (tunnelIDs, org, flag) => {
 const prepareModifyRoutes = (origDevice, newDevice) => {
   // Handle changes in default route
   const routes = [];
+
+  // Check if a route should be redistributed due to a global setting
+  const newRedistributeViaOSPF = newDevice.ospf.redistributeStaticRoutes;
+  const oldRedistributeViaOSPF = origDevice.ospf.redistributeStaticRoutes;
+
   // Handle changes in static routes
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
+
     newDevice.staticroutes.map(route => {
       return ({
         destination: route.destination,
         gateway: route.gateway,
         ifname: route.ifname,
-        metric: route.metric
+        metric: route.metric,
+        redistributeViaOSPF: newRedistributeViaOSPF || route.redistributeViaOSPF === true
       });
     }),
 
@@ -674,7 +683,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         destination: route.destination,
         gateway: route.gateway,
         ifname: route.ifname,
-        metric: route.metric
+        metric: route.metric,
+        redistributeViaOSPF: oldRedistributeViaOSPF || route.redistributeViaOSPF === true
       });
     })
   ];
@@ -706,7 +716,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       old_route: route.gateway,
       new_route: '',
       devId: route.ifname || undefined,
-      metric: route.metric || undefined
+      metric: route.metric || undefined,
+      redistributeViaOSPF: oldRedistributeViaOSPF || route.redistributeViaOSPF === true
     });
   });
   routesToAdd.forEach(route => {
@@ -715,7 +726,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       new_route: route.gateway,
       old_route: '',
       devId: route.ifname || undefined,
-      metric: route.metric || undefined
+      metric: route.metric || undefined,
+      redistributeViaOSPF: newRedistributeViaOSPF || route.redistributeViaOSPF === true
     });
   });
 
@@ -1014,12 +1026,13 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const { interfaces, staticroutes, dhcp } = await devices.findOne(
+  const { interfaces, staticroutes, dhcp, ospf } = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
       staticroutes: 1,
       dhcp: 1,
+      ospf: 1,
       versions: 1
     }
   )
@@ -1058,11 +1071,17 @@ const sync = async (deviceId, org) => {
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
 
+    // Check if a route should be redistributed due to a global setting
+    const redistributeViaOSPF = ospf.redistributeStaticRoutes ||
+      (route.redistributeViaOSPF === true);
+
     const params = {
       addr: destination,
       via: gateway,
       dev_id: ifname || undefined,
-      metric: metric ? parseInt(metric, 10) : undefined
+      metric: metric ? parseInt(metric, 10) : undefined,
+      redistributeViaOSPF,
+      redistributeViaBGP: route.redistributeViaBGP === true
     };
 
     deviceConfRequests.push({
