@@ -265,8 +265,7 @@ const interfacesSchema = new Schema({
     },
     key: {
       type: String,
-      minlength: [1, 'Key length must be at least 1'],
-      maxlength: [253, 'Key length must be at most 16']
+      maxlength: [16, 'Key length must be at most 16']
     },
     cost: {
       type: String,
