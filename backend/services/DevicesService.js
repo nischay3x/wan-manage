@@ -2195,6 +2195,76 @@ class DevicesService {
   }
 
   /**
+   * Get OSPF global configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by (optional)
+   * returns OSPF global configuration
+   **/
+  static async devicesIdRoutingOSPFGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }
+      );
+
+      if (!device) throw new Error('Device not found');
+
+      return Service.successResponse(device.ospf, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify OSPF global configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by
+   * ospfConfigs ospfConfigs
+   * returns OSPF global configuration
+   **/
+  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: deviceObject._id },
+        { $set: { ospf: ospfConfigs } },
+        { new: true, runValidators: true }
+      );
+
+      const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+        org: orgList[0],
+        newDevice: updDevice
+      });
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      return Service.successResponse(ospfConfigs, 202);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Sets Location header of the response, used in some integrations
    * @param {Object} response - response to http request
    * @param {Array} jobsIds - array of jobs ids

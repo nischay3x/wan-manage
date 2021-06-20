@@ -1548,6 +1548,146 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/{id}/routing/ospf:
+    get:
+      operationId: devicesIdRoutingOSPFGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OspfConfigs'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get global OSPF configuration
+      tags:
+      - Routing
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+    put:
+      operationId: devicesIdRoutingOSPFPUT
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OspfConfigs'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OspfConfigs'
+          description: Successful operation
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OspfConfigs'
+          description: Operation queued for processing
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify global OSPF configuration
+      tags:
+      - Routing
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/{id}/staticroutes:
     post:
       operationId: devicesIdStaticroutesPOST
@@ -7180,6 +7320,26 @@ components:
         - sync
         - connection
         - isApproved
+    OspfConfigs:
+      example:
+        redistributeStaticRoutes: false
+        helloInterval: 10
+        deadInterval: 40
+        routerId: A.B.C.D
+      properties:
+        redistributeStaticRoutes:
+          type: boolean
+          description: Indicates whether to redistribute all the static routes
+        helloInterval:
+          type: string
+          description: The number of seconds for HelloInterval timer value
+        deadInterval:
+          type: string
+          description: The number of seconds for RouterDeadInterval timer value used for Wait Timer and Inactivity Timer
+        routerId:
+          type: string
+          description: The Router ID of the router originating the LSA
+      type: object
     DeviceRouteInformation:
       example:
         osRoutes:
