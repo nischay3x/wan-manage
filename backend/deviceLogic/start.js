@@ -59,7 +59,7 @@ const apply = async (device, user, data) => {
 
   deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
   const startParams = {};
-  startParams.interfaces = buildInterfaces(device[0].interfaces);
+  startParams.interfaces = buildInterfaces(device[0].interfaces, device[0].ospf);
 
   const tasks = [];
   const userName = user.username;

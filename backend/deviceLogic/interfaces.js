@@ -18,14 +18,16 @@
 const { isIPv4Address } = require('./validators');
 const wifiChannels = require('../utils/wifi-channels');
 const Joi = require('@hapi/joi');
+const omitBy = require('lodash/omitBy');
 
 /**
  * Builds collection of interfaces to be sent to device
  *
- * @param {*} deviceInterfaces interfaces stored in db
+ * @param {array} deviceInterfaces interfaces stored in db
+ * @param {object} globalOSPF global OSPF configuration to apply on each interfaces
  * @returns array of interfaces
  */
-const buildInterfaces = (deviceInterfaces) => {
+const buildInterfaces = (deviceInterfaces, globalOSPF) => {
   const interfaces = [];
   for (const ifc of deviceInterfaces) {
     // Skip unassigned/un-typed interfaces, as they
@@ -51,7 +53,8 @@ const buildInterfaces = (deviceInterfaces) => {
       configuration,
       dnsServers,
       dnsDomains,
-      useDhcpDnsServers
+      useDhcpDnsServers,
+      ospf
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -86,6 +89,18 @@ const buildInterfaces = (deviceInterfaces) => {
       if (ifcInfo.dhcp === 'yes' && useDhcpDnsServers === true) {
         ifcInfo.dnsServers = [];
       }
+    }
+
+    if (ifc.routing === 'OSPF') {
+      ifcInfo.ospf = {
+        ...ospf,
+        ...globalOSPF
+      };
+
+      // No need to send this field for interfaces
+      delete ifcInfo.ospf.redistributeStaticRoutes;
+      // remove empty values since they are optional
+      ifcInfo.ospf = omitBy(ifcInfo.ospf, val => val === '');
     }
     interfaces.push(ifcInfo);
   }

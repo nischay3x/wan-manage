@@ -37,6 +37,7 @@ const pullAllWith = require('lodash/pullAllWith');
 const isEqual = require('lodash/isEqual');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
+const omitBy = require('lodash/omitBy');
 const { buildInterfaces } = require('./interfaces');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
@@ -79,6 +80,13 @@ const prepareIfcParams = (interfaces, device) => {
       delete newIfc.PublicPort; // used by flexiManage only for tunnels creation
 
       delete newIfc.useDhcpDnsServers; // used by flexiManage only for dns servers depiction
+
+      if (newIfc.ospf) {
+        delete newIfc.ospf.redistributeStaticRoutes; // used for static routes logic in flexiManage
+
+        // remove empty values since they are optional
+        newIfc.ospf = omitBy(newIfc.ospf, val => val === '');
+      }
     }
     return newIfc;
   });
@@ -90,9 +98,9 @@ const prepareIfcParams = (interfaces, device) => {
  * @param {*} interfaces
  * @returns array of interfaces
  */
-const transformInterfaces = (interfaces) => {
+const transformInterfaces = (interfaces, globalOSPF) => {
   return interfaces.map(ifc => {
-    return {
+    const ifcObg = {
       _id: ifc._id,
       devId: ifc.devId,
       dhcp: ifc.dhcp ? ifc.dhcp : 'no',
@@ -116,6 +124,20 @@ const transformInterfaces = (interfaces) => {
       dnsDomains: ifc.dnsDomains,
       useDhcpDnsServers: ifc.useDhcpDnsServers
     };
+
+    // add ospf data if relevant
+    if (ifcObg.routing === 'OSPF') {
+      ifcObg.ospf = {
+        ...ifc.ospf.toObject(),
+        helloInterval: globalOSPF.helloInterval,
+        deadInterval: globalOSPF.deadInterval
+      };
+
+      if (globalOSPF.routerId) {
+        ifcObg.ospf.routerId = globalOSPF.routerId;
+      }
+    }
+    return ifcObg;
   });
 };
 
@@ -836,7 +858,8 @@ const apply = async (device, user, data) => {
   // an array of the interfaces that have changed
   // First, extract only the relevant interface fields
   const [origInterfaces, origIsAssigned] = [
-    transformInterfaces(device[0].interfaces),
+    // add global ospf settings to each interface
+    transformInterfaces(device[0].interfaces, device[0].ospf),
     device[0].interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -847,7 +870,8 @@ const apply = async (device, user, data) => {
   ];
 
   const [newInterfaces, newIsAssigned] = [
-    transformInterfaces(data.newDevice.interfaces),
+    // add global ospf settings to each interface
+    transformInterfaces(data.newDevice.interfaces, data.newDevice.ospf),
     data.newDevice.interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -1042,7 +1066,7 @@ const sync = async (deviceId, org) => {
   // Prepare add-interface message
   const deviceConfRequests = [];
   // build interfaces
-  buildInterfaces(interfaces).forEach(item => {
+  buildInterfaces(interfaces, ospf).forEach(item => {
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-interface',
