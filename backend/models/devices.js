@@ -257,10 +257,16 @@ const interfacesSchema = new Schema({
       }
     },
     keyId: {
-      type: String
+      type: String,
+      validate: {
+        validator: validators.validateIsInteger,
+        message: 'keyId should be an integer'
+      }
     },
     key: {
-      type: String
+      type: String,
+      minlength: [1, 'Key length must be at least 1'],
+      maxlength: [253, 'Key length must be at most 16']
     },
     cost: {
       type: String,
