@@ -866,6 +866,15 @@ class DevicesService {
               );
             }
 
+            // don't allow set OSPF keyID without key and vise versa
+            const keyId = updIntf.ospf.keyId;
+            const key = updIntf.ospf.key;
+            if ((keyId && !key) || (!keyId && key)) {
+              throw new Error(
+                `(${origIntf.name}) Not allowed to save OSPF key ID without key and vice versa`
+              );
+            }
+
             if (updIntf.isAssigned && updIntf.type === 'WAN') {
               const dhcp = updIntf.dhcp;
               const servers = updIntf.dnsServers;
