@@ -19,6 +19,7 @@ const { isIPv4Address } = require('./validators');
 const wifiChannels = require('../utils/wifi-channels');
 const Joi = require('@hapi/joi');
 const omitBy = require('lodash/omitBy');
+const omit = require('lodash/omit');
 
 /**
  * Builds collection of interfaces to be sent to device
@@ -97,10 +98,12 @@ const buildInterfaces = (deviceInterfaces, globalOSPF) => {
         ...globalOSPF
       };
 
-      // No need to send this field for interfaces
-      delete ifcInfo.ospf.redistributeStaticRoutes;
       // remove empty values since they are optional
       ifcInfo.ospf = omitBy(ifcInfo.ospf, val => val === '');
+
+      // No need to send this field for interfaces. We use them for other things in the system
+      const omitFields = ['redistributeStaticRoutes', 'routerId'];
+      ifcInfo.ospf = omit(ifcInfo.ospf, omitFields);
     }
     interfaces.push(ifcInfo);
   }
