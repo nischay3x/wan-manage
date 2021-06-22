@@ -66,7 +66,7 @@ class OrganizationsService {
    **/
   static async organizationsGET ({ offset, limit }, { user }) {
     try {
-      const orgs = await getUserOrganizations(user);
+      const orgs = await getUserOrganizations(user, offset, limit);
       const result = Object.keys(orgs).map((key) => {
         return OrganizationsService.selectOrganizationParams(orgs[key]);
       });

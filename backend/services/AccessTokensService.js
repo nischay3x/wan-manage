@@ -32,6 +32,8 @@ class AccessTokensService {
   static async accesstokensGET ({ org, offset, limit }, { user }) {
     try {
       const response = await AccessTokens.find({ account: user.defaultAccount._id })
+        .skip(offset)
+        .limit(limit)
         .populate('organization');
 
       const result = response.map(record => {

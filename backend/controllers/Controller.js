@@ -97,6 +97,10 @@ class Controller {
       } else if (param.in === 'query') {
         requestParams[param.name] = request.query[param.name];
       }
+      // offset and limit must be integer
+      if (['offset', 'limit'].includes(param.name) && requestParams[param.name]) {
+        requestParams[param.name] = parseInt(requestParams[param.name]);
+      }
     });
     return requestParams;
   }
