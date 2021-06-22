@@ -28,7 +28,7 @@ const configEnv = {
   // This is the default configuration, override by the following sections
   default: {
     // URL of the rest server
-    restServerUrl: ['https://local.flexiwan.com:3443', 'dfasdf'],
+    restServerUrl: ['https://local.flexiwan.com:3443'],
     // URL of the UI server
     uiServerUrl: 'https://local.flexiwan.com:3000',
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
