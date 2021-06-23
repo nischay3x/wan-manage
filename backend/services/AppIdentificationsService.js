@@ -16,7 +16,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
-const { getCurrentServer } = require('../utils/httpUtils');
 const {
   appIdentifications,
   importedAppIdentifications,
@@ -128,9 +127,8 @@ class AppIdentificationsService {
    * @returns
    * @memberof AppIdentificationsService
    */
-  static async appIdentificationsPOST ({ org, appIdentification }, request, response) {
+  static async appIdentificationsPOST ({ org, appIdentification }, { user, server }, response) {
     try {
-      const user = request.user;
       const orgList = await getAccessTokenOrgList(user, org, true);
       let appIdentsRes =
         await appIdentifications.findOne({ 'meta.org': { $in: orgList } });
@@ -164,7 +162,6 @@ class AppIdentificationsService {
       await appIdentifications.findOneAndUpdate(
         { 'meta.org': { $in: orgList } }, appIdentsRes, options);
 
-      const server = getCurrentServer(request);
       const location = `${server}/api/appidentifications/custom/${
           objectId.toString()}`;
       response.setHeader('Location', location);
