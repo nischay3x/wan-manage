@@ -27,7 +27,6 @@ async function up () {
 
   const defaultGlobalSettings = {
     routerId: '',
-    redistributeStaticRoutes: false,
     helloInterval: '10',
     deadInterval: '40'
   };
@@ -38,6 +37,8 @@ async function up () {
       {
         $set: {
           'interfaces.$[].ospf': defaultLinkSettings,
+          'staticroutes.$[].redistributeViaOSPF': false,
+          'staticroutes.$[].redistributeViaBGP': false,
           ospf: defaultGlobalSettings
         }
       },
@@ -61,6 +62,8 @@ async function down () {
       {
         $unset: {
           'interfaces.$[].ospf': '',
+          'staticroutes.$[].redistributeViaOSPF': '',
+          'staticroutes.$[].redistributeViaBGP': '',
           ospf: ''
         }
       },

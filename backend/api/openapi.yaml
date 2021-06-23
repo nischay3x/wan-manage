@@ -7322,14 +7322,10 @@ components:
         - isApproved
     OspfConfigs:
       example:
-        redistributeStaticRoutes: false
         helloInterval: 10
         deadInterval: 40
         routerId: A.B.C.D
       properties:
-        redistributeStaticRoutes:
-          type: boolean
-          description: Indicates whether to redistribute all the static routes
         helloInterval:
           type: string
           description: The number of seconds for HelloInterval timer value

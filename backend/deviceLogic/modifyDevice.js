@@ -83,8 +83,6 @@ const prepareIfcParams = (interfaces, device) => {
       delete newIfc.useDhcpDnsServers; // used by flexiManage only for dns servers depiction
 
       if (newIfc.ospf) {
-        delete newIfc.ospf.redistributeStaticRoutes; // used for static routes logic in flexiManage
-
         // remove empty values since they are optional
         newIfc.ospf = omitBy(newIfc.ospf, val => val === '');
       }
@@ -700,10 +698,6 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
   // Handle changes in default route
   const routes = [];
 
-  // Check if a route should be redistributed due to a global setting
-  const newRedistributeViaOSPF = newDevice.ospf.redistributeStaticRoutes;
-  const oldRedistributeViaOSPF = origDevice.ospf.redistributeStaticRoutes;
-
   // Handle changes in static routes
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
@@ -714,7 +708,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         gateway: route.gateway,
         ifname: route.ifname,
         metric: route.metric,
-        redistributeViaOSPF: newRedistributeViaOSPF || route.redistributeViaOSPF === true
+        redistributeViaOSPF: route.redistributeViaOSPF
       });
     }),
 
@@ -724,7 +718,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         gateway: route.gateway,
         ifname: route.ifname,
         metric: route.metric,
-        redistributeViaOSPF: oldRedistributeViaOSPF || route.redistributeViaOSPF === true
+        redistributeViaOSPF: route.redistributeViaOSPF
       });
     })
   ];
@@ -757,7 +751,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       new_route: '',
       devId: route.ifname || undefined,
       metric: route.metric || undefined,
-      redistributeViaOSPF: oldRedistributeViaOSPF || route.redistributeViaOSPF === true
+      redistributeViaOSPF: route.redistributeViaOSPF
     });
   });
   routesToAdd.forEach(route => {
@@ -767,7 +761,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       old_route: '',
       devId: route.ifname || undefined,
       metric: route.metric || undefined,
-      redistributeViaOSPF: newRedistributeViaOSPF || route.redistributeViaOSPF === true
+      redistributeViaOSPF: route.redistributeViaOSPF
     });
   });
 
@@ -1151,17 +1145,13 @@ const sync = async (deviceId, org) => {
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
 
-    // Check if a route should be redistributed due to a global setting
-    const redistributeViaOSPF = ospf.redistributeStaticRoutes ||
-      (route.redistributeViaOSPF === true);
-
     const params = {
       addr: destination,
       via: gateway,
       dev_id: ifname || undefined,
       metric: metric ? parseInt(metric, 10) : undefined,
-      redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP === true
+      redistributeViaOSPF: route.redistributeViaOSPF,
+      redistributeViaBGP: route.redistributeViaBGP
     };
 
     deviceConfRequests.push({

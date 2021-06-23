@@ -763,10 +763,6 @@ const deviceSchema = new Schema({
         message: props => `${props.value} should be a vaild ip address`
       }
     },
-    redistributeStaticRoutes: {
-      type: Boolean,
-      default: false
-    },
     helloInterval: {
       type: String,
       default: '10',

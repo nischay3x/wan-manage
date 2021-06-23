@@ -48,13 +48,11 @@ const apply = async (device, user, data) => {
     let message = 'add-route';
     let titlePrefix = 'Add';
 
-    // Check if a route should be redistributed due to a global setting
-    const redistributeViaOSPF = device.ospf.redistributeStaticRoutes;
     const params = {
       addr: data.destination,
       via: data.gateway,
-      redistributeViaOSPF: redistributeViaOSPF || data.redistributeViaOSPF === true,
-      redistributeViaBGP: data.redistributeViaBGP === true
+      redistributeViaOSPF: data.redistributeViaOSPF,
+      redistributeViaBGP: data.redistributeViaBGP
     };
 
     if (data.ifname) {

@@ -1128,8 +1128,6 @@ class DevicesService {
       if (device.staticroutes.length) {
         routes = device.staticroutes;
       }
-      // Indicate if a route should be redistributed due to a global setting
-      const redistributeViaOSPF = device.ospf.redistributeStaticRoutes;
 
       routes = routes.map(value => {
         return {
@@ -1139,7 +1137,7 @@ class DevicesService {
           ifname: value.ifname,
           metric: value.metric,
           status: value.status,
-          redistributeViaOSPF: redistributeViaOSPF || value.redistributeViaOSPF
+          redistributeViaOSPF: value.redistributeViaOSPF
         };
       });
       return Service.successResponse(routes);

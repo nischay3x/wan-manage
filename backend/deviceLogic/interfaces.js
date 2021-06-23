@@ -102,7 +102,7 @@ const buildInterfaces = (deviceInterfaces, globalOSPF) => {
       ifcInfo.ospf = omitBy(ifcInfo.ospf, val => val === '');
 
       // No need to send this field for interfaces. We use them for other things in the system
-      const omitFields = ['redistributeStaticRoutes', 'routerId'];
+      const omitFields = ['routerId'];
       ifcInfo.ospf = omit(ifcInfo.ospf, omitFields);
     }
     interfaces.push(ifcInfo);
