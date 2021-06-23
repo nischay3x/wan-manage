@@ -7108,6 +7108,7 @@ components:
           deviceType: dpdk
           dnsServers: [8.8.8.8, 8.8.4.4]
           dnsDomains: [subdomain.maindomain]
+          useDhcpDnsServers: false
         - IPv6: IPv6
           PublicIP: PublicIP
           PublicPort: PublicPort
@@ -7148,6 +7149,7 @@ components:
           devId: devId
           _id: _id
           deviceType: lte
+          useDhcpDnsServers: true
         org: org
         isConnected: true
         upgradeSchedule:
@@ -7532,6 +7534,9 @@ components:
           items:
             type: string
           type: array
+        useDhcpDnsServers:
+          description: In case of DHCP interface, use the DNS info received from DHCP server
+          type: boolean
       type: object
     DeviceVersion:
       example:

@@ -136,7 +136,8 @@ class DevicesService {
       'labels',
       'upgradeSchedule',
       'sync']);
-    retDevice.deviceStatus = (retDevice.deviceStatus === '1');
+
+    retDevice.isConnected = connections.isConnected(retDevice.machineId);
 
     // pick interfaces
     let retInterfaces;
@@ -171,9 +172,12 @@ class DevicesService {
           'configuration',
           'deviceParams',
           'dnsServers',
-          'dnsDomains'
+          'dnsDomains',
+          'useDhcpDnsServers'
         ]);
         retIf._id = retIf._id.toString();
+        // if device is not connected then internet access status is unknown
+        retIf.internetAccess = retDevice.isConnected ? retIf.internetAccess : '';
         return retIf;
       });
     } else retInterfaces = [];
@@ -255,7 +259,6 @@ class DevicesService {
     retDevice.firewall = {
       rules: retFirewallRules
     };
-    retDevice.isConnected = connections.isConnected(retDevice.machineId);
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
       ? deviceStatus.getDeviceStatus(retDevice.machineId) || {} : {};
@@ -888,31 +891,31 @@ class DevicesService {
               );
             }
 
-            if (updIntf.isAssigned && updIntf.dhcp === 'no' && updIntf.type === 'WAN') {
-              if (updIntf.dnsServers.length === 0) {
-                throw new Error(
-                  `DNS ip address is required for ${origIntf.name}`
-                );
+            if (updIntf.isAssigned && updIntf.type === 'WAN') {
+              const dhcp = updIntf.dhcp;
+              const servers = updIntf.dnsServers;
+              const domains = updIntf.dnsDomains;
+
+              // Prevent static IP without dns servers
+              if (dhcp === 'no' && servers.length === 0) {
+                throw new Error(`DNS ip address is required for ${origIntf.name}`);
               }
 
-              const isValidIpList = updIntf.dnsServers.every((ip) => {
-                return net.isIPv4(ip);
-              });
+              // Prevent override dhcp DNS info without dns servers
+              if (dhcp === 'yes' && !updIntf.useDhcpDnsServers && servers.length === 0) {
+                throw new Error(`DNS ip address is required for ${origIntf.name}`);
+              }
 
+              const isValidIpList = servers.every(ip => net.isIPv4(ip));
               if (!isValidIpList) {
-                throw new Error(
-                  `DNS ip addresses are not valid for (${origIntf.name})`
-                );
+                throw new Error(`DNS ip addresses are not valid for (${origIntf.name})`);
               }
 
-              const isValidDomainList = updIntf.dnsDomains.every((domain) => {
-                return validator.isFQDN(domain);
+              const isValidDomainList = domains.every(domain => {
+                return validator.isFQDN(domain, { require_tld: false });
               });
-
               if (!isValidDomainList) {
-                throw new Error(
-                  `DNS domain list is not valid for (${origIntf.name})`
-                );
+                throw new Error(`DNS domain list is not valid for (${origIntf.name})`);
               }
             }
 
@@ -1898,6 +1901,9 @@ class DevicesService {
     });
     if (!interfaceObj) {
       throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
+    }
+    if (!interfaceObj.isAssigned) {
+      throw new Error('DHCP can be defined only for assigned interfaces');
     }
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
