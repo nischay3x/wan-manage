@@ -675,6 +675,30 @@ const IKEv2Schema = new Schema({
   }
 });
 
+const BGPNeighborSchema = new Schema({
+  ip: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateIPv4WithMask,
+      message: props => `${props.value} should be a valid ipv4 with mask type`
+    }
+  },
+  remoteASN: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateBGPASN,
+      message: props => `${props.value} should be a vaild ASN`
+    }
+  },
+  password: {
+    type: String
+  }
+}, {
+  timestamps: true
+});
+
 /**
  * Device Database Schema
  */
@@ -851,6 +875,46 @@ const deviceSchema = new Schema({
   IKEv2: {
     type: IKEv2Schema,
     default: IKEv2Schema
+  },
+  bgp: {
+    enable: {
+      type: Boolean,
+      required: true
+    },
+    routerId: {
+      type: String,
+      required: false,
+      validate: {
+        validator: validators.validateIPv4,
+        message: props => `${props.value} should be a vaild ip address`
+      }
+    },
+    localASN: {
+      type: String,
+      required: true,
+      default: '',
+      validate: {
+        validator: validators.validateBGPASN,
+        message: props => `${props.value} should be a vaild ASN`
+      }
+    },
+    keepaliveInterval: {
+      type: String,
+      default: '30',
+      validate: {
+        validator: validators.validateBGPInterval,
+        message: props => `${props.value} should be a vaild interval`
+      }
+    },
+    holdInterval: {
+      type: String,
+      default: '90',
+      validate: {
+        validator: validators.validateBGPInterval,
+        message: props => `${props.value} should be a vaild interval`
+      }
+    },
+    neighbors: [BGPNeighborSchema]
   },
   ospf: {
     routerId: {

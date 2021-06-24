@@ -181,6 +181,14 @@ class DevicesController {
 
   async devicesIdCoordsPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdCoordsPUT);
+  }
+
+  async devicesIdRoutingBGPGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdRoutingBGPGET);
+  };
+
+  async devicesIdRoutingBGPPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdRoutingBGPPUT);
   };
 }
 

@@ -894,6 +894,22 @@ const transformOSPF = (ospf) => {
 };
 
 /**
+ * Creates add/remove-bgp jobs
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing an array of routes
+ */
+const transformBGP = (bgp) => {
+  // remove ids from nested neighbors array
+  const neighbors = bgp.neighbors.map(n => {
+    delete n._id;
+    return n;
+  });
+  bgp = omit(bgp, 'enable');
+  return { ...bgp, neighbors: neighbors };
+};
+
+/**
  * Creates add/remove-ospf jobs
  * @param  {Object} origDevice device object before changes in the database
  * @param  {Object} newDevice  device object after changes in the database
@@ -1323,13 +1339,14 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const { interfaces, staticroutes, dhcp, ospf } = await devices.findOne(
+  const { interfaces, staticroutes, dhcp, ospf, bgp } = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
       staticroutes: 1,
       dhcp: 1,
       ospf: 1,
+      bgp: 1,
       versions: 1
     }
   )
@@ -1435,6 +1452,18 @@ const sync = async (deviceId, org) => {
       }
     });
   });
+
+  if (bgp.enable) {
+    let bgpData = transformBGP(bgp);
+    bgpData = omitBy(bgpData, val => val === '');
+    if (!isEmpty(bgpData)) {
+      deviceConfRequests.push({
+        entity: 'agent',
+        message: 'add-bgp',
+        params: bgpData
+      });
+    }
+  }
 
   return {
     requests: deviceConfRequests,
