@@ -170,6 +170,14 @@ class DevicesController {
   async devicesIdRoutingOSPFPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdRoutingOSPFPUT);
   };
+
+  async devicesIdRoutingBGPGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdRoutingBGPGET);
+  };
+
+  async devicesIdRoutingBGPPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdRoutingBGPPUT);
+  };
 }
 
 module.exports = DevicesController;

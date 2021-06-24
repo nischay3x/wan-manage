@@ -132,7 +132,8 @@ class DevicesService {
       'labels',
       'upgradeSchedule',
       'sync',
-      'ospf'
+      'ospf',
+      'bgp'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -863,6 +864,13 @@ class DevicesService {
             if (!updIntf.isAssigned && updIntf.mtu && updIntf.mtu !== origIntf.mtu) {
               throw new Error(
                 `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
+              );
+            }
+
+            // don't update MTU on an unassigned interface,
+            if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
+              throw new Error(
+                `Can't set BGP on (${origIntf.name}). BGP is disabled`
               );
             }
 
@@ -2202,11 +2210,81 @@ class DevicesService {
   }
 
   /**
-   * Get OSPF global configuration
+   * Get BGP configuration
    *
    * id String Numeric ID of the Device
    * org String Organization to be filtered by (optional)
-   * returns OSPF global configuration
+   * returns BGP global configuration
+   **/
+  static async devicesIdRoutingBGPGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }
+      );
+
+      if (!device) throw new Error('Device not found');
+
+      return Service.successResponse(device.bgp, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify BGP configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by
+   * bgpConfigs bgpConfigs
+   * returns BGP configuration
+   **/
+  static async devicesIdRoutingBGPPUT ({ id, org, bgpConfigs }, { user }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: deviceObject._id },
+        { $set: { bgp: bgpConfigs } },
+        { new: true, runValidators: true }
+      );
+
+      const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+        org: orgList[0],
+        newDevice: updDevice
+      });
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      return Service.successResponse(bgpConfigs, 202);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get OSPF configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by (optional)
+   * returns OSPF configuration
    **/
   static async devicesIdRoutingOSPFGET ({ id, org }, { user }) {
     try {
@@ -2230,12 +2308,12 @@ class DevicesService {
   }
 
   /**
-   * Modify OSPF global configuration
+   * Modify OSPF configuration
    *
    * id String Numeric ID of the Device
    * org String Organization to be filtered by
    * ospfConfigs ospfConfigs
-   * returns OSPF global configuration
+   * returns OSPF configuration
    **/
   static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user }, response) {
     try {

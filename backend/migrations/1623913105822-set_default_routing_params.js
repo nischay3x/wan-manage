@@ -25,10 +25,19 @@ async function up () {
     cost: ''
   };
 
-  const defaultGlobalSettings = {
+  const defaultOSPFGlobalSettings = {
     routerId: '',
     helloInterval: '10',
     deadInterval: '40'
+  };
+
+  const defaultBGPGlobalSettings = {
+    enable: false,
+    localASN: '',
+    routerId: '',
+    keepaliveInterval: '30',
+    holdInterval: '90',
+    neighbors: []
   };
 
   try {
@@ -39,10 +48,11 @@ async function up () {
           'interfaces.$[].ospf': defaultLinkSettings,
           'staticroutes.$[].redistributeViaOSPF': false,
           'staticroutes.$[].redistributeViaBGP': false,
-          ospf: defaultGlobalSettings
+          ospf: defaultOSPFGlobalSettings,
+          bgp: defaultBGPGlobalSettings
         }
       },
-      { upsert: false, runValidators: true }
+      { upsert: false }
     );
   } catch (err) {
     logger.error('Database migration failed', {
@@ -64,7 +74,8 @@ async function down () {
           'interfaces.$[].ospf': '',
           'staticroutes.$[].redistributeViaOSPF': '',
           'staticroutes.$[].redistributeViaBGP': '',
-          ospf: ''
+          ospf: '',
+          bgp: ''
         }
       },
       { upsert: false }

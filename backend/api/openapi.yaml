@@ -1548,6 +1548,146 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/{id}/routing/bgp:
+    get:
+      operationId: devicesIdRoutingBGPGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BgpConfigs'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get BGP configuration
+      tags:
+      - Routing
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+    put:
+      operationId: devicesIdRoutingBGPPUT
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BgpConfigs'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BgpConfigs'
+          description: Successful operation
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BgpConfigs'
+          description: Operation queued for processing
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify BGP configuration
+      tags:
+      - Routing
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/{id}/routing/ospf:
     get:
       operationId: devicesIdRoutingOSPFGET
@@ -1607,7 +1747,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get global OSPF configuration
+      summary: Get OSPF configuration
       tags:
       - Routing
       x-swagger-router-controller: Devices
@@ -1682,7 +1822,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Modify global OSPF configuration
+      summary: Modify OSPF configuration
       tags:
       - Routing
       x-swagger-router-controller: Devices
@@ -7131,6 +7271,7 @@ components:
         routing:
           enum:
           - OSPF
+          - BGP
           - NONE
           type: string
         type:
@@ -7320,6 +7461,56 @@ components:
         - sync
         - connection
         - isApproved
+    BgpConfigs:
+      example:
+        enable: true
+        localASN: 45235
+        keepaliveInterval: 30
+        holdInterval: 90
+        routerId: A.B.C.D
+        neighbors:
+        - ip: 1.1.1.1/24
+          remoteASN: 6
+        - ip: 2.2.2.2/24
+          remoteASN: 22435
+          password: abcdefg
+      properties:
+        enable:
+          type: boolean
+        localASN:
+          type: string
+          description: The AS number is an identifier for the autonomous system
+        keepaliveInterval:
+          type: string
+          description: The number of seconds for keepalive timer
+        holdInterval:
+          type: string
+          description: The number of seconds for hold time
+        routerId:
+          type: string
+          description: The Router ID of the router
+        neighbors:
+          items:
+            $ref: '#/components/schemas/BgpNeighbor'
+          type: array
+      type: object
+    BgpNeighbor:
+      example:
+        ip: 8.8.8.8/32
+        remoteASN: 25
+        password: abcde
+      properties:
+        ip:
+          type: string
+          maxLength: 24
+          description: Ip and Mask of the neighbor interface
+        remoteASN:
+          type: string
+          description: The AS number of the remote neighbor
+        password:
+          type: string
+          description: A MD5 password to be used with the tcp socket that is being used to connect to the remote peer
+      type: object
     OspfConfigs:
       example:
         helloInterval: 10
