@@ -20,6 +20,7 @@ const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const { paginated } = require('../utils/pagination');
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
@@ -109,24 +110,24 @@ class TunnelsService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async tunnelsGET ({ org, offset, limit }, { user }) {
+  static async tunnelsGET ({ org, offset, limit }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const response = await Tunnels.find({
+      const result = await Tunnels.find({
         org: { $in: orgList },
         isActive: true
       })
-        .skip(offset)
-        .limit(limit)
         .populate('deviceA', 'name interfaces')
         .populate('deviceB', 'name interfaces')
         .populate('pathlabel');
 
       // Populate interface details
-      const tunnelMap = response.map((d) => {
+      const tunnelMap = paginated(result, offset, limit).map((d) => {
         return TunnelsService.selectTunnelParams(d);
       });
 
+      response.setHeader('Access-Control-Expose-Headers', '*');
+      response.setHeader('records-total', result.length);
       return Service.successResponse(tunnelMap);
     } catch (e) {
       return Service.rejectResponse(

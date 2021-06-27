@@ -22,6 +22,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const { paginated } = require('../utils/pagination');
 const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
@@ -66,7 +67,7 @@ class JobsService {
    * status String A filter on the job status (optional)
    * returns List
    **/
-  static async jobsGET ({ offset, limit, org, status, ids }, { user }) {
+  static async jobsGET ({ offset, limit, org, status, ids }, { user }, response) {
     try {
       const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
       // Check state provided is allowed
@@ -79,7 +80,7 @@ class JobsService {
 
       // Generate and send the result
       const orgList = await getAccessTokenOrgList(user, org, true);
-      let result = [];
+      const result = [];
 
       if (ids !== undefined) {
         // Convert Ids to strings
@@ -90,7 +91,9 @@ class JobsService {
             result.push(parsedJob);
           }
         );
-        return Service.successResponse(result);
+        response.setHeader('Access-Control-Expose-Headers', '*');
+        response.setHeader('records-total', result.length);
+        return Service.successResponse(paginated(result, offset, limit));
       }
       if (status === 'all') {
         await Promise.all(
@@ -109,12 +112,10 @@ class JobsService {
           }
         );
       }
-      limit = limit > 0 ? limit : result.length;
-      if (offset) {
-        result = result.slice(offset, offset + limit);
-      }
 
-      return Service.successResponse(result);
+      response.setHeader('Access-Control-Expose-Headers', '*');
+      response.setHeader('records-total', result.length);
+      return Service.successResponse(paginated(result, offset, limit));
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
