@@ -920,16 +920,26 @@ const transformOSPF = (ospf) => {
  * @param  {Object} newDevice  device object after changes in the database
  * @return {Object}            an object containing an array of routes
  */
-const transformBGP = (bgp) => {
+const transformBGP = (bgp, interfaces) => {
   const neighbors = [];
   bgp.neighbors.forEach(n => {
     const neighborObj = {
       ip: n.ip,
-      remoteASN: n.remoteASN,
-      password: n.password
+      remoteASN: n.remoteASN
     };
 
-    neighbors.push(omitBy(neighborObj, val => val === ''));
+    if (n.password) {
+      neighborObj.password = n.password;
+    }
+
+    neighbors.push(neighborObj);
+  });
+
+  const networks = [];
+  interfaces.forEach(i => {
+    networks.push({
+      ipv4: `${i.IPv4}/${i.IPv4Mask}`
+    });
   });
 
   const res = {
@@ -937,7 +947,8 @@ const transformBGP = (bgp) => {
     holdInterval: bgp.holdInterval,
     keepaliveInterval: bgp.keepaliveInterval,
     localASN: bgp.localASN,
-    neighbors: neighbors
+    neighbors: neighbors,
+    networks: networks
   };
 
   // remove empty values
@@ -951,9 +962,10 @@ const transformBGP = (bgp) => {
  * @return {Object}            an object containing add and remove ospf parameters
  */
 const prepareModifyBGP = (origDevice, newDevice) => {
+  const bgpAssignedFilter = i => i.isAssigned && i.routing === 'BGP';
   const [origBGP, newBGP] = [
-    transformBGP(origDevice.bgp),
-    transformBGP(newDevice.bgp)
+    transformBGP(origDevice.bgp, origDevice.interfaces.filter(bgpAssignedFilter)),
+    transformBGP(newDevice.bgp, newDevice.interfaces.filter(bgpAssignedFilter))
   ];
 
   const origEnable = origDevice.bgp.enable;
@@ -1484,7 +1496,7 @@ const sync = async (deviceId, org) => {
   }
 
   if (bgp.enable) {
-    let bgpData = transformBGP(bgp);
+    let bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned && i.routing === 'BGP'));
     bgpData = omitBy(bgpData, val => val === '');
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({
