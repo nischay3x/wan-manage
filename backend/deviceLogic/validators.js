@@ -367,10 +367,9 @@ const validateStaticRoute = (device, tunnels, route) => {
       };
     }
   } else {
-    let valid = device.interfaces.some(ifc => {
-      if (ifc.IPv4 === '') return false;
-      return cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
-    });
+    let valid = device.interfaces.filter(ifc => ifc.IPv4 && ifc.IPv4Mask).some(ifc =>
+      cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)
+    );
     if (!valid) {
       valid = tunnels.some(tunnel => {
         const { ip1 } = generateTunnelParams(tunnel.num);
