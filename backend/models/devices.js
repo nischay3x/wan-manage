@@ -781,7 +781,8 @@ const deviceSchema = new Schema({
   bgp: {
     enable: {
       type: Boolean,
-      required: true
+      required: true,
+      default: false
     },
     routerId: {
       type: String,

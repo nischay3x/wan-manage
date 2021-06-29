@@ -864,9 +864,6 @@ const prepareModifyBGP = (origDevice, newDevice) => {
 
   const origEnable = origDevice.bgp.enable;
   const newEnable = newDevice.bgp.enable;
-  // if (origEnable === newEnable && isEqual(origBGP, newBGP)) {
-  //   return { remove: null, add: null };
-  // }
 
   if (origEnable && !newEnable) {
     return { remove: origBGP, add: null };
@@ -1264,6 +1261,7 @@ const sync = async (deviceId, org) => {
     });
   }
 
+  // IMPORTANT: routing data should be before static routes!
   if (bgp.enable) {
     let bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned && i.routing === 'BGP'));
     bgpData = omitBy(bgpData, val => val === '');
