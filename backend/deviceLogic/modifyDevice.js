@@ -255,7 +255,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             via: item.old_route,
             devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined,
-            redistributeViaOSPF: item.redistributeViaOSPF
+            redistributeViaOSPF: item.redistributeViaOSPF,
+            redistributeViaBGP: item.redistributeViaBGP
           }
         });
       }
@@ -268,7 +269,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             via: item.new_route,
             devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined,
-            redistributeViaOSPF: item.redistributeViaOSPF
+            redistributeViaOSPF: item.redistributeViaOSPF,
+            redistributeViaBGP: item.redistributeViaBGP
           }
         });
       }
@@ -841,7 +843,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         gateway: route.gateway,
         ifname: route.ifname,
         metric: route.metric,
-        redistributeViaOSPF: route.redistributeViaOSPF
+        redistributeViaOSPF: route.redistributeViaOSPF,
+        redistributeViaBGP: route.redistributeViaBGP
       });
     }),
 
@@ -851,7 +854,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         gateway: route.gateway,
         ifname: route.ifname,
         metric: route.metric,
-        redistributeViaOSPF: route.redistributeViaOSPF
+        redistributeViaOSPF: route.redistributeViaOSPF,
+        redistributeViaBGP: route.redistributeViaBGP
       });
     })
   ];
@@ -884,7 +888,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       new_route: '',
       devId: route.ifname || undefined,
       metric: route.metric || undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF
+      redistributeViaOSPF: route.redistributeViaOSPF,
+      redistributeViaBGP: route.redistributeViaBGP
     });
   });
   routesToAdd.forEach(route => {
@@ -894,7 +899,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       old_route: '',
       devId: route.ifname || undefined,
       metric: route.metric || undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF
+      redistributeViaOSPF: route.redistributeViaOSPF,
+      redistributeViaBGP: route.redistributeViaBGP
     });
   });
 
