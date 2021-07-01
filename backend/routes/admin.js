@@ -23,6 +23,7 @@ const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const usersModel = require('../models/users');
 const tunnelsModel = require('../models/tunnels');
+const accountsModel = require('../models/accounts');
 const { devices: devicesModel } = require('../models/devices');
 const { deviceAggregateStats } = require('../models/analytics/deviceStats');
 
@@ -128,13 +129,119 @@ adminRouter
       monthlyStats = 'Error getting installed tunnels info, error=' + e.message;
     }
 
+    const accounts = await accountsModel.aggregate(
+      [
+        {
+          $project: {
+            _id: 0,
+            account_id: '$_id',
+            account_name: '$name',
+            country: '$country',
+            billing_customer_id: '$billingCustomerId',
+            organizations: '$organizations'
+          }
+        },
+        {
+          $lookup: {
+            from: 'organizations',
+            localField: 'organizations',
+            foreignField: '_id',
+            as: 'organizations'
+          }
+        },
+        { $unwind: '$organizations' },
+        {
+          $lookup: {
+            from: 'devices',
+            let: { org_id: '$organizations._id' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$$org_id', '$org'] } } },
+              { $group: { _id: null, count: { $sum: 1 } } }
+            ],
+            as: 'devices'
+          }
+        },
+        {
+          $lookup: {
+            from: 'tunnels',
+            let: { org_id: '$organizations._id' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$$org_id', '$org'] } } },
+              { $project: { isActive: 1, _id: 1 } }
+            ],
+            as: 'tunnels'
+          }
+        },
+        { $addFields: { num_devices: '$devices.count' } },
+        {
+          $project: {
+            account_name: 1,
+            account_id: 1,
+            country: 1,
+            billing_customer_id: 1,
+            organization_id: '$organizations._id',
+            organization_name: '$organizations.name',
+            num_devices: { $arrayElemAt: ['$num_devices', 0] },
+            num_tunnels_created: { $size: '$tunnels' },
+            num_tunnels_active: {
+              $size: {
+                $filter: {
+                  input: '$tunnels',
+                  as: 't',
+                  cond: {
+                    $eq: [
+                      '$$t.isActive', true
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              account_id: '$account_id',
+              account_name: '$account_name',
+              country: '$country',
+              billing_customer_id: '$billing_customer_id'
+            },
+            organizations: {
+              $push: {
+                organization_id: '$organization_id',
+                organization_name: '$organization_name',
+                num_devices: '$num_devices',
+                num_tunnels_created: '$num_tunnels_created',
+                num_tunnels_active: '$num_tunnels_active',
+                devices: '$devices'
+              }
+            }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            account_id: '$_id.account_id',
+            account_name: '$_id.account_name',
+            country: '$_id.country',
+            billing_customer_id: '$_id.billing_customer_id',
+            account_num_devices: { $sum: '$organizations.num_devices' },
+            account_num_tunnels_created: { $sum: '$organizations.num_tunnels_created' },
+            account_num_tunnels_active: { $sum: '$organizations.num_tunnels_active' },
+            organizations: '$organizations'
+          }
+        }
+      ]
+    ).allowDiskUse(true);
+
     // Return  static info from:
     const result = {
       ...registeredUsers[0],
       installedDevices: installedDevices,
       installedTunnels: installedTunnels,
       monthlyStats: monthlyStats,
-      connectedOrgs: {}
+      connectedOrgs: {},
+      accounts
     };
 
     // 1. Open websocket connections and connection info
@@ -145,10 +252,12 @@ adminRouter
       if (result.connectedOrgs[deviceInfo.org] === undefined) {
         result.connectedOrgs[deviceInfo.org] = [];
       }
+      const devStatus = deviceStatus.getDeviceStatus(device);
       result.connectedOrgs[deviceInfo.org].push({
         machineID: device,
-        status: ((deviceStatus.getDeviceStatus(device))
-          ? deviceStatus.getDeviceStatus(device).state : 'unknown')
+        status: devStatus ? devStatus.state : 'unknown',
+        version: deviceInfo.version
+        // ? deviceStatus.getDeviceStatus(device).state : 'unknown')
         // ip:(deviceInfo.socket._sender._socket._peername.address || 'unknown'),
         // port:(deviceInfo.socket._sender._socket._peername.port || 'unknown')
       });
