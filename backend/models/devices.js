@@ -879,7 +879,8 @@ const deviceSchema = new Schema({
   bgp: {
     enable: {
       type: Boolean,
-      required: true
+      required: true,
+      default: false
     },
     routerId: {
       type: String,
@@ -891,10 +892,9 @@ const deviceSchema = new Schema({
     },
     localASN: {
       type: String,
-      required: true,
       default: '',
       validate: {
-        validator: validators.validateBGPASN,
+        validator: asn => asn === '' || validators.validateBGPASN(asn),
         message: props => `${props.value} should be a vaild ASN`
       }
     },
