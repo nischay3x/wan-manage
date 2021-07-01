@@ -275,6 +275,7 @@ const staticroutesSchema = new Schema({
   // destination
   destination: {
     type: String,
+    required: [true, 'Destination name must be set'],
     validate: {
       validator: validators.validateIPv4WithMask,
       message: 'Destination should be a valid ipv4 with mask type'
@@ -283,6 +284,7 @@ const staticroutesSchema = new Schema({
   // gateway
   gateway: {
     type: String,
+    required: [true, 'Gateway name must be set'],
     validate: {
       validator: validators.validateIPv4,
       message: 'Gateway should be a valid ipv4 address'
@@ -290,7 +292,11 @@ const staticroutesSchema = new Schema({
   },
   // interface name
   ifname: {
-    type: String
+    type: String,
+    validate: {
+      validator: validators.validateDevId,
+      message: 'ifname should be a vaild interface devId'
+    }
   },
   // metric
   metric: {
