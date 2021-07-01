@@ -20,6 +20,7 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
+const firewallPoliciesModel = require('../models/firewallPolicies');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -31,9 +32,12 @@ const net = require('net');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
+const omit = require('lodash/omit');
+const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
+const { queueFirewallPolicyJob } = require('../deviceLogic/firewallPolicy');
 const { validateOperations } = require('../deviceLogic/interfaces');
 const {
   validateDevice,
@@ -220,6 +224,25 @@ class DevicesService {
       });
     } else retDhcpList = [];
 
+    const retFirewallRules = (item.firewall && item.firewall.rules)
+      ? item.firewall.rules.map(r => {
+        const retRule = pick(r, [
+          '_id',
+          'description',
+          'priority',
+          'enabled',
+          'direction',
+          'inbound',
+          'classification',
+          'action',
+          'internalIP',
+          'internalPortStart',
+          'interfaces'
+        ]);
+        retRule._id = retRule._id.toString();
+        return retRule;
+      }) : [];
+
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
@@ -232,6 +255,10 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
+    retDevice.firewallApplied = item.firewallApplied;
+    retDevice.firewall = {
+      rules: retFirewallRules
+    };
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
       ? deviceStatus.getDeviceStatus(retDevice.machineId) || {} : {};
@@ -249,6 +276,8 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.find({ org: { $in: orgList } })
+        .skip(offset)
+        .limit(limit)
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.multilink.policy', '_id name description');
 
@@ -358,6 +387,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description');
       const device = DevicesService.selectDeviceParams(result);
 
@@ -1040,13 +1070,15 @@ class DevicesService {
         { new: true, upsert: false, runValidators: true }
       )
         .session(session)
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.firewall.policy', '_id name description rules')
+        .populate('policies.multilink.policy', '_id name description');
       await session.commitTransaction();
       session = null;
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      let modifyDevResult = [];
+      let modifyDevResult = { ids: [] };
       if (origDevice) {
         modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
           org: orgList[0],
@@ -1054,7 +1086,47 @@ class DevicesService {
         });
       }
 
-      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
+      // If firewall rules modified then need to send install firewall policy job to the device
+      const modifyFirewallResult = { ids: [] };
+      const updRules = updDevice.firewall.rules.toObject();
+      const origRules = origDevice.firewall.rules.toObject();
+      const rulesModified = origDevice.firewallApplied !== updDevice.firewallApplied ||
+        !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
+          isEqual(
+            omit(updatedRule, ['_id', 'name', 'classification']),
+            omit(origRules[index], ['_id', 'name', 'classification'])
+          ) &&
+          isEqual(
+            omit(updatedRule.classification.source, ['_id']),
+            omit(origRules[index].classification.source, ['_id'])
+          ) &&
+          isEqual(
+            omit(updatedRule.classification.destination, ['_id']),
+            omit(origRules[index].classification.destination, ['_id'])
+          )
+        ));
+
+      if (rulesModified) {
+        const requestTime = Date.now();
+        const { firewall } = updDevice.policies;
+        let firewallPolicy;
+        if (firewall && firewall.status && firewall.status.startsWith('install')) {
+          firewallPolicy = await firewallPoliciesModel.findOne(
+            { org: orgList[0], _id: firewall.policy },
+            { rules: 1, name: 1 }
+          ).session(session);
+        };
+        const jobs = await queueFirewallPolicyJob(
+          [updDevice],
+          'install',
+          requestTime,
+          firewallPolicy,
+          user,
+          orgList[0]
+        );
+        modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
+      }
+      const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
       DevicesService.setLocationHeader(server, response, modifyDevResult.ids, orgList[0]);
       const deviceObj = DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);

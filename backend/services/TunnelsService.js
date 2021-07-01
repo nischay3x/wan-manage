@@ -61,6 +61,9 @@ class TunnelsService {
     retTunnel.tunnelStatusB =
       deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
 
+    retTunnel.deviceA = pick(retTunnel.deviceA, ['_id', 'name']);
+    retTunnel.deviceB = pick(retTunnel.deviceB, ['_id', 'name']);
+
     retTunnel._id = retTunnel._id.toString();
 
     return retTunnel;
@@ -113,8 +116,10 @@ class TunnelsService {
         org: { $in: orgList },
         isActive: true
       })
-        .populate('deviceA')
-        .populate('deviceB')
+        .skip(offset)
+        .limit(limit)
+        .populate('deviceA', 'name interfaces')
+        .populate('deviceB', 'name interfaces')
         .populate('pathlabel');
 
       // Populate interface details

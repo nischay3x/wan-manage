@@ -61,7 +61,10 @@ const Permissions = new Schema({
   accesstokens: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   notifications: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
   pathlabels: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
-  mlpolicies: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] }
+  mlpolicies: { type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high'] },
+  firewallpolicies: {
+    type: Number, min: [0, 'Permission too low'], max: [15, 'Permission too high']
+  }
 });
 
 // Predefined permissions
@@ -79,7 +82,8 @@ const preDefinedPermissions = {
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(0, 0, 0, 0),
     pathlabels: setPermission(0, 0, 0, 0),
-    mlpolicies: setPermission(0, 0, 0, 0)
+    mlpolicies: setPermission(0, 0, 0, 0),
+    firewallpolicies: setPermission(0, 0, 0, 0)
   },
   account_owner: {
     jobs: setPermission(1, 1, 1, 1),
@@ -94,7 +98,8 @@ const preDefinedPermissions = {
     accesstokens: setPermission(1, 1, 1, 1),
     notifications: setPermission(1, 1, 1, 1),
     pathlabels: setPermission(1, 1, 1, 1),
-    mlpolicies: setPermission(1, 1, 1, 1)
+    mlpolicies: setPermission(1, 1, 1, 1),
+    firewallpolicies: setPermission(1, 1, 1, 1)
   },
   account_manager: {
     jobs: setPermission(1, 1, 1, 1),
@@ -109,7 +114,8 @@ const preDefinedPermissions = {
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 1, 1, 1),
     pathlabels: setPermission(1, 1, 1, managerDelPermission()),
-    mlpolicies: setPermission(1, 1, 1, managerDelPermission())
+    mlpolicies: setPermission(1, 1, 1, managerDelPermission()),
+    firewallpolicies: setPermission(1, 1, 1, managerDelPermission())
   },
   account_viewer: {
     jobs: setPermission(1, 0, 0, 0),
@@ -124,7 +130,8 @@ const preDefinedPermissions = {
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 0, 0, 0),
     pathlabels: setPermission(1, 0, 0, 0),
-    mlpolicies: setPermission(1, 0, 0, 0)
+    mlpolicies: setPermission(1, 0, 0, 0),
+    firewallpolicies: setPermission(1, 0, 0, 0)
   },
   group_manager: {
     jobs: setPermission(1, 1, 1, 1),
@@ -139,7 +146,8 @@ const preDefinedPermissions = {
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 1, 1, 1),
     pathlabels: setPermission(1, 1, 1, managerDelPermission()),
-    mlpolicies: setPermission(1, 1, 1, managerDelPermission())
+    mlpolicies: setPermission(1, 1, 1, managerDelPermission()),
+    firewallpolicies: setPermission(1, 1, 1, managerDelPermission())
   },
   group_viewer: {
     jobs: setPermission(1, 0, 0, 0),
@@ -154,7 +162,8 @@ const preDefinedPermissions = {
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 0, 0, 0),
     pathlabels: setPermission(1, 0, 0, 0),
-    mlpolicies: setPermission(1, 0, 0, 0)
+    mlpolicies: setPermission(1, 0, 0, 0),
+    firewallpolicies: setPermission(1, 0, 0, 0)
   },
   organization_manager: {
     jobs: setPermission(1, 1, 1, 1),
@@ -169,7 +178,8 @@ const preDefinedPermissions = {
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 1, 1, 1),
     pathlabels: setPermission(1, 1, 1, managerDelPermission()),
-    mlpolicies: setPermission(1, 1, 1, managerDelPermission())
+    mlpolicies: setPermission(1, 1, 1, managerDelPermission()),
+    firewallpolicies: setPermission(1, 1, 1, managerDelPermission())
   },
   organization_viewer: {
     jobs: setPermission(1, 0, 0, 0),
@@ -184,7 +194,8 @@ const preDefinedPermissions = {
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 0, 0, 0),
     pathlabels: setPermission(1, 0, 0, 0),
-    mlpolicies: setPermission(1, 0, 0, 0)
+    mlpolicies: setPermission(1, 0, 0, 0),
+    firewallpolicies: setPermission(1, 0, 0, 0)
   }
 };
 
