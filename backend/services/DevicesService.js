@@ -914,8 +914,44 @@ class DevicesService {
         deviceToValidate.interfaces = origDevice.interfaces;
       }
 
-      // validate DHCP info if it exists
+      // Map dhcp config if needed
       if (Array.isArray(deviceRequest.dhcp)) {
+        deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
+          const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
+          if (!ifc) return d;
+          const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
+          if (!origIfc) return d;
+
+          // if the interface is going to be unassigned now but it was assigned
+          // and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned interface in the bridge.
+          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
+          // now, the user unassigned the eth3. In this case we reassociate the dhcp to the eth4.
+          if (!ifc.isAssigned && origIfc.isAssigned) {
+            const anotherBridgedIfc = deviceRequest.interfaces.find(i =>
+              i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned);
+            if (anotherBridgedIfc) {
+              return { ...d, interface: anotherBridgedIfc.devId };
+            }
+          }
+
+          // if the IP of the interface is changed and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned
+          // interface which has the orig IP.
+          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
+          // now, the user changed the IP of eth3. In this case we reassociate the dhcp to the eth4.
+          if (ifc.isAssigned && ifc.IPv4 !== origIfc.IPv4) {
+            const anotherAssignWithSameIp = deviceRequest.interfaces.find(i =>
+              i.devId !== ifc.devId && i.IPv4 === origIfc.IPv4 && i.isAssigned);
+            if (anotherAssignWithSameIp) {
+              return { ...d, interface: anotherAssignWithSameIp.devId };
+            }
+          }
+
+          return d;
+        });
+
+        // validate DHCP info if it exists
         for (const dhcpRequest of deviceRequest.dhcp) {
           DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
         }
@@ -1203,6 +1239,15 @@ class DevicesService {
         ifname: staticRouteRequest.ifname,
         metric: staticRouteRequest.metric
       });
+
+      const error = route.validateSync();
+      if (error) {
+        logger.warn('static route validation failed',
+          {
+            params: { staticRouteRequest, error }
+          });
+        throw new Error(error.message);
+      }
 
       const tunnels = await tunnelsModel.find({
         isActive: true,
@@ -1674,6 +1719,8 @@ class DevicesService {
       });
       if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
 
+      DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
+
       const dhcpData = {
         _id: dhcpId,
         interface: dhcpRequest.interface,
@@ -1836,6 +1883,7 @@ class DevicesService {
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
+
     // check that DHCP Range Start/End IP are on the same subnet with interface IP
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
       throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
@@ -1890,6 +1938,22 @@ class DevicesService {
         return (s.interface === dhcpRequest.interface);
       });
       if (dhcpObject.length > 0) throw new Error('DHCP already configured for that interface');
+
+      // for bridge feature we allow to set only one dhcp config
+      // for one of the interface in the bridge
+      const interfaceObj = deviceObject.interfaces.find(i => i.devId === dhcpRequest.interface);
+      const addr = interfaceObj.IPv4;
+      const bridgedInterfacesIds = deviceObject.interfaces.filter(i => {
+        return i.devId !== dhcpRequest.interface && i.isAssigned && i.IPv4 === addr;
+      }).map(i => i.devId);
+
+      if (bridgedInterfacesIds.length) {
+        const dhcp = deviceObject.dhcp.map(d => d.interface);
+        const dhcpConfigured = bridgedInterfacesIds.some(i => dhcp.includes(i));
+        if (dhcpConfigured) {
+          throw new Error(`DHCP already configured for an interface in ${addr} bridge`);
+        }
+      }
 
       const dhcpData = {
         interface: dhcpRequest.interface,

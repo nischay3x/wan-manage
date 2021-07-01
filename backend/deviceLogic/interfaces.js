@@ -87,6 +87,11 @@ const buildInterfaces = (deviceInterfaces) => {
         ifcInfo.dnsServers = [];
       }
     }
+
+    ifcInfo.bridge_addr = ifc.type === 'LAN' && deviceInterfaces.some(i => {
+      return devId !== i.devId && IPv4 === i.IPv4 && IPv4Mask === i.IPv4Mask;
+    }) ? ifcInfo.addr : null;
+
     interfaces.push(ifcInfo);
   }
 
