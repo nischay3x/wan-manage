@@ -118,8 +118,8 @@ class TunnelsService {
       })
         .skip(offset)
         .limit(limit)
-        .populate('deviceA', 'name interfaces')
-        .populate('deviceB', 'name interfaces')
+        .populate('deviceA', 'name interfaces machineId')
+        .populate('deviceB', 'name interfaces machineId')
         .populate('pathlabel');
 
       // Populate interface details
