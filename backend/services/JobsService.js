@@ -79,7 +79,7 @@ class JobsService {
 
       // Generate and send the result
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const result = [];
+      let result = [];
 
       if (ids !== undefined) {
         // Convert Ids to strings
@@ -108,6 +108,10 @@ class JobsService {
             result.push(parsedJob);
           }
         );
+      }
+      limit = limit > 0 ? limit : result.length;
+      if (offset) {
+        result = result.slice(offset, offset + limit);
       }
 
       return Service.successResponse(result);

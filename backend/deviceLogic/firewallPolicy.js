@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const createError = require('http-errors');
-const MultiLinkPolicies = require('../models/mlpolicies');
+const firewallPoliciesModel = require('../models/firewallPolicies');
 const mongoConns = require('../mongoConns.js')();
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -25,68 +25,157 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+
 const { getDevicesAppIdentificationJobInfo } = require('./appIdentification');
 const appComplete = require('./appIdentification').complete;
 const appError = require('./appIdentification').error;
 const appRemove = require('./appIdentification').remove;
+const isEmpty = require('lodash/isEmpty');
 
-const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
+const prepareParameters = (policy, device) => {
+  // global rules must be applied after device specific rules
+  // assuming there will be not more than 10000 local rules
+  const globalShift = 10000;
+  const policyRules = policy ? policy.rules.toObject()
+    .filter(r => r.enabled)
+    .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
+  const deviceRules = device.firewallApplied ? device.firewall.rules.toObject()
+    .filter(r => r.enabled) : [];
+  const firewallRules = [...policyRules, ...deviceRules]
+    .sort((r1, r2) => r1.priority - r2.priority);
+  if (firewallRules.length === 0) {
+    return null;
+  }
+  const params = {};
+  params.id = policy ? policy._id : 'device-specific';
+  params.outbound = {
+    rules: firewallRules.filter(rule => rule.direction === 'outbound').map(rule => {
+      const { _id, priority, action, interfaces } = rule;
+      const classification = {};
+      if (rule.classification) {
+        if (!isEmpty(rule.classification.source)) {
+          classification.source = {};
+          ['trafficId', 'ipPort'].forEach(item => {
+            if (!isEmpty(rule.classification.source[item])) {
+              classification.source[item] = rule.classification.source[item];
+            }
+          });
+        }
+        if (!isEmpty(rule.classification.destination)) {
+          classification.destination = {};
+          ['trafficId', 'trafficTags', 'ipProtoPort'].forEach(item => {
+            if (!isEmpty(rule.classification.destination[item])) {
+              classification.destination[item] = rule.classification.destination[item];
+            }
+          });
+        }
+      }
+      const jobRule = {
+        id: _id,
+        priority,
+        classification,
+        action: {
+          interfaces,
+          permit: action === 'allow'
+        }
+      };
+      return jobRule;
+    })
+  };
+  params.inbound = firewallRules.filter(r => r.direction === 'inbound')
+    .reduce((result, rule) => {
+      const { _id, inbound, priority, action } = rule;
+      const classification = {};
+      if (!isEmpty(rule.classification.source) && inbound !== 'nat1to1') {
+        classification.source = {};
+        ['trafficId', 'ipPort'].forEach(item => {
+          if (!isEmpty(rule.classification.source[item])) {
+            classification.source[item] = rule.classification.source[item];
+          }
+        });
+      }
+      const { ipProtoPort } = rule.classification.destination;
+      if (!isEmpty(ipProtoPort)) {
+        classification.destination = {};
+        const inboundParams = inbound === 'nat1to1' ? ['interface']
+          : ['interface', 'ports', 'protocols'];
+        inboundParams.forEach(item => {
+          if (!isEmpty(ipProtoPort[item])) {
+            classification.destination[item] = ipProtoPort[item];
+          }
+        });
+      }
+      const ruleAction = {};
+      switch (inbound) {
+        case 'nat1to1':
+          ruleAction.internalIP = rule.internalIP;
+          break;
+        case 'portForward':
+          ruleAction.internalIP = rule.internalIP;
+          ruleAction.internalPortStart = +rule.internalPortStart;
+          break;
+        default:
+          ruleAction.permit = action === 'allow';
+      }
+      const jobRule = {
+        id: _id,
+        priority,
+        classification,
+        action: ruleAction
+      };
+      result[inbound] = result[inbound] || { rules: [] };
+      result[inbound].rules.push(jobRule);
+      return result;
+    }, {});
+  return params;
+};
+
+const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
-  const jobTitle = op === 'install'
-    ? `Install policy ${policy.name}`
-    : 'Uninstall policy';
 
   // Extract applications information
   const { message, params, installIds, deviceJobResp } =
     await getDevicesAppIdentificationJobInfo(
       org,
-      'multilink',
+      'firewall',
       deviceList.map((d) => d._id),
       op === 'install'
     );
 
   deviceList.forEach(dev => {
     const { _id, machineId, policies } = dev;
-    const tasks = [[
+    const policyParams = prepareParameters(policy, dev);
+    const jobTitle = policyParams
+      ? policy ? `Install policy ${policy.name}` : 'Install device specific policy'
+      : 'Uninstall policy';
+
+    const tasks = [
       {
         entity: 'agent',
-        message: `${op === 'install' ? 'add' : 'remove'}-multilink-policy`,
-        params: {}
+        message: `${policyParams ? 'add' : 'remove'}-firewall-policy`,
+        params: policyParams
       }
-    ]];
-
-    if (op === 'install') {
-      tasks[0][0].params.id = policy._id;
-      tasks[0][0].params.rules = policy.rules.map(rule => {
-        const { _id, priority, action, classification } = rule;
-        return {
-          id: _id,
-          priority: priority,
-          classification: classification,
-          action: action
-        };
-      });
-    }
+    ];
     const data = {
       policy: {
-        device: { _id: _id, mlpolicy: policies.multilink },
+        device: { _id: _id, firewallPolicy: policies.firewall },
         requestTime: requestTime,
-        op: op,
+        op: policyParams ? 'install' : op,
         org: org
       }
     };
 
     // If the device's appIdentification database is outdated
     // we add an add-application/remove-application message as well.
-    // add-application comes before add-multilink-policy when installing.
-    // remove-application comes after remove-multilink-policy when uninstalling.
+    // add-application comes before add-firewall-policy when installing.
+    // remove-application comes after remove-firewall-policy when uninstalling.
     if (installIds[_id] === true) {
       const task = {
         entity: 'agent',
         message: message,
         params: params
       };
-      op === 'install' ? tasks[0].unshift(task) : tasks[0].push(task);
+      op === 'install' && policyParams ? tasks.unshift(task) : tasks.push(task);
 
       data.appIdentification = {
         deviceId: _id,
@@ -106,7 +195,7 @@ const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) 
         },
         // Response data
         {
-          method: 'mlpolicy',
+          method: 'firewallPolicy',
           data: data
         },
         // Metadata
@@ -135,8 +224,8 @@ const getOpDevices = async (devicesObj, org, policy) => {
   const result = await devices.find(
     {
       org: org,
-      'policies.multilink.policy': _id,
-      'policies.multilink.status': { $in: ['installing', 'installed'] }
+      'policies.firewall.policy': _id,
+      'policies.firewall.status': { $in: ['installing', 'installed'] }
     },
     { _id: 1 }
   );
@@ -146,7 +235,7 @@ const getOpDevices = async (devicesObj, org, policy) => {
 
 const filterDevices = (devices, deviceIds, op) => {
   const filteredDevices = devices.filter(device => {
-    const { status, policy } = device.policies.multilink;
+    const { status, policy } = device.policies.firewall || {};
     // Don't attempt to uninstall a policy if the device
     // doesn't have one, or if its policy is already in
     // the process of being uninstalled.
@@ -171,7 +260,7 @@ const apply = async (deviceList, user, data) => {
   const { org } = data;
   const { op, id } = data.meta;
 
-  let mLPolicy, session, deviceIds;
+  let firewallPolicy, session, deviceIds;
   const requestTime = Date.now();
 
   try {
@@ -179,7 +268,7 @@ const apply = async (deviceList, user, data) => {
     await session.withTransaction(async () => {
       if (op === 'install') {
         // Retrieve policy from database
-        mLPolicy = await MultiLinkPolicies.findOne(
+        firewallPolicy = await firewallPoliciesModel.findOne(
           {
             org: org,
             _id: id
@@ -190,27 +279,27 @@ const apply = async (deviceList, user, data) => {
           }
         ).session(session);
 
-        if (!mLPolicy) {
+        if (!firewallPolicy) {
           throw createError(404, `policy ${id} does not exist`);
         }
         // Disabled rules should not be sent to the device
-        mLPolicy.rules = mLPolicy.rules.filter(rule => rule.enabled === true);
-        if (mLPolicy.rules.length === 0) {
+        firewallPolicy.rules = firewallPolicy.rules.filter(rule => rule.enabled);
+        if (firewallPolicy.rules.length === 0) {
           throw createError(400, 'Policy must have at least one enabled rule');
         }
       }
 
       // Extract the device IDs to operate on
       deviceIds = data.devices
-        ? await getOpDevices(data.devices, org, mLPolicy)
+        ? await getOpDevices(data.devices, org, firewallPolicy)
         : [deviceList[0]._id];
 
       // Update devices policy in the database
       const update = op === 'install'
         ? {
           $set: {
-            'policies.multilink': {
-              policy: mLPolicy._id,
+            'policies.firewall': {
+              policy: firewallPolicy._id,
               status: 'installing',
               requestTime: requestTime
             }
@@ -218,8 +307,8 @@ const apply = async (deviceList, user, data) => {
         }
         : {
           $set: {
-            'policies.multilink.status': 'uninstalling',
-            'policies.multilink.requestTime': requestTime
+            'policies.firewall.status': 'uninstalling',
+            'policies.firewall.requestTime': requestTime
           }
         };
 
@@ -240,7 +329,7 @@ const apply = async (deviceList, user, data) => {
   const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
   const opDevices = filterDevices(deviceList, deviceIdsSet, op);
 
-  const jobs = await queueMlPolicyJob(opDevices, op, requestTime, mLPolicy, user, org);
+  const jobs = await queueFirewallPolicyJob(opDevices, op, requestTime, firewallPolicy, user, org);
   const failedToQueue = [];
   const succeededToQueue = [];
   jobs.forEach(job => {
@@ -276,7 +365,7 @@ const apply = async (deviceList, user, data) => {
     // Update devices' policy status in the database
     await devices.updateMany(
       { _id: { $in: failedDevices }, org: org },
-      { $set: { 'policies.multilink.status': 'job queue failed' } },
+      { $set: { 'policies.firewall.status': 'job queue failed' } },
       { upsert: false }
     );
     status = 'partially completed';
@@ -307,8 +396,8 @@ const complete = async (jobId, res) => {
   const { _id } = res.policy.device;
   try {
     const update = op === 'install'
-      ? { $set: { 'policies.multilink.status': 'installed' } }
-      : { $set: { 'policies.multilink': {} } };
+      ? { $set: { 'policies.firewall.status': 'installed' } }
+      : { $set: { 'policies.firewall': {} } };
 
     await devices.updateOne(
       { _id: _id, org: org },
@@ -345,7 +434,7 @@ const completeSync = async (jobId, jobsData) => {
       });
     }
   } catch (err) {
-    logger.error('Multi link policy sync complete callback failed', {
+    logger.error('Firewall policy sync complete callback failed', {
       params: { jobsData, reason: err.message }
     });
   }
@@ -371,7 +460,7 @@ const error = async (jobId, res) => {
     const status = `${op === 'install' ? '' : 'un'}installation failed`;
     await devices.updateOne(
       { _id: _id, org: org },
-      { $set: { 'policies.multilink.status': status } },
+      { $set: { 'policies.firewall.status': status } },
       { upsert: false }
     );
 
@@ -412,9 +501,9 @@ const remove = async (job) => {
         {
           _id: _id,
           org: org,
-          'policies.multilink.requestTime': { $eq: requestTime }
+          'policies.firewall.requestTime': { $eq: requestTime }
         },
-        { $set: { 'policies.multilink.status': status } },
+        { $set: { 'policies.firewall.status': status } },
         { upsert: false }
       );
 
@@ -437,13 +526,12 @@ const remove = async (job) => {
  * @return Object
  */
 const sync = async (deviceId, org) => {
-  const { policies } = await devices.findOne(
+  const device = await devices.findOne(
     { _id: deviceId },
-    { 'policies.multilink': 1 }
-  )
-    .lean();
+    { 'policies.firewall': 1, 'firewall.rules': 1 }
+  );
 
-  const { policy, status } = policies.multilink;
+  const { policy, status } = device.policies.firewall;
 
   // No need to take care of no policy cases,
   // as the device removes the policy in the
@@ -451,8 +539,9 @@ const sync = async (deviceId, org) => {
   const requests = [];
   const completeCbData = [];
   let callComplete = false;
+  let firewallPolicy;
   if (status.startsWith('install')) {
-    const mLPolicy = await MultiLinkPolicies.findOne(
+    firewallPolicy = await firewallPoliciesModel.findOne(
       {
         _id: policy
       },
@@ -461,34 +550,18 @@ const sync = async (deviceId, org) => {
         name: 1
       }
     );
-
-    // Nothing to do if the policy was not found.
-    // The policy will be removed by the device
-    // at the beginning of the sync process
-    if (mLPolicy) {
-      const params = {};
-      params.id = policy;
-      params.rules = [];
-      mLPolicy.rules.forEach(rule => {
-        const { _id, priority, action, classification, enabled } = rule;
-        if (enabled) {
-          params.rules.push({
-            id: _id,
-            priority: priority,
-            classification: classification,
-            action: action
-          });
-        }
-      });
-      // Push policy task and relevant data for sync complete handler
-      requests.push({ entity: 'agent', message: 'add-multilink-policy', params });
-      completeCbData.push({
-        org,
-        deviceId,
-        op: 'install'
-      });
-      callComplete = true;
-    }
+  }
+  // if no firewall policy then device specific rules will be sent
+  const params = prepareParameters(firewallPolicy, device);
+  if (!isEmpty(params)) {
+    // Push policy task and relevant data for sync complete handler
+    requests.push({ entity: 'agent', message: 'add-firewall-policy', params });
+    completeCbData.push({
+      org,
+      deviceId,
+      op: 'install'
+    });
+    callComplete = true;
   }
 
   return {
@@ -504,5 +577,6 @@ module.exports = {
   completeSync: completeSync,
   error: error,
   remove: remove,
-  sync: sync
+  sync: sync,
+  queueFirewallPolicyJob
 };

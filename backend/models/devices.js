@@ -20,6 +20,7 @@ const { validateConfiguration } = require('../deviceLogic/interfaces');
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
+const { firewallRuleSchema } = require('./firewallRule');
 
 /**
  * Interfaces Database Schema
@@ -274,6 +275,7 @@ const staticroutesSchema = new Schema({
   // destination
   destination: {
     type: String,
+    required: [true, 'Destination name must be set'],
     validate: {
       validator: validators.validateIPv4WithMask,
       message: 'Destination should be a valid ipv4 with mask type'
@@ -282,6 +284,7 @@ const staticroutesSchema = new Schema({
   // gateway
   gateway: {
     type: String,
+    required: [true, 'Gateway name must be set'],
     validate: {
       validator: validators.validateIPv4,
       message: 'Gateway should be a valid ipv4 address'
@@ -289,7 +292,11 @@ const staticroutesSchema = new Schema({
   },
   // interface name
   ifname: {
-    type: String
+    type: String,
+    validate: {
+      validator: validators.validateDevId,
+      message: 'ifname should be a vaild interface devId'
+    }
   },
   // metric
   metric: {
@@ -460,13 +467,43 @@ const deviceVersionsSchema = new Schema({
 });
 
 /**
- * Device policy schema
+ * Device multilink policy schema
  */
-const devicePolicySchema = new Schema({
+const deviceMultilinkPolicySchema = new Schema({
   _id: false,
   policy: {
     type: Schema.Types.ObjectId,
     ref: 'MultiLinkPolicies',
+    default: null
+  },
+  status: {
+    type: String,
+    enum: [
+      '',
+      'installing',
+      'installed',
+      'uninstalling',
+      'job queue failed',
+      'job deleted',
+      'installation failed',
+      'uninstallation failed'
+    ],
+    default: ''
+  },
+  requestTime: {
+    type: Date,
+    default: null
+  }
+});
+
+/**
+ * Device firewall policy schema
+ */
+const deviceFirewallPolicySchema = new Schema({
+  _id: false,
+  policy: {
+    type: Schema.Types.ObjectId,
+    ref: 'FirewallPolicies',
     default: null
   },
   status: {
@@ -700,9 +737,20 @@ const deviceSchema = new Schema({
   labels: [String],
   policies: {
     multilink: {
-      type: devicePolicySchema,
-      default: devicePolicySchema
+      type: deviceMultilinkPolicySchema,
+      default: deviceMultilinkPolicySchema
+    },
+    firewall: {
+      type: deviceFirewallPolicySchema,
+      default: deviceFirewallPolicySchema
     }
+  },
+  firewallApplied: {
+    type: Boolean,
+    default: false
+  },
+  firewall: {
+    rules: [firewallRuleSchema]
   },
   sync: {
     type: deviceSyncSchema,
