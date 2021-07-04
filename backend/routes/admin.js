@@ -22,9 +22,7 @@ const auth = require('../authenticate');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const usersModel = require('../models/users');
-const tunnelsModel = require('../models/tunnels');
 const accountsModel = require('../models/accounts');
-const { devices: devicesModel } = require('../models/devices');
 const { deviceAggregateStats } = require('../models/analytics/deviceStats');
 
 const adminRouter = express.Router();
@@ -49,57 +47,19 @@ adminRouter
       registeredUsers = 'Error getting registered users info, error=' + e.message;
     }
 
-    // Get Installed Devices
-    let installedDevices = 'No info';
-    try {
-      installedDevices = await devicesModel
-        .aggregate([{ $project: { org: 1 } },
-          { $group: { _id: { org: '$org' }, num_devices: { $sum: 1 } } },
-          { $project: { _id: 0, org: '$_id.org', num_devices: '$num_devices' } }])
-        .allowDiskUse(true);
-    } catch (e) {
-      installedDevices = 'Error getting installed devices info, error=' + e.message;
-    }
-
-    // Get Installed Tunnels
-    let installedTunnels = 'No info';
-    try {
-      installedTunnels = await tunnelsModel
-        .aggregate([
-          {
-            $project: {
-              org: 1,
-              active: { $cond: [{ $eq: ['$isActive', true] }, 1, 0] }
-            }
-          },
-          {
-            $group: {
-              _id: { org: '$org' },
-              created: { $sum: 1 },
-              active: { $sum: '$active' }
-            }
-          },
-          {
-            $project: {
-              _id: 0,
-              org: '$_id.org',
-              created: '$created',
-              active: '$active'
-            }
-          }
-        ])
-        .allowDiskUse(true);
-    } catch (e) {
-      installedTunnels = 'Error getting installed tunnels info, error=' + e.message;
-    }
-
     // Get Monthly Stats
     let monthlyStats = 'No info';
     try {
       monthlyStats = await deviceAggregateStats
         .aggregate([{ $project: { month: 1, orgs: { $objectToArray: '$stats.orgs' } } },
           { $unwind: '$orgs' },
-          { $project: { month: 1, org: '$org.k', devices: { $objectToArray: '$orgs.v.devices' } } },
+          {
+            $project: {
+              month: 1,
+              org: '$orgs.k',
+              devices: { $objectToArray: '$orgs.v.devices' }
+            }
+          },
           { $unwind: '$devices' },
           { $project: { month: 1, org: 1, device: '$devices.k', bytes: '$devices.v.bytes' } },
           {
@@ -129,116 +89,188 @@ adminRouter
       monthlyStats = 'Error getting installed tunnels info, error=' + e.message;
     }
 
-    const accounts = await accountsModel.aggregate(
-      [
-        {
-          $project: {
-            _id: 0,
-            account_id: '$_id',
-            account_name: '$name',
-            country: '$country',
-            billing_customer_id: '$billingCustomerId',
-            organizations: '$organizations'
-          }
-        },
-        {
-          $lookup: {
-            from: 'organizations',
-            localField: 'organizations',
-            foreignField: '_id',
-            as: 'organizations'
-          }
-        },
-        { $unwind: '$organizations' },
-        {
-          $lookup: {
-            from: 'devices',
-            let: { org_id: '$organizations._id' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$$org_id', '$org'] } } },
-              { $group: { _id: null, count: { $sum: 1 } } }
-            ],
-            as: 'devices'
-          }
-        },
-        {
-          $lookup: {
-            from: 'tunnels',
-            let: { org_id: '$organizations._id' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$$org_id', '$org'] } } },
-              { $project: { isActive: 1, _id: 1 } }
-            ],
-            as: 'tunnels'
-          }
-        },
-        { $addFields: { num_devices: '$devices.count' } },
-        {
-          $project: {
-            account_name: 1,
-            account_id: 1,
-            country: 1,
-            billing_customer_id: 1,
-            organization_id: '$organizations._id',
-            organization_name: '$organizations.name',
-            num_devices: { $arrayElemAt: ['$num_devices', 0] },
-            num_tunnels_created: { $size: '$tunnels' },
-            num_tunnels_active: {
-              $size: {
-                $filter: {
-                  input: '$tunnels',
-                  as: 't',
-                  cond: {
-                    $eq: [
-                      '$$t.isActive', true
-                    ]
-                  }
-                }
-              }
+    const accountPipeline = [
+      {
+        $project: {
+          _id: 0,
+          account_id: '$_id',
+          account_name: '$name',
+          country: '$country',
+          billing_customer_id: '$billingCustomerId',
+          organizations: '$organizations'
+        }
+      },
+      {
+        $lookup: {
+          from: 'organizations',
+          localField: 'organizations',
+          foreignField: '_id',
+          as: 'organizations'
+        }
+      },
+      { $unwind: '$organizations' },
+      {
+        $lookup: {
+          from: 'devices',
+          let: { org_id: '$organizations._id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$$org_id', '$org'] } } },
+            { $group: { _id: null, count: { $sum: 1 } } }
+          ],
+          as: 'devices'
+        }
+      },
+      {
+        $lookup: {
+          from: 'tunnels',
+          let: { org_id: '$organizations._id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$$org_id', '$org'] } } },
+            { $project: { isActive: 1, _id: 1 } }
+          ],
+          as: 'tunnels'
+        }
+      },
+      { $addFields: { num_devices: '$devices.count' } },
+      {
+        $project: {
+          account_name: 1,
+          account_id: 1,
+          country: 1,
+          billing_customer_id: 1,
+          organization_id: '$organizations._id',
+          organization_name: '$organizations.name',
+          num_devices: { $arrayElemAt: ['$num_devices', 0] },
+          num_tunnels_created: { $size: '$tunnels' },
+          num_tunnels_active: {
+            $size: {
+              $filter: { input: '$tunnels', as: 't', cond: { $eq: ['$$t.isActive', true] } }
             }
-          }
-        },
-        {
-          $group: {
-            _id: {
-              account_id: '$account_id',
-              account_name: '$account_name',
-              country: '$country',
-              billing_customer_id: '$billing_customer_id'
-            },
-            organizations: {
-              $push: {
-                organization_id: '$organization_id',
-                organization_name: '$organization_name',
-                num_devices: '$num_devices',
-                num_tunnels_created: '$num_tunnels_created',
-                num_tunnels_active: '$num_tunnels_active',
-                devices: '$devices'
-              }
-            }
-          }
-        },
-        {
-          $project: {
-            _id: 0,
-            account_id: '$_id.account_id',
-            account_name: '$_id.account_name',
-            country: '$_id.country',
-            billing_customer_id: '$_id.billing_customer_id',
-            account_num_devices: { $sum: '$organizations.num_devices' },
-            account_num_tunnels_created: { $sum: '$organizations.num_tunnels_created' },
-            account_num_tunnels_active: { $sum: '$organizations.num_tunnels_active' },
-            organizations: '$organizations'
           }
         }
-      ]
-    ).allowDiskUse(true);
+      },
+      {
+        $group: {
+          _id: {
+            account_id: '$account_id',
+            account_name: '$account_name',
+            country: '$country',
+            billing_customer_id: '$billing_customer_id'
+          },
+          organizations: {
+            $push: {
+              organization_id: '$organization_id',
+              organization_name: '$organization_name',
+              num_devices: '$num_devices',
+              num_tunnels_created: '$num_tunnels_created',
+              num_tunnels_active: '$num_tunnels_active',
+              devices: '$devices'
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          account_id: '$_id.account_id',
+          account_name: '$_id.account_name',
+          country: '$_id.country',
+          billing_customer_id: '$_id.billing_customer_id',
+          account_num_devices: { $sum: '$organizations.num_devices' },
+          account_num_tunnels_created: { $sum: '$organizations.num_tunnels_created' },
+          account_num_tunnels_active: { $sum: '$organizations.num_tunnels_active' },
+          account_bytes: { $literal: {} },
+          organizations: '$organizations'
+        }
+      }
+    ];
+
+    // handle filter pagination
+    if (req.query.filters) {
+      const parsed = JSON.parse(req.query.filters);
+
+      const mapping = {
+        account_name: 'name'
+      };
+
+      const filters = {};
+      for (const key in parsed) {
+        if (key in mapping) {
+          filters[mapping[key]] = { $regex: parsed[key] };
+        }
+      }
+
+      accountPipeline.unshift({ $match: filters });
+    }
+
+    // handle sort pagination
+    if (req.query.sort) {
+      const parsed = JSON.parse(req.query.sort);
+      accountPipeline.push({ $sort: { [parsed.key]: parsed.value === 'desc' ? -1 : 1 } });
+    } else {
+      accountPipeline.push({ $sort: { account_name: -1 } });
+    }
+
+    if (+req.query.page > 0) {
+      accountPipeline.push({ $skip: req.query.page * req.query.size });
+    }
+    accountPipeline.push({ $limit: +req.query.size });
+
+    const accounts = await accountsModel.aggregate(accountPipeline).allowDiskUse(true);
+
+    const sixMonths = new Date();
+    sixMonths.setMonth(sixMonths.getMonth() - 6);
+
+    const bytesPerOrg = await deviceAggregateStats.aggregate([
+      { $match: { month: { $gte: sixMonths.getTime() } } },
+      { $project: { month: 1, orgs: { $objectToArray: '$stats.orgs' } } },
+      { $unwind: '$orgs' },
+      { $project: { month: 1, org: '$orgs.k', devices: { $objectToArray: '$orgs.v.devices' } } },
+      { $unwind: '$devices' },
+      { $project: { month: 1, org: 1, bytes: '$devices.v.bytes' } },
+      { $group: { _id: { org: '$org', month: '$month' }, device_bytes: { $sum: '$bytes' } } },
+      {
+        $project: {
+          _id: 0,
+          org: '$_id.org',
+          month: { $toDate: '$_id.month' },
+          device_bytes: '$device_bytes'
+        }
+      }
+    ]).allowDiskUse(true);
+
+    for (const account of accounts) {
+      // account.bytes = {};
+      const bytesPerMonth = bytesPerOrg.reduce((result, current) => {
+        // check if org is under current account
+        const org = account.organizations.find(o => o.organization_id.toString() === current.org);
+        if (!org) return result;
+
+        const monthName = current.month.toLocaleDateString();
+
+        // add data per organization
+        if (!org.bytes) {
+          org.bytes = {};
+        }
+        org.bytes[monthName] = current.device_bytes;
+
+        if (!result[monthName]) {
+          result[monthName] = 0;
+        }
+
+        result[monthName] += current.device_bytes;
+
+        return result;
+      }, {});
+
+      account.account_bytes = bytesPerMonth;
+    }
 
     // Return  static info from:
     const result = {
       ...registeredUsers[0],
-      installedDevices: installedDevices,
-      installedTunnels: installedTunnels,
+      // installedDevices: installedDevices,
+      // installedTunnels: installedTunnels,
       monthlyStats: monthlyStats,
       connectedOrgs: {},
       accounts
@@ -265,7 +297,7 @@ adminRouter
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    return res.json(result);
+    return res.json([result]);
   });
 
 // Default exports
