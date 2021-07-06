@@ -23,6 +23,7 @@ const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const usersModel = require('../models/users');
 const accountsModel = require('../models/accounts');
+const flexibilling = require('../flexibilling');
 const { deviceAggregateStats } = require('../models/analytics/deviceStats');
 
 const adminRouter = express.Router();
@@ -100,6 +101,7 @@ adminRouter
           organizations: '$organizations'
         }
       },
+      // lookup organizations to get organizations names
       {
         $lookup: {
           from: 'organizations',
@@ -109,17 +111,19 @@ adminRouter
         }
       },
       { $unwind: '$organizations' },
+      // lookup devices by orgId and get only deviceId for count. no need for extra data
       {
         $lookup: {
           from: 'devices',
           let: { org_id: '$organizations._id' },
           pipeline: [
             { $match: { $expr: { $eq: ['$$org_id', '$org'] } } },
-            { $group: { _id: null, count: { $sum: 1 } } }
+            { $project: { _id: 1 } }
           ],
           as: 'devices'
         }
       },
+      // lookup tunnels by orgId
       {
         $lookup: {
           from: 'tunnels',
@@ -131,7 +135,7 @@ adminRouter
           as: 'tunnels'
         }
       },
-      { $addFields: { num_devices: '$devices.count' } },
+      // project each *organization* data
       {
         $project: {
           account_name: 1,
@@ -140,7 +144,7 @@ adminRouter
           billing_customer_id: 1,
           organization_id: '$organizations._id',
           organization_name: '$organizations.name',
-          num_devices: { $arrayElemAt: ['$num_devices', 0] },
+          num_devices: { $size: '$devices' },
           num_tunnels_created: { $size: '$tunnels' },
           num_tunnels_active: {
             $size: {
@@ -149,6 +153,7 @@ adminRouter
           }
         }
       },
+      // group organizations by account data, and put organizations array in each account
       {
         $group: {
           _id: {
@@ -169,6 +174,7 @@ adminRouter
           }
         }
       },
+      // sum the organizations data into account data
       {
         $project: {
           _id: 0,
@@ -196,10 +202,11 @@ adminRouter
       const filters = {};
       for (const key in parsed) {
         if (key in mapping) {
-          filters[mapping[key]] = { $regex: parsed[key] };
+          filters[mapping[key]] = { $regex: parsed[key], $options: 'i' };
         }
       }
 
+      // we put filters at the beginning of the pipeline to reduce computing resources
       accountPipeline.unshift({ $match: filters });
     }
 
@@ -211,44 +218,132 @@ adminRouter
       accountPipeline.push({ $sort: { account_name: -1 } });
     }
 
+    // handle pagination skip
     if (+req.query.page > 0) {
       accountPipeline.push({ $skip: req.query.page * req.query.size });
     }
     accountPipeline.push({ $limit: +req.query.size });
 
+    // run pipeline
     const accounts = await accountsModel.aggregate(accountPipeline).allowDiskUse(true);
 
+    // get devices traffic data (6 months ago)
     const sixMonths = new Date();
     sixMonths.setMonth(sixMonths.getMonth() - 6);
-
     const bytesPerOrg = await deviceAggregateStats.aggregate([
       { $match: { month: { $gte: sixMonths.getTime() } } },
       { $project: { month: 1, orgs: { $objectToArray: '$stats.orgs' } } },
       { $unwind: '$orgs' },
-      { $project: { month: 1, org: '$orgs.k', devices: { $objectToArray: '$orgs.v.devices' } } },
+      {
+        $project: {
+          month: 1,
+          org: '$orgs.k',
+          account: '$orgs.v.account',
+          devices: { $objectToArray: '$orgs.v.devices' }
+        }
+      },
       { $unwind: '$devices' },
-      { $project: { month: 1, org: 1, bytes: '$devices.v.bytes' } },
-      { $group: { _id: { org: '$org', month: '$month' }, device_bytes: { $sum: '$bytes' } } },
+      { $project: { month: 1, org: 1, account: 1, bytes: '$devices.v.bytes' } },
+      {
+        $group: {
+          _id: { org: '$org', month: '$month', account: '$account' },
+          device_bytes: { $sum: '$bytes' }
+        }
+      },
       {
         $project: {
           _id: 0,
           org: '$_id.org',
+          account: '$_id.account',
           month: { $toDate: '$_id.month' },
           device_bytes: '$device_bytes'
         }
       }
     ]).allowDiskUse(true);
 
+    // !!! IMPORTANT INFORMATION !!!!
+    // three databases are involved here - flexiManage, flexiBilling, and flexiwanAnalytics
+    // When an organization is removed from flexiManage DB,
+    // we don't remove it from billing and analytics.
+    // If an organizations doesn't include in the `accounts` array,
+    // but exists in `summary` (flexiBilling) or in `bytesPerOrg` (flexiwanAnalytics) -
+    // it means that this org is removed from flexiManage.
+    // In such a case, we fill the accounts array with this deleted organization and mark it
+    // with `deleted=true`. The reason is to let the admin know about the traffic and devices count.
+    // `createDefaultOrg()` is the template for organization based on the pipeline above
+    const createDefaultOrg = () => {
+      return {
+        organization_id: '',
+        deleted: false,
+        organization_name: '',
+        num_devices: 0,
+        num_tunnels_active: 0,
+        num_tunnels_created: 0,
+        billingInfo: {
+          current: 0,
+          max: 0
+        }
+      };
+    };
+
     for (const account of accounts) {
-      // account.bytes = {};
+      const accountId = account.account_id;
+      const summary = await flexibilling.getMaxDevicesRegisteredSummmary(accountId);
+      const accountBillingInfo = {
+        current: summary ? summary.current : null,
+        max: summary ? summary.max : null
+      };
+      account.billingInfo = accountBillingInfo;
+
+      if (summary) {
+        summary.organizations.forEach(o => {
+          const orgExists = account.organizations.find(org =>
+            org.organization_id.toString() === o.orgId.toString());
+
+          if (orgExists) {
+            orgExists.billingInfo = {
+              current: o.current,
+              max: o.max
+            };
+          } else {
+            // org might be deleted from flexiManage but exists in billing database,
+            // see the important comment above
+            const newOrg = createDefaultOrg();
+            newOrg.deleted = true;
+            newOrg.organization_id = o.orgId.toString();
+            newOrg.organization_name = 'Unknown (Deleted)';
+            newOrg.billingInfo = {
+              current: o.current,
+              max: o.max
+            };
+            account.organizations.push(newOrg);
+          }
+        });
+      }
+
       const bytesPerMonth = bytesPerOrg.reduce((result, current) => {
         // check if org is under current account
-        const org = account.organizations.find(o => o.organization_id.toString() === current.org);
-        if (!org) return result;
+        if (!accountId === current.account) return result;
+
+        let org = account.organizations.find(o => o.organization_id.toString() === current.org);
+        if (!org) {
+          // org might be deleted from flexiManage but exists in statistic database
+          // see the important comment above
+          org = createDefaultOrg();
+          org.deleted = true;
+          org.organization_id = current.org;
+          org.organization_name = 'Unknown (Deleted)';
+          org.billingInfo = {
+            current: 0,
+            max: 0
+          };
+          account.organizations.push(org);
+          org = account.organizations[account.organizations.length - 1]; // get pushed item
+        }
 
         const monthName = current.month.toLocaleDateString();
 
-        // add data per organization
+        // add traffic data per organization
         if (!org.bytes) {
           org.bytes = {};
         }
@@ -269,8 +364,6 @@ adminRouter
     // Return  static info from:
     const result = {
       ...registeredUsers[0],
-      // installedDevices: installedDevices,
-      // installedTunnels: installedTunnels,
       monthlyStats: monthlyStats,
       connectedOrgs: {},
       accounts
