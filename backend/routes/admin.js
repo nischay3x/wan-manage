@@ -323,7 +323,7 @@ adminRouter
 
       const bytesPerMonth = bytesPerOrg.reduce((result, current) => {
         // check if org is under current account
-        if (!accountId === current.account) return result;
+        if (accountId.toString() !== current.account.toString()) return result;
 
         let org = account.organizations.find(o => o.organization_id.toString() === current.org);
         if (!org) {
