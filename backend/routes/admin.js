@@ -110,7 +110,12 @@ adminRouter
           as: 'organizations'
         }
       },
-      { $unwind: '$organizations' },
+      {
+        $unwind: {
+          path: '$organizations',
+          preserveNullAndEmptyArrays: true
+        }
+      },
       // lookup devices by orgId and get only deviceId for count. no need for extra data
       {
         $lookup: {
@@ -294,6 +299,10 @@ adminRouter
         max: summary ? summary.max : null
       };
       account.billingInfo = accountBillingInfo;
+
+      // if accounts doesn't have organizations, the pipeline returns array without orgId
+      // So we filter it here
+      account.organizations = account.organizations.filter(o => o.organization_id);
 
       if (summary) {
         summary.organizations.forEach(o => {
