@@ -35,7 +35,7 @@ var corsOptionsCheck = (req, callback) => {
 };
 
 // Operations allowed for * origins
-exports.cors = cors({ exposedHeaders: ['Refresh-JWT', 'refresh-token'] });
+exports.cors = cors({ exposedHeaders: ['Refresh-JWT', 'refresh-token', 'records-total'] });
 
 // Operations allowed for whitelist origins
 exports.corsWithOptions = cors(corsOptionsCheck);

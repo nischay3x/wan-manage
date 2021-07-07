@@ -20,7 +20,6 @@ const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
 const pick = require('lodash/pick');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-const { paginated } = require('../utils/pagination');
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
@@ -105,29 +104,58 @@ class TunnelsService {
   /**
    * Retrieve device tunnels information
    *
-   * id String Numeric ID of the Device to fetch tunnel information about
-   * offset Integer The number of items to skip before starting to collect the result set (optional)
-   * limit Integer The numbers of items to return (optional)
-   * returns List
+   * @param {String} id Numeric ID of the Device to fetch tunnel information about
+   * @param {Integer} offset The number of items to skip before collecting the result (optional)
+   * @param {Integer} limit The numbers of items to return (optional)
+   * @param {String} sortField The field by which the data will be ordered (optional)
+   * @param {String} sortOrder Sorting order [asc|desc] (optional)
    **/
-  static async tunnelsGET ({ org, offset, limit }, { user }, response) {
+  static async tunnelsGET ({ org, offset, limit, sortField, sortOrder }, { user }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await Tunnels.find({
-        org: { $in: orgList },
-        isActive: true
-      })
-        .populate('deviceA', 'name interfaces')
-        .populate('deviceB', 'name interfaces')
-        .populate('pathlabel');
+      const pipeline = [
+        {
+          $match: {
+            org: mongoose.Types.ObjectId(orgList[0]),
+            isActive: true
+          }
+        }
+      ];
+      if (sortField) {
+        const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
+        pipeline.push({
+          $sort: { [sortField]: order }
+        });
+      };
+      const paginationParams = [{
+        $skip: offset > 0 ? +offset : 0
+      }];
+      if (limit !== undefined) {
+        paginationParams.push({ $limit: +limit });
+      };
+      pipeline.push({
+        $facet: {
+          records: paginationParams,
+          meta: [{ $count: 'total' }]
+        }
+      });
 
-      // Populate interface details
-      const tunnelMap = paginated(result, offset, limit).map((d) => {
+      const paginated = await Tunnels.aggregate(pipeline).allowDiskUse(true);
+      if (paginationParams.length > 0) {
+        response.setHeader('records-total', paginated[0].meta[0].total);
+      };
+
+      const result = await Tunnels
+        .populate(paginated[0].records, [
+          { path: 'deviceA', model: 'devices' },
+          { path: 'deviceB', model: 'devices' },
+          { path: 'pathlabel', model: 'PathLabels' }
+        ]);
+
+      const tunnelMap = result.map((d) => {
         return TunnelsService.selectTunnelParams(d);
       });
 
-      response.setHeader('Access-Control-Expose-Headers', '*');
-      response.setHeader('records-total', result.length);
       return Service.successResponse(tunnelMap);
     } catch (e) {
       return Service.rejectResponse(
