@@ -244,7 +244,7 @@ const queueFullSyncJob = async (device, hash, org) => {
       }
     },
     // Metadata
-    { priority: 'low', attempts: 1, removeOnComplete: false },
+    { priority: 'normal', attempts: 1, removeOnComplete: false },
     // Complete callback
     null
   );
