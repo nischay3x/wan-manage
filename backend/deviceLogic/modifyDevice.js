@@ -34,7 +34,9 @@ const has = require('lodash/has');
 const omit = require('lodash/omit');
 const differenceWith = require('lodash/differenceWith');
 const pullAllWith = require('lodash/pullAllWith');
+const omitBy = require('lodash/omitBy');
 const isEqual = require('lodash/isEqual');
+const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
@@ -197,6 +199,26 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     }
   }
 
+  if (has(messageParams, 'modify_ospf')) {
+    const { remove, add } = messageParams.modify_ospf;
+
+    if (remove) {
+      requests.push({
+        entity: 'agent',
+        message: 'remove-ospf',
+        params: { ...remove }
+      });
+    }
+
+    if (add) {
+      requests.push({
+        entity: 'agent',
+        message: 'add-ospf',
+        params: { ...add }
+      });
+    }
+  }
+
   if (has(messageParams, 'modify_routes')) {
     const routeRequests = messageParams.modify_routes.routes.flatMap(item => {
       let items = [];
@@ -208,7 +230,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             addr: item.addr,
             via: item.old_route,
             devId: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
+            metric: item.metric ? parseInt(item.metric, 10) : undefined,
+            redistributeViaOSPF: item.redistributeViaOSPF
           }
         });
       }
@@ -220,7 +243,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             addr: item.addr,
             via: item.new_route,
             devId: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
+            metric: item.metric ? parseInt(item.metric, 10) : undefined,
+            redistributeViaOSPF: item.redistributeViaOSPF
           }
         });
       }
@@ -531,6 +555,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
   const skipModifyJob = !has(messageParams, 'modify_router') &&
     !has(messageParams, 'modify_routes') &&
     !has(messageParams, 'modify_dhcp_config') &&
+    !has(messageParams, 'modify_ospf') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
       const propsModified = Object.keys(modifiedIfc).filter(prop => {
@@ -700,7 +725,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         destination: route.destination,
         gateway: route.gateway,
         ifname: route.ifname,
-        metric: route.metric
+        metric: route.metric,
+        redistributeViaOSPF: route.redistributeViaOSPF
       });
     }),
 
@@ -709,7 +735,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         destination: route.destination,
         gateway: route.gateway,
         ifname: route.ifname,
-        metric: route.metric
+        metric: route.metric,
+        redistributeViaOSPF: route.redistributeViaOSPF
       });
     })
   ];
@@ -741,7 +768,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       old_route: route.gateway,
       new_route: '',
       devId: route.ifname || undefined,
-      metric: route.metric || undefined
+      metric: route.metric || undefined,
+      redistributeViaOSPF: route.redistributeViaOSPF
     });
   });
   routesToAdd.forEach(route => {
@@ -750,11 +778,55 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       new_route: route.gateway,
       old_route: '',
       devId: route.ifname || undefined,
-      metric: route.metric || undefined
+      metric: route.metric || undefined,
+      redistributeViaOSPF: route.redistributeViaOSPF
     });
   });
 
   return { routes: routes };
+};
+
+/**
+ * Creates a modify-ospf object
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing an array of routes
+ */
+const transformOSPF = (ospf) => {
+  // Extract only global fields from ospf
+  // The rest fields are per interface and sent to device via add/modify-interface jobs
+  const globalFields = ['routerId'];
+  return pick(ospf, globalFields);
+};
+
+/**
+ * Creates add/remove-ospf jobs
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing add and remove ospf parameters
+ */
+const prepareModifyOSPF = (origDevice, newDevice) => {
+  const [origOSPF, newOSPF] = [
+    transformOSPF(origDevice.ospf),
+    transformOSPF(newDevice.ospf)
+  ];
+
+  if (isEqual(origOSPF, newOSPF)) {
+    return { remove: null, add: null };
+  }
+
+  // if newOSPF is with empty values - send only remove-ospf
+  if (!Object.keys(omitBy(newOSPF, val => val === '')).length) {
+    return { remove: origOSPF, add: null };
+  }
+
+  // if origOSPF is with empty values - send only add-ospf
+  if (!Object.keys(omitBy(origOSPF, val => val === '')).length) {
+    return { remove: null, add: newOSPF };
+  }
+
+  // if there is a change, send pair of remove-ospf and add-ospf
+  return { remove: origOSPF, add: newOSPF };
 };
 
 /**
@@ -881,6 +953,12 @@ const apply = async (device, user, data) => {
   if (modifyDHCP.dhcpRemove.length > 0 ||
       modifyDHCP.dhcpAdd.length > 0) {
     modifyParams.modify_dhcp_config = modifyDHCP;
+  }
+
+  // Create OSPF modification parameters
+  const { remove: removeOSPF, add: addOSPF } = prepareModifyOSPF(device[0], data.newDevice);
+  if (removeOSPF || addOSPF) {
+    modifyParams.modify_ospf = { remove: removeOSPF, add: addOSPF };
   }
 
   modifyParams.modify_router = {};
@@ -1034,6 +1112,7 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_routes') ||
       has(modifyParams, 'modify_router') ||
       has(modifyParams, 'modify_interfaces') ||
+      has(modifyParams, 'modify_ospf') ||
       has(modifyParams, 'modify_dhcp_config');
 
   // Return empty jobs array if the device did not change
@@ -1131,12 +1210,13 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const { interfaces, staticroutes, dhcp } = await devices.findOne(
+  const { interfaces, staticroutes, dhcp, ospf } = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
       staticroutes: 1,
       dhcp: 1,
+      ospf: 1,
       versions: 1
     }
   )
@@ -1184,6 +1264,18 @@ const sync = async (deviceId, org) => {
     });
   }
 
+  // IMPORTANT: routing data should be before static routes!
+  let ospfData = transformOSPF(ospf);
+  // remove empty values because they are optional
+  ospfData = omitBy(ospfData, val => val === '');
+  if (!isEmpty(ospfData)) {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-ospf',
+      params: ospfData
+    });
+  }
+
   // Prepare add-route message
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
@@ -1192,7 +1284,8 @@ const sync = async (deviceId, org) => {
       addr: destination,
       via: gateway,
       dev_id: ifname || undefined,
-      metric: metric ? parseInt(metric, 10) : undefined
+      metric: metric ? parseInt(metric, 10) : undefined,
+      redistributeViaOSPF: route.redistributeViaOSPF
     };
 
     deviceConfRequests.push({

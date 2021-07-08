@@ -306,6 +306,10 @@ const staticroutesSchema = new Schema({
       validator: validators.validateMetric,
       message: 'Metric should be a number'
     }
+  },
+  redistributeViaOSPF: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true
@@ -760,6 +764,32 @@ const deviceSchema = new Schema({
   IKEv2: {
     type: IKEv2Schema,
     default: IKEv2Schema
+  },
+  ospf: {
+    routerId: {
+      type: String,
+      required: false,
+      validate: {
+        validator: validators.validateIPv4,
+        message: props => `${props.value} should be a vaild ip address`
+      }
+    },
+    helloInterval: {
+      type: String,
+      default: '10',
+      validate: {
+        validator: validators.validateOSPFInterval,
+        message: props => `${props.value} should be a vaild integer`
+      }
+    },
+    deadInterval: {
+      type: String,
+      default: '40',
+      validate: {
+        validator: validators.validateOSPFInterval,
+        message: props => `${props.value} should be a vaild integer`
+      }
+    }
   }
 },
 {
