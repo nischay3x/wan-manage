@@ -162,13 +162,6 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
           err: 'LAN interfaces should not be set to DHCP'
         };
       }
-
-      if (ifc.routing === 'BGP' && !device.bgp.enable) {
-        return {
-          valid: false,
-          err: `Interface ${ifc.name} cannot be set with BGP. Please Enable BGP`
-        };
-      }
     }
 
     if (ifc.type === 'WAN') {
@@ -340,15 +333,8 @@ const isIPv4Address = (ip, mask) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateStaticRoute = (device, tunnels, route) => {
-  const { ifname, gateway, redistributeViaBGP } = route;
+  const { ifname, gateway } = route;
   const gatewaySubnet = `${gateway}/32`;
-
-  if (redistributeViaBGP && !device.bgp.enable) {
-    return {
-      valid: false,
-      err: 'Can\'t redistribute via BGP. BGP is disabled'
-    };
-  }
 
   if (ifname) {
     const ifc = device.interfaces.find(i => i.devId === ifname);

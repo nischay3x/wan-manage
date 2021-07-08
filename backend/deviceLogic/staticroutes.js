@@ -51,8 +51,7 @@ const apply = async (device, user, data) => {
     const params = {
       addr: data.destination,
       via: data.gateway,
-      redistributeViaOSPF: data.redistributeViaOSPF,
-      redistributeViaBGP: data.redistributeViaBGP
+      redistributeViaOSPF: data.redistributeViaOSPF
     };
 
     if (data.ifname) {

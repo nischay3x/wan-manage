@@ -31,15 +31,6 @@ async function up () {
     deadInterval: '40'
   };
 
-  const defaultBGPGlobalSettings = {
-    enable: false,
-    localASN: '',
-    routerId: '',
-    keepaliveInterval: '30',
-    holdInterval: '90',
-    neighbors: []
-  };
-
   try {
     await devices.updateMany(
       { },
@@ -47,9 +38,7 @@ async function up () {
         $set: {
           'interfaces.$[].ospf': defaultLinkSettings,
           'staticroutes.$[].redistributeViaOSPF': false,
-          'staticroutes.$[].redistributeViaBGP': false,
-          ospf: defaultOSPFGlobalSettings,
-          bgp: defaultBGPGlobalSettings
+          ospf: defaultOSPFGlobalSettings
         }
       },
       { upsert: false }
@@ -73,9 +62,7 @@ async function down () {
         $unset: {
           'interfaces.$[].ospf': '',
           'staticroutes.$[].redistributeViaOSPF': '',
-          'staticroutes.$[].redistributeViaBGP': '',
-          ospf: '',
-          bgp: ''
+          ospf: ''
         }
       },
       { upsert: false }

@@ -214,26 +214,6 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     }
   }
 
-  if (has(messageParams, 'modify_bgp')) {
-    const { remove, add } = messageParams.modify_bgp;
-
-    if (remove) {
-      requests.push({
-        entity: 'agent',
-        message: 'remove-bgp',
-        params: { ...remove }
-      });
-    }
-
-    if (add) {
-      requests.push({
-        entity: 'agent',
-        message: 'add-bgp',
-        params: { ...add }
-      });
-    }
-  }
-
   if (has(messageParams, 'modify_ospf')) {
     const { remove, add } = messageParams.modify_ospf;
 
@@ -266,8 +246,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             via: item.old_route,
             devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined,
-            redistributeViaOSPF: item.redistributeViaOSPF,
-            redistributeViaBGP: item.redistributeViaBGP
+            redistributeViaOSPF: item.redistributeViaOSPF
           }
         });
       }
@@ -280,8 +259,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             via: item.new_route,
             devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined,
-            redistributeViaOSPF: item.redistributeViaOSPF,
-            redistributeViaBGP: item.redistributeViaBGP
+            redistributeViaOSPF: item.redistributeViaOSPF
           }
         });
       }
@@ -593,7 +571,6 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     !has(messageParams, 'modify_routes') &&
     !has(messageParams, 'modify_dhcp_config') &&
     !has(messageParams, 'modify_ospf') &&
-    !has(messageParams, 'modify_bgp') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
       const propsModified = Object.keys(modifiedIfc).filter(prop => {
@@ -766,8 +743,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         gateway: route.gateway,
         ifname: route.ifname,
         metric: route.metric,
-        redistributeViaOSPF: route.redistributeViaOSPF,
-        redistributeViaBGP: route.redistributeViaBGP
+        redistributeViaOSPF: route.redistributeViaOSPF
       });
     }),
 
@@ -777,8 +753,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         gateway: route.gateway,
         ifname: route.ifname,
         metric: route.metric,
-        redistributeViaOSPF: route.redistributeViaOSPF,
-        redistributeViaBGP: route.redistributeViaBGP
+        redistributeViaOSPF: route.redistributeViaOSPF
       });
     })
   ];
@@ -811,8 +786,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       new_route: '',
       devId: route.ifname || undefined,
       metric: route.metric || undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP
+      redistributeViaOSPF: route.redistributeViaOSPF
     });
   });
   routesToAdd.forEach(route => {
@@ -822,8 +796,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       old_route: '',
       devId: route.ifname || undefined,
       metric: route.metric || undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP
+      redistributeViaOSPF: route.redistributeViaOSPF
     });
   });
 
@@ -841,101 +814,6 @@ const transformOSPF = (ospf) => {
   // The rest fields are per interface and sent to device via add/modify-interface jobs
   const globalFields = ['routerId'];
   return pick(ospf, globalFields);
-};
-
-/**
- * Creates a modify-bgp object
- * @param  {Object} bgp bgp configuration
- * @param  {Object} interfaces  assigned interfaces of device
- * @return {Object}            an object containing an array of routes
- */
-const transformBGP = async (bgp, interfaces) => {
-  const neighbors = [];
-
-  // for (const ifc of interfaces.filter(i => i.type === 'WAN')) {
-  //   const tunnels = await tunnelsModel
-  //     .find({
-  //       isActive: true,
-  //       $or: [{ interfaceA: ifc._id }, { interfaceB: ifc._id }]
-  //     })
-  //     .populate('deviceA')
-  //     .populate('deviceB');
-
-  //   for (const tunnel of tunnels) {
-  //     const tunnelParams = generateTunnelParams(tunnel.num);
-  //     const ifcId = ifc._id.toString();
-  //     neighbors.push({
-  //       // we use the remote side of the tunnel as neighbor
-  //       ip: tunnel.interfaceA.toString() === ifcId ? tunnelParams.ip2 : tunnelParams.ip1,
-  //       // we use the local ASN to establish iBGP between them
-  //       remoteASN: bgp.localASN
-  //     });
-  //   }
-  // }
-
-  bgp.neighbors.forEach(n => {
-    const neighborObj = {
-      ip: n.ip,
-      remoteASN: n.remoteASN
-    };
-
-    if (n.password) {
-      neighborObj.password = n.password;
-    }
-
-    neighbors.push(neighborObj);
-  });
-
-  const networks = [];
-  interfaces.filter(i => i.routing === 'BGP').forEach(i => {
-    networks.push({
-      ipv4: `${i.IPv4}/${i.IPv4Mask}`
-    });
-  });
-
-  const res = {
-    routerId: bgp.routerId,
-    holdInterval: bgp.holdInterval,
-    keepaliveInterval: bgp.keepaliveInterval,
-    localASN: bgp.localASN,
-    neighbors: neighbors,
-    networks: networks
-  };
-
-  // remove empty values
-  return omitBy(res, val => val === '');
-};
-
-/**
- * Creates add/remove-bgp jobs
- * @param  {Object} origDevice device object before changes in the database
- * @param  {Object} newDevice  device object after changes in the database
- * @return {Object}            an object containing add and remove ospf parameters
- */
-const prepareModifyBGP = async (origDevice, newDevice) => {
-  const [origBGP, newBGP] = [
-    // transformBGP(origDevice.bgp, origDevice.interfaces.filter(bgpAssignedFilter)),
-    await transformBGP(origDevice.bgp, origDevice.interfaces.filter(i => i.isAssigned)),
-    await transformBGP(newDevice.bgp, newDevice.interfaces.filter(i => i.isAssigned))
-  ];
-
-  const origEnable = origDevice.bgp.enable;
-  const newEnable = newDevice.bgp.enable;
-
-  if (origEnable && !newEnable) {
-    return { remove: origBGP, add: null };
-  }
-
-  if (!origEnable && newEnable) {
-    return { remove: null, add: newBGP };
-  }
-
-  if (isEqual(origBGP, newBGP)) {
-    return { remove: null, add: null };
-  }
-
-  // if there is a change, send pair of remove-bgp and add-bgp
-  return { remove: origBGP, add: newBGP };
 };
 
 /**
@@ -1100,12 +978,6 @@ const apply = async (device, user, data) => {
     modifyParams.modify_ospf = { remove: removeOSPF, add: addOSPF };
   }
 
-  // Create BGP modification parameters
-  const { remove: removeBGP, add: addBGP } = await prepareModifyBGP(device[0], data.newDevice);
-  if (removeBGP || addBGP) {
-    modifyParams.modify_bgp = { remove: removeBGP, add: addBGP };
-  }
-
   modifyParams.modify_router = {};
   const oldBridges = getBridges(device[0].interfaces.filter(i => i.isAssigned));
   const newBridges = getBridges(data.newDevice.interfaces.filter(i => i.isAssigned));
@@ -1260,7 +1132,6 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_router') ||
       has(modifyParams, 'modify_interfaces') ||
       has(modifyParams, 'modify_ospf') ||
-      has(modifyParams, 'modify_bgp') ||
       has(modifyParams, 'modify_dhcp_config');
 
   // Queue job only if the device has changed
@@ -1349,14 +1220,13 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const { interfaces, staticroutes, dhcp, ospf, bgp } = await devices.findOne(
+  const { interfaces, staticroutes, dhcp, ospf } = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
       staticroutes: 1,
       dhcp: 1,
       ospf: 1,
-      bgp: 1,
       versions: 1
     }
   )
@@ -1416,19 +1286,6 @@ const sync = async (deviceId, org) => {
     });
   }
 
-  // IMPORTANT: routing data should be before static routes!
-  if (bgp.enable) {
-    let bgpData = await transformBGP(bgp, interfaces.filter(i => i.isAssigned));
-    bgpData = omitBy(bgpData, val => val === '');
-    if (!isEmpty(bgpData)) {
-      deviceConfRequests.push({
-        entity: 'agent',
-        message: 'add-bgp',
-        params: bgpData
-      });
-    }
-  }
-
   // Prepare add-route message
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
@@ -1438,8 +1295,7 @@ const sync = async (deviceId, org) => {
       via: gateway,
       dev_id: ifname || undefined,
       metric: metric ? parseInt(metric, 10) : undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP
+      redistributeViaOSPF: route.redistributeViaOSPF
     };
 
     deviceConfRequests.push({
