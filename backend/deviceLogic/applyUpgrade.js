@@ -49,7 +49,7 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
         // Response data
         { method: 'upgrade', data: { device: dev._id, org: org } },
         // Metadata
-        { priority: 'high', attempts: 1, removeOnComplete: false },
+        { priority: 'medium', attempts: 1, removeOnComplete: false },
         // Complete callback
         null)
     );

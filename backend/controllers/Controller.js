@@ -97,6 +97,10 @@ class Controller {
       } else if (param.in === 'query') {
         requestParams[param.name] = request.query[param.name];
       }
+      // offset and limit must be integer
+      if (['offset', 'limit'].includes(param.name) && requestParams[param.name]) {
+        requestParams[param.name] = parseInt(requestParams[param.name]);
+      }
     });
     return requestParams;
   }
@@ -104,6 +108,10 @@ class Controller {
   static async handleRequest (request, response, serviceOperation) {
     try {
       const requestParams = this.collectRequestParams(request);
+
+      // extract the "host" header into the top-level of the object to allow destructs it easily
+      request.server = `${request.protocol}://${request.get('host')}`;
+
       const serviceResponse = await serviceOperation(requestParams,
         /** need to pass the additional argument here */ request,
         response);

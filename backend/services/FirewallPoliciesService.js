@@ -17,78 +17,89 @@
 /* eslint-disable no-unused-vars */
 const Service = require('./Service');
 const createError = require('http-errors');
-const isEqual = require('lodash/isEqual');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-const MultiLinkPolicies = require('../models/mlpolicies');
+const FirewallPolicies = require('../models/firewallPolicies');
 const { devices } = require('../models/devices');
-const pathLabelsModel = require('../models/pathlabels');
 const { ObjectId } = require('mongoose').Types;
 
-const emptyPrefix = {
-  ip: '',
-  ports: '',
-  protocol: ''
-};
-
-const emptyApp = {
-  appId: '',
-  category: '',
-  serviceClass: '',
-  importance: ''
-};
-
-class MultiLinkPoliciesService {
-  static async verifyRequestSchema (mLPolicyRequest, org) {
-    const { _id, name, rules } = mLPolicyRequest;
-    // Check if any enabled rule exists
-    if (!rules.some(rule => rule.enabled)) {
-      return {
-        valid: false,
-        message: 'Policy must have at least one enabled rule'
-      };
-    }
+class FirewallPoliciesService {
+  static async verifyRequestSchema (firewallPolicyRequest, org) {
+    const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
+    const { _id, name, rules } = firewallPolicyRequest;
     for (const rule of rules) {
-      // At least application or prefix
-      // should exist in the request
-      const { application, prefix } = rule.classification;
-      if (
-        (!application && !prefix) ||
-        (application && prefix)
-      ) {
+      const { direction, inbound } = rule;
+      // Inbound rule type must be specified
+      if (direction === 'inbound' && !inboundRuleTypes.includes(inbound)) {
         return {
           valid: false,
-          message: 'At least application or prefix should exist in the request'
+          message: 'Wrong inbound rule type'
         };
-      };
+      }
+      for (const [side, { trafficTags, ipPort, ipProtoPort }]
+        of Object.entries(rule.classification)) {
+        // Only ip, ports and protocols allowed for inbound rule destination
+        if (!ipProtoPort && side === 'destination' && direction === 'inbound') {
+          return {
+            valid: false,
+            message: 'Only ip, ports and protocols allowed for inbound rule destination'
+          };
+        }
+        // Ip, ports and protocols must be specified for the destination
+        if (ipPort && side === 'destination') {
+          return {
+            valid: false,
+            message: 'Ip, ports and protocols must be specified for the destination'
+          };
+        }
+        // Only ip and ports without protocols can be specified for the source
+        if (ipProtoPort && side === 'source') {
+          return {
+            valid: false,
+            message: 'Only IP and ports without protocols can be specified for the source'
+          };
+        }
+        // Empty (ip, ports, protocol) not allowed
+        if (ipPort) {
+          const { ip, ports } = ipPort;
+          if (!(ip || ports)) {
+            return {
+              valid: false,
+              message: 'IP or ports must be provided'
+            };
+          }
+        };
+        if (ipProtoPort) {
+          const { ip, ports, protocols } = ipProtoPort;
+          if (!(ip || ports || (Array.isArray(protocols) && protocols.length))) {
+            return {
+              valid: false,
+              message: 'IP, ports or protocols must be provided'
+            };
+          }
+        };
 
-      // Empty prefix is not allowed
-      if (prefix && isEqual(prefix, emptyPrefix)) {
-        return {
-          valid: false,
-          message: 'Empty prefix is not allowed'
-        };
-      };
-
-      // Empty application is not allowed
-      if (application && isEqual(application, emptyApp)) {
-        return {
-          valid: false,
-          message: 'Empty application is not allowed'
-        };
-      };
-
-      // Any enabled rule must contain Path Labels
-      if (rule.enabled &&
-        (rule.action.links.length === 0 || rule.action.links[0].pathlabels.length === 0)) {
-        return {
-          valid: false,
-          message: 'Enabled rule must contain Path Labels'
-        };
+        if (trafficTags) {
+          // Traffic Tags not allowed for source
+          if (side === 'source') {
+            return {
+              valid: false,
+              message: 'Traffic Tags not allowed for source'
+            };
+          }
+          const { category, serviceClass, importance } = trafficTags;
+          // Empty Traffic Tags not allowed
+          if (!(category || serviceClass || importance)) {
+            return {
+              valid: false,
+              message: 'Category, service class or importance must be provided'
+            };
+          }
+        }
       }
     };
 
     // Duplicate names are not allowed in the same organization
-    const hasDuplicateName = await MultiLinkPolicies.findOne(
+    const hasDuplicateName = await FirewallPolicies.findOne(
       { org, name, _id: { $ne: _id } }
     );
     if (hasDuplicateName) {
@@ -98,54 +109,34 @@ class MultiLinkPoliciesService {
       };
     };
 
-    // Not allowed to assign path labels of a different organization
-    let orgPathLabels = await pathLabelsModel.find({ org }, '_id').lean();
-    orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
-    const notAllowedPathLabels = rules.map(rule =>
-      rule.action && !Array.isArray(rule.action.links) ? []
-        : rule.action.links.map(link =>
-          !Array.isArray(link.pathlabels) ? []
-            : link.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
-        )
-    ).flat(3);
-    if (notAllowedPathLabels.length) {
-      return {
-        valid: false,
-        message: 'Not allowed to assign path labels of a different organization'
-      };
-    };
-
     return { valid: true, message: '' };
   }
 
   /**
-   * Get all Multi Link policies
+   * Get all Firewall policies
    *
    * offset Integer The number of items to skip before starting to collect the result set (optional)
    * limit Integer The numbers of items to return (optional)
    * org String Organization to be filtered by (optional)
    * returns List
    **/
-  static async mlpoliciesGET ({ offset, limit, org }, { user }) {
+  static async firewallPoliciesGET ({ offset, limit, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const mlPolicies = await MultiLinkPolicies.find(
+      const firewallPolicies = await FirewallPolicies.find(
         { org: { $in: orgList } },
         {
           name: 1,
           description: 1,
+          isDefault: 1,
           rules: 1
         }
       )
         .lean()
         .skip(offset)
-        .limit(limit)
-        .populate(
-          'rules.action.links.pathlabels',
-          '_id name description color type'
-        );
+        .limit(limit);
 
-      const converted = JSON.parse(JSON.stringify(mlPolicies));
+      const converted = JSON.parse(JSON.stringify(firewallPolicies));
       return Service.successResponse(converted);
     } catch (e) {
       return Service.rejectResponse(
@@ -156,20 +147,20 @@ class MultiLinkPoliciesService {
   }
 
   /**
-   * Delete a Multi Link policy
+   * Delete a Firewall policy
    *
-   * id String Numeric ID of the Multi Link policy to delete
+   * id String Numeric ID of the Firewall policy to delete
    * no response value expected for this operation
    **/
-  static async mlpoliciesIdDELETE ({ id, org }, { user }) {
+  static async firewallPoliciesIdDELETE ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Don't allow deleting a policy if it's
       // installed on at least one device
       const count = await devices.countDocuments({
-        'policies.multilink.policy': id,
-        'policies.multilink.status': { $in: ['installing', 'installed'] },
+        'policies.firewall.policy': id,
+        'policies.firewall.status': { $in: ['installing', 'installed'] },
         org: { $in: orgList }
       });
 
@@ -180,17 +171,17 @@ class MultiLinkPoliciesService {
 
       await devices.updateMany({
         org: { $in: orgList },
-        'policies.multilink.policy': id,
-        'policies.multilink.status': { $nin: ['installing', 'installed'] }
+        'policies.firewall.policy': id,
+        'policies.firewall.status': { $nin: ['installing', 'installed'] }
       }, {
         $set: {
-          'policies.multilink.policy': null,
-          'policies.multilink.status': '',
-          'policies.multilink.requestTime': null
+          'policies.firewall.policy': null,
+          'policies.firewall.status': '',
+          'policies.firewall.requestTime': null
         }
       });
 
-      const { deletedCount } = await MultiLinkPolicies.deleteOne({
+      const { deletedCount } = await FirewallPolicies.deleteOne({
         org: { $in: orgList },
         _id: id
       });
@@ -209,16 +200,16 @@ class MultiLinkPoliciesService {
   }
 
   /**
-   * Get a Multi Link policy by id
+   * Get a Firewall policy by id
    *
-   * id String Numeric ID of the Multi Link policy to retrieve
+   * id String Numeric ID of the Firewall policy to retrieve
    * org String Organization to be filtered by (optional)
-   * returns MLPolicy
+   * returns FirewallPolicy
    **/
-  static async mlpoliciesIdGET ({ id, org }, { user }) {
+  static async firewallPoliciesIdGET ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const MLPolicy = await MultiLinkPolicies.findOne(
+      const firewallPolicy = await FirewallPolicies.findOne(
         {
           org: { $in: orgList },
           _id: id
@@ -226,20 +217,17 @@ class MultiLinkPoliciesService {
         {
           name: 1,
           description: 1,
+          isDefault: 1,
           rules: 1
         }
       )
-        .lean()
-        .populate(
-          'rules.action.links.pathlabels',
-          '_id name description color type'
-        );
+        .lean();
 
-      if (!MLPolicy) {
+      if (!firewallPolicy) {
         return Service.rejectResponse('Not found', 404);
       }
 
-      const converted = JSON.parse(JSON.stringify(MLPolicy));
+      const converted = JSON.parse(JSON.stringify(firewallPolicy));
       return Service.successResponse(converted);
     } catch (e) {
       return Service.rejectResponse(
@@ -250,26 +238,35 @@ class MultiLinkPoliciesService {
   }
 
   /**
-   * Modify a Multi Link policy
+   * Modify a Firewall policy
    *
-   * id String Numeric ID of the Multi Link policy to modify
-   * mLPolicyRequest MLPolicyRequest  (optional)
-   * returns MLPolicy
+   * id String Numeric ID of the Firewall policy to modify
+   * firewallPolicyRequest FirewallPolicyRequest  (optional)
+   * returns FirewallPolicy
    **/
-  static async mlpoliciesIdPUT ({ id, org, mLPolicyRequest }, { user }) {
+  static async firewallPoliciesIdPUT ({ id, org, firewallPolicyRequest }, { user }) {
     try {
-      const { name, description, rules } = mLPolicyRequest;
+      const { name, description, isDefault, rules } = firewallPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Verify request schema
-      const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
-        mLPolicyRequest, orgList[0]
+      const { valid, message } = await FirewallPoliciesService.verifyRequestSchema(
+        firewallPolicyRequest, orgList[0]
       );
       if (!valid) {
         throw createError(400, message);
       }
 
-      const MLPolicy = await MultiLinkPolicies.findOneAndUpdate(
+      // only one default policy per organization is allowed
+      if (isDefault) {
+        await FirewallPolicies.update(
+          { org: { $in: orgList }, _id: { $ne: id }, isDefault: true },
+          { $set: { isDefault: false } },
+          { upsert: false }
+        );
+      };
+
+      const firewallPolicy = await FirewallPolicies.findOneAndUpdate(
         {
           org: { $in: orgList },
           _id: id
@@ -278,28 +275,26 @@ class MultiLinkPoliciesService {
           org: orgList[0].toString(),
           name: name,
           description: description,
+          isDefault: isDefault,
           rules: rules
         },
         {
           fields: {
             name: 1,
             description: 1,
+            isDefault: 1,
             rules: 1
           },
           new: true
         }
       )
-        .lean()
-        .populate(
-          'rules.action.links.pathlabels',
-          '_id name description color type'
-        );
+        .lean();
 
-      if (!MLPolicy) {
+      if (!firewallPolicy) {
         return Service.rejectResponse('Not found', 404);
       }
 
-      const converted = JSON.parse(JSON.stringify(MLPolicy));
+      const converted = JSON.parse(JSON.stringify(firewallPolicy));
       return Service.successResponse(converted);
     } catch (e) {
       return Service.rejectResponse(
@@ -310,24 +305,24 @@ class MultiLinkPoliciesService {
   }
 
   /**
-   * Get all Multi Link policies names and IDs only
+   * Get all Firewall policies names and IDs only
    *
    * offset Integer The number of items to skip before starting to collect the result set (optional)
    * limit Integer The numbers of items to return (optional)
    * org String Organization to be filtered by (optional)
    * returns List
    **/
-  static async mlpoliciesListGET ({ offset, limit, org }, { user }) {
+  static async firewallPoliciesListGET ({ offset, limit, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const mlPolicies = await MultiLinkPolicies.find(
+      const firewallPolicies = await FirewallPolicies.find(
         { org: { $in: orgList } },
-        { name: 1 }
+        { name: 1, isDefault: 1 }
       )
         .skip(offset)
         .limit(limit);
 
-      return Service.successResponse(mlPolicies);
+      return Service.successResponse(firewallPolicies);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -337,56 +332,51 @@ class MultiLinkPoliciesService {
   }
 
   /**
-   * Add a new Multi Link policy
+   * Add a new Firewall policy
    *
-   * mLPolicyRequest MLPolicyRequest
+   * firewallPolicyRequest FirewallPolicyRequest
    * org String Organization to be filtered by (optional)
-   * returns MLPolicy
+   * returns FirewallPolicy
    **/
-  static async mlpoliciesPOST ({ mLPolicyRequest, org }, { user }) {
+  static async firewallPoliciesPOST ({ firewallPolicyRequest, org }, { user }) {
     try {
-      const { name, description, rules } = mLPolicyRequest;
+      const { name, description, isDefault, rules } = firewallPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Verify request schema
-      const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
-        mLPolicyRequest, orgList[0]
+      const { valid, message } = await FirewallPoliciesService.verifyRequestSchema(
+        firewallPolicyRequest, orgList[0]
       );
       if (!valid) {
         throw createError(400, message);
       }
 
-      let result = await MultiLinkPolicies.create({
+      // only one default policy per organization is allowed
+      if (isDefault) {
+        await FirewallPolicies.update(
+          { org: { $in: orgList }, isDefault: true },
+          { $set: { isDefault: false } },
+          { upsert: false }
+        );
+      };
+
+      const result = await FirewallPolicies.create({
         org: orgList[0].toString(),
         name: name,
         description: description,
+        isDefault: isDefault,
         rules: rules
       });
 
-      result = await result.populate(
-        'rules.action.links.pathlabels',
-        '_id name description color type'
-      ).execPopulate();
-
-      const MLPolicy = (({ _id, name, description, rules }) => ({
+      const firewallPolicy = (({ _id, name, description, isDefault, rules }) => ({
         _id,
         name,
         description,
+        isDefault,
         rules
       }))(result);
 
-      MLPolicy.rules = MLPolicy.rules.map(rule => {
-        return ({
-          _id: rule._id,
-          name: rule.name,
-          enabled: rule.enabled,
-          priority: rule.priority,
-          classification: rule.classification,
-          action: rule.action
-        });
-      });
-
-      const converted = JSON.parse(JSON.stringify(MLPolicy));
+      const converted = JSON.parse(JSON.stringify(firewallPolicy));
       return Service.successResponse(converted, 201);
     } catch (e) {
       return Service.rejectResponse(
@@ -397,7 +387,7 @@ class MultiLinkPoliciesService {
   }
 
   /**
-   * Get all multi link policies metadata
+   * Get all Firewall policies metadata
    *
    * offset Integer The number of items to skip before
    * starting to collect the result set (optional)
@@ -405,19 +395,20 @@ class MultiLinkPoliciesService {
    * org String Organization to be filtered by (optional)
    * returns List
    **/
-  static async mlpoliciesMetaGET ({ offset, limit, org }, { user }) {
+  static async firewallPoliciesMetaGET ({ offset, limit, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
-      // Fetch al multi link policies of the organization.
+      // Fetch all Firewall policies of the organization.
       // To each policy, attach the installation status of
       // each of the devices the policy is installed on.
-      const mlPoliciesMeta = await MultiLinkPolicies.aggregate([
+      const firewallPoliciesMeta = await FirewallPolicies.aggregate([
         { $match: { org: { $in: orgList.map(org => ObjectId(org)) } } },
         {
           $project: {
             _id: 1,
             name: 1,
+            rules: 1,
             description: 1
           }
         },
@@ -426,24 +417,25 @@ class MultiLinkPoliciesService {
             from: 'devices',
             let: { id: '$_id' },
             pipeline: [
-              { $match: { $expr: { $eq: ['$policies.multilink.policy', '$$id'] } } },
-              { $project: { 'policies.multilink': 1 } }
+              { $match: { $expr: { $eq: ['$policies.firewall.policy', '$$id'] } } },
+              { $project: { 'policies.firewall': 1 } }
             ],
-            as: 'mlpolicy'
+            as: 'firewallPolicy'
           }
         },
-        { $addFields: { statuses: '$mlpolicy.policies.multilink.status' } },
+        { $addFields: { statuses: '$firewallPolicy.policies.firewall.status' } },
         {
           $project: {
             _id: { $toString: '$_id' },
             name: 1,
             description: 1,
+            rules: 1,
             statuses: 1
           }
         }
       ]).allowDiskUse(true);
 
-      const response = mlPoliciesMeta.map(policy => {
+      const response = firewallPoliciesMeta.map(policy => {
         const installCount = {
           installed: 0,
           pending: 0,
@@ -477,4 +469,4 @@ class MultiLinkPoliciesService {
   }
 }
 
-module.exports = MultiLinkPoliciesService;
+module.exports = FirewallPoliciesService;

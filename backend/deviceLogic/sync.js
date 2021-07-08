@@ -23,8 +23,10 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const deviceStatus = require('../periodic/deviceStatus')();
 const { devices } = require('../models/devices');
-const policySyncHandler = require('./mlpolicy').sync;
-const policyCompleteHandler = require('./mlpolicy').completeSync;
+const mlPolicySyncHandler = require('./mlpolicy').sync;
+const mlPolicyCompleteHandler = require('./mlpolicy').completeSync;
+const firewallPolicySyncHandler = require('./firewallPolicy').sync;
+const firewallPolicyCompleteHandler = require('./firewallPolicy').completeSync;
 const deviceConfSyncHandler = require('./modifyDevice').sync;
 const deviceConfCompleteHandler = require('./modifyDevice').completeSync;
 const tunnelsSyncHandler = require('./tunnels').sync;
@@ -45,9 +47,13 @@ const syncHandlers = {
     syncHandler: tunnelsSyncHandler,
     completeHandler: tunnelsCompleteHandler
   },
-  policies: {
-    syncHandler: policySyncHandler,
-    completeHandler: policyCompleteHandler
+  mlPolicies: {
+    syncHandler: mlPolicySyncHandler,
+    completeHandler: mlPolicyCompleteHandler
+  },
+  firewallPolicies: {
+    syncHandler: firewallPolicySyncHandler,
+    completeHandler: firewallPolicyCompleteHandler
   },
   appIdentification: {
     syncHandler: appIdentificationSyncHandler,
@@ -238,7 +244,7 @@ const queueFullSyncJob = async (device, hash, org) => {
       }
     },
     // Metadata
-    { priority: 'low', attempts: 1, removeOnComplete: false },
+    { priority: 'normal', attempts: 1, removeOnComplete: false },
     // Complete callback
     null
   );

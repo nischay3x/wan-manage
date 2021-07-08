@@ -195,7 +195,7 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     for (const ifc2 of assignedNotEmptyIfs.filter(i => i.devId !== ifc1.devId)) {
       const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
       const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
-      if (cidr.overlap(ifc1Subnet, ifc2Subnet)) {
+      if (ifc1Subnet !== ifc2Subnet && cidr.overlap(ifc1Subnet, ifc2Subnet)) {
         return {
           valid: false,
           err: 'IP addresses of the assigned interfaces have an overlap'
@@ -368,6 +368,17 @@ const validateStaticRoute = (device, tunnels, route) => {
       return {
         valid: false,
         err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+      };
+    }
+
+    // Don't allow putting static route on a bridged interface
+    const anotherBridgedIfc = device.interfaces.some(i => {
+      return i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned;
+    });
+    if (anotherBridgedIfc) {
+      return {
+        valid: false,
+        err: 'Specify interface in static route is not allowed on a bridged interface'
       };
     }
   } else {

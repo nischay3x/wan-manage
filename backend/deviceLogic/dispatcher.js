@@ -24,6 +24,7 @@ const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
 const mlpolicy = require('./mlpolicy');
+const firewallPolicy = require('./firewallPolicy');
 const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
 const sync = require('./sync');
@@ -99,6 +100,12 @@ const methods = {
     complete: mlpolicy.complete,
     error: mlpolicy.error,
     remove: mlpolicy.remove
+  },
+  firewallPolicy: {
+    apply: firewallPolicy.apply,
+    complete: firewallPolicy.complete,
+    error: firewallPolicy.error,
+    remove: firewallPolicy.remove
   },
   appIdentification: {
     apply: appIdentification.apply,

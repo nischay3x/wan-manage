@@ -20,6 +20,7 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
+const firewallPoliciesModel = require('../models/firewallPolicies');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -31,9 +32,12 @@ const net = require('net');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
+const omit = require('lodash/omit');
+const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
+const { queueFirewallPolicyJob } = require('../deviceLogic/firewallPolicy');
 const { validateOperations } = require('../deviceLogic/interfaces');
 const {
   validateDevice,
@@ -57,7 +61,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ org, deviceCommand }, { user }, response) {
+  static async devicesApplyPOST ({ org, deviceCommand }, { user, server }, response) {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -66,7 +70,7 @@ class DevicesService {
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -83,7 +87,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }, response) {
+  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevice = await devices.find({
@@ -96,7 +100,7 @@ class DevicesService {
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -226,6 +230,25 @@ class DevicesService {
       });
     } else retDhcpList = [];
 
+    const retFirewallRules = (item.firewall && item.firewall.rules)
+      ? item.firewall.rules.map(r => {
+        const retRule = pick(r, [
+          '_id',
+          'description',
+          'priority',
+          'enabled',
+          'direction',
+          'inbound',
+          'classification',
+          'action',
+          'internalIP',
+          'internalPortStart',
+          'interfaces'
+        ]);
+        retRule._id = retRule._id.toString();
+        return retRule;
+      }) : [];
+
     // Update with additional objects
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
@@ -238,6 +261,10 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
+    retDevice.firewallApplied = item.firewallApplied;
+    retDevice.firewall = {
+      rules: retFirewallRules
+    };
     // Add interface stats to mongoose response
     retDevice.deviceStatus = retDevice.isConnected
       ? deviceStatus.getDeviceStatus(retDevice.machineId) || {} : {};
@@ -255,6 +282,8 @@ class DevicesService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.find({ org: { $in: orgList } })
+        .skip(offset)
+        .limit(limit)
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.multilink.policy', '_id name description');
 
@@ -364,6 +393,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description');
       const device = DevicesService.selectDeviceParams(result);
 
@@ -740,7 +770,7 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user }, response) {
+  static async devicesIdPUT ({ id, org, deviceRequest }, { user, server }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -936,8 +966,44 @@ class DevicesService {
         deviceToValidate.interfaces = origDevice.interfaces;
       }
 
-      // validate DHCP info if it exists
+      // Map dhcp config if needed
       if (Array.isArray(deviceRequest.dhcp)) {
+        deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
+          const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
+          if (!ifc) return d;
+          const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
+          if (!origIfc) return d;
+
+          // if the interface is going to be unassigned now but it was assigned
+          // and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned interface in the bridge.
+          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
+          // now, the user unassigned the eth3. In this case we reassociate the dhcp to the eth4.
+          if (!ifc.isAssigned && origIfc.isAssigned) {
+            const anotherBridgedIfc = deviceRequest.interfaces.find(i =>
+              i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned);
+            if (anotherBridgedIfc) {
+              return { ...d, interface: anotherBridgedIfc.devId };
+            }
+          }
+
+          // if the IP of the interface is changed and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned
+          // interface which has the orig IP.
+          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
+          // now, the user changed the IP of eth3. In this case we reassociate the dhcp to the eth4.
+          if (ifc.isAssigned && ifc.IPv4 !== origIfc.IPv4) {
+            const anotherAssignWithSameIp = deviceRequest.interfaces.find(i =>
+              i.devId !== ifc.devId && i.IPv4 === origIfc.IPv4 && i.isAssigned);
+            if (anotherAssignWithSameIp) {
+              return { ...d, interface: anotherAssignWithSameIp.devId };
+            }
+          }
+
+          return d;
+        });
+
+        // validate DHCP info if it exists
         for (const dhcpRequest of deviceRequest.dhcp) {
           DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
         }
@@ -1026,13 +1092,15 @@ class DevicesService {
         { new: true, upsert: false, runValidators: true }
       )
         .session(session)
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.firewall.policy', '_id name description rules')
+        .populate('policies.multilink.policy', '_id name description');
       await session.commitTransaction();
       session = null;
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      let modifyDevResult = [];
+      let modifyDevResult = { ids: [] };
       if (origDevice) {
         modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
           org: orgList[0],
@@ -1040,8 +1108,48 @@ class DevicesService {
         });
       }
 
-      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
-      DevicesService.setLocationHeader(response, modifyDevResult.ids, orgList[0]);
+      // If firewall rules modified then need to send install firewall policy job to the device
+      const modifyFirewallResult = { ids: [] };
+      const updRules = updDevice.firewall.rules.toObject();
+      const origRules = origDevice.firewall.rules.toObject();
+      const rulesModified = origDevice.firewallApplied !== updDevice.firewallApplied ||
+        !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
+          isEqual(
+            omit(updatedRule, ['_id', 'name', 'classification']),
+            omit(origRules[index], ['_id', 'name', 'classification'])
+          ) &&
+          isEqual(
+            omit(updatedRule.classification.source, ['_id']),
+            omit(origRules[index].classification.source, ['_id'])
+          ) &&
+          isEqual(
+            omit(updatedRule.classification.destination, ['_id']),
+            omit(origRules[index].classification.destination, ['_id'])
+          )
+        ));
+
+      if (rulesModified) {
+        const requestTime = Date.now();
+        const { firewall } = updDevice.policies;
+        let firewallPolicy;
+        if (firewall && firewall.status && firewall.status.startsWith('install')) {
+          firewallPolicy = await firewallPoliciesModel.findOne(
+            { org: orgList[0], _id: firewall.policy },
+            { rules: 1, name: 1 }
+          ).session(session);
+        };
+        const jobs = await queueFirewallPolicyJob(
+          [updDevice],
+          'install',
+          requestTime,
+          firewallPolicy,
+          user,
+          orgList[0]
+        );
+        modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
+      }
+      const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
+      DevicesService.setLocationHeader(server, response, modifyDevResult.ids, orgList[0]);
       const deviceObj = DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
@@ -1164,7 +1272,7 @@ class DevicesService {
    * route String Numeric ID of the Route to delete
    * no response value expected for this operation
    **/
-  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }, response) {
+  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const device = await devices.findOne(
@@ -1186,7 +1294,7 @@ class DevicesService {
       copy._id = route;
       copy.action = 'del';
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -1203,7 +1311,7 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns DeviceStaticRouteInformation
    **/
-  static async devicesIdStaticroutesPOST (request, { user }, response) {
+  static async devicesIdStaticroutesPOST (request, { user, server }, response) {
     const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -1225,6 +1333,15 @@ class DevicesService {
         ifname: staticRouteRequest.ifname,
         metric: staticRouteRequest.metric
       });
+
+      const error = route.validateSync();
+      if (error) {
+        logger.warn('static route validation failed',
+          {
+            params: { staticRouteRequest, error }
+          });
+        throw new Error(error.message);
+      }
 
       const tunnels = await tunnelsModel.find({
         isActive: true,
@@ -1254,7 +1371,7 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy._id = route.id;
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       const result = {
         _id: route._id.toString(),
         gateway: route.gateway,
@@ -1280,7 +1397,7 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesRoutePATCH (request, { user }, response) {
+  static async devicesIdStaticroutesRoutePATCH (request, { user, server }, response) {
     const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -1301,7 +1418,7 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse({ deviceId: device.id });
     } catch (e) {
       return Service.rejectResponse(
@@ -1563,7 +1680,7 @@ class DevicesService {
    * org String Organization to be filtered by (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdDhcpDhcpIdDELETE ({ id, dhcpId, force, org }, { user }, response) {
+  static async devicesIdDhcpDhcpIdDELETE ({ id, dhcpId, force, org }, { user, server }, response) {
     try {
       const isForce = (force === 'yes');
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -1596,7 +1713,7 @@ class DevicesService {
         copy._id = dhcpId;
         copy.action = 'del';
         const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-        DevicesService.setLocationHeader(response, ids, orgList[0]);
+        DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       }
 
       // If force delete specified, delete the entry regardless of the job status
@@ -1674,7 +1791,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, { user }, response) {
+  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, { user, server }, res) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -1696,6 +1813,8 @@ class DevicesService {
       });
       if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
 
+      DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
+
       const dhcpData = {
         _id: dhcpId,
         interface: dhcpRequest.interface,
@@ -1715,7 +1834,7 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, res, ids, orgList[0]);
       return Service.successResponse(dhcpData, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -1734,7 +1853,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org }, { user }, response) {
+  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -1767,7 +1886,7 @@ class DevicesService {
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       const dhcpData = {
         _id: dhcpObject.id,
         interface: dhcpObject.interface,
@@ -1858,6 +1977,7 @@ class DevicesService {
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
+
     // check that DHCP Range Start/End IP are on the same subnet with interface IP
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
       throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
@@ -1889,7 +2009,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user }, response) {
+  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user, server }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -1912,6 +2032,22 @@ class DevicesService {
         return (s.interface === dhcpRequest.interface);
       });
       if (dhcpObject.length > 0) throw new Error('DHCP already configured for that interface');
+
+      // for bridge feature we allow to set only one dhcp config
+      // for one of the interface in the bridge
+      const interfaceObj = deviceObject.interfaces.find(i => i.devId === dhcpRequest.interface);
+      const addr = interfaceObj.IPv4;
+      const bridgedInterfacesIds = deviceObject.interfaces.filter(i => {
+        return i.devId !== dhcpRequest.interface && i.isAssigned && i.IPv4 === addr;
+      }).map(i => i.devId);
+
+      if (bridgedInterfacesIds.length) {
+        const dhcp = deviceObject.dhcp.map(d => d.interface);
+        const dhcpConfigured = bridgedInterfacesIds.some(i => dhcp.includes(i));
+        if (dhcpConfigured) {
+          throw new Error(`DHCP already configured for an interface in ${addr} bridge`);
+        }
+      }
 
       const dhcpData = {
         interface: dhcpRequest.interface,
@@ -1946,7 +2082,7 @@ class DevicesService {
       copy.org = orgList[0];
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(result, 202);
     } catch (e) {
       if (session) session.abortTransaction();
@@ -2355,9 +2491,9 @@ class DevicesService {
    * @param {Array} jobsIds - array of jobs ids
    * @param {string} orgId - ID of the organzation
    */
-  static setLocationHeader (response, jobsIds, orgId) {
+  static setLocationHeader (server, response, jobsIds, orgId) {
     if (jobsIds.length) {
-      const locationHeader = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
+      const locationHeader = `${server}/api/jobs?status=all&ids=${
         jobsIds.join('%2C')}&org=${orgId}`;
       response.setHeader('Location', locationHeader);
     }

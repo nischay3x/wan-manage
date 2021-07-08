@@ -35,7 +35,7 @@ class AccountsService {
    **/
   static async accountsGET ({ offset, limit }, { user }) {
     try {
-      const accounts = await getUserAccounts(user);
+      const accounts = await getUserAccounts(user, offset, limit);
       return Service.successResponse(accounts);
     } catch (e) {
       return Service.rejectResponse(
