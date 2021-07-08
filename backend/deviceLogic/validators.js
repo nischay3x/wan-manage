@@ -335,6 +335,7 @@ const isIPv4Address = (ip, mask) => {
 const validateStaticRoute = (device, tunnels, route) => {
   const { ifname, gateway } = route;
   const gatewaySubnet = `${gateway}/32`;
+
   if (ifname) {
     const ifc = device.interfaces.find(i => i.devId === ifname);
     if (ifc === undefined) {

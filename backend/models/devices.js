@@ -246,6 +246,35 @@ const interfacesSchema = new Schema({
   deviceParams: {
     type: Object,
     default: {}
+  },
+  ospf: {
+    area: {
+      type: String,
+      default: '0',
+      required: true,
+      validate: {
+        validator: validators.validateOSPFArea,
+        message: 'area should be a vaild number'
+      }
+    },
+    keyId: {
+      type: String,
+      validate: {
+        validator: validators.validateIsInteger,
+        message: 'keyId should be an integer'
+      }
+    },
+    key: {
+      type: String,
+      maxlength: [16, 'Key length must be at most 16']
+    },
+    cost: {
+      type: String,
+      default: '',
+      validate: {
+        validator: validators.validateOSPFCost
+      }
+    }
   }
 }, {
   timestamps: true,
