@@ -39,8 +39,6 @@ const isEqual = require('lodash/isEqual');
 const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
-const omitBy = require('lodash/omitBy');
-const isEmpty = require('lodash/isEmpty');
 const { buildInterfaces } = require('./interfaces');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
