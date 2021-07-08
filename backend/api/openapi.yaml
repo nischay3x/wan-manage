@@ -7913,18 +7913,15 @@ components:
       example:
         metric: 0
         destination: destination
-        flags: flags
+        protocol: static
         interface: interface
         gateway: gateway
-        mask: mask
       properties:
         metric:
-          type: integer
+          type: string
         destination:
           type: string
-        mask:
-          type: string
-        flags:
+        protocol:
           type: string
         interface:
           type: string
