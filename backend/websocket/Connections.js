@@ -28,6 +28,8 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'w
 const notificationsMgr = require('../notifications/notifications')();
 const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
+const { TimeoutError } = require('../utils/errors');
+
 class Connections {
   constructor () {
     this.createConnection = this.createConnection.bind(this);
@@ -612,6 +614,7 @@ class Connections {
         null,
         machineId,
         message,
+        undefined,
         '',
         validateDevInfoMessage
       );
@@ -780,6 +783,7 @@ class Connections {
     org,
     device,
     msg,
+    timeout = configs.get('jobTimeout', 'number'),
     jobid = '',
     responseValidator = () => {
       return { valid: true, err: '' };
@@ -793,10 +797,10 @@ class Connections {
         // Increment seq and update queue with resolve function for this promise,
         // set timeout to clear when no response received
         var tohandle = setTimeout(() => {
-          reject(new Error('Error: Send Timeout'));
+          reject(new TimeoutError('Error: Send Timeout'));
           // delete queue for this seq
           delete msgQ[seq];
-        }, configs.get('jobTimeout', 'number'));
+        }, timeout);
         msgQ[seq] = {
           resolver: resolve,
           rejecter: reject,

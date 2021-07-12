@@ -33,7 +33,7 @@ const omit = require('lodash/omit');
  */
 const sendMsg = (org, machineID, msg, job, curTask, tasksLength) => (inp, done) => {
   logger.debug('Starting new task', { params: { message: msg, input: inp }, job: job });
-  connections.deviceSendMessage(org, machineID, msg, job.id)
+  connections.deviceSendMessage(org, machineID, msg, undefined, job.id)
     .then((rmsg) => {
       if (rmsg !== null && rmsg.ok === 1) {
         logger.debug('Finished task', { params: { message: msg, reply: rmsg }, job: job });

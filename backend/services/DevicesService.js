@@ -53,6 +53,8 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const cidr = require('cidr-tools');
+const { TimeoutError } = require('../utils/errors');
+
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -407,6 +409,7 @@ class DevicesService {
    * Returns Device Configuration
    **/
   static async devicesIdConfigurationGET ({ id, org }, { user }) {
+    let deviceStatus = 'unknown';
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.find({
@@ -420,14 +423,16 @@ class DevicesService {
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
           status: 'disconnected',
-          configurations: []
+          configuration: []
         });
       }
+      deviceStatus = 'connected';
 
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-device-config' }
+        { entity: 'agent', message: 'get-device-config' },
+        configs.get('directMessageTimeout', 'number')
       );
 
       if (!deviceConf.ok) {
@@ -449,10 +454,18 @@ class DevicesService {
         configuration
       });
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      if (e instanceof TimeoutError) {
+        return Service.successResponse({
+          error: 'timeout',
+          status: deviceStatus,
+          configuration: []
+        });
+      } else {
+        return Service.rejectResponse(
+          e.message || 'Internal Server Error',
+          e.status || 500
+        );
+      }
     }
   }
 
@@ -470,79 +483,122 @@ class DevicesService {
         throw new Error('Device or Interface not found');
       };
 
-      const deviceStatus = connections.isConnected(deviceObject.machineId);
-      const selectedInterface = deviceObject.interfaces.find(i => {
-        return i._id.toString() === interfaceId;
-      });
-      let interfaceInfo = {};
+      const supportedMessages = {
+        lte: {
+          message: 'get-lte-info',
+          defaultResponse: {
+            connectivity: false,
+            simStatus: null,
+            signals: {},
+            hardwareInfo: {},
+            packetServiceState: {},
+            phoneNumber: null,
+            systemInfo: {},
+            defaultSettings: {},
+            pinState: {},
+            connectionState: null,
+            registrationNetworkState: {}
+          },
+          parseResponse: async response => {
+            response = mapLteNames(response);
+            let defaultApn = response.defaultSettings ? response.defaultSettings.apn : null;
+            const mcc = response.systemInfo.mcc;
+            const mnc = response.systemInfo.mnc;
 
-      const interfaceType = selectedInterface.deviceType;
-      if (deviceStatus) {
-        const agentMessages = {
-          lte: 'get-lte-info',
-          wifi: 'get-wifi-info'
-        }[interfaceType];
-
-        if (agentMessages) {
-          const response = await connections.deviceSendMessage(
-            null,
-            deviceObject.machineId,
-            {
-              entity: 'agent',
-              message: agentMessages,
-              params: { dev_id: selectedInterface.devId }
-            }
-          );
-          if (!response.ok) {
-            logger.error('Failed to get interface info', {
-              params: {
-                deviceId: id, response: response.message
+            if (mcc && mnc) {
+              const key = mcc + '-' + mnc;
+              if (apnsJson[key]) {
+                defaultApn = apnsJson[key];
               }
-            });
-            return Service.rejectResponse('Failed to get interface status', 500);
-          } else {
-            interfaceInfo = response.message;
+            }
+
+            // update pin state
+            await devices.updateOne(
+              { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+              {
+                $set: {
+                  'interfaces.$.deviceParams.initial_pin1_state': status.pinState,
+                  'interfaces.$.deviceParams.default_settings': status.defaultSettings
+                }
+              }
+            );
+
+            return {
+              ...response,
+              defaultSettings: {
+                ...response.defaultSettings,
+                apn: defaultApn
+              }
+            };
           }
+        },
+        wifi: {
+          message: 'get-wifi-info',
+          defaultResponse: {
+            clients: [],
+            accessPointStatus: false
+          },
+          parseResponse: async response => {
+            response = mapWifiNames(response);
+            return { ...response, wifiChannels };
+          }
+        }
+      };
+
+      const ifc = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
+      const message = supportedMessages[ifc.deviceType];
+      if (!message) {
+        throw new Error('Unsupported request');
+      }
+
+      if (!connections.isConnected(deviceObject.machineId)) {
+        return Service.successResponse({
+          deviceStatus: 'disconnected',
+          status: message.response
+        });
+      }
+
+      let response = message.defaultResponse;
+      try {
+        response = await connections.deviceSendMessage(
+          null,
+          deviceObject.machineId,
+          {
+            entity: 'agent',
+            message: message.message,
+            params: { dev_id: ifc.devId }
+          },
+          configs.get('directMessageTimeout', 'number')
+        );
+      } catch (e) {
+        if (e instanceof TimeoutError) {
+          return Service.successResponse({
+            error: 'timeout',
+            deviceStatus: 'connected',
+            status: response
+          });
+        } else {
+          throw e;
         }
       }
 
-      if (interfaceType === 'wifi') {
-        interfaceInfo = { ...interfaceInfo, wifiChannels };
-      } else if (interfaceType === 'lte' && Object.keys(interfaceInfo).length > 0) {
-        let defaultApn = interfaceInfo.default_settings
-          ? interfaceInfo.default_settings.APN : null;
-        const mcc = interfaceInfo.system_info.MCC;
-        const mnc = interfaceInfo.system_info.MNC;
-
-        if (!defaultApn && mcc && mnc) {
-          const key = mcc + '-' + mnc;
-          if (apnsJson[key]) {
-            defaultApn = apnsJson[key];
+      if (!response.ok) {
+        logger.error('Failed to get interface info', {
+          params: {
+            deviceId: id, response: response.message
           }
-        }
+        });
+        return Service.rejectResponse('Failed to get interface status', 500);
+      }
 
-        interfaceInfo = {
-          ...interfaceInfo,
-          default_settings: {
-            ...interfaceInfo.default_settings,
-            APN: defaultApn
-          }
-        };
-
-        // update pin state
-        await devices.updateOne(
-          { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-          {
-            $set: {
-              'interfaces.$.deviceParams.initial_pin1_state': interfaceInfo.pin_state,
-              'interfaces.$.deviceParams.default_settings': interfaceInfo.default_settings
-            }
-          }
-        );
+      let status = response.message;
+      if (message.parseResponse) {
+        status = await message.parseResponse(status);
       }
 
       return Service.successResponse({
-        interfaceInfo
+        deviceStatus: 'connected',
+        status
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -589,7 +645,8 @@ class DevicesService {
             lines: limit || '100',
             filter: filter || 'all'
           }
-        }
+        },
+        configs.get('directMessageTimeout', 'number')
       );
 
       if (!deviceLogs.ok) {
@@ -636,10 +693,18 @@ class DevicesService {
         logs: deviceLogs.message
       });
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      if (e instanceof TimeoutError) {
+        return Service.successResponse({
+          error: 'timeout',
+          status: 'connected',
+          logs: []
+        });
+      } else {
+        return Service.rejectResponse(
+          e.message || 'Internal Server Error',
+          e.status || 500
+        );
+      }
     }
   }
 
@@ -671,7 +736,8 @@ class DevicesService {
             packets: packets || '100',
             timeout: timeout || '5'
           }
-        }
+        },
+        configs.get('directMessageTimeout', 'number')
       );
 
       if (!devicePacketTraces.ok) {
@@ -689,10 +755,18 @@ class DevicesService {
         traces: devicePacketTraces.message
       });
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      if (e instanceof TimeoutError) {
+        return Service.successResponse({
+          error: 'timeout',
+          status: 'connected',
+          traces: []
+        });
+      } else {
+        return Service.rejectResponse(
+          e.message || 'Internal Server Error',
+          e.status || 500
+        );
+      }
     }
   }
 
@@ -1170,7 +1244,8 @@ class DevicesService {
       const deviceOsRoutes = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-device-os-routes' }
+        { entity: 'agent', message: 'get-device-os-routes' },
+        configs.get('directMessageTimeout', 'number')
       );
 
       if (!deviceOsRoutes.ok) {
@@ -1190,10 +1265,19 @@ class DevicesService {
       };
       return Service.successResponse(response);
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      if (e instanceof TimeoutError) {
+        return Service.successResponse({
+          error: 'timeout',
+          status: 'connected',
+          osRoutes: [],
+          vppRoutes: []
+        });
+      } else {
+        return Service.rejectResponse(
+          e.message || 'Internal Server Error',
+          e.status || 500
+        );
+      }
     }
   }
 
@@ -2112,27 +2196,33 @@ class DevicesService {
             onError: async (jobId, err) => {
               try {
                 err = JSON.parse(err.replace(/'/g, '"'));
+                const data = mapLteNames(err.data);
                 await devices.updateOne(
                   { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
                   {
                     $set: {
-                      'interfaces.$.deviceParams.initial_pin1_state': err.data
+                      'interfaces.$.deviceParams.initial_pin1_state': data
                     }
                   }
                 );
+                return JSON.stringify({ err_msg: err.err_msg, data: data });
               } catch (err) { }
             },
             onComplete: async (jobId, response) => {
               if (response.message && response.message.data) {
+                const data = mapLteNames(response.message.data);
+                response.message.data = data;
                 // update pin state
                 await devices.updateOne(
                   { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
                   {
                     $set: {
-                      'interfaces.$.deviceParams.initial_pin1_state': response.message.data
+                      'interfaces.$.deviceParams.initial_pin1_state': data
                     }
                   }
                 );
+
+                return data;
               }
             }
           }
@@ -2199,15 +2289,29 @@ class DevicesService {
           if (!isConnected) {
             return Service.rejectResponse('Device must be connected', 500);
           }
-          const response = await connections.deviceSendMessage(
-            null,
-            deviceObject.machineId,
-            {
-              entity: 'agent',
-              message: agentAction.message,
-              params: params
+
+          let response = {};
+          try {
+            response = await connections.deviceSendMessage(
+              null,
+              deviceObject.machineId,
+              {
+                entity: 'agent',
+                message: agentAction.message,
+                params: params
+              },
+              configs.get('directMessageTimeout', 'number')
+            );
+          } catch (e) {
+            if (e instanceof TimeoutError) {
+              return Service.successResponse({
+                error: 'timeout',
+                deviceStatus: 'connected'
+              });
+            } else {
+              throw e;
             }
-          );
+          }
 
           if (!response.ok) {
             logger.error('Failed to perform interface operation', {
@@ -2217,10 +2321,10 @@ class DevicesService {
             });
 
             const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
-            const err = response.message.match(regex).join(',');
+            let err = response.message.match(regex).join(',');
 
             if (agentAction.onError) {
-              await agentAction.onError(null, err);
+              err = await agentAction.onError(null, err);
             }
 
             return Service.rejectResponse(err, 500);
@@ -2311,15 +2415,23 @@ class DevicesService {
       const result = await connections.deviceSendMessage(
         null,
         deviceObject.machineId,
-        request
+        request,
+        configs.get('directMessageTimeout', 'number')
       );
 
       return Service.successResponse(result, 200);
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      if (e instanceof TimeoutError) {
+        return Service.successResponse({
+          error: 'timeout',
+          deviceStatus: 'connected'
+        });
+      } else {
+        return Service.rejectResponse(
+          e.message || 'Internal Server Error',
+          e.status || 500
+        );
+      }
     }
   }
 
@@ -2337,5 +2449,70 @@ class DevicesService {
     }
   }
 }
+
+const mapWifiNames = agentData => {
+  const map = {
+    ap_status: 'accessPointStatus'
+  };
+  return renameKeys(agentData, map);
+};
+
+const mapLteNames = agentData => {
+  const map = {
+    sim_status: 'simStatus',
+    hardware_info: 'hardwareInfo',
+    packet_service_state: 'packetServiceState',
+    phone_number: 'phoneNumber',
+    system_info: 'systemInfo',
+    default_settings: 'defaultSettings',
+    pin_state: 'pinState',
+    connection_state: 'connectionState',
+    registration_network: 'registrationNetworkState',
+    APN: 'apn',
+    UserName: 'userName',
+    Password: 'password',
+    Auth: 'auth',
+    Vendor: 'vendor',
+    Model: 'model',
+    Imei: 'imei',
+    Downlink_speed: 'downlinkSpeed',
+    Uplink_speed: 'uplinkSpeed',
+    PIN1_RETRIES: 'pin1Retries',
+    PIN1_STATUS: 'pin1Status',
+    PUK1_RETRIES: 'puk1Retries',
+    network_error: 'networkError',
+    register_state: 'registrationState',
+    RSRP: 'rsrp',
+    RSRQ: 'rsrq',
+    RSSI: 'rssi',
+    SINR: 'sinr',
+    SNR: 'snr',
+    Cell_Id: 'cellId',
+    MCC: 'mcc',
+    MNC: 'mnc',
+    Operator_Name: 'operatorName'
+  };
+
+  return renameKeys(agentData, map);
+};
+
+const renameKeys = (obj, map) => {
+  Object.keys(obj).forEach(key => {
+    const newKey = map[key];
+    let value = obj[key];
+
+    if (typeof value === 'object') {
+      value = renameKeys(value, map);
+    }
+
+    if (newKey) {
+      obj[newKey] = value;
+      delete obj[key];
+    } else {
+      obj[key] = value;
+    }
+  });
+  return obj;
+};
 
 module.exports = DevicesService;
