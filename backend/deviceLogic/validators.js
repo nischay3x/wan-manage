@@ -272,6 +272,15 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
   // Firewall rules validation
   if (device.firewall) {
     const firewallRules = device.firewall.rules;
+    for (const rule of firewallRules) {
+      // protocols must be specified
+      if (rule.inbound !== 'nat1to1' && rule.classification.destination.ipProtoPort) {
+        const { protocols } = rule.classification.destination.ipProtoPort;
+        if (!protocols || protocols.length === 0) {
+          return { valid: false, err: 'At least one protocol must be specified' };
+        }
+      }
+    };
     const forwardedPorts = [];
     for (const rule of firewallRules.filter(r => r.inbound === 'portForward')) {
       const destPorts = rule.classification.destination.ipProtoPort.ports;
