@@ -21,14 +21,13 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'm
  */
 async function up () {
   const defaultLinkSettings = {
-    area: '0',
-    cost: ''
+    area: 0
   };
 
   const defaultOSPFGlobalSettings = {
     routerId: '',
-    helloInterval: '10',
-    deadInterval: '40'
+    helloInterval: 10,
+    deadInterval: 40
   };
 
   try {

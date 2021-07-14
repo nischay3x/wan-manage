@@ -249,8 +249,8 @@ const interfacesSchema = new Schema({
   },
   ospf: {
     area: {
-      type: String,
-      default: '0',
+      type: Number,
+      default: 0,
       required: true,
       validate: {
         validator: validators.validateOSPFArea,
@@ -269,8 +269,7 @@ const interfacesSchema = new Schema({
       maxlength: [16, 'Key length must be at most 16']
     },
     cost: {
-      type: String,
-      default: '',
+      type: Number,
       validate: {
         validator: validators.validateOSPFCost
       }
@@ -804,16 +803,16 @@ const deviceSchema = new Schema({
       }
     },
     helloInterval: {
-      type: String,
-      default: '10',
+      type: Number,
+      default: 10,
       validate: {
         validator: validators.validateOSPFInterval,
         message: props => `${props.value} should be a vaild integer`
       }
     },
     deadInterval: {
-      type: String,
-      default: '40',
+      type: Number,
+      default: 40,
       validate: {
         validator: validators.validateOSPFInterval,
         message: props => `${props.value} should be a vaild integer`

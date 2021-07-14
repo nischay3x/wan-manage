@@ -7716,6 +7716,17 @@ components:
         useDhcpDnsServers:
           description: In case of DHCP interface, use the DNS info received from DHCP server
           type: boolean
+        ospf:
+          type: object
+          properties:
+            keyId:
+              type: integer
+            key:
+              type: string
+            area:
+              type: integer
+            cost:
+              type: integer
       type: object
     DeviceVersion:
       example:
@@ -7870,10 +7881,10 @@ components:
         routerId: A.B.C.D
       properties:
         helloInterval:
-          type: string
+          type: integer
           description: The number of seconds for HelloInterval timer value
         deadInterval:
-          type: string
+          type: integer
           description: The number of seconds for RouterDeadInterval timer value used for Wait Timer and Inactivity Timer
         routerId:
           type: string
