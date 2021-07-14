@@ -279,6 +279,7 @@ class DevicesService {
         .skip(offset)
         .limit(limit)
         .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.firewall.policy', '_id name description')
         .populate('policies.multilink.policy', '_id name description');
 
       const devicesMap = result.map(item => {
