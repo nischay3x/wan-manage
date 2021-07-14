@@ -16,21 +16,21 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-class TimeoutError extends Error {
-  constructor (...params) {
+class TypedError extends Error {
+  constructor (errorType = 'error', ...params) {
     // Pass remaining arguments (including vendor specific ones) to parent constructor
     super(...params);
 
     // Maintains proper stack trace for where our error was thrown (only available on V8)
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, TimeoutError);
+      Error.captureStackTrace(this, TypedError);
     }
 
     // Custom information
-    this.type = 'timeout';
+    this.type = errorType;
   }
 };
 
 module.exports = {
-  TimeoutError
+  TypedError
 };

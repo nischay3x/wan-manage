@@ -28,7 +28,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'w
 const notificationsMgr = require('../notifications/notifications')();
 const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
-const { TimeoutError } = require('../utils/errors');
+const { TypedError } = require('../utils/errors');
 
 class Connections {
   constructor () {
@@ -797,7 +797,7 @@ class Connections {
         // Increment seq and update queue with resolve function for this promise,
         // set timeout to clear when no response received
         var tohandle = setTimeout(() => {
-          reject(new TimeoutError('Error: Send Timeout'));
+          reject(new TypedError('timeout', 'Error: Send Timeout'));
           // delete queue for this seq
           delete msgQ[seq];
         }, timeout);

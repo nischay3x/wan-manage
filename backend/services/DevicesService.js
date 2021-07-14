@@ -53,7 +53,6 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const cidr = require('cidr-tools');
-const { TimeoutError } = require('../utils/errors');
 
 class DevicesService {
   /**
@@ -454,18 +453,7 @@ class DevicesService {
         configuration
       });
     } catch (e) {
-      if (e instanceof TimeoutError) {
-        return Service.successResponse({
-          error: 'timeout',
-          status: deviceStatus,
-          configuration: []
-        });
-      } else {
-        return Service.rejectResponse(
-          e.message || 'Internal Server Error',
-          e.status || 500
-        );
-      }
+      return Service.handleRequestError(e, { status: deviceStatus, configuration: [] });
     }
   }
 
@@ -571,15 +559,7 @@ class DevicesService {
           configs.get('directMessageTimeout', 'number')
         );
       } catch (e) {
-        if (e instanceof TimeoutError) {
-          return Service.successResponse({
-            error: 'timeout',
-            deviceStatus: 'connected',
-            status: response
-          });
-        } else {
-          throw e;
-        }
+        return Service.handleRequestError(e, { deviceStatus: 'connected', status: response });
       }
 
       if (!response.ok) {
@@ -693,18 +673,7 @@ class DevicesService {
         logs: deviceLogs.message
       });
     } catch (e) {
-      if (e instanceof TimeoutError) {
-        return Service.successResponse({
-          error: 'timeout',
-          status: 'connected',
-          logs: []
-        });
-      } else {
-        return Service.rejectResponse(
-          e.message || 'Internal Server Error',
-          e.status || 500
-        );
-      }
+      return Service.handleRequestError(e, { status: 'connected', logs: [] });
     }
   }
 
@@ -755,18 +724,7 @@ class DevicesService {
         traces: devicePacketTraces.message
       });
     } catch (e) {
-      if (e instanceof TimeoutError) {
-        return Service.successResponse({
-          error: 'timeout',
-          status: 'connected',
-          traces: []
-        });
-      } else {
-        return Service.rejectResponse(
-          e.message || 'Internal Server Error',
-          e.status || 500
-        );
-      }
+      return Service.handleRequestError(e, { status: 'connected', traces: [] });
     }
   }
 
@@ -1265,19 +1223,7 @@ class DevicesService {
       };
       return Service.successResponse(response);
     } catch (e) {
-      if (e instanceof TimeoutError) {
-        return Service.successResponse({
-          error: 'timeout',
-          status: 'connected',
-          osRoutes: [],
-          vppRoutes: []
-        });
-      } else {
-        return Service.rejectResponse(
-          e.message || 'Internal Server Error',
-          e.status || 500
-        );
-      }
+      return Service.handleRequestError(e, { status: 'connected', osRoutes: [], vppRoutes: [] });
     }
   }
 
@@ -2303,14 +2249,7 @@ class DevicesService {
               configs.get('directMessageTimeout', 'number')
             );
           } catch (e) {
-            if (e instanceof TimeoutError) {
-              return Service.successResponse({
-                error: 'timeout',
-                deviceStatus: 'connected'
-              });
-            } else {
-              throw e;
-            }
+            return Service.handleRequestError(e, { deviceStatus: 'connected' });
           }
 
           if (!response.ok) {
@@ -2421,17 +2360,7 @@ class DevicesService {
 
       return Service.successResponse(result, 200);
     } catch (e) {
-      if (e instanceof TimeoutError) {
-        return Service.successResponse({
-          error: 'timeout',
-          deviceStatus: 'connected'
-        });
-      } else {
-        return Service.rejectResponse(
-          e.message || 'Internal Server Error',
-          e.status || 500
-        );
-      }
+      return Service.handleRequestError(e, { deviceStatus: 'connected' });
     }
   }
 
