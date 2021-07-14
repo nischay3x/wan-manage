@@ -45,9 +45,9 @@ async function up () {
               });
 
               summery.organizations.push({
-                orgId: org._id,
+                org: org._id,
                 current: devicesCount,
-                max: null // when org is a new one, max is always as current
+                max: null
               });
             }
             await flexibilling.updateAccountOrganizations(summery._id, summery.organizations);

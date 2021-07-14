@@ -300,14 +300,14 @@ adminRouter
       };
       account.billingInfo = accountBillingInfo;
 
-      // if accounts doesn't have organizations, the pipeline returns array without orgId
+      // if accounts doesn't have organizations, the pipeline returns array without org
       // So we filter it here
       account.organizations = account.organizations.filter(o => o.organization_id);
 
       if (summary) {
         summary.organizations.forEach(o => {
           const orgExists = account.organizations.find(org =>
-            org.organization_id.toString() === o.orgId.toString());
+            org.organization_id.toString() === o.org.toString());
 
           if (orgExists) {
             orgExists.billingInfo = {
@@ -319,7 +319,7 @@ adminRouter
             // see the important comment above
             const newOrg = createDefaultOrg();
             newOrg.deleted = true;
-            newOrg.organization_id = o.orgId.toString();
+            newOrg.organization_id = o.org.toString();
             newOrg.organization_name = 'Unknown (Deleted)';
             newOrg.billingInfo = {
               current: o.current,
