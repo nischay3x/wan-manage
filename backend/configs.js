@@ -51,6 +51,8 @@ const configEnv = {
     userRefreshTokenExpiration: 604800,
     // The time to wait for job response before declaring the job as timeout
     jobTimeout: 180000,
+    // The time to wait for deviceSendMessage response before declaring the req as timeout
+    directMessageTimeout: 15000,
     // The time to retain jobs until deleted from the database, in msec
     jobRetainTimeout: 604800000,
     // Key used for device tokens, override default with environment variable DEVICE_SECRET_KEY

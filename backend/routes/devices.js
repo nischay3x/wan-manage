@@ -397,7 +397,8 @@ devicesRouter.route('/:deviceId/configuration')
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-device-config' }
+        { entity: 'agent', message: 'get-device-config' },
+        15000
       );
 
       if (!deviceConf.ok) {
@@ -460,7 +461,8 @@ devicesRouter.route('/:deviceId/logs')
               lines: req.query.lines || '100',
               filter: req.query.filter || 'all'
             }
-          }
+          },
+          15000
         );
 
         if (!deviceLogs.ok) {
@@ -502,7 +504,8 @@ devicesRouter.route('/:deviceId/routes')
       const deviceOsRoutes = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-device-os-routes' }
+        { entity: 'agent', message: 'get-device-os-routes' },
+        15000
       );
 
       if (!deviceOsRoutes.ok) {

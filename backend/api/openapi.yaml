@@ -2882,7 +2882,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WifiAvailableNetworks'
+                $ref: '#/components/schemas/InterfaceOperationResponse'
           description: Successful operation
         "400":
           content:
@@ -7853,10 +7853,17 @@ components:
         username:
           type: string
       type: object
+    DeviceResponseStatus:
+      enum:
+      - timeout
+      - null
+      type: string
+      nullable: true
     DeviceConnectionStatus:
       enum:
       - connected
       - disconnected
+      - unknown
       type: string
     DeviceStatus:
       example:
@@ -7909,7 +7916,9 @@ components:
         - metric: 6
         - metric: 6
       properties:
-        status:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
           $ref: '#/components/schemas/DeviceConnectionStatus'
         osRoutes:
           items:
@@ -7991,7 +8000,9 @@ components:
           - {}
         status: connected
       properties:
-        status:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
           $ref: '#/components/schemas/DeviceConnectionStatus'
         configuration:
           items:
@@ -8023,28 +8034,36 @@ components:
         useDHCP:
           type: boolean
       type: object
-    WifiAvailableNetworks:
+    InterfaceOperationResponse:
       example:
-        networks: 
-        - network 1
-        - network 2
         deviceStatus: connected
       properties:
-        networks:
-          items:
-            type: string
-          type: array
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
+          $ref: '#/components/schemas/DeviceConnectionStatus'
       type: object
     InterfaceStatus:
       example:
-        status: 
+        status:
           key: value
         deviceStatus: connected
+      required:
+        - deviceStatus
+        - status
       properties:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
         status:
+          oneOf:
+            - $ref: '#/components/schemas/LteStatus'
+            - $ref: '#/components/schemas/WifiStatus'
+            - type: object
+              minProperties: 0
+              maxProperties: 0
           type: object
         deviceStatus:
-          type: string
+          $ref: '#/components/schemas/DeviceConnectionStatus'
       type: object
     DeviceLog:
       example:
@@ -8053,7 +8072,9 @@ components:
         - logs
         status: connected
       properties:
-        status:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
           $ref: '#/components/schemas/DeviceConnectionStatus'
         logs:
           items:
@@ -8067,7 +8088,9 @@ components:
         - logs
         status: connected
       properties:
-        status:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
           $ref: '#/components/schemas/DeviceStatus'
         logs:
           items:
@@ -9149,6 +9172,125 @@ components:
                     type: string
                     pattern: ^(\d{8}|)$
                     description: PUK (Personal unblocking key) Code. 8 digits
+    WifiClient:
+      type: object
+      required:
+      - mac
+      - signal
+      - ip
+      properties:
+        mac:
+          type: string
+        signal:
+          type: string
+        ip:
+          type: string
+          description: WiFi client IP
+    WifiStatus:
+      type: object
+      required:
+      - clients
+      - accessPointStatus
+      properties:
+        clients:
+          items:
+            $ref: '#/components/schemas/WifiClient'
+          type: array
+        accessPointStatus:
+          type: boolean
+    LteStatus:
+      required:
+      - signals
+      - connectivity
+      - packetServiceState
+      - hardwareInfo
+      - systemInfo
+      - simStatus
+      - defaultSettings
+      - phoneNumber
+      - pinState
+      - connectionState
+      - registrationNetworkState
+      properties:
+        signals:
+          type: object
+          properties:
+            rssi:
+              type: string
+            rsrp:
+              type: string
+            rsrq:
+              type: string
+            sinr:
+              type: string
+            snr:
+              type: string
+            text:
+              type: string
+              enum: [Marginal, Very low, Low, Good, Very Good, Excellent]
+              description: Based on RSSI value (-50 -> Excellent, -60 -> Very Good, -70 -> Godd, -80 -> Low, -85 -> Very Low, -95 -> Marginal)
+        connectivity:
+          type: boolean
+        packetServiceState:
+          type: object
+          properties:
+            uplinkSpeed:
+              type: string
+            downlinkSpeed:
+              type: string
+        hardwareInfo:
+          type: object
+          properties:
+            vendor:
+              type: string
+            model:
+              type: string
+            imei:
+              type: string
+        systemInfo:
+          type: object
+          properties:
+            cellId:
+              type: string
+            operatorName:
+              type: string
+            mcc:
+              type: string
+            mnc:
+              type: string
+        simStatus:
+          type: string
+        defaultSettings:
+          type: object
+          properties:
+            apn:
+              type: string
+            userName:
+              type: string
+            password:
+              type: string
+            auth:
+              type: string
+        phoneNumber:
+          type: string
+        pinState:
+          type: object
+          properties:
+            pin1Status:
+              type: string
+            pin1Retries:
+              type: string
+            puk1Retries:
+              type: string
+        connectionState:
+          type: string
+        registrationNetworkState:
+          type: object
+          properties:
+            registerState:
+              type: string
+            networkError:
+              type: string
     LteConfiguration:
       required:
         - apn
