@@ -39,7 +39,7 @@ const prepareParameters = (policy, device) => {
   const policyRules = policy ? policy.rules.toObject()
     .filter(r => r.enabled)
     .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
-  const deviceRules = device.firewallApplied ? device.firewall.rules.toObject()
+  const deviceRules = device.deviceSpecifficRulesEnabled ? device.firewall.rules.toObject()
     .filter(r => r.enabled) : [];
   const firewallRules = [...policyRules, ...deviceRules]
     .sort((r1, r2) => r1.priority - r2.priority);

@@ -777,9 +777,9 @@ const deviceSchema = new Schema({
       default: deviceFirewallPolicySchema
     }
   },
-  firewallApplied: {
+  deviceSpecifficRulesEnabled: {
     type: Boolean,
-    default: false
+    default: true
   },
   firewall: {
     rules: [firewallRuleSchema]
