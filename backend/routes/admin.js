@@ -296,7 +296,8 @@ adminRouter
       const summary = await flexibilling.getMaxDevicesRegisteredSummmary(accountId);
       const accountBillingInfo = {
         current: summary ? summary.current : null,
-        max: summary ? summary.max : null
+        max: summary ? summary.max : null,
+        lastBillingDate: summary.lastBillingDate
       };
       account.billingInfo = accountBillingInfo;
 
