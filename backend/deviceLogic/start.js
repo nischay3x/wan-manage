@@ -38,33 +38,34 @@ const { buildInterfaces } = require('./interfaces');
  * @return {None}
  */
 const apply = async (device, user, data) => {
+  device = device[0].toObject();
   logger.info('Starting device:', {
-    params: { machineId: device[0].machineId, user: user, data: data }
+    params: { machineId: device.machineId, user: user, data: data }
   });
 
   let organizationLanSubnets = [];
   if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-    organizationLanSubnets = await getAllOrganizationLanSubnets(device[0].org);
+    organizationLanSubnets = await getAllOrganizationLanSubnets(device.org);
   }
 
-  const deviceValidator = validateDevice(device[0], true, organizationLanSubnets);
+  const deviceValidator = validateDevice(device, true, organizationLanSubnets);
 
   if (!deviceValidator.valid) {
     logger.warn('Start command validation failed',
       {
-        params: { device: device[0], err: deviceValidator.err }
+        params: { device: device, err: deviceValidator.err }
       });
     throw new Error(deviceValidator.err);
   }
 
-  deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
+  deviceStatus.setDeviceStatsField(device.machineId, 'state', 'pending');
   const startParams = {};
-  startParams.interfaces = buildInterfaces(device[0].interfaces);
+  startParams.interfaces = buildInterfaces(device.interfaces, device.ospf);
 
   const tasks = [];
   const userName = user.username;
   const org = data.org;
-  const { machineId } = device[0];
+  const { machineId } = device;
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
 
@@ -75,12 +76,12 @@ const apply = async (device, user, data) => {
         userName,
         org,
         // Data
-        { title: 'Start device ' + device[0].hostname, tasks: tasks },
+        { title: 'Start device ' + device.hostname, tasks: tasks },
         // Response data
         {
           method: 'start',
           data: {
-            device: device[0]._id,
+            device: device._id,
             org: org
           }
         },

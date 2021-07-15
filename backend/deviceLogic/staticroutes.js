@@ -47,7 +47,12 @@ const apply = async (device, user, data) => {
 
     let message = 'add-route';
     let titlePrefix = 'Add';
-    const params = { addr: data.destination, via: data.gateway };
+
+    const params = {
+      addr: data.destination,
+      via: data.gateway,
+      redistributeViaOSPF: data.redistributeViaOSPF
+    };
 
     if (data.ifname) {
       params.devId = data.ifname;
