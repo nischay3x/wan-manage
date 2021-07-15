@@ -7721,12 +7721,14 @@ components:
           properties:
             keyId:
               type: integer
+              nullable: true
             key:
               type: string
             area:
               type: integer
             cost:
               type: integer
+              nullable: true
       type: object
     DeviceVersion:
       example:
