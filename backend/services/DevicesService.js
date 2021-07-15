@@ -135,7 +135,9 @@ class DevicesService {
       // Internal array, objects
       'labels',
       'upgradeSchedule',
-      'sync']);
+      'sync',
+      'ospf'
+    ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
 
@@ -173,7 +175,8 @@ class DevicesService {
           'deviceParams',
           'dnsServers',
           'dnsDomains',
-          'useDhcpDnsServers'
+          'useDhcpDnsServers',
+          'ospf'
         ]);
         retIf._id = retIf._id.toString();
         // if device is not connected then internet access status is unknown
@@ -190,7 +193,8 @@ class DevicesService {
           'destination',
           'gateway',
           'ifname',
-          'metric'
+          'metric',
+          'redistributeViaOSPF'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;
@@ -892,6 +896,15 @@ class DevicesService {
               );
             }
 
+            // don't allow set OSPF keyID without key and vise versa
+            const keyId = updIntf.ospf.keyId;
+            const key = updIntf.ospf.key;
+            if ((keyId && !key) || (!keyId && key)) {
+              throw new Error(
+                `(${origIntf.name}) Not allowed to save OSPF key ID without key and vice versa`
+              );
+            }
+
             if (updIntf.isAssigned && updIntf.type === 'WAN') {
               const dhcp = updIntf.dhcp;
               const servers = updIntf.dnsServers;
@@ -1232,7 +1245,8 @@ class DevicesService {
           gateway: value.gateway,
           ifname: value.ifname,
           metric: value.metric,
-          status: value.status
+          status: value.status,
+          redistributeViaOSPF: value.redistributeViaOSPF
         };
       });
       return Service.successResponse(routes);
@@ -1294,17 +1308,16 @@ class DevicesService {
     const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const deviceObject = await devices.find({
+      let device = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
       });
-      if (!deviceObject || deviceObject.length === 0) {
+      if (!device) {
         return Service.rejectResponse('Device not found');
       }
-      if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
+      if (!device.isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
       }
-      const device = deviceObject[0];
 
       // eslint-disable-next-line new-cap
       const route = new staticroutes({
@@ -1336,14 +1349,14 @@ class DevicesService {
         throw new Error(err);
       }
 
-      await devices.findOneAndUpdate(
+      device = await devices.findOneAndUpdate(
         { _id: device._id },
         {
           $push: {
             staticroutes: route
           }
         },
-        { new: true }
+        { new: true, runValidators: true }
       );
 
       const copy = Object.assign({}, staticRouteRequest);
@@ -2317,6 +2330,76 @@ class DevicesService {
       );
 
       return Service.successResponse(result, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get OSPF configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by (optional)
+   * returns OSPF configuration
+   **/
+  static async devicesIdRoutingOSPFGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }
+      );
+
+      if (!device) throw new Error('Device not found');
+
+      return Service.successResponse(device.ospf, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify OSPF configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by
+   * ospfConfigs ospfConfigs
+   * returns OSPF configuration
+   **/
+  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: deviceObject._id },
+        { $set: { ospf: ospfConfigs } },
+        { new: true, runValidators: true }
+      );
+
+      const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+        org: orgList[0],
+        newDevice: updDevice
+      });
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      return Service.successResponse(ospfConfigs, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

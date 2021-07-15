@@ -22,7 +22,7 @@ const filenamify = require('filenamify');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
 
 // Globals
-const protocols = ['OSPF', 'BGP', 'NONE'];
+const protocols = ['OSPF', 'NONE'];
 const interfaceTypes = ['WAN', 'LAN', 'NONE'];
 
 // Helper functions
@@ -165,6 +165,9 @@ const validateRuleName = (name) => { return /^[a-z0-9-_ .]{3,15}$/i.test(name ||
 
 const validateMetric = (val) => val === '' || (val && validateIsInteger(val) && +val >= 0);
 const validateMtu = (val) => val && validateIsInteger(val) && +val >= 500 && +val <= 9000;
+const validateOSPFArea = (val) => val !== null && validateIsInteger(val) && +val >= 0;
+const validateOSPFCost = (val) => val === null || (validateIsInteger(val) && +val >= 0 && +val < 65535);
+const validateOSPFInterval = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
 
 module.exports = {
   validateDHCP,
@@ -203,5 +206,8 @@ module.exports = {
   validateRuleName,
   validateMetric,
   validateMtu,
-  validateIsInteger
+  validateIsInteger,
+  validateOSPFArea,
+  validateOSPFCost,
+  validateOSPFInterval
 };
