@@ -53,6 +53,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const cidr = require('cidr-tools');
+const { TypedError, ErrorTypes } = require('../utils/errors');
 
 class DevicesService {
   /**
@@ -421,7 +422,8 @@ class DevicesService {
 
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
+          error: null,
+          deviceStatus: 'disconnected',
           configuration: []
         });
       }
@@ -449,11 +451,13 @@ class DevicesService {
         : deviceConf.message.filter(item => item.params);
 
       return Service.successResponse({
-        status: 'connected',
+        error: null,
+        deviceStatus: 'connected',
         configuration
       });
     } catch (e) {
-      return Service.handleRequestError(e, { status: deviceStatus, configuration: [] });
+      return DevicesService.handleRequestError(e,
+        { deviceStatus: deviceStatus, configuration: [] });
     }
   }
 
@@ -541,8 +545,9 @@ class DevicesService {
 
       if (!connections.isConnected(deviceObject.machineId)) {
         return Service.successResponse({
+          error: null,
           deviceStatus: 'disconnected',
-          status: message.response
+          status: message.defaultResponse
         });
       }
 
@@ -559,7 +564,8 @@ class DevicesService {
           configs.get('directMessageTimeout', 'number')
         );
       } catch (e) {
-        return Service.handleRequestError(e, { deviceStatus: 'connected', status: response });
+        return DevicesService.handleRequestError(e,
+          { deviceStatus: 'connected', status: response });
       }
 
       if (!response.ok) {
@@ -577,6 +583,7 @@ class DevicesService {
       }
 
       return Service.successResponse({
+        error: null,
         deviceStatus: 'connected',
         status
       });
@@ -610,7 +617,8 @@ class DevicesService {
 
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
+          error: null,
+          deviceStatus: 'disconnected',
           logs: []
         });
       }
@@ -669,11 +677,12 @@ class DevicesService {
       }
 
       return Service.successResponse({
-        status: 'connected',
+        error: null,
+        deviceStatus: 'connected',
         logs: deviceLogs.message
       });
     } catch (e) {
-      return Service.handleRequestError(e, { status: 'connected', logs: [] });
+      return DevicesService.handleRequestError(e, { deviceStatus: 'connected', logs: [] });
     }
   }
 
@@ -690,7 +699,8 @@ class DevicesService {
 
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
+          error: null,
+          deviceStatus: 'disconnected',
           traces: []
         });
       }
@@ -720,11 +730,12 @@ class DevicesService {
       }
 
       return Service.successResponse({
-        status: 'connected',
+        error: null,
+        deviceStatus: 'connected',
         traces: devicePacketTraces.message
       });
     } catch (e) {
-      return Service.handleRequestError(e, { status: 'connected', traces: [] });
+      return DevicesService.handleRequestError(e, { deviceStatus: 'connected', traces: [] });
     }
   }
 
@@ -1193,7 +1204,8 @@ class DevicesService {
 
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
+          error: null,
+          deviceStatus: 'disconnected',
           osRoutes: [],
           vppRoutes: []
         });
@@ -1217,13 +1229,15 @@ class DevicesService {
         return Service.rejectResponse('Failed to get device routes');
       }
       const response = {
-        status: 'connected',
+        error: null,
+        deviceStatus: 'connected',
         osRoutes: deviceOsRoutes.message,
         vppRoutes: []
       };
       return Service.successResponse(response);
     } catch (e) {
-      return Service.handleRequestError(e, { status: 'connected', osRoutes: [], vppRoutes: [] });
+      return DevicesService.handleRequestError(e,
+        { deviceStatus: 'connected', osRoutes: [], vppRoutes: [] });
     }
   }
 
@@ -2233,7 +2247,10 @@ class DevicesService {
         } else {
           const isConnected = connections.isConnected(deviceObject.machineId);
           if (!isConnected) {
-            return Service.rejectResponse('Device must be connected', 500);
+            return Service.successResponse({
+              error: null,
+              deviceStatus: 'disconnected'
+            });
           }
 
           let response = {};
@@ -2249,7 +2266,7 @@ class DevicesService {
               configs.get('directMessageTimeout', 'number')
             );
           } catch (e) {
-            return Service.handleRequestError(e, { deviceStatus: 'connected' });
+            return DevicesService.handleRequestError(e, { deviceStatus: 'connected' });
           }
 
           if (!response.ok) {
@@ -2273,11 +2290,15 @@ class DevicesService {
             await agentAction.onComplete(null, response);
           }
 
-          return Service.successResponse(response, 200);
+          return Service.successResponse({
+            ...response,
+            deviceStatus: 'connected',
+            error: null
+          }, 200);
         }
       }
 
-      return Service.successResponse({}, 200);
+      return Service.successResponse({ deviceStatus: 'connected', error: null }, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
@@ -2340,7 +2361,10 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
       if (!connections.isConnected(deviceObject.machineId)) {
-        throw new Error('Device not connected');
+        return Service.successResponse({
+          error: null,
+          deviceStatus: 'disconnected'
+        });
       }
 
       const request = {
@@ -2358,9 +2382,9 @@ class DevicesService {
         configs.get('directMessageTimeout', 'number')
       );
 
-      return Service.successResponse(result, 200);
+      return Service.successResponse({ ...result, error: null }, 200);
     } catch (e) {
-      return Service.handleRequestError(e, { deviceStatus: 'connected' });
+      return DevicesService.handleRequestError(e, { deviceStatus: 'connected' });
     }
   }
 
@@ -2375,6 +2399,17 @@ class DevicesService {
       const locationHeader = `${server}/api/jobs?status=all&ids=${
         jobsIds.join('%2C')}&org=${orgId}`;
       response.setHeader('Location', locationHeader);
+    }
+  }
+
+  static handleRequestError (e, payload, code = 200) {
+    if (e instanceof TypedError && e.code === ErrorTypes.TIMEOUT.code) {
+      return Service.successResponse({ ...payload, error: 'timeout' }, code);
+    } else {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 }

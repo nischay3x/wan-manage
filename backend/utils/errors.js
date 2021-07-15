@@ -17,7 +17,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 class TypedError extends Error {
-  constructor (errorType = 'error', ...params) {
+  constructor (errorType = ErrorTypes.ERROR, ...params) {
     // Pass remaining arguments (including vendor specific ones) to parent constructor
     super(...params);
 
@@ -27,10 +27,23 @@ class TypedError extends Error {
     }
 
     // Custom information
-    this.type = errorType;
+    this.code = errorType.code;
+    this.type = errorType.type;
+  }
+};
+
+const ErrorTypes = {
+  ERROR: {
+    code: 0,
+    type: 'error'
+  },
+  TIMEOUT: {
+    code: 1,
+    type: 'timeout'
   }
 };
 
 module.exports = {
-  TypedError
+  TypedError,
+  ErrorTypes
 };
