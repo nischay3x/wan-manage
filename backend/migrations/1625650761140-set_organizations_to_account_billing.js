@@ -50,7 +50,7 @@ async function up () {
                 summery.organizations.push({
                   org: org._id,
                   current: devicesCount,
-                  max: null
+                  max: devicesCount
                 });
               }
             }
