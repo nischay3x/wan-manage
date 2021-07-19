@@ -18,40 +18,16 @@
 const Service = require('./Service');
 const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
-const pick = require('lodash/pick');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
   /**
-   * Select the API fields from mongo Tunnel Object
+   * Extends mongo results with tunnel status info
    *
    * @param {mongo Tunnel Object} item
    */
-  static selectTunnelParams (item) {
-    // Pick relevant fields
-    const retTunnel = pick(item, [
-      'num',
-      'isActive',
-      'interfaceA',
-      'interfaceB',
-      'deviceA',
-      'deviceAconf',
-      'deviceB',
-      'deviceBconf',
-      'encryptionMethod',
-      '_id',
-      'pathlabel']);
-
-    retTunnel.interfaceADetails =
-      retTunnel.deviceA.interfaces.filter((ifc) => {
-        return ifc._id.toString() === '' + retTunnel.interfaceA;
-      })[0];
-    retTunnel.interfaceBDetails =
-      retTunnel.deviceB.interfaces.filter((ifc) => {
-        return ifc._id.toString() === '' + retTunnel.interfaceB;
-      })[0];
-
+  static selectTunnelParams (retTunnel) {
     const tunnelId = retTunnel.num;
     // Add tunnel status
     retTunnel.tunnelStatusA =
@@ -60,9 +36,6 @@ class TunnelsService {
     // Add tunnel status
     retTunnel.tunnelStatusB =
       deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
-
-    retTunnel.deviceA = pick(retTunnel.deviceA, ['_id', 'name']);
-    retTunnel.deviceB = pick(retTunnel.deviceB, ['_id', 'name']);
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -119,6 +92,81 @@ class TunnelsService {
             org: mongoose.Types.ObjectId(orgList[0]),
             isActive: true
           }
+        },
+        {
+          $lookup: {
+            from: 'devices',
+            localField: 'deviceA',
+            foreignField: '_id',
+            as: 'deviceA'
+          }
+        },
+        { $unwind: '$deviceA' },
+        {
+          $lookup: {
+            from: 'devices',
+            localField: 'deviceB',
+            foreignField: '_id',
+            as: 'deviceB'
+          }
+        },
+        { $unwind: '$deviceB' },
+        {
+          $lookup: {
+            from: 'pathlabels',
+            localField: 'pathlabel',
+            foreignField: '_id',
+            as: 'pathlabel'
+          }
+        },
+        {
+          $unwind: {
+            path: '$pathlabel',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $addFields: {
+            interfaceADetails: {
+              $filter: {
+                input: '$deviceA.interfaces',
+                as: 'f',
+                cond: {
+                  $eq: ['$$f._id', '$interfaceA']
+                }
+              }
+            },
+            interfaceBDetails: {
+              $filter: {
+                input: '$deviceB.interfaces',
+                as: 'f',
+                cond: {
+                  $eq: ['$$f._id', '$interfaceB']
+                }
+              }
+            }
+          }
+        },
+        { $unwind: '$interfaceADetails' },
+        { $unwind: '$interfaceBDetails' },
+        {
+          $project: {
+            num: 1,
+            isActive: 1,
+            'interfaceADetails.name': 1,
+            'interfaceBDetails.name': 1,
+            'deviceA.name': 1,
+            'deviceA.machineId': 1,
+            'deviceA._id': 1,
+            'deviceB.name': 1,
+            'deviceB.machineId': 1,
+            'deviceB._id': 1,
+            deviceAconf: 1,
+            deviceBconf: 1,
+            encryptionMethod: 1,
+            'pathlabel.name': 1,
+            'pathlabel.color': 1
+          }
         }
       ];
       if (sortField) {
@@ -141,18 +189,11 @@ class TunnelsService {
       });
 
       const paginated = await Tunnels.aggregate(pipeline).allowDiskUse(true);
-      if (paginationParams.length > 0) {
+      if (paginated[0].meta.length > 0) {
         response.setHeader('records-total', paginated[0].meta[0].total);
       };
 
-      const result = await Tunnels
-        .populate(paginated[0].records, [
-          { path: 'deviceA', model: 'devices' },
-          { path: 'deviceB', model: 'devices' },
-          { path: 'pathlabel', model: 'PathLabels' }
-        ]);
-
-      const tunnelMap = result.map((d) => {
+      const tunnelMap = paginated[0].records.map((d) => {
         return TunnelsService.selectTunnelParams(d);
       });
 
