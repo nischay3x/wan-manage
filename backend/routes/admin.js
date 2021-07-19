@@ -134,8 +134,17 @@ adminRouter
           from: 'tunnels',
           let: { org_id: '$organizations._id' },
           pipeline: [
-            { $match: { $expr: { $eq: ['$$org_id', '$org'] } } },
-            { $project: { isActive: 1, _id: 1 } }
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$$org_id', '$org'] },
+                    { $eq: ['$isActive', true] }
+                  ]
+                }
+              }
+            },
+            { $project: { id: 1 } }
           ],
           as: 'tunnels'
         }
@@ -147,15 +156,10 @@ adminRouter
           account_id: 1,
           country: 1,
           billing_customer_id: 1,
-          organization_id: '$organizations._id',
-          organization_name: '$organizations.name',
+          organization_id: { $ifNull: ['$organizations._id', null] },
+          organization_name: { $ifNull: ['$organizations.name', null] },
           num_devices: { $size: '$devices' },
-          num_tunnels_created: { $size: '$tunnels' },
-          num_tunnels_active: {
-            $size: {
-              $filter: { input: '$tunnels', as: 't', cond: { $eq: ['$$t.isActive', true] } }
-            }
-          }
+          num_tunnels: { $size: '$tunnels' }
         }
       },
       // group organizations by account data, and put organizations array in each account
@@ -167,14 +171,14 @@ adminRouter
             country: '$country',
             billing_customer_id: '$billing_customer_id'
           },
+          num_devices: { $sum: '$num_devices' },
+          num_tunnels: { $sum: '$num_tunnels' },
           organizations: {
             $push: {
               organization_id: '$organization_id',
               organization_name: '$organization_name',
               num_devices: '$num_devices',
-              num_tunnels_created: '$num_tunnels_created',
-              num_tunnels_active: '$num_tunnels_active',
-              devices: '$devices'
+              num_tunnels: '$num_tunnels'
             }
           }
         }
@@ -187,11 +191,19 @@ adminRouter
           account_name: '$_id.account_name',
           country: '$_id.country',
           billing_customer_id: '$_id.billing_customer_id',
-          account_num_devices: { $sum: '$organizations.num_devices' },
-          account_num_tunnels_created: { $sum: '$organizations.num_tunnels_created' },
-          account_num_tunnels_active: { $sum: '$organizations.num_tunnels_active' },
-          account_bytes: { $literal: {} },
-          organizations: '$organizations'
+          num_devices: 1,
+          num_tunnels: 1,
+          organizations: {
+            // if accounts doesn't have organizations, the pipeline returns array without org
+            // So we filter here empty objects
+            $filter: {
+              input: '$organizations',
+              as: 'org',
+              cond: {
+                $ne: ['$$org.organization_id', null]
+              }
+            }
+          }
         }
       }
     ];
@@ -282,8 +294,7 @@ adminRouter
         deleted: false,
         organization_name: '',
         num_devices: 0,
-        num_tunnels_active: 0,
-        num_tunnels_created: 0,
+        num_tunnels: 0,
         billingInfo: {
           current: 0,
           max: 0
@@ -292,6 +303,7 @@ adminRouter
     };
 
     for (const account of accounts) {
+      // fill billing
       const accountId = account.account_id;
       const summary = await flexibilling.getMaxDevicesRegisteredSummmary(accountId);
       const accountBillingInfo = {
@@ -301,36 +313,36 @@ adminRouter
       };
       account.billingInfo = accountBillingInfo;
 
-      // if accounts doesn't have organizations, the pipeline returns array without org
-      // So we filter it here
-      account.organizations = account.organizations.filter(o => o.organization_id);
-
-      if (summary) {
-        summary.organizations.forEach(o => {
-          const orgExists = account.organizations.find(org =>
-            org.organization_id.toString() === o.org.toString());
-
-          if (orgExists) {
-            orgExists.billingInfo = {
-              current: o.current,
-              max: o.max
-            };
-          } else {
-            // org might be deleted from flexiManage but exists in billing database,
-            // see the important comment above
-            const newOrg = createDefaultOrg();
-            newOrg.deleted = true;
-            newOrg.organization_id = o.org.toString();
-            newOrg.organization_name = 'Unknown (Deleted)';
-            newOrg.billingInfo = {
-              current: o.current,
-              max: o.max
-            };
-            account.organizations.push(newOrg);
-          }
-        });
+      if (!summary) {
+        continue;
       }
 
+      summary.organizations.forEach(o => {
+        // Check if organizations of billing exists in fleximanage db
+        const orgExists = account.organizations.find(org =>
+          org.organization_id.toString() === o.org.toString());
+
+        if (orgExists) {
+          orgExists.billingInfo = {
+            current: o.current,
+            max: o.max
+          };
+        } else {
+          // org might be deleted from flexiManage but exists in billing database,
+          // see the important comment above
+          const newOrg = createDefaultOrg();
+          newOrg.deleted = true;
+          newOrg.organization_id = o.org.toString();
+          newOrg.organization_name = 'Unknown (Deleted)';
+          newOrg.billingInfo = {
+            current: o.current,
+            max: o.max
+          };
+          account.organizations.push(newOrg);
+        }
+      });
+
+      // fill traffic
       const bytesPerMonth = bytesPerOrg.reduce((result, current) => {
         // check if org is under current account
         if (accountId.toString() !== current.account.toString()) return result;
@@ -375,7 +387,7 @@ adminRouter
     const result = {
       ...registeredUsers[0],
       monthlyStats: monthlyStats,
-      connectedOrgs: {},
+      connectedDevices: [],
       accounts
     };
 
@@ -384,17 +396,24 @@ adminRouter
     result.numConnectedDevices = devices.length;
     devices.forEach((device) => {
       const deviceInfo = connections.getDeviceInfo(device);
-      if (result.connectedOrgs[deviceInfo.org] === undefined) {
-        result.connectedOrgs[deviceInfo.org] = [];
-      }
       const devStatus = deviceStatus.getDeviceStatus(device);
-      result.connectedOrgs[deviceInfo.org].push({
+
+      let deviceOrg = null;
+      const account = accounts.find(a => {
+        const org = a.organizations.find(ao => ao.organization_id.toString() === deviceInfo.org);
+        if (org) {
+          deviceOrg = org;
+        }
+        return org !== null;
+      });
+      result.connectedDevices.push({
         machineID: device,
         status: devStatus ? devStatus.state : 'unknown',
-        version: deviceInfo.version
-        // ? deviceStatus.getDeviceStatus(device).state : 'unknown')
-        // ip:(deviceInfo.socket._sender._socket._peername.address || 'unknown'),
-        // port:(deviceInfo.socket._sender._socket._peername.port || 'unknown')
+        version: deviceInfo.version,
+        org: deviceInfo.org,
+        orgName: deviceOrg ? deviceOrg.organization_name : '',
+        accountId: account ? account.account_id : '',
+        accountName: account ? account.account_name : ''
       });
     });
 
