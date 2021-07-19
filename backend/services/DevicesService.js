@@ -710,6 +710,7 @@ class DevicesService {
         });
       }
 
+      timeout = timeout || 5;
       const devicePacketTraces = await connections.deviceSendMessage(
         null,
         device[0].machineId,
@@ -717,11 +718,11 @@ class DevicesService {
           entity: 'agent',
           message: 'get-device-packet-traces',
           params: {
-            packets: packets || '100',
-            timeout: timeout || '5'
+            packets: packets || 100,
+            timeout: timeout
           }
         },
-        configs.get('directMessageTimeout', 'number')
+        timeout + configs.get('directMessageTimeout', 'number')
       );
 
       if (!devicePacketTraces.ok) {
@@ -2394,7 +2395,7 @@ class DevicesService {
         null,
         deviceObject.machineId,
         request,
-        configs.get('directMessageTimeout', 'number')
+        100000 // 100 sec
       );
 
       return Service.successResponse({ ...result, error: null }, 200);
