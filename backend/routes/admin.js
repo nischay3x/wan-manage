@@ -155,6 +155,7 @@ adminRouter
           account_name: 1,
           account_id: 1,
           country: 1,
+          users: 1,
           billing_customer_id: 1,
           organization_id: { $ifNull: ['$organizations._id', null] },
           organization_name: { $ifNull: ['$organizations.name', null] },
@@ -204,6 +205,27 @@ adminRouter
               }
             }
           }
+        }
+      },
+      // lookup users by account id
+      {
+        $lookup: {
+          from: 'memberships',
+          let: { account_id: '$account_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$$account_id', '$account'] } } },
+            {
+              $lookup: {
+                from: 'users',
+                localField: 'user',
+                foreignField: '_id',
+                as: 'user'
+              }
+            },
+            { $unwind: '$user' },
+            { $project: { email: '$user.email', role: 1 } }
+          ],
+          as: 'users'
         }
       }
     ];
@@ -309,7 +331,8 @@ adminRouter
       const accountBillingInfo = {
         current: summary ? summary.current : null,
         max: summary ? summary.max : null,
-        lastBillingDate: summary.lastBillingDate
+        lastBillingDate: summary ? summary.lastBillingDate : null,
+        lastBillingMax: summary ? summary.lastBillingMax : null
       };
       account.billingInfo = accountBillingInfo;
 
@@ -325,7 +348,8 @@ adminRouter
         if (orgExists) {
           orgExists.billingInfo = {
             current: o.current,
-            max: o.max
+            max: o.max,
+            lastBillingMax: o.lastBillingMax
           };
         } else {
           // org might be deleted from flexiManage but exists in billing database,
@@ -336,7 +360,8 @@ adminRouter
           newOrg.organization_name = 'Unknown (Deleted)';
           newOrg.billingInfo = {
             current: o.current,
-            max: o.max
+            max: o.max,
+            lastBillingMax: o.lastBillingMax
           };
           account.organizations.push(newOrg);
         }
