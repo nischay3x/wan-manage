@@ -1,4 +1,4 @@
-# flexiWAN Repository
+# flexiWAN Official Repository
 
 The official respository for flexiwan is in https://gitlab.com/flexiwangroup
 
