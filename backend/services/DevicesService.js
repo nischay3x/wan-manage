@@ -2551,7 +2551,7 @@ const renameKeys = (obj, map) => {
     const newKey = map[key];
     let value = obj[key];
 
-    if (typeof value === 'object') {
+    if (value && typeof value === 'object') {
       value = renameKeys(value, map);
     }
 
