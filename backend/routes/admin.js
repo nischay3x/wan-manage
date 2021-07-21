@@ -272,7 +272,9 @@ adminRouter
     if (+req.query.page > 0) {
       dataStage.push({ $skip: req.query.page * req.query.size });
     }
-    dataStage.push({ $limit: +req.query.size });
+    if (+req.query.size > 0) {
+      dataStage.push({ $limit: +req.query.size });
+    }
 
     // run pipeline
     let accounts = await accountsModel.aggregate(accountPipeline).allowDiskUse(true);
