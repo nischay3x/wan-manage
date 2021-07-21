@@ -1481,9 +1481,9 @@ class DevicesService {
 
     if (id) match.device = mongoose.Types.ObjectId(id);
     if (startTime && endTime) {
-      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
-    } else if (startTime) match.time = { $gte: startTime };
-    else if (endTime) match.time = { $lte: endTime };
+      match.$and = [{ time: { $gte: +startTime } }, { time: { $lte: +endTime } }];
+    } else if (startTime) match.time = { $gte: +startTime };
+    else if (endTime) match.time = { $lte: +endTime };
 
     const pipeline = [
       { $match: match },
@@ -1533,9 +1533,9 @@ class DevicesService {
 
     if (id) match.device = mongoose.Types.ObjectId(id);
     if (startTime && endTime) {
-      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
-    } else if (startTime) match.time = { $gte: startTime };
-    else if (endTime) match.time = { $lte: endTime };
+      match.$and = [{ time: { $gte: +startTime } }, { time: { $lte: +endTime } }];
+    } else if (startTime) match.time = { $gte: +startTime };
+    else if (endTime) match.time = { $lte: +endTime };
 
     const pipeline = [
       { $match: match },
@@ -1588,9 +1588,9 @@ class DevicesService {
     const match = { org: mongoose.Types.ObjectId(org) };
     if (id) match.device = mongoose.Types.ObjectId(id);
     if (startTime && endTime) {
-      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
-    } else if (startTime) match.time = { $gte: startTime };
-    else if (endTime) match.time = { $lte: endTime };
+      match.$and = [{ time: { $gte: +startTime } }, { time: { $lte: +endTime } }];
+    } else if (startTime) match.time = { $gte: +startTime };
+    else if (endTime) match.time = { $lte: +endTime };
 
     const pipeline = [
       { $match: match },
