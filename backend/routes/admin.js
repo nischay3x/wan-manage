@@ -266,8 +266,6 @@ adminRouter
       dataStage.push({ $sort: { account_name: -1 } });
     }
 
-    /// CHECK SORT AND MATCH TOUGHENER!
-
     // handle pagination skip
     if (+req.query.page > 0) {
       dataStage.push({ $skip: req.query.page * req.query.size });
