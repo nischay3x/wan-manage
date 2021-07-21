@@ -30,8 +30,6 @@ async function up () {
         const accountsSummery = await flexibilling.getBillingAccountsSummary();
 
         for (const summery of accountsSummery) {
-          const lastBillingDate = summery.updatedAt;
-
           // if billing database is updated, for some reason, *before* this migration,
           // empty organization array is created automatically. If not, we create it
           if (!summery.organizations) {
@@ -54,8 +52,7 @@ async function up () {
                 });
               }
             }
-            await flexibilling.updateAccountOrganizations(
-              summery._id, lastBillingDate, summery.organizations);
+            await flexibilling.updateAccountOrganizations(summery._id, summery.organizations);
           }
         }
 
