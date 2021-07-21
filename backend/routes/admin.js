@@ -227,6 +227,14 @@ adminRouter
           ],
           as: 'users'
         }
+      },
+      {
+        $facet: {
+          all: [
+            { $count: 'account_id' }
+          ],
+          data: [] // will be populated by skip and limit
+        }
       }
     ];
 
@@ -249,22 +257,29 @@ adminRouter
       accountPipeline.unshift({ $match: filters });
     }
 
+    const dataStage = accountPipeline[accountPipeline.length - 1].$facet.data;
     // handle sort pagination
     if (req.query.sort) {
       const parsed = JSON.parse(req.query.sort);
-      accountPipeline.push({ $sort: { [parsed.key]: parsed.value === 'desc' ? -1 : 1 } });
+      dataStage.push({ $sort: { [parsed.key]: parsed.value === 'desc' ? -1 : 1 } });
     } else {
-      accountPipeline.push({ $sort: { account_name: -1 } });
+      dataStage.push({ $sort: { account_name: -1 } });
     }
+
+    /// CHECK SORT AND MATCH TOUGHENER!
 
     // handle pagination skip
     if (+req.query.page > 0) {
-      accountPipeline.push({ $skip: req.query.page * req.query.size });
+      dataStage.push({ $skip: req.query.page * req.query.size });
     }
-    accountPipeline.push({ $limit: +req.query.size });
+    dataStage.push({ $limit: +req.query.size });
 
     // run pipeline
-    const accounts = await accountsModel.aggregate(accountPipeline).allowDiskUse(true);
+    let accounts = await accountsModel.aggregate(accountPipeline).allowDiskUse(true);
+    accounts = {
+      all: accounts[0].all[0].account_id,
+      data: accounts[0].data
+    };
 
     // get devices traffic data (6 months ago)
     const sixMonths = new Date();
@@ -324,7 +339,7 @@ adminRouter
       };
     };
 
-    for (const account of accounts) {
+    for (const account of accounts.data) {
       // fill billing
       const accountId = account.account_id;
       const summary = await flexibilling.getMaxDevicesRegisteredSummmary(accountId);
@@ -424,7 +439,7 @@ adminRouter
       const devStatus = deviceStatus.getDeviceStatus(device);
 
       let deviceOrg = null;
-      const account = accounts.find(a => {
+      const account = accounts.data.find(a => {
         const org = a.organizations.find(ao => ao.organization_id.toString() === deviceInfo.org);
         if (org) {
           deviceOrg = org;
@@ -444,7 +459,7 @@ adminRouter
 
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    return res.json([result]);
+    return res.json(result);
   });
 
 // Default exports
