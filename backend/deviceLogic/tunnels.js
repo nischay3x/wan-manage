@@ -66,15 +66,16 @@ const applyTunnelAdd = async (devices, user, data) => {
       else return false;
     }) : [];
 
+  const isPeer = data.meta.peerId !== undefined && data.meta.peerId;
+
   // For each device pair, create tunnels between WAN interfaces
   const devicesLen = opDevices.length;
-  // Only allow tunnels for more than two devices
-  if (devicesLen >= 2) {
+  // For a regular tunnel we only allow more than two devices
+  if (devicesLen >= 2 || isPeer) {
     const dbTasks = [];
     const userName = user.username;
     const org = data.org;
     const { encryptionMethod } = await orgModel.findOne({ _id: org });
-
     // for now only 'none', 'ikev2' and 'psk' key exchange methods are supported
     if (!['none', 'ikev2', 'psk'].includes(encryptionMethod)) {
       logger.error('Tunnel creation failed',
@@ -148,33 +149,8 @@ const applyTunnelAdd = async (devices, user, data) => {
 
         // Create the list of interfaces for both devices.
         // Add a set of the interface's path labels
-        const deviceAIntfs = [];
-        deviceA.interfaces.forEach(intf => {
-          if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
-            const labelsSet = new Set(intf.pathlabels.map(label => {
-              // DIA interfaces cannot be used in tunnels
-              return label.type !== 'DIA' ? label._id : null;
-            }));
-            deviceAIntfs.push({
-              labelsSet: labelsSet,
-              ...intf.toObject()
-            });
-          }
-        });
-
-        const deviceBIntfs = [];
-        deviceB.interfaces.forEach(intf => {
-          if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
-            const labelsSet = new Set(intf.pathlabels.map(label => {
-              // DIA interfaces cannot be used in tunnels
-              return label.type !== 'DIA' ? label._id : null;
-            }));
-            deviceBIntfs.push({
-              labelsSet: labelsSet,
-              ...intf.toObject()
-            });
-          }
-        });
+        const deviceAIntfs = getInterfacesWithPathLabels(deviceA);
+        const deviceBIntfs = getInterfacesWithPathLabels(deviceB);
 
         const devicesInfo = {
           deviceA: { hostname: deviceA.hostname, interfaces: deviceAIntfs },
@@ -1312,6 +1288,23 @@ const prepareTunnelParams = (
   delete paramsDeviceB.devId;
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
+};
+
+const getInterfacesWithPathLabels = device => {
+  const deviceIntfs = [];
+  device.interfaces.forEach(intf => {
+    if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
+      const labelsSet = new Set(intf.pathlabels.map(label => {
+        // DIA interfaces cannot be used in tunnels
+        return label.type !== 'DIA' ? label._id : null;
+      }));
+      deviceIntfs.push({
+        labelsSet: labelsSet,
+        ...intf.toObject()
+      });
+    }
+  });
+  return deviceIntfs;
 };
 
 module.exports = {
