@@ -7725,7 +7725,10 @@ components:
             key:
               type: string
             area:
-              type: integer
+              oneOf:
+              - type: integer
+              - type: string
+                format: ipv4
             cost:
               type: integer
               nullable: true
