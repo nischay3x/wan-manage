@@ -133,6 +133,18 @@ class FlexiBilling {
     }
     return this.Instance;
   }
+
+  async getBillingAccountsSummary () {
+    return [];
+  }
+
+  async updateAccountOrganizations (id, organizations) {
+    return null;
+  }
+
+  isDbConnected () {
+    return false;
+  }
 }
 
 // check if flexibilling is required

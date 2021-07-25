@@ -18,54 +18,77 @@ const flexibilling = require('../flexibilling');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
 const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
+const useFlexiBilling = require('../configs')().get('useFlexiBilling', 'boolean');
+
+const sleep = (time) => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      return resolve();
+    }, time);
+  });
+};
 /**
  * Make any changes you need to make to the database here
  */
 async function up () {
-  return new Promise((resolve, reject) => {
-    logger.info('Wait few seconds to billing database to completely load');
-    try {
-      // wait for billing database to load
-      setTimeout(async () => {
-        const accountsSummery = await flexibilling.getBillingAccountsSummary();
+  // no need to merge on server that doesn't work with our billing system
+  if (!useFlexiBilling) {
+    return true;
+  }
 
-        for (const summery of accountsSummery) {
-          // if billing database is updated, for some reason, *before* this migration,
-          // empty organization array is created automatically. If not, we create it
-          if (!summery.organizations) {
-            summery.organizations = [];
-          }
+  // It takes time for the billing database to load
+  let count = 0;
+  do {
+    console.log('waiting to flexiBilling database to load');
+    await sleep(2000);
+    if (count < 10) {
+      count++;
+    } else {
+      const errMsg = 'The billing database was not initialized after 20 seconds';
+      logger.error(errMsg, { params: { collections: ['devices'], operation: 'up' } });
+      throw new Error(errMsg);
+    }
+  } while (flexibilling.isDbConnected() === false);
 
-          // update org array if empty
-          if (summery.organizations.length === 0) {
-            const orgs = await orgModel.find({ account: summery.account }).lean();
-            for (const org of orgs) {
-              const devicesCount = await devices.countDocuments({
-                account: summery.account, org: org._id
-              });
+  // The billing database initialized, we can start the migration
+  try {
+    const accountsSummery = await flexibilling.getBillingAccountsSummary();
 
-              if (devicesCount > 0) {
-                summery.organizations.push({
-                  org: org._id,
-                  current: devicesCount,
-                  max: devicesCount
-                });
-              }
-            }
-            await flexibilling.updateAccountOrganizations(summery._id, summery.organizations);
+    for (const summery of accountsSummery) {
+      // if billing database is updated, for some reason, *before* this migration,
+      // empty organization array is created automatically. If not, we create it
+      if (!summery.organizations) {
+        summery.organizations = [];
+      }
+
+      // update org array if empty
+      if (summery.organizations.length === 0) {
+        const orgs = await orgModel.find({ account: summery.account }).lean();
+        for (const org of orgs) {
+          const devicesCount = await devices.countDocuments({
+            account: summery.account, org: org._id
+          });
+
+          if (devicesCount > 0) {
+            summery.organizations.push({
+              org: org._id,
+              current: devicesCount,
+              max: devicesCount
+            });
           }
         }
-
-        return resolve();
-      }, 8000); // it takes time to billing database to loaded
-    } catch (err) {
-      logger.error('Database migration failed', {
-        params: { collections: ['devices'], operation: 'up', err: err.message }
-      });
-      return reject(err);
+        await flexibilling.updateAccountOrganizations(summery._id, summery.organizations);
+      }
     }
-  });
-}
+
+    return true;
+  } catch (err) {
+    logger.error('Database migration failed', {
+      params: { collections: ['devices'], operation: 'up', err: err.message }
+    });
+    throw new Error(err);
+  }
+};
 
 /**
  * Make any changes that UNDO the up function side effects here (if possible)
