@@ -900,6 +900,26 @@ class DevicesService {
                   }
                 }
               }
+              if (!updIntf.isAssigned || origIntf.type !== updIntf.type) {
+                // check firewall rules
+                if (deviceRequest.firewall) {
+                  const { rules } = deviceRequest.firewall;
+                  if (rules.some(r => r.direction === 'inbound' &&
+                    r.classification.destination.ipProtoPort.interface === origIntf.devId)) {
+                    throw new Error(
+                      `Not allowed to change WAN interface ${origIntf.name},\
+                      it is reffered in inbound firewall rules.`
+                    );
+                  }
+                  if (rules.some(r => r.direction === 'outbound' &&
+                    r.interfaces.includes(origIntf.devId))) {
+                    throw new Error(
+                      `Not allowed to change LAN interface ${origIntf.name},\
+                      it is reffered in outbound firewall rules.`
+                    );
+                  }
+                }
+              }
             }
 
             // Unassigned interfaces are not controlled from manage
