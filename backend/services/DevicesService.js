@@ -780,10 +780,16 @@ class DevicesService {
         account: delDevices[0].account
       }).session(session);
 
+      const orgCount = await devices.countDocuments({
+        account: delDevices[0].account, org: orgList[0]
+      }).session(session);
+
       // Unregister a device (by adding -1)
       await flexibilling.registerDevice({
         account: delDevices[0].account,
+        org: orgList[0],
         count: deviceCount,
+        orgCount: orgCount,
         increment: -1
       }, session);
 
