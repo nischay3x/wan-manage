@@ -141,10 +141,6 @@ class FlexiBilling {
   async updateAccountOrganizations (id, organizations) {
     return null;
   }
-
-  isDbConnected () {
-    return false;
-  }
 }
 
 // check if flexibilling is required
