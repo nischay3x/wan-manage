@@ -20,37 +20,15 @@ const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
 const useFlexiBilling = require('../configs')().get('useFlexiBilling', 'boolean');
 
-const sleep = (time) => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      return resolve();
-    }, time);
-  });
-};
 /**
  * Make any changes you need to make to the database here
  */
 async function up () {
-  // no need to merge on server that doesn't work with our billing system
+  // no need to migrate on server that doesn't work with our billing system
   if (!useFlexiBilling) {
     return true;
   }
 
-  // It takes time for the billing database to load
-  let count = 0;
-  do {
-    console.log('waiting to flexiBilling database to load');
-    await sleep(2000);
-    if (count < 10) {
-      count++;
-    } else {
-      const errMsg = 'The billing database was not initialized after 20 seconds';
-      logger.error(errMsg, { params: { collections: ['devices'], operation: 'up' } });
-      throw new Error(errMsg);
-    }
-  } while (flexibilling.isDbConnected() === false);
-
-  // The billing database initialized, we can start the migration
   try {
     const accountsSummery = await flexibilling.getBillingAccountsSummary();
 
