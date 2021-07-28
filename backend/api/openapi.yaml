@@ -1373,6 +1373,14 @@ paths:
         schema:
           type: string
         style: form
+      - description: Array of filter strings in format 'key|operation|value'
+        explode: true
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: array
+        style: form
       - description: Organization to be filtered by
         explode: true
         in: query

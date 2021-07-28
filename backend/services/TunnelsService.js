@@ -82,8 +82,10 @@ class TunnelsService {
    * @param {Integer} limit The numbers of items to return (optional)
    * @param {String} sortField The field by which the data will be ordered (optional)
    * @param {String} sortOrder Sorting order [asc|desc] (optional)
+   * @param {Array} filters Array of filter strings in format 'key|operation|value' (optional)
    **/
-  static async tunnelsGET ({ org, offset, limit, sortField, sortOrder }, { user }, response) {
+  static async tunnelsGET (requestParams, { user }, response) {
+    const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const pipeline = [
@@ -169,6 +171,35 @@ class TunnelsService {
           }
         }
       ];
+      if (filters) {
+        const matchFilters = {};
+        for (const filter of Array.isArray(filters) ? filters : [filters]) {
+          const [key, operation, value] = filter.split('|');
+          if (value) {
+            switch (operation) {
+              case '==':
+                matchFilters[key] = value;
+                break;
+              case '!=':
+                matchFilters[key] = { $ne: value };
+                break;
+              case 'contains':
+                matchFilters[key] = { $regex: value };
+                break;
+              case '!contains':
+                matchFilters[key] = { $regex: '^((?!' + value + ').)*$' };
+                break;
+              default:
+                break;
+            }
+          }
+        }
+        if (Object.keys(matchFilters).length > 0) {
+          pipeline.push({
+            $match: matchFilters
+          });
+        }
+      }
       if (sortField) {
         const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
         pipeline.push({
