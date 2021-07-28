@@ -25,6 +25,7 @@ const usersModel = require('../models/users');
 const accountsModel = require('../models/accounts');
 const flexibilling = require('../flexibilling');
 const { deviceAggregateStats } = require('../models/analytics/deviceStats');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 const adminRouter = express.Router();
 adminRouter.use(bodyParser.json());
@@ -238,189 +239,243 @@ adminRouter
       }
     ];
 
-    // handle filter pagination
-    if (req.query.filters) {
-      const parsed = JSON.parse(req.query.filters);
-
-      const mapping = {
-        account_name: 'name'
-      };
-
-      const filters = {};
-      for (const key in parsed) {
-        if (key in mapping) {
-          filters[mapping[key]] = { $regex: parsed[key], $options: 'i' };
-        }
-      }
-
-      // we put filters at the beginning of the pipeline to reduce computing resources
-      accountPipeline.unshift({ $match: filters });
-    }
-
-    const dataStage = accountPipeline[accountPipeline.length - 1].$facet.data;
-    // handle sort pagination
-    if (req.query.sort) {
-      const parsed = JSON.parse(req.query.sort);
-      dataStage.push({ $sort: { [parsed.key]: parsed.value === 'desc' ? -1 : 1 } });
-    } else {
-      dataStage.push({ $sort: { account_name: -1 } });
-    }
-
-    // handle pagination skip
-    if (+req.query.page > 0) {
-      dataStage.push({ $skip: req.query.page * req.query.size });
-    }
-    if (+req.query.size > 0) {
-      dataStage.push({ $limit: +req.query.size });
-    }
-
-    // run pipeline
-    let accounts = await accountsModel.aggregate(accountPipeline).allowDiskUse(true);
-    accounts = {
-      all: accounts[0].all[0].account_id,
-      data: accounts[0].data
+    // initial accounts response format
+    const accounts = {
+      all: 0,
+      data: []
     };
 
-    // get devices traffic data (6 months ago)
-    const sixMonths = new Date();
-    sixMonths.setMonth(sixMonths.getMonth() - 6);
-    const bytesPerOrg = await deviceAggregateStats.aggregate([
-      { $match: { month: { $gte: sixMonths.getTime() } } },
-      { $project: { month: 1, orgs: { $objectToArray: '$stats.orgs' } } },
-      { $unwind: '$orgs' },
-      {
-        $project: {
-          month: 1,
-          org: '$orgs.k',
-          account: '$orgs.v.account',
-          devices: { $objectToArray: '$orgs.v.devices' }
-        }
-      },
-      { $unwind: '$devices' },
-      { $project: { month: 1, org: 1, account: 1, bytes: '$devices.v.bytes' } },
-      {
-        $group: {
-          _id: { org: '$org', month: '$month', account: '$account' },
-          device_bytes: { $sum: '$bytes' }
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          org: '$_id.org',
-          account: '$_id.account',
-          month: { $toDate: '$_id.month' },
-          device_bytes: '$device_bytes'
-        }
-      }
-    ]).allowDiskUse(true);
+    try {
+      // handle filter pagination
+      if (req.query.filters) {
+        const parsed = JSON.parse(req.query.filters);
 
-    // !!! IMPORTANT INFORMATION !!!!
-    // three databases are involved here - flexiManage, flexiBilling, and flexiwanAnalytics
-    // When an organization is removed from flexiManage DB,
-    // we don't remove it from billing and analytics.
-    // If an organizations doesn't include in the `accounts` array,
-    // but exists in `summary` (flexiBilling) or in `bytesPerOrg` (flexiwanAnalytics) -
-    // it means that this org is removed from flexiManage.
-    // In such a case, we fill the accounts array with this deleted organization and mark it
-    // with `deleted=true`. The reason is to let the admin know about the traffic and devices count.
-    // `createDefaultOrg()` is the template for organization based on the pipeline above
-    const createDefaultOrg = () => {
-      return {
-        organization_id: '',
-        deleted: false,
-        organization_name: '',
-        num_devices: 0,
-        num_tunnels: 0,
-        billingInfo: {
-          current: 0,
-          max: 0
+        const mapping = {
+          account_name: 'name'
+        };
+
+        const filters = {};
+        for (const key in parsed) {
+          if (key in mapping) {
+            filters[mapping[key]] = { $regex: parsed[key], $options: 'i' };
+          }
         }
-      };
-    };
 
-    for (const account of accounts.data) {
-      // fill billing
-      const accountId = account.account_id;
-      const summary = await flexibilling.getMaxDevicesRegisteredSummmary(accountId);
-      const accountBillingInfo = {
-        current: summary ? summary.current : null,
-        max: summary ? summary.max : null,
-        lastBillingDate: summary ? summary.lastBillingDate : null,
-        lastBillingMax: summary ? summary.lastBillingMax : null
-      };
-      account.billingInfo = accountBillingInfo;
-
-      if (!summary) {
-        continue;
+        // we put filters at the beginning of the pipeline to reduce computing resources
+        accountPipeline.unshift({ $match: filters });
       }
 
-      summary.organizations.forEach(o => {
-        // Check if organizations of billing exists in fleximanage db
-        const orgExists = account.organizations.find(org =>
-          org.organization_id.toString() === o.org.toString());
+      const dataStage = accountPipeline[accountPipeline.length - 1].$facet.data;
+      // handle sort pagination
+      if (req.query.sort) {
+        const parsed = JSON.parse(req.query.sort);
+        dataStage.push({ $sort: { [parsed.key]: parsed.value === 'desc' ? -1 : 1 } });
+      } else {
+        dataStage.push({ $sort: { account_name: -1 } });
+      }
 
-        if (orgExists) {
-          orgExists.billingInfo = {
-            current: o.current,
-            max: o.max,
-            lastBillingMax: o.lastBillingMax
-          };
-        } else {
-          // org might be deleted from flexiManage but exists in billing database,
-          // see the important comment above
-          const newOrg = createDefaultOrg();
-          newOrg.deleted = true;
-          newOrg.organization_id = o.org.toString();
-          newOrg.organization_name = 'Unknown (Deleted)';
-          newOrg.billingInfo = {
-            current: o.current,
-            max: o.max,
-            lastBillingMax: o.lastBillingMax
-          };
-          account.organizations.push(newOrg);
+      // handle pagination skip
+      if (+req.query.page > 0) {
+        dataStage.push({ $skip: req.query.page * req.query.size });
+      }
+      if (+req.query.size > 0) {
+        dataStage.push({ $limit: +req.query.size });
+      }
+
+      // run pipeline
+      const accountsData = await accountsModel.aggregate(accountPipeline).allowDiskUse(true);
+
+      accounts.all = accountsData[0].all[0].account_id;
+      accounts.data = accountsData[0].data;
+
+      // get devices traffic data (6 months ago)
+      const sixMonths = new Date();
+      sixMonths.setMonth(sixMonths.getMonth() - 6);
+      const bytesPerOrg = await deviceAggregateStats.aggregate([
+        { $match: { month: { $gte: sixMonths.getTime() } } },
+        { $project: { month: 1, orgs: { $objectToArray: '$stats.orgs' } } },
+        { $unwind: '$orgs' },
+        {
+          $project: {
+            month: 1,
+            org: '$orgs.k',
+            account: '$orgs.v.account',
+            devices: { $objectToArray: '$orgs.v.devices' }
+          }
+        },
+        { $unwind: '$devices' },
+        { $project: { month: 1, org: 1, account: 1, bytes: '$devices.v.bytes' } },
+        {
+          $group: {
+            _id: { org: '$org', month: '$month', account: '$account' },
+            device_bytes: { $sum: '$bytes' }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            org: '$_id.org',
+            account: '$_id.account',
+            month: { $toDate: '$_id.month' },
+            device_bytes: '$device_bytes'
+          }
         }
-      });
+      ]).allowDiskUse(true);
 
-      // fill traffic
-      const bytesPerMonth = bytesPerOrg.reduce((result, current) => {
-        // check if org is under current account
-        if (accountId.toString() !== current.account.toString()) return result;
-
-        let org = account.organizations.find(o => o.organization_id.toString() === current.org);
-        if (!org) {
-          // org might be deleted from flexiManage but exists in statistic database
-          // see the important comment above
-          org = createDefaultOrg();
-          org.deleted = true;
-          org.organization_id = current.org;
-          org.organization_name = 'Unknown (Deleted)';
-          org.billingInfo = {
+      // !!! IMPORTANT INFORMATION !!!!
+      // three databases are involved here - flexiManage, flexiBilling, and flexiwanAnalytics
+      // When an organization is removed from flexiManage DB,
+      // we don't remove it from billing and analytics.
+      // If an organizations doesn't include in the `accounts` array,
+      // but exists in `summary` (flexiBilling) or in `bytesPerOrg` (flexiwanAnalytics) -
+      // it means that this org is removed from flexiManage.
+      // In such a case, we fill the accounts array with this deleted organization and mark it
+      // with `deleted=true`.
+      // The reason is to let the admin know about the traffic and devices count.
+      // `createDefaultOrg()` is the template for organization based on the pipeline above
+      const createDefaultOrg = () => {
+        return {
+          organization_id: '',
+          deleted: false,
+          organization_name: '',
+          num_devices: 0,
+          num_tunnels: 0,
+          billingInfo: {
             current: 0,
             max: 0
+          }
+        };
+      };
+
+      // mapping orgs to account - orgId -> accountId
+      const orgs = {};
+
+      for (const account of accounts.data) {
+        const accountId = account.account_id;
+
+        // fill global orgs mapping with account organizations
+        account.organizations.forEach(ao => {
+          orgs[ao.organization_id.toString()] = accountId.toString();
+        });
+
+        try {
+          // fill billing
+          const summary = await flexibilling.getMaxDevicesRegisteredSummmary(accountId);
+          const accountBillingInfo = {
+            current: summary ? summary.current : null,
+            max: summary ? summary.max : null,
+            lastBillingDate: summary ? summary.lastBillingDate : null,
+            lastBillingMax: summary ? summary.lastBillingMax : null
           };
-          account.organizations.push(org);
-          org = account.organizations[account.organizations.length - 1]; // get pushed item
+          account.billingInfo = accountBillingInfo;
+
+          if (!summary) {
+            continue;
+          }
+
+          summary.organizations.forEach(o => {
+            // Check if organizations of billing exists in fleximanage db
+            const orgExists = account.organizations.find(org =>
+              org.organization_id.toString() === o.org.toString());
+
+            if (orgExists) {
+              orgExists.billingInfo = {
+                current: o.current,
+                max: o.max,
+                lastBillingMax: o.lastBillingMax
+              };
+            } else {
+              // org might be deleted from flexiManage but exists in billing database,
+              // see the important comment above
+              const newOrg = createDefaultOrg();
+              newOrg.deleted = true;
+              newOrg.organization_id = o.org.toString();
+              newOrg.organization_name = 'Unknown (Deleted)';
+              newOrg.billingInfo = {
+                current: o.current,
+                max: o.max,
+                lastBillingMax: o.lastBillingMax
+              };
+              account.organizations.push(newOrg);
+            }
+          });
+        } catch (err) {
+          logger.error('Error in processing account billing data', {
+            params: { error: err.message, account }
+          });
+          throw err;
         }
 
-        const monthName = current.month.toLocaleDateString();
+        // fill traffic
+        const bytesPerMonth = bytesPerOrg.reduce((result, current) => {
+          try {
+            // Until July 2021, the statistics database kept only the organization ID,
+            // without the account ID.
+            // That's why there are organizations that we are trying to associate
+            // with an account manually.
 
-        // add traffic data per organization
-        if (!org.bytes) {
-          org.bytes = {};
-        }
-        org.bytes[monthName] = current.device_bytes;
+            let orgAccountId = current.account ? current.account.toString() : null;
+            // If account is empty, try to get it from global mapping object
+            // At this point, the organizations of current account already populated
+            // So we can try to get it.
+            if (!orgAccountId) {
+              orgAccountId = orgs[current.org];
+            }
 
-        if (!result[monthName]) {
-          result[monthName] = 0;
-        }
+            // If the organization is deleted from the flexiManage database
+            // and remains only in the statistics database,
+            // we have no way to associate it, and we continue without it.
+            if (!orgAccountId) {
+              return result;
+            }
 
-        result[monthName] += current.device_bytes;
+            // check if org is under current account
+            if (accountId.toString() !== orgAccountId) return result;
 
-        return result;
-      }, {});
+            let org = account.organizations.find(o => o.organization_id.toString() === current.org);
+            if (!org) {
+              // org might be deleted from flexiManage but exists in statistic database
+              // see the important comment above
+              org = createDefaultOrg();
+              org.deleted = true;
+              org.organization_id = current.org;
+              org.organization_name = 'Unknown (Deleted)';
+              org.billingInfo = {
+                current: 0,
+                max: 0
+              };
+              account.organizations.push(org);
+              org = account.organizations[account.organizations.length - 1]; // get pushed item
+            }
 
-      account.account_bytes = bytesPerMonth;
+            const monthName = current.month.toLocaleDateString();
+
+            // add traffic data per organization
+            if (!org.bytes) {
+              org.bytes = {};
+            }
+            org.bytes[monthName] = current.device_bytes;
+
+            if (!result[monthName]) {
+              result[monthName] = 0;
+            }
+
+            result[monthName] += current.device_bytes;
+
+            return result;
+          } catch (err) {
+            logger.error('Error in processing account traffic data', {
+              params: { error: err.message, bytesPerOrg, result, current, account }
+            });
+            throw err;
+          }
+        }, {});
+
+        account.account_bytes = bytesPerMonth;
+      }
+    } catch (err) {
+      logger.error('Error in processing accounts data', { params: { error: err.message } });
+      return res.status(500).send('Failed to process accounts data');
     }
 
     // Return  static info from:
