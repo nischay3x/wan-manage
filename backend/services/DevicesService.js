@@ -261,7 +261,7 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
-    retDevice.deviceSpecifficRulesEnabled = item.deviceSpecifficRulesEnabled;
+    retDevice.deviceSpecificRulesEnabled = item.deviceSpecificRulesEnabled;
     retDevice.firewall = {
       rules: retFirewallRules
     };
@@ -1175,7 +1175,7 @@ class DevicesService {
       const updRules = updDevice.firewall.rules.toObject();
       const origRules = origDevice.firewall.rules.toObject();
       const rulesModified =
-        origDevice.deviceSpecifficRulesEnabled !== updDevice.deviceSpecifficRulesEnabled ||
+        origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
         !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
           isEqual(
             omit(updatedRule, ['_id', 'name', 'classification']),
@@ -1203,7 +1203,7 @@ class DevicesService {
         };
         const jobs = await queueFirewallPolicyJob(
           [updDevice],
-          'install',
+          firewallPolicy || updDevice.deviceSpecificRulesEnabled ? 'install' : 'uninstall',
           requestTime,
           firewallPolicy,
           user,
