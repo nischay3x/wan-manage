@@ -286,7 +286,11 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     const internalPorts = {};
     for (const rule of firewallRules.filter(r => r.inbound === 'portForward')) {
       const { internalIP, internalPortStart, classification } = rule;
-      const { ports: destPorts, interface: wanIfc } = classification.destination.ipProtoPort;
+      const { source, destination } = classification;
+      if (!source && !destination) {
+        return { valid: false, message: 'Source or destination must be specified' };
+      }
+      const { ports: destPorts, interface: wanIfc } = destination.ipProtoPort;
       if (isEmpty(internalIP)) {
         return { valid: false, err: 'Internal IP address must be specified' };
       }
