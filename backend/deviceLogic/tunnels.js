@@ -41,6 +41,170 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   return intersection;
 };
 
+const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
+  const devicesLen = opDevices.length;
+  const tasks = [];
+
+  const { encryptionMethod } = await orgModel.findOne({ _id: org });
+  // for now only 'none', 'ikev2' and 'psk' key exchange methods are supported
+  if (!['none', 'ikev2', 'psk'].includes(encryptionMethod)) {
+    logger.error('Tunnel creation failed',
+      { params: { reason: 'Not supported key exchange method', encryptionMethod } }
+    );
+    throw new Error('Not supported key exchange method');
+  }
+
+  for (let idxA = 0; idxA < devicesLen - 1; idxA++) {
+    for (let idxB = idxA + 1; idxB < devicesLen; idxB++) {
+      const deviceA = opDevices[idxA];
+      const deviceB = opDevices[idxB];
+
+      // Tunnels are supported only between devices of the same router version
+      const [verA, verB] = [deviceA.versions.router, deviceB.versions.router];
+      if (!routerVersionsCompatible(verA, verB)) {
+        logger.warn('Tunnel creation failed', {
+          params: { reason: 'Router version mismatch', versions: { verA: verA, verB: verB } }
+        });
+        reasons.add('Router version mismatch for some devices.');
+        continue;
+      }
+
+      // only devices with version of agent >= 4
+      // are supported for creating tunnels with none encryption method
+      if (encryptionMethod === 'none') {
+        let noneEncryptionValidated = true;
+        for (const device of [deviceA, deviceB]) {
+          const majorAgentVersion = getMajorVersion(device.versions.agent);
+          if (majorAgentVersion < 4) {
+            const reason = 'None encryption method not supported';
+            logger.warn('Tunnel creation failed', {
+              params: { reason, machineId: device.machineId }
+            });
+            reasons.add(`${reason} on some of devices.`);
+            noneEncryptionValidated = false;
+          }
+        }
+        if (!noneEncryptionValidated) {
+          continue;
+        }
+      }
+
+      // only devices with version of agent >= 4 and valid certificates
+      // are supported for creating tunnels with IKEv2 key exchange method
+      if (encryptionMethod === 'ikev2') {
+        let ikev2Validated = true;
+        for (const device of [deviceA, deviceB]) {
+          const { valid, reason } = validateIKEv2(device);
+          if (!valid) {
+            logger.warn('Tunnel creation failed', {
+              params: { reason, machineId: device.machineId }
+            });
+            reasons.add(`${reason} on some of devices.`);
+            ikev2Validated = false;
+          }
+        }
+        if (!ikev2Validated) {
+          continue;
+        }
+      }
+
+      // Create the list of interfaces for both devices.
+      // Add a set of the interface's path labels
+      const deviceAIntfs = getInterfacesWithPathLabels(deviceA);
+      const deviceBIntfs = getInterfacesWithPathLabels(deviceB);
+
+      const devicesInfo = {
+        deviceA: { hostname: deviceA.hostname, interfaces: deviceAIntfs },
+        deviceB: { hostname: deviceB.hostname, interfaces: deviceBIntfs }
+      };
+      logger.debug('Connecting tunnel between devices', { params: { devicesInfo } });
+
+      // Create a tunnel between each WAN interface on device A to
+      // each of the WAN interfaces on device B according to the path
+      // labels assigned to the interfaces. If the list of path labels
+      // IDs contains the ID 'FFFFFF', create tunnels between all common
+      // path labels across all WAN interfaces.
+      // TBD: key exchange should be dynamic
+      const specifiedLabels = new Set(pathLabels);
+      const createForAllLabels = specifiedLabels.has('FFFFFF');
+      if (deviceAIntfs.length && deviceBIntfs.length) {
+        for (let idxA = 0; idxA < deviceAIntfs.length; idxA++) {
+          for (let idxB = 0; idxB < deviceBIntfs.length; idxB++) {
+            const wanIfcA = deviceAIntfs[idxA];
+            const wanIfcB = deviceBIntfs[idxB];
+            const ifcALabels = wanIfcA.labelsSet;
+            const ifcBLabels = wanIfcB.labelsSet;
+
+            // If no path labels were selected, create a tunnel
+            // only if both interfaces aren't assigned with labels
+            if (specifiedLabels.size === 0) {
+              if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
+                // If a tunnel already exists, skip the configuration
+                const tunnelFound = await getTunnel(org, null, wanIfcA, wanIfcB);
+                if (tunnelFound.length > 0) {
+                  logger.debug('Found tunnel', {
+                    params: { tunnel: tunnelFound }
+                  });
+                  reasons.add('Some tunnels exist already.');
+                } else {
+                  tasks.push(generateTunnelPromise(userName, org, null,
+                    { ...deviceA.toObject() }, { ...deviceB.toObject() },
+                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
+                }
+              } else {
+                reasons.add(
+                  'No Path Labels specified but some devices have interfaces with Path Labels.'
+                );
+              }
+            } else {
+              // Create a list of path labels that are common to both interfaces.
+              const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
+              if (labelsIntersection.length === 0) {
+                reasons.add('Some devices have interfaces without specified Path Labels.');
+              }
+              for (const label of labelsIntersection) {
+                // Skip tunnel if the label is not included in
+                // the list of labels specified by the user
+                const shouldSkipTunnel =
+                  !createForAllLabels &&
+                  !specifiedLabels.has(label);
+                if (shouldSkipTunnel) {
+                  reasons.add('Some devices have interfaces without specified Path Labels.');
+                  continue;
+                }
+                // If a tunnel already exists, skip the configuration
+                const tunnelFound = await getTunnel(org, label, wanIfcA, wanIfcB);
+                if (tunnelFound.length > 0) {
+                  logger.debug('Found tunnel', {
+                    params: { tunnel: tunnelFound }
+                  });
+                  reasons.add('Some tunnels exist already.');
+                  continue;
+                }
+                // Use a copy of devices objects as promise runs later
+                tasks.push(generateTunnelPromise(userName, org, label,
+                  { ...deviceA.toObject() }, { ...deviceB.toObject() },
+                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
+              }
+            }
+          };
+        };
+      } else {
+        logger.info('Failed to connect tunnel between devices', {
+          params: {
+            deviceA: deviceA.hostname,
+            deviceB: deviceB.hostname,
+            reason: 'no valid WAN interfaces'
+          }
+        });
+        reasons.add('Some devices have no valid WAN interfaces.');
+      }
+    }
+  }
+
+  return tasks;
+};
+
 /**
  * This function is called when adding new tunnels
  * @async
@@ -66,7 +230,10 @@ const applyTunnelAdd = async (devices, user, data) => {
       else return false;
     }) : [];
 
-  const isPeer = data.meta.peerId !== undefined && data.meta.peerId;
+  const isPeer = data.tunnelType === 'peer';
+  if (isPeer && (!data.peers || !Array.isArray(data.peers) || data.peers.length === 0)) {
+    throw new Error('Peers identifiers were not specified');
+  }
 
   // For each device pair, create tunnels between WAN interfaces
   const devicesLen = opDevices.length;
@@ -75,170 +242,18 @@ const applyTunnelAdd = async (devices, user, data) => {
     const dbTasks = [];
     const userName = user.username;
     const org = data.org;
-    const { encryptionMethod } = await orgModel.findOne({ _id: org });
-    // for now only 'none', 'ikev2' and 'psk' key exchange methods are supported
-    if (!['none', 'ikev2', 'psk'].includes(encryptionMethod)) {
-      logger.error('Tunnel creation failed',
-        { params: { reason: 'Not supported key exchange method', encryptionMethod } }
-      );
-      throw new Error('Not supported key exchange method');
-    }
 
     // array of common reasons of not created tunnels for some devices
     // used to build a response message
-    const reasons = [];
-    const addReason = (reason) => {
-      if (!reasons.includes(reason)) {
-        reasons.push(reason);
-      }
-    };
+    const reasons = new Set(); // unique messages array
 
-    for (let idxA = 0; idxA < devicesLen - 1; idxA++) {
-      for (let idxB = idxA + 1; idxB < devicesLen; idxB++) {
-        const deviceA = opDevices[idxA];
-        const deviceB = opDevices[idxB];
-
-        // Tunnels are supported only between devices of the same router version
-        const [verA, verB] = [deviceA.versions.router, deviceB.versions.router];
-        if (!routerVersionsCompatible(verA, verB)) {
-          logger.warn('Tunnel creation failed', {
-            params: { reason: 'Router version mismatch', versions: { verA: verA, verB: verB } }
-          });
-          addReason('Router version mismatch for some devices.');
-          continue;
-        }
-
-        // only devices with version of agent >= 4
-        // are supported for creating tunnels with none encryption method
-        if (encryptionMethod === 'none') {
-          let noneEncryptionValidated = true;
-          for (const device of [deviceA, deviceB]) {
-            const majorAgentVersion = getMajorVersion(device.versions.agent);
-            if (majorAgentVersion < 4) {
-              const reason = 'None encryption method not supported';
-              logger.warn('Tunnel creation failed', {
-                params: { reason, machineId: device.machineId }
-              });
-              addReason(`${reason} on some of devices.`);
-              noneEncryptionValidated = false;
-            }
-          }
-          if (!noneEncryptionValidated) {
-            continue;
-          }
-        }
-
-        // only devices with version of agent >= 4 and valid certificates
-        // are supported for creating tunnels with IKEv2 key exchange method
-        if (encryptionMethod === 'ikev2') {
-          let ikev2Validated = true;
-          for (const device of [deviceA, deviceB]) {
-            const { valid, reason } = validateIKEv2(device);
-            if (!valid) {
-              logger.warn('Tunnel creation failed', {
-                params: { reason, machineId: device.machineId }
-              });
-              addReason(`${reason} on some of devices.`);
-              ikev2Validated = false;
-            }
-          }
-          if (!ikev2Validated) {
-            continue;
-          }
-        }
-
-        // Create the list of interfaces for both devices.
-        // Add a set of the interface's path labels
-        const deviceAIntfs = getInterfacesWithPathLabels(deviceA);
-        const deviceBIntfs = getInterfacesWithPathLabels(deviceB);
-
-        const devicesInfo = {
-          deviceA: { hostname: deviceA.hostname, interfaces: deviceAIntfs },
-          deviceB: { hostname: deviceB.hostname, interfaces: deviceBIntfs }
-        };
-        logger.debug('Connecting tunnel between devices', { params: { devicesInfo } });
-
-        // Create a tunnel between each WAN interface on device A to
-        // each of the WAN interfaces on device B according to the path
-        // labels assigned to the interfaces. If the list of path labels
-        // IDs contains the ID 'FFFFFF', create tunnels between all common
-        // path labels across all WAN interfaces.
-        // TBD: key exchange should be dynamic
-        const specifiedLabels = new Set(data.meta.pathLabels);
-        const createForAllLabels = specifiedLabels.has('FFFFFF');
-        if (deviceAIntfs.length && deviceBIntfs.length) {
-          for (let idxA = 0; idxA < deviceAIntfs.length; idxA++) {
-            for (let idxB = 0; idxB < deviceBIntfs.length; idxB++) {
-              const wanIfcA = deviceAIntfs[idxA];
-              const wanIfcB = deviceBIntfs[idxB];
-              const ifcALabels = wanIfcA.labelsSet;
-              const ifcBLabels = wanIfcB.labelsSet;
-
-              // If no path labels were selected, create a tunnel
-              // only if both interfaces aren't assigned with labels
-              if (specifiedLabels.size === 0) {
-                if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
-                  // If a tunnel already exists, skip the configuration
-                  const tunnelFound = await getTunnel(org, null, wanIfcA, wanIfcB);
-                  if (tunnelFound.length > 0) {
-                    logger.debug('Found tunnel', {
-                      params: { tunnel: tunnelFound }
-                    });
-                    addReason('Some tunnels exist already.');
-                  } else {
-                    dbTasks.push(generateTunnelPromise(userName, org, null,
-                      { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                      { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
-                  }
-                } else {
-                  addReason(
-                    'No Path Labels specified but some devices have interfaces with Path Labels.'
-                  );
-                }
-              } else {
-                // Create a list of path labels that are common to both interfaces.
-                const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
-                if (labelsIntersection.length === 0) {
-                  addReason('Some devices have interfaces without specified Path Labels.');
-                }
-                for (const label of labelsIntersection) {
-                  // Skip tunnel if the label is not included in
-                  // the list of labels specified by the user
-                  const shouldSkipTunnel =
-                    !createForAllLabels &&
-                    !specifiedLabels.has(label);
-                  if (shouldSkipTunnel) {
-                    addReason('Some devices have interfaces without specified Path Labels.');
-                    continue;
-                  }
-                  // If a tunnel already exists, skip the configuration
-                  const tunnelFound = await getTunnel(org, label, wanIfcA, wanIfcB);
-                  if (tunnelFound.length > 0) {
-                    logger.debug('Found tunnel', {
-                      params: { tunnel: tunnelFound }
-                    });
-                    addReason('Some tunnels exist already.');
-                    continue;
-                  }
-                  // Use a copy of devices objects as promise runs later
-                  dbTasks.push(generateTunnelPromise(userName, org, label,
-                    { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
-                }
-              }
-            };
-          };
-        } else {
-          logger.info('Failed to connect tunnel between devices', {
-            params: {
-              deviceA: deviceA.hostname,
-              deviceB: deviceB.hostname,
-              reason: 'no valid WAN interfaces'
-            }
-          });
-          addReason('Some devices have no valid WAN interfaces.');
-        }
-      }
+    if (isPeer) {
+      const { tasks } = await handlePeers();
+      dbTasks.concat(tasks);
+    } else {
+      const tasks = await handleTunnels(
+        org, userName, opDevices, data.meta.pathLabels, reasons);
+      dbTasks.concat(tasks);
     }
 
     // Execute all promises
@@ -266,8 +281,8 @@ const applyTunnelAdd = async (devices, user, data) => {
     } else {
       message = `${ids.length} ${message}`;
     }
-    if (reasons.length > 0) {
-      message = `${message} ${reasons.join(' ')}`;
+    if (reasons.size > 0) {
+      message = `${message} ${Array.from(reasons).join(' ')}`;
     }
     return { ids, status, message };
   } else {
