@@ -77,7 +77,6 @@ class TunnelsService {
   /**
    * Retrieve device tunnels information
    *
-   * @param {String} id Numeric ID of the Device to fetch tunnel information about
    * @param {Integer} offset The number of items to skip before collecting the result (optional)
    * @param {Integer} limit The numbers of items to return (optional)
    * @param {String} sortField The field by which the data will be ordered (optional)
