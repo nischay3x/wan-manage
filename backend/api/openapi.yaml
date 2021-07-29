@@ -6787,14 +6787,14 @@ paths:
     get:
       operationId: applicationsLibraryGET
       responses:
-	      "200":
+        "200":
           content:
             application/json:
               schema:
-			          items:
-                  $ref: '#/components/schemas/FirewallPolicy'
+                items:
+                  $ref: '#/components/schemas/PurchasedApplication'
                 type: array
-			    x-content-type: application/json
+          x-content-type: application/json
           description: Successful operation
         "401":
           content:
@@ -6823,7 +6823,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-	    summary: Get all repository applications
+      summary: Get all repository applications
       tags:
       - Applications
       x-swagger-router-controller: Applications
@@ -6832,7 +6832,7 @@ paths:
   /applications:
     get:
       operationId: applicationsGET
-	    responses:
+      responses:
         "200":
           # content:
           #   application/json:
@@ -6864,11 +6864,11 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: Internal server error
         default:
-			    content:
+          content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-			description: Unexpected error
+          description: Unexpected error
       security:
       - apiKey: []
       - bearerAuth: []
@@ -6898,7 +6898,7 @@ paths:
                 $ref: '#/components/schemas/PurchasedApplication'
                 x-content-type: application/json
           description: Successful operation
-	      "401":
+        "401":
           content:
             application/json:
               schema:
@@ -6925,7 +6925,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-	    summary: Get purchased application
+      summary: Get purchased application
       tags:
       - Applications
       x-swagger-router-controller: Applications
@@ -6936,14 +6936,14 @@ paths:
       parameters:
       - description: Purchased application id
         explode: true
-		    in: path
+        in: path
         name: id
         required: true
         schema:
           type: string
         style: simple
-		  responses:
-			  "200":
+      responses:
+        "200":
           content:
             application/json:
               schema:
@@ -6977,7 +6977,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-	    summary: Purchase application
+      summary: Purchase application
       tags:
       - Applications
       x-swagger-router-controller: Applications
@@ -6988,72 +6988,25 @@ paths:
       parameters:
       - description: application id to update
         explode: true
-		    in: path
+        in: path
         name: id
         required: true
         schema:
           type: string
         style: simple
-		  requestBody:
+      requestBody:
         content:
           application/json:
             schema:
-			        $ref: '#/components/schemas/ConfigurationRequest'
+              $ref: '#/components/schemas/ConfigurationRequest'
       responses:
-	      "200":
+        "200":
           content:
             application/json:
               schema:
-			          $ref: '#/components/schemas/PurchasedApplication'
+                $ref: '#/components/schemas/PurchasedApplication'
           x-content-type: application/json
           description: Successful operation
-		    "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-		    "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-	    summary: Update application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-    delete:
-      operationId: applicationDELETE
-      parameters:
-      - description: Application id to remove
-        explode: true
-		 in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-		  responses:
-        "200":
-		      description: Successful operation
         "401":
           content:
             application/json:
@@ -7066,7 +7019,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Forbidden
-		    "500":
+        "500":
           content:
             application/json:
               schema:
@@ -7081,7 +7034,54 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-	    summary: Remove application from an organization
+      summary: Update application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+    delete:
+      operationId: applicationDELETE
+      parameters:
+      - description: Application id to remove
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Remove application from an organization
       tags:
       - Applications
       x-swagger-router-controller: Applications
@@ -7101,7 +7101,7 @@ paths:
         style: simple
       responses:
         "200":
-		      description: Successful operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -7129,7 +7129,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-	    summary: Get application Status
+      summary: Get application Status
       tags:
       - Applications
       x-swagger-router-controller: Applications
@@ -7149,7 +7149,7 @@ paths:
         style: simple
       responses:
         "200":
-	      	description: Successful operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -7167,7 +7167,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-          description: Internal server error
+          description: Internal server errorS
         default:
           content:
             application/json:
@@ -7177,7 +7177,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-	    summary: Upgrade application
+      summary: Upgrade application
       tags:
       - Applications
       x-swagger-router-controller: Applications
@@ -7385,10 +7385,10 @@ components:
           type: object
         removed: 
           type: boolean
-    PurchasedApplicationList:
+    PurchasedApplication:
       example:
         _id: _id
-        app: library object 
+        app: library object
         org: organization object
         installedVersion: 1.2.3.5
         statuses:
@@ -7397,15 +7397,15 @@ components:
           failed: 0
           deleted: 1
       properties:
-        _id: 
+        _id:
           maxLength: 24
           minLength: 24
-          type: string          
-        app:                             
-          type: object          
-        org:          
+          type: string
+        app:
           type: object
-        installedVersion: 
+        org:
+          type: object
+        installedVersion:
           type: string
         statuses:
           type: object
@@ -8077,7 +8077,7 @@ components:
           items:
             $ref: '#/components/schemas/Interface'
           type: array
-        applications:
+        # applications:
           # items:
           #   type: object
           #   properties:

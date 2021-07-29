@@ -31,7 +31,7 @@ const dispatcher = require('../deviceLogic/dispatcher');
 const { validateDevice } = require('../deviceLogic/validators');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
-const Joi = require('@hapi/joi');
+const Joi = require('joi');
 
 const flexibilling = require('../flexibilling');
 

@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const configs = require('../configs')();
-const Joi = require('@hapi/joi');
+const Joi = require('joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
 const createError = require('http-errors');
@@ -561,9 +561,9 @@ class Connections {
               .keys({ version: Joi.string().required() })
               .optional()
           }),
-          network: joi.object().optional(),
-          tunnels: joi.array().optional(),
-          reconfig: joi.string().allow('').optional(),
+          network: Joi.object().optional(),
+          tunnels: Joi.array().optional(),
+          reconfig: Joi.string().allow('').optional(),
           ikev2: Joi.object({
             certificateExpiration: Joi.string().allow('').optional(),
             error: Joi.string().allow('').optional()

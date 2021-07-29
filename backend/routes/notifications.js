@@ -21,7 +21,7 @@ const notificationsDb = require('../models/notifications');
 const { devices } = require('../models/devices');
 const { verifyPermission } = require('../authenticate');
 const createError = require('http-errors');
-const Joi = require('@hapi/joi');
+const Joi = require('joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 const notificationsRouter = express.Router();

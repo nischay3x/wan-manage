@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const Joi = require('@hapi/joi');
+const Joi = require('joi');
 const ObjectId = require('mongoose').Types.ObjectId;
 const pick = require('lodash/pick');
 const applications = require('../models/applications');

@@ -43,8 +43,13 @@ class ApplicationsService {
    */
   static async applicationsLibraryGET ({ user }) {
     try {
-      const appsList = await applicationsLibrary.find();
-      return Service.successResponse({ applications: appsList });
+      const appsList = await applicationsLibrary.find().lean();
+
+      const mapped = appsList.map(app => {
+        return { ...app, _id: app._id.toString() };
+      });
+
+      return Service.successResponse(mapped);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
