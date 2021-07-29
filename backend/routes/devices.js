@@ -90,10 +90,16 @@ const checkUpdReq = (qtype, req) => new Promise(function (resolve, reject) {
               const deviceCount = await devices.countDocuments({
                 account: mres[0].account
               }).session(session);
+
+              const deviceOrgCount = await devices.countDocuments({
+                account: mres[0].account, org: req.user.defaultOrg._id
+              }).session(session);
               // Unregister a device (by adding -1)
               await flexibilling.registerDevice({
                 account: mres[0].account,
+                org: req.user.defaultOrg._id,
                 count: deviceCount,
+                orgCount: deviceOrgCount,
                 increment: -1
               }, session);
               resolve({ ok: 1, session });
@@ -397,7 +403,8 @@ devicesRouter.route('/:deviceId/configuration')
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-router-config' }
+        { entity: 'agent', message: 'get-device-config' },
+        15000
       );
 
       if (!deviceConf.ok) {
@@ -461,7 +468,8 @@ devicesRouter.route('/:deviceId/logs')
               lines: req.query.lines || '100',
               filter: req.query.filter || 'all'
             }
-          }
+          },
+          15000
         );
 
         if (!deviceLogs.ok) {
@@ -503,7 +511,8 @@ devicesRouter.route('/:deviceId/routes')
       const deviceOsRoutes = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-device-os-routes' }
+        { entity: 'agent', message: 'get-device-os-routes' },
+        15000
       );
 
       if (!deviceOsRoutes.ok) {

@@ -33,6 +33,7 @@ const createError = require('http-errors');
 
 const passport = require('passport');
 const auth = require('./authenticate');
+const { connectRouter } = require('./routes/connect');
 const morgan = require('morgan');
 const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 const { reqLogger, errLogger } = require('./logging/request-logging');
@@ -50,10 +51,6 @@ const applications = require('./periodic/applications')();
 const rateLimit = require('express-rate-limit');
 const RateLimitStore = require('./rateLimitStore');
 
-// mongo database UI
-const mongoExpress = require('mongo-express/lib/middleware');
-const mongoExpressConfig = require('./mongo_express_config');
-
 // Internal routers definition
 const adminRouter = require('./routes/admin');
 
@@ -69,14 +66,16 @@ class ExpressServer {
     this.app = express();
     this.openApiPath = openApiYaml;
     this.schema = yamljs.load(openApiYaml);
-    const restServerUrl = configs.get('restServerUrl');
+    const restServerUrl = configs.get('restServerUrl', 'list');
     const servers = this.schema.servers.filter(server => server.url.includes(restServerUrl));
     if (servers.length === 0) {
-      this.schema.servers.unshift({
-        description: 'Local Server',
-        url: restServerUrl + '/api'
-      });
-    }
+      this.schema.servers.unshift(...restServerUrl.map((restServer, idx) => {
+        return {
+          description: `Local Server #${idx + 1}`,
+          url: restServer + '/api'
+        };
+      }));
+    };
 
     this.setupMiddleware = this.setupMiddleware.bind(this);
     this.addErrorHandler = this.addErrorHandler.bind(this);
@@ -88,7 +87,7 @@ class ExpressServer {
     this.setupMiddleware();
   }
 
-  setupMiddleware () {
+  async setupMiddleware () {
     // this.setupAllowedMedia();
     this.app.use((req, res, next) => {
       console.log(`${req.method}: ${req.url}`);
@@ -131,7 +130,7 @@ class ExpressServer {
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
       // Allow Let's encrypt certbot to access its certificate dirctory
-      if (!configs.get('shouldRedirectHttps') ||
+      if (!configs.get('shouldRedirectHttps', 'boolean') ||
           req.secure || req.url.startsWith('/.well-known/acme-challenge')) {
         return next();
       } else {
@@ -146,7 +145,8 @@ class ExpressServer {
     const inMemoryStore = new RateLimitStore(5 * 60 * 1000);
     const rateLimiter = rateLimit({
       store: inMemoryStore,
-      max: +configs.get('userIpReqRateLimit'), // Rate limit for requests in 5 min per IP address
+      // Rate limit for requests in 5 min per IP address
+      max: configs.get('userIpReqRateLimit', 'number'),
       message: 'Request rate limit exceeded',
       onLimitReached: (req, res, options) => {
         logger.error(
@@ -171,7 +171,7 @@ class ExpressServer {
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
       // Allow Let's encrypt certbot to access its certificate dirctory
-      if (!configs.get('shouldRedirectHttps') ||
+      if (!configs.get('shouldRedirectHttps', 'boolean') ||
           req.secure || req.url.startsWith('/.well-known/acme-challenge')) {
         return next();
       } else {
@@ -182,7 +182,7 @@ class ExpressServer {
     });
 
     // no authentication
-    this.app.use('/api/connect', require('./routes/connect'));
+    this.app.use('/api/connect', connectRouter);
     this.app.use('/api/users', require('./routes/users'));
 
     // add API documentation
@@ -194,7 +194,11 @@ class ExpressServer {
     // Enable db admin only in development mode
     if (configs.get('environment') === 'development') {
       logger.warn('Warning: Enabling UI database access');
-      this.app.use('/admindb', mongoExpress(mongoExpressConfig));
+      // mongo database UI
+      const mongoExpress = require('mongo-express/lib/middleware');
+      const mongoExpressConfig = require('./mongo_express_config');
+      const expressApp = await mongoExpress(mongoExpressConfig);
+      this.app.use('/admindb', expressApp);
     }
 
     // Enable routes for non-authorized links
@@ -203,6 +207,7 @@ class ExpressServer {
     this.app.get('/hello', (req, res) => res.send('Hello World'));
 
     this.app.get('/api/version', (req, res) => res.json({ version }));
+    this.app.get('/api/restServers', (req, res) => res.json({ version }));
 
     this.app.use(cors.corsWithOptions);
     this.app.use(auth.verifyUserJWT);
@@ -234,13 +239,13 @@ class ExpressServer {
     const validator = new OpenApiValidator({
       apiSpec: this.openApiPath,
       validateRequests: true,
-      validateResponses: configs.get('validateOpenAPIResponse')
+      validateResponses: configs.get('validateOpenAPIResponse', 'boolean')
     });
 
     validator
       .install(this.app)
       .then(async () => {
-        await this.app.use(openapiRouter());
+        await this.app.use(openapiRouter(this.schema.components.schemas));
         await this.launch();
         logger.info('Express server running');
       });
@@ -330,12 +335,13 @@ class ExpressServer {
 
       // setup wss here
       this.wss = new WebSocket.Server({
-        server: configs.get('shouldRedirectHttps') ? this.secureServer : this.server,
+        server: configs.get('shouldRedirectHttps', 'boolean') ? this.secureServer : this.server,
         verifyClient: connections.verifyDevice
       });
 
       connections.registerConnectCallback('broker', broker.deviceConnectionOpened);
       connections.registerCloseCallback('broker', broker.deviceConnectionClosed);
+      connections.registerCloseCallback('deviceStatus', deviceStatus.deviceConnectionClosed);
 
       this.wss.on('connection', connections.createConnection);
       console.log('Websocket server running');

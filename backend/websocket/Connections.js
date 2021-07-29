@@ -15,37 +15,20 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
 const createError = require('http-errors');
+const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
+const Accounts = require('../models/accounts');
+const tunnelsModel = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
 const notificationsMgr = require('../notifications/notifications')();
-const { verifyAgentVersion, isSemVer, isVppVersion } = require('../versioning');
-const flexibilling = require('../flexibilling');
-/**
- * Verifies a device subscription.
- * @param  {string} device device machine id
- * @return
- * {{
- *   subscriptionValid: boolean,
- *   subscriptionError: Object
- * }}
- */
-const verifySubscription = async (device) => {
-  const result = await flexibilling.validateSubscription(device);
-
-  if (result) {
-    return { subscriptionValid: result, subscriptionError: null };
-  } else {
-    logger.warn('Can not validate subscription', { params: { result } });
-    return {
-      subscriptionValid: false,
-      subscriptionError: new Error('Subscription validation failed')
-    };
-  }
-};
+const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
+const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
+const { TypedError, ErrorTypes } = require('../utils/errors');
 
 class Connections {
   constructor () {
@@ -84,7 +67,7 @@ class Connections {
     this.getAllDevices().forEach(deviceID => {
       const { socket } = this.devices.getDeviceInfo(deviceID);
       // Don't try to ping a closing, or already closed socket
-      if ([socket.CLOSING, socket.CLOSED].includes(socket.readyState)) return;
+      if (!socket || [socket.CLOSING, socket.CLOSED].includes(socket.readyState)) return;
       if (socket.isAlive <= 0) {
         logger.warn('Terminating device due to ping failure', {
           params: { deviceId: deviceID }
@@ -224,23 +207,13 @@ class Connections {
 
     const device = connectionURL.pathname.substr(1);
 
-    const { subscriptionValid, subscriptionError } = await verifySubscription(
-      device
-    );
-    if (!subscriptionValid) {
-      logger.warn('Subscription verification failed', {
-        params: { deviceId: connectionURL.pathname, err: subscriptionError }
-      });
-      return done(false, 402);
-    }
-
     devices
       .find({
         machineId: device,
         deviceToken: connectionURL.searchParams.get('token')
       })
       .then(
-        resp => {
+        async resp => {
           if (resp.length === 1) {
             // exactly one token found
             // Check if device approved
@@ -259,10 +232,20 @@ class Connections {
                 devInfo.socket.removeAllListeners('close');
                 devInfo.socket.terminate();
               }
+
+              // Validate account subscription
+              const checkCancledSubscription = await Accounts.countDocuments(
+                { _id: resp[0].account, isSubscriptionValid: false }
+              );
+              if (checkCancledSubscription > 0) {
+                throw createError(402, 'Your subscription is canceled');
+              }
+
               this.devices.setDeviceInfo(device, {
                 org: resp[0].org.toString(),
                 deviceObj: resp[0]._id,
                 machineId: resp[0].machineId,
+                version: resp[0].versions.agent,
                 ready: false
               });
               return done(true);
@@ -308,10 +291,10 @@ class Connections {
     const msgQ = this.msgQueue;
 
     // Initialize to alive connection, with 3 retries
-    socket.isAlive = 3;
+    socket.isAlive = 7;
     socket.on('pong', function heartbeat () {
       // Pong received, reset retries
-      socket.isAlive = 3;
+      socket.isAlive = 7;
     });
 
     socket.on('message', function incoming (message) {
@@ -359,14 +342,67 @@ class Connections {
     });
     socket.on('close', () => this.closeConnection(device));
 
-    // Query device for additional required information. Only after getting the device's
-    // response and updating the information, the device can be considered ready.
-    this.sendDeviceInfoMsg(device);
+    // Query device for additional required information (such as
+    // device version, network information, tunnel keys, etc.)
+    // Only after getting the device's response and updating
+    // the information, the device can be considered ready.
+    this.sendDeviceInfoMsg(device, info.deviceObj);
+  }
+
+  /**
+   * Gets the tunnel numbers of all tunnels that don't have
+   * the information about the tunnels keys in the database.
+   * @async
+   * @param  {string} deviceId The mongodb id of the device
+   * @return {Array}           An array of tunnels numbers of the tunnels
+   *                           that require keys information from the device
+   */
+  async getTunnelsWithEmptyKeys (deviceId) {
+    // Retrieve all device's tunnels that
+    // don't have tunnel parameters
+    const result = await tunnelsModel.find({
+      $and: [
+        { $or: [{ deviceA: deviceId }, { deviceB: deviceId }] },
+        { isActive: true },
+        { encryptionMethod: 'psk' },
+        {
+          $or: [
+            { tunnelKeys: { $exists: false } },
+            { tunnelKeys: null }
+          ]
+        }
+      ]
+    });
+    return result.map(tunnel => tunnel.num);
+  }
+
+  /**
+   * Updates the keys for each of the tunnels sent by
+   * the device in the management database
+   * @async
+   * @param  {Array} tunnels An array of tunnels information
+   * @return {void}
+   */
+  async updateTunnelKeys (org, tunnels) {
+    // Update all tunnels with the keys sent by the device
+    const tunnelsOps = [];
+    for (const tunnel of tunnels) {
+      const { id, key1, key2, key3, key4 } = tunnel;
+      tunnelsOps.push({
+        updateOne:
+          {
+            filter: { org, num: id },
+            update: { $set: { tunnelKeys: { key1, key2, key3, key4 } } },
+            upsert: false
+          }
+      });
+    }
+    return tunnelsModel.bulkWrite(tunnelsOps);
   }
 
   /**
    * Checks if reconfig hash is changed on the device.
-   * and applies new parameters in case of dhcp client is used
+   * and applies new parameters if need
    * @async
    * @param  {Object} origDevice instance of the device from db
    * @param  {Object} deviceInfo data received on get-device-info message
@@ -375,11 +411,13 @@ class Connections {
   async reconfigCheck (origDevice, deviceInfo) {
     const machineId = origDevice.machineId;
     const prevDeviceInfo = this.devices.getDeviceInfo(machineId);
-    if (deviceInfo.message.reconfig && prevDeviceInfo.reconfig !== deviceInfo.message.reconfig) {
-      // Check if dhcp client is defined on any of interfaces
-      if (origDevice.interfaces && deviceInfo.message.network.interfaces &&
-        deviceInfo.message.network.interfaces.length > 0 &&
-        origDevice.interfaces.filter(i => i.dhcp === 'yes').length > 0) {
+    // Check if reconfig was changed
+    if ((prevDeviceInfo === undefined) || (deviceInfo.message.reconfig &&
+      prevDeviceInfo.reconfig !== deviceInfo.message.reconfig)) {
+      const needReconfig = origDevice.interfaces && deviceInfo.message.network.interfaces &&
+        deviceInfo.message.network.interfaces.length > 0;
+
+      if (needReconfig) {
         // Currently we allow only one change at a time to the device,
         // to prevent inconsistencies between the device and the MGMT database.
         // Therefore, we block the request if there's a pending change in the queue.
@@ -387,54 +425,101 @@ class Connections {
         if (origDevice.pendingDevModification) {
           throw new Error('Failed to apply new config, only one device change is allowed');
         }
-        const interfaces = origDevice.interfaces.map(i => {
-          if (i.dhcp === 'yes') {
-            const updatedConfig = deviceInfo.message.network.interfaces
-              .find(u => u.pciaddr === i.pciaddr);
-            // ignore if IPv4 or gateway is not assigned by DHCP server
-            if (updatedConfig && updatedConfig.IPv4 && updatedConfig.gateway) {
-              return {
-                ...i.toJSON(),
-                IPv4: updatedConfig.IPv4,
-                IPv4Mask: updatedConfig.IPv4Mask,
-                IPv6: updatedConfig.IPv6,
-                IPv6Mask: updatedConfig.IPv6Mask,
-                gateway: updatedConfig.gateway
-              };
-            } else {
-              // Missing some DHCP parameters
-              logger.warn('Missing some DHCP parameters, the config will not be applied', {
-                params: {
-                  reconfig: deviceInfo.message.reconfig,
-                  machineId: machineId,
-                  updatedConfig: JSON.stringify(updatedConfig)
-                }
-              });
-            }
-          }
-          return i;
-        });
-        // Update interfaces in DB
-        const updDevice = await devices.findOneAndUpdate(
-          { machineId },
-          { $set: { interfaces } },
-          { new: true, runValidators: true }
-        );
-        // Update the reconfig hash before applying to prevent infinite loop
-        this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
 
-        // Apply the new config and rebuild tunnels if need
-        logger.info('Applying new configuraton from the device', {
-          params: {
-            reconfig: deviceInfo.message.reconfig,
-            machineId
+        const incomingInterfaces = deviceInfo.message.network.interfaces;
+
+        const interfaces = origDevice.interfaces.map(i => {
+          const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
+          if (!updatedConfig) {
+            logger.warn('Missing interface configuration in the get-device-info message', {
+              params: {
+                reconfig: deviceInfo.message.reconfig,
+                machineId: machineId,
+                interface: i.toJSON()
+              }
+            });
+            return i;
           }
+
+          // from device internetAccess type is boolean, in management it is enum yes/no
+          const prevInternetAccess = i.internetAccess === 'yes';
+          if (updatedConfig.internetAccess !== undefined &&
+            i.monitorInternet && updatedConfig.internetAccess !== prevInternetAccess) {
+            const newInterfaceState = updatedConfig.internetAccess ? 'online' : 'offline';
+            const details = `Interface ${i.name} state changed to "${newInterfaceState}"`;
+            logger.info(details, {
+              params: {
+                machineId,
+                updatedConfig
+              }
+            });
+            notificationsMgr.sendNotifications([
+              {
+                org: origDevice.org,
+                title: 'Interface connection change',
+                time: new Date(),
+                device: origDevice._id,
+                machineId,
+                details
+              }
+            ]);
+          };
+
+          const updInterface = {
+            ...i.toJSON(),
+            PublicIP: updatedConfig.public_ip && i.useStun
+              ? updatedConfig.public_ip : i.PublicIP,
+            PublicPort: updatedConfig.public_port && i.useStun
+              ? updatedConfig.public_port : i.PublicPort,
+            NatType: updatedConfig.nat_type || i.NatType,
+            internetAccess: updatedConfig.internetAccess === undefined ? ''
+              : updatedConfig.internetAccess ? 'yes' : 'no'
+          };
+
+          if (!i.isAssigned) {
+            updInterface.metric = updatedConfig.metric;
+          };
+
+          if (i.dhcp === 'yes' || !i.isAssigned) {
+            updInterface.IPv4 = updatedConfig.IPv4;
+            updInterface.IPv4Mask = updatedConfig.IPv4Mask;
+            updInterface.IPv6 = updatedConfig.IPv6;
+            updInterface.IPv6Mask = updatedConfig.IPv6Mask;
+            updInterface.gateway = updatedConfig.gateway;
+          };
+
+          return updInterface;
         });
-        await modifyDeviceDispatcher.apply(
-          [origDevice],
-          { username: 'system' },
-          { newDevice: updDevice, org: origDevice.org.toString() }
-        );
+
+        try {
+          // Update interfaces in DB
+          const updDevice = await devices.findOneAndUpdate(
+            { machineId },
+            { $set: { interfaces } },
+            { new: true, runValidators: true }
+          ).populate('interfaces.pathlabels', '_id type');
+
+          // Update the reconfig hash before applying to prevent infinite loop
+          this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
+          this.devices.updateDeviceInfo(machineId, 'version', deviceInfo.message.device);
+
+          // Apply the new config and rebuild tunnels if need
+          logger.info('Applying new configuration from the device', {
+            params: {
+              reconfig: deviceInfo.message.reconfig,
+              machineId
+            }
+          });
+          await modifyDeviceDispatcher.apply(
+            [origDevice],
+            { username: 'system' },
+            { newDevice: updDevice, org: origDevice.org.toString() }
+          );
+        } catch (err) {
+          logger.error('Failed to apply new configuration from device', {
+            params: { device: machineId, err: err.message }
+          });
+        }
       }
     }
   }
@@ -445,9 +530,10 @@ class Connections {
    * versions of the different components running on it.
    * @async
    * @param  {string} machineId the device machine id
+   * @param  {string} deviceId the device mongodb id
    * @return {void}
    */
-  async sendDeviceInfoMsg (machineId) {
+  async sendDeviceInfoMsg (machineId, deviceId) {
     const validateDevInfoMessage = msg => {
       const devInfoSchema = Joi.object().keys({
         device: Joi
@@ -458,15 +544,30 @@ class Connections {
           agent: Joi.object()
             .keys({ version: Joi.string().required() })
             .required(),
-          router: Joi.object()
-            .keys({ version: Joi.string().required() })
-            .required(),
-          vpp: Joi.object()
-            .keys({ version: Joi.string().required() })
-            .required(),
-          frr: Joi.object()
-            .keys({ version: Joi.string().required() })
-            .required()
+          components: Joi.object({
+            agent: Joi.object()
+              .keys({ version: Joi.string().required() })
+              .required(),
+            router: Joi.object()
+              .keys({ version: Joi.string().required() })
+              .required(),
+            vpp: Joi.object()
+              .keys({ version: Joi.string().required() })
+              .required(),
+            frr: Joi.object()
+              .keys({ version: Joi.string().required() })
+              .required(),
+            edgeui: Joi.object()
+              .keys({ version: Joi.string().required() })
+              .optional()
+          }),
+          network: joi.object().optional(),
+          tunnels: joi.array().optional(),
+          reconfig: joi.string().allow('').optional(),
+          ikev2: Joi.object({
+            certificateExpiration: Joi.string().allow('').optional(),
+            error: Joi.string().allow('').optional()
+          }).allow({}).optional()
         }),
         network: Joi.object().optional(),
         reconfig: Joi.string().allow('').optional()
@@ -491,14 +592,21 @@ class Connections {
     };
 
     try {
-      logger.info('Device info message sent', { params: { machineId } });
+      const emptyTunnels = await this.getTunnelsWithEmptyKeys(deviceId);
+      const message = { entity: 'agent', message: 'get-device-info', params: {} };
+      if (emptyTunnels.length > 0) {
+        message.params.tunnels = emptyTunnels;
+      }
       const deviceInfo = await this.deviceSendMessage(
         null,
         machineId,
-        { entity: 'agent', message: 'get-device-info' },
+        message,
+        undefined,
+        '',
         validateDevInfoMessage
       );
 
+      logger.info('Device info message sent', { params: { deviceId: deviceId } });
       if (!deviceInfo.ok) {
         throw new Error(`device reply: ${deviceInfo.message}`);
       }
@@ -511,23 +619,74 @@ class Connections {
       }
 
       const origDevice = await devices.findOneAndUpdate(
-        { machineId },
+        { _id: deviceId },
         { $set: { versions: versions } },
         { new: true, runValidators: true }
-      );
+      ).populate('interfaces.pathlabels', '_id type');
+      const { expireTime, jobQueued } = origDevice.IKEv2;
+
+      const { encryptionMethod } = await orgModel.findOne({ _id: origDevice.org });
+      const { ikev2 } = deviceInfo.message;
+      let needNewIKEv2Certificate = false;
+      if (encryptionMethod === 'ikev2' && getMajorVersion(deviceInfo.message.device) >= 4) {
+        if (!ikev2) {
+          needNewIKEv2Certificate = true;
+        } else if (ikev2.error) {
+          logger.warn('IKEv2 certificate error on device', {
+            params: { deviceId, err: ikev2.error }
+          });
+          needNewIKEv2Certificate = true;
+        } else {
+          const dbExpireTime = expireTime ? expireTime.getTime() : 0;
+          const devExpireTime = (new Date(ikev2.certificateExpiration)).getTime();
+          // check if expiration is different on agent and management
+          // or certificate is about to expire
+          if (devExpireTime !== dbExpireTime || dbExpireTime < getRenewBeforeExpireTime()) {
+            needNewIKEv2Certificate = true;
+          } else {
+            this.devices.updateDeviceInfo(machineId, 'certificateExpiration', dbExpireTime);
+          }
+        }
+      }
+
+      if (needNewIKEv2Certificate && !jobQueued) {
+        queueCreateIKEv2Jobs(
+          [origDevice],
+          'system',
+          origDevice.org
+        ).then(jobResults => {
+          logger.info('Create a new IKEv2 certificate device job queued', {
+            params: { jobId: jobResults[0].id },
+            job: jobResults[0]
+          });
+        });
+      }
+
+      if (!origDevice) {
+        logger.warn('Device not found in DB', {
+          params: { device: machineId }
+        });
+        this.deviceDisconnect(machineId);
+        return;
+      }
+
+      const { tunnels } = deviceInfo.message;
+      if (Array.isArray(tunnels) && tunnels.length > 0) {
+        await this.updateTunnelKeys(origDevice.org, tunnels);
+      }
 
       // Check if config was modified on the device
       this.reconfigCheck(origDevice, deviceInfo);
 
       logger.info('Device info message response received', {
-        params: { machineId, message: deviceInfo }
+        params: { deviceId: deviceId, message: deviceInfo }
       });
 
       this.devices.updateDeviceInfo(machineId, 'ready', true);
       this.callRegisteredCallbacks(this.connectCallbacks, machineId);
     } catch (err) {
       logger.error('Failed to receive info from device', {
-        params: { machineId, err: err.message }
+        params: { device: machineId, err: err.message }
       });
       this.deviceDisconnect(machineId);
     }
@@ -603,6 +762,7 @@ class Connections {
    * @param  {string}   org               organization that owns the device
    * @param  {string}   device            device machine id
    * @param  {Object}   msg               message to be sent to the device
+   * @param  {String}   jobid             sends the job ID to the agent, if job is created
    * @param  {Callback} responseValidator a validator for validating the device response
    * @return {Promise}                    A promise the message has been sent
    */
@@ -610,6 +770,8 @@ class Connections {
     org,
     device,
     msg,
+    timeout = configs.get('jobTimeout', 'number'),
+    jobid = '',
     responseValidator = () => {
       return { valid: true, err: '' };
     }
@@ -620,19 +782,19 @@ class Connections {
     var p = new Promise(function (resolve, reject) {
       if (info.socket && (org == null || info.org === org)) {
         // Increment seq and update queue with resolve function for this promise,
-        // set timeout to 60s to clear when no response received
+        // set timeout to clear when no response received
         var tohandle = setTimeout(() => {
-          reject(new Error('Error: Send Timeout'));
+          reject(new TypedError(ErrorTypes.TIMEOUT, 'Error: Send Timeout'));
           // delete queue for this seq
           delete msgQ[seq];
-        }, 120000);
+        }, timeout);
         msgQ[seq] = {
           resolver: resolve,
           rejecter: reject,
           tohandle: tohandle,
           validator: responseValidator
         };
-        info.socket.send(JSON.stringify({ seq: seq, msg: msg }));
+        info.socket.send(JSON.stringify({ seq: seq, msg: msg, jobid: jobid }));
       } else reject(new Error('Send General Error'));
     });
     return p;

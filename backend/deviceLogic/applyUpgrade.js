@@ -49,7 +49,7 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
         // Response data
         { method: 'upgrade', data: { device: dev._id, org: org } },
         // Metadata
-        { priority: 'high', attempts: 1, removeOnComplete: false },
+        { priority: 'medium', attempts: 1, removeOnComplete: false },
         // Complete callback
         null)
     );
@@ -96,7 +96,7 @@ const apply = async (devicesIn, user, data) => {
   const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
   const version = await swUpdater.getLatestDevSwVersion();
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const jobResults = await queueUpgradeJobs(opDevices, userName, org, version);
   jobResults.forEach(job => {
     logger.info('Upgrade device job queued', {

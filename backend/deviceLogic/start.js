@@ -19,7 +19,7 @@
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { validateDevice } = require('./validators');
-const { getAllOrganizationLanSubnets, getDefaultGateway } = require('../utils/deviceUtils');
+const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -27,7 +27,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { getMajorVersion } = require('../versioning');
+const { buildInterfaces } = require('./interfaces');
 
 /**
  * Creates and queues the start-router job.
@@ -38,86 +38,34 @@ const { getMajorVersion } = require('../versioning');
  * @return {None}
  */
 const apply = async (device, user, data) => {
+  device = device[0].toObject();
   logger.info('Starting device:', {
-    params: { machineId: device[0].machineId, user: user, data: data }
+    params: { machineId: device.machineId, user: user, data: data }
   });
 
-  const organizationLanSubnets = await getAllOrganizationLanSubnets(device[0].org);
+  let organizationLanSubnets = [];
+  if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
+    organizationLanSubnets = await getAllOrganizationLanSubnets(device.org);
+  }
 
-  const deviceValidator = validateDevice(device[0], true, organizationLanSubnets);
+  const deviceValidator = validateDevice(device, true, organizationLanSubnets);
 
   if (!deviceValidator.valid) {
     logger.warn('Start command validation failed',
       {
-        params: { device: device[0], err: deviceValidator.err }
+        params: { device: device, err: deviceValidator.err }
       });
     throw new Error(deviceValidator.err);
   }
 
-  deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
-  const majorAgentVersion = getMajorVersion(device[0].versions.agent);
+  deviceStatus.setDeviceStatsField(device.machineId, 'state', 'pending');
   const startParams = {};
-  let ifnum = 0;
-  const defaultGateway = getDefaultGateway(device[0]);
-
-  if (majorAgentVersion === 0) { // version 0.X.X
-    for (let idx = 0; idx < device[0].interfaces.length; idx++) {
-      const intf = device[0].interfaces[idx];
-      const ifParams = {};
-      if (intf.isAssigned === true) {
-        ifnum++;
-        ifParams.pci = intf.pciaddr;
-        ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
-        ifParams.addr = intf.IPv4 ? `${intf.IPv4}/${intf.IPv4Mask}` : '';
-        if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        startParams['iface' + (ifnum)] = ifParams;
-      }
-    }
-    startParams['default-route'] = defaultGateway || '';
-  } else if (majorAgentVersion >= 1) { // version 1.X.X+
-    const interfaces = [];
-    for (let idx = 0; idx < device[0].interfaces.length; idx++) {
-      const intf = device[0].interfaces[idx];
-      const ifParams = {};
-      if (intf.isAssigned === true) {
-        ifParams.pci = intf.pciaddr;
-        ifParams.dhcp = intf.dhcp && intf.type === 'WAN' ? intf.dhcp : 'no';
-        ifParams.addr = intf.IPv4 ? `${intf.IPv4}/${intf.IPv4Mask}` : '';
-        ifParams.type = intf.type;
-        // Device should only be aware of DIA labels.
-        const labels = [];
-        intf.pathlabels.forEach(label => {
-          if (label.type === 'DIA') labels.push(label._id);
-        });
-        ifParams.multilink = { labels };
-        if (intf.routing === 'OSPF') ifParams.routing = 'ospf';
-        ifParams.gateway = intf.gateway ? intf.gateway : '';
-        ifParams.metric = intf.metric;
-        interfaces.push(ifParams);
-      }
-    }
-    // Send route for backward compatibility (agent version < 1.2.15)
-    const routes = [];
-    if (defaultGateway) {
-      routes.push({
-        addr: 'default',
-        via: defaultGateway
-      });
-    }
-
-    startParams.interfaces = interfaces;
-    startParams.routes = routes;
-  }
-
-  // Start router command might change IP address of the
-  // interface connected to the MGMT. Tell the agent to
-  // reconnect to the MGMT after processing this command.
-  startParams.reconnect = true;
+  startParams.interfaces = buildInterfaces(device.interfaces, device.ospf);
 
   const tasks = [];
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
-  const { machineId } = device[0];
+  const org = data.org;
+  const { machineId } = device;
 
   tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
 
@@ -128,18 +76,17 @@ const apply = async (device, user, data) => {
         userName,
         org,
         // Data
-        { title: 'Start device ' + device[0].hostname, tasks: tasks },
+        { title: 'Start device ' + device.hostname, tasks: tasks },
         // Response data
         {
           method: 'start',
           data: {
-            device: device[0]._id,
-            org: org,
-            shouldUpdateTunnel: majorAgentVersion === 0
+            device: device._id,
+            org: org
           }
         },
         // Metadata
-        { priority: 'medium', attempts: 1, removeOnComplete: false },
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null
       );

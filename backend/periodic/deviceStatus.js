@@ -21,6 +21,9 @@ const { deviceStats, deviceAggregateStats } = require('../models/analytics/devic
 const Joi = require('@hapi/joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const notificationsMgr = require('../notifications/notifications')();
+const configs = require('../configs')();
+const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
+const orgModel = require('../models/organizations');
 
 /***
  * This class gets periodic status from all connected devices
@@ -52,14 +55,22 @@ class DeviceStatus {
     this.generateDevStatsNotifications = this.generateDevStatsNotifications.bind(this);
     this.getDeviceStatus = this.getDeviceStatus.bind(this);
     this.setDeviceStatus = this.setDeviceStatus.bind(this);
+    this.registerSyncUpdateFunc = this.registerSyncUpdateFunc.bind(this);
+    this.removeDeviceStatus = this.removeDeviceStatus.bind(this);
+    this.deviceConnectionClosed = this.deviceConnectionClosed.bind(this);
 
     // Task information
+    this.updateSyncStatus = async () => {};
     this.taskInfo = {
       name: 'poll_status',
       func: this.periodicPollDevices,
       handle: null,
       period: 10000
     };
+  }
+
+  registerSyncUpdateFunc (func) {
+    this.updateSyncStatus = func;
   }
 
   /**
@@ -83,6 +94,10 @@ class DeviceStatus {
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
+      ikev2: Joi.object({
+        certificateExpiration: Joi.string().allow('').optional(),
+        error: Joi.string().allow('').optional()
+      }).allow({}).optional(),
       health: Joi.object({
         cpu: Joi.array().items(Joi.number()).min(1).optional(),
         mem: Joi.number().optional(),
@@ -142,8 +157,8 @@ class DeviceStatus {
      */
   periodicPollOneDevice (deviceID) {
     connections.deviceSendMessage(null, deviceID,
-      { entity: 'agent', message: 'get-device-stats' }, this.validateDevStatsMessage)
-      .then((msg) => {
+      { entity: 'agent', message: 'get-device-stats' }, undefined, '', this.validateDevStatsMessage)
+      .then(async (msg) => {
         if (msg != null) {
           if (msg.ok === 1) {
             if (msg.message.length === 0) return;
@@ -154,11 +169,43 @@ class DeviceStatus {
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
             this.generateDevStatsNotifications();
+            this.updateDeviceSyncStatus(
+              deviceInfo.org,
+              deviceInfo.deviceObj,
+              deviceID,
+              msg['router-cfg-hash']
+            );
+            // check if need to generate a new IKEv2 certificate
+            let needNewIKEv2Certificate = false;
+            const { encryptionMethod } = await orgModel.findOne({ _id: deviceInfo.org });
 
-            // Check if config was modified on the device
-            if (lastUpdateEntry.reconfig && lastUpdateEntry.reconfig !== deviceInfo.reconfig) {
+            if (encryptionMethod === 'ikev2') {
+              const { ikev2 } = lastUpdateEntry;
+              if (!ikev2) {
+                needNewIKEv2Certificate = true;
+              } else if (ikev2.error) {
+                logger.warn('IKEv2 certificate error on device', {
+                  params: { deviceID: deviceID, err: ikev2.error },
+                  periodic: { task: this.taskInfo }
+                });
+                needNewIKEv2Certificate = true;
+              } else {
+                const certificateExpiration =
+                  (new Date(ikev2.certificateExpiration)).getTime();
+                // check if expiration is different on agent and management
+                // or certificate is about to expire
+                if (deviceInfo.certificateExpiration !== certificateExpiration ||
+                  certificateExpiration < getRenewBeforeExpireTime()) {
+                  needNewIKEv2Certificate = true;
+                }
+              }
+            }
+
+            // Check if config was modified on the device or need to check IKEv2 certificate
+            const { reconfig } = lastUpdateEntry;
+            if ((reconfig && reconfig !== deviceInfo.reconfig) || needNewIKEv2Certificate) {
               // Call get-device-info and reconfig
-              connections.sendDeviceInfoMsg(deviceID);
+              connections.sendDeviceInfoMsg(deviceID, deviceInfo.deviceObj);
             }
           } else {
             this.setDeviceStatsField(deviceID, 'state', 'stopped');
@@ -184,6 +231,17 @@ class DeviceStatus {
       });
   }
 
+  async updateDeviceSyncStatus (org, deviceId, machineId, hash) {
+    try {
+      await this.updateSyncStatus(org, deviceId, machineId, hash);
+    } catch (err) {
+      logger.error('Failed to update device sync status', {
+        params: { deviceID: deviceId, err: err.message },
+        periodic: { task: this.taskInfo }
+      });
+    }
+  }
+
   /**
      * Updates the interface stats per device in the database
      * @param  {string} deviceID   device UUID
@@ -193,8 +251,9 @@ class DeviceStatus {
      */
   updateAnalyticsInterfaceStats (deviceID, deviceInfo, statsList) {
     statsList.forEach((statsEntry) => {
-      // Update the database once every 5 minutes
-      const msgTime = Math.floor(statsEntry.utc / 300) * 300;
+      // Update the database once per update time configuration (default: 5min)
+      const msgTime = Math.floor(statsEntry.utc / configs.get('analyticsUpdateTime', 'number')) *
+        configs.get('analyticsUpdateTime', 'number');
       if (this.getDeviceLastUpdateTime(deviceID) === msgTime) return;
 
       // Build DB updates
@@ -343,10 +402,10 @@ class DeviceStatus {
           });
         }
         // Generate a notification only if RTT has changed,
-        // and the new RTT is higher than 100 milliseconds
+        // and the new RTT is higher than 300 milliseconds
         if ((firstTunnelUpdate ||
                     tunnelState.rtt !== this.status[deviceID].tunnelStatus[tunnelID].rtt) &&
-                    tunnelState.rtt > 100) {
+                    tunnelState.rtt > 300) {
           this.events.push({
             org: org,
             title: 'Tunnel latency',
@@ -395,6 +454,17 @@ class DeviceStatus {
      */
   getDeviceStatus (deviceID) {
     return this.status[deviceID];
+  }
+
+  /**
+   * Remove devices status by ID
+   * @param  {string} deviceID device host id
+   * @return {void}
+   */
+  removeDeviceStatus (deviceID) {
+    if (deviceID && this.status[deviceID]) {
+      delete this.status[deviceID];
+    }
   }
 
   /**
@@ -464,9 +534,15 @@ class DeviceStatus {
     const device = stats.deviceID;
     const bytes = stats.bytes;
 
+    // save account in order to keep relations between *deleted* orgs and accounts
+    const { account } = await orgModel.findOne({ _id: org });
+
     try {
-      const inc = { $inc: { [`stats.orgs.${org}.devices.${device}.bytes`]: bytes } };
-      await deviceAggregateStats.findOneAndUpdate({ month: month }, inc, {
+      const update = {
+        $inc: { [`stats.orgs.${org}.devices.${device}.bytes`]: bytes },
+        $set: { [`stats.orgs.${org}.account`]: account }
+      };
+      await deviceAggregateStats.findOneAndUpdate({ month: month }, update, {
         upsert: true,
         useFindAndModify: false
       });
@@ -502,6 +578,15 @@ class DeviceStatus {
   getDeviceLastUpdateTime (deviceID) {
     return !this.status[deviceID].lastUpdateTime
       ? 0 : this.status[deviceID].lastUpdateTime;
+  }
+
+  /**
+   * A callback that is called when a device disconnects from the MGMT
+   * @param  {string} deviceID device host id
+   * @return {void}
+   */
+  deviceConnectionClosed (deviceID) {
+    this.removeDeviceStatus(deviceID);
   }
 }
 

@@ -24,7 +24,7 @@ const config = require('./flexibillingconfig.json');
  */
 class FlexiBilling {
   async getMaxDevicesRegisteredSummmary (account) {
-    return { current: 'N/A', max: 'N/A' };
+    return null;
   }
 
   async getMaxDevicesAllowed (id) {
@@ -133,11 +133,19 @@ class FlexiBilling {
     }
     return this.Instance;
   }
+
+  async getBillingAccountsSummary () {
+    return [];
+  }
+
+  async updateAccountOrganizations (id, organizations) {
+    return null;
+  }
 }
 
 // check if flexibilling is required
 let billing;
-const useFlexiBilling = require('./configs')().get('useFlexiBilling') || false;
+const useFlexiBilling = require('./configs')().get('useFlexiBilling', 'boolean');
 
 if (useFlexiBilling) {
   billing = require('./billing');

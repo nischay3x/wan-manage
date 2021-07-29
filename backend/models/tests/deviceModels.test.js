@@ -61,6 +61,9 @@ beforeEach(() => {
     IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7348',
     IPv6Mask: '64',
     PublicIP: '72.168.10.30',
+    PublicPort: '',
+    NatType: '',
+    useStun: true,
     isAssigned: false,
     routing: 'None',
     type: 'None'
@@ -287,12 +290,12 @@ describe('Interface schema', () => {
     });
   });
 
-  it('Should be invalid if pci address is invalid', () => {
-    interfaceModel.pciaddr = null;
+  it('Should be invalid if dev_id address is invalid', () => {
+    interfaceModel.devId = null;
 
     interfaceModel.validate((err) => {
       expect(err.message).toBe(
-        'interfaces validation failed: pciaddr: pciaddr should be a vaild pci address'
+        'interfaces validation failed: devId: devId should be a vaild devId address'
       );
     });
   });

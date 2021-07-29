@@ -51,8 +51,20 @@ class DeviceQueues {
     this.resumeQueue = this.resumeQueue.bind(this);
     this.removeJobs = this.removeJobs.bind(this);
     this.removeJobIdsByOrg = this.removeJobIdsByOrg.bind(this);
+    this.getLastJob = this.getLastJob.bind(this);
+    this.getQueueJobsByState = this.getQueueJobsByState.bind(this);
+    this.getOPendingJobsCount = this.getOPendingJobsCount.bind(this);
+    this.registerJobRemoveCallback = this.registerJobRemoveCallback.bind(this);
+    this.unregisterJobRemoveCallback = this.unregisterJobRemoveCallback.bind(this);
+    this.callRemoveRegisteredCallback = this.callRemoveRegisteredCallback.bind(this);
+    this.registerJobErrorCallback = this.registerJobErrorCallback.bind(this);
+    this.unregisterJobErrorCallback = this.unregisterJobErrorCallback.bind(this);
+    this.callErrorRegisteredCallback = this.callErrorRegisteredCallback.bind(this);
+    this.failedJobs = this.failedJobs.bind(this);
 
+    this.updateSyncState = async (deviceId, job) => {};
     this.removeCallbacks = {};
+    this.errorCallbacks = {};
 
     // TBD: make it more safe
     const args = redis.split('://')[1].split(':');
@@ -71,12 +83,12 @@ class DeviceQueues {
               // a individual error
               return new Error('The server refused the connection');
             }
-            if (options.total_retry_time > configs.get('redisTotalRetryTime')) {
+            if (options.total_retry_time > configs.get('redisTotalRetryTime', 'number')) {
               // End reconnecting after a specific timeout and flush all commands
               // with a individual error
               return new Error('Retry time exhausted');
             }
-            if (options.attempt > configs.get('redisTotalAttempts')) {
+            if (options.attempt > configs.get('redisTotalAttempts', 'number')) {
               // End reconnecting with built in error
               return undefined;
             }
@@ -219,9 +231,18 @@ class DeviceQueues {
             return reject(new Error(failErr));
           });
       }
-      job.save((err) => {
+      job.save(async (err) => {
         if (err) return reject(new JobError(err, job));
-        else if (!init) return resolve(job);
+        else if (!init) {
+          // If autoSync is on, queueing a job should
+          // change the devices sync state to "syncing"
+          try {
+            await this.updateSyncState(deviceId, message);
+          } catch (e) {
+            return reject(new JobError(e, job));
+          }
+          return resolve(job);
+        }
       });
     });
   }
@@ -392,7 +413,7 @@ class DeviceQueues {
       await this.iterateJobsIdsByOrg(org, jobIDs, async (job) => {
         const removedJob = await job.remove(function (err) { if (err) throw err; });
         const { method } = removedJob.data.response;
-        this.callRegisteredCallback(method, removedJob);
+        this.callRemoveRegisteredCallback(method, removedJob);
       });
     } catch (err) {
       logger.warn('Encountered an error while removing jobs', {
@@ -400,6 +421,63 @@ class DeviceQueues {
       });
       throw err;
     }
+  }
+
+  /**
+   * Gets all jobs of a specific status and range in
+   * the queue of the device specified by "deviceId"
+   * @param  {string} deviceId device UUID
+   * @param  {string}  state   job state (complete/failed/etc.)
+   * @param  {number}  from    start index
+   * @param  {number}  to      stop index
+   * @return {Promise}         a list of job ids with the requested state
+   */
+  getQueueJobsByState (deviceId, state, from = 0, to = -1) {
+    return new Promise((resolve, reject) => {
+      kue.Job.rangeByType(deviceId, state, from, to, 'asc', (err, ids) => {
+        if (err) return resolve([]);
+        resolve(ids);
+      });
+    });
+  }
+
+  /**
+   * Gets the number of pending (waiting/running) jobs
+   * for the device specified by "deviceId"
+   * @param  {string} deviceId device UUID
+   * @return {Promise}         a list of job ids of pending jobs
+   */
+  async getOPendingJobsCount (deviceId) {
+    let pendingJobs = [];
+    for (const state of [
+      'inactive',
+      'active'
+    ]) {
+      const jobIds = await this.getQueueJobsByState(deviceId, state);
+      pendingJobs = pendingJobs.concat(jobIds);
+    }
+    return pendingJobs.length;
+  }
+
+  /**
+   * Gets the last job in the queue of
+   * the device specified by "deviceId"
+   * @param  {string} deviceId device UUID
+   * @param  {string} state - state to query last job for. No value looks for all states
+   * @return {Promise}         last queued job
+   */
+  async getLastJob (deviceId, state) {
+    let allJobs = [];
+    const states = (state) ? [state] : ['complete', 'failed', 'inactive', 'delayed', 'active'];
+    for (const _state of states) {
+      // We call getQueueJobsByState() with 'from' and 'to'
+      // set to -1 to get only the last job in the queue
+      const jobIds = await this.getQueueJobsByState(deviceId, _state, -1, -1);
+      allJobs = allJobs.concat(jobIds);
+    }
+
+    // Find the job with the highest ID
+    return allJobs.reduce((res, job) => !res.id || job.id > res.id ? job : res, {});
   }
 
   /**
@@ -431,7 +509,7 @@ class DeviceQueues {
         if (now - job.created_at > createdBefore) {
           const removedJob = await job.remove(function (err) { if (err) throw err; });
           const { method } = removedJob.data.response;
-          this.callRegisteredCallback(method, removedJob);
+          this.callRemoveRegisteredCallback(method, removedJob);
         }
       });
     } catch (err) {
@@ -440,6 +518,45 @@ class DeviceQueues {
       });
       throw err;
     }
+  }
+
+  /**
+     * Set jobs created before the specified time for a given state to failed
+     * @param  {string} state         queue state to remove jobs from
+     *                                ('complete', 'failed', 'inactive', 'delayed', 'active')
+     * @param  {number} createdBefore time in milliseconds
+     * @return {void}
+     */
+  async failedJobs (state, createdBefore = 3600000) {
+    try {
+      const now = new Date().getTime();
+      await this.iterateJobs(state, async (job) => {
+        if (now - job.created_at > createdBefore) {
+          const failedJob = await job.failed(function (err) { if (err) throw err; });
+          await job.error('Error: Dangle Waiting');
+          const { method } = failedJob.data.response;
+          this.callErrorRegisteredCallback(method, failedJob);
+        }
+      });
+    } catch (err) {
+      logger.warn('Encountered an error while setting failure for old jobs', {
+        params: { state: state, createdBefore: createdBefore, err: err.message }
+      });
+      throw err;
+    }
+  }
+
+  /**
+   * Returns the job object according to the job id.
+   * @param  {string}  jobId  Id of the job to be retrieved
+   */
+  getJobById (jobId, strict = false) {
+    return new Promise((resolve, reject) => {
+      kue.Job.get(jobId, async (err, job) => {
+        if (err) resolve(null);
+        return resolve(job);
+      });
+    });
   }
 
   /**
@@ -462,15 +579,56 @@ class DeviceQueues {
   }
 
   /**
-     * Calls all registered callbacks
+     * Calls remove registered callbacks
      * @param  {string} name  The name of the callback to be called.
      * @param  {Object} job   The job object that will be pass to the callbacks.
      * @return {void}
      */
-  callRegisteredCallback (name, job) {
+  callRemoveRegisteredCallback (name, job) {
     if (this.removeCallbacks.hasOwnProperty(name)) {
-      this.removeCallbacks[name](job);
+      return this.removeCallbacks[name](job);
     }
+  }
+
+  /**
+     * Registers a callback to be called when a job has an error.
+     * @param  {string}   name      the name of the module that registered the callback.
+     * @param  {Callback} callback  the callback method to be called
+     * @return {void}
+     */
+  registerJobErrorCallback (name, callback) {
+    this.errorCallbacks[name] = callback;
+  }
+
+  /**
+       * Unregister a callback that was registered using registerJobErrorCallback().
+       * @param  {string} name The name of the module that registered the callback.
+       * @return {void}
+       */
+  unregisterJobErrorCallback (name) {
+    delete this.errorCallbacks[name];
+  }
+
+  /**
+       * Calls error registered callbacks
+       * @param  {string} name  The name of the callback to be called.
+       * @param  {Object} job   The job object that will be pass to the callbacks.
+       * @return {void}
+       */
+  callErrorRegisteredCallback (name, job) {
+    if (this.errorCallbacks.hasOwnProperty(name)) {
+      return this.errorCallbacks[name](job);
+    }
+  }
+
+  /**
+   * Registers a method to be called as part of
+   * addJob() and update the device sync status
+   * @param  {Function} method  the callback method to be called
+   * @return {void}
+   */
+  registerUpdateSyncMethod (method) {
+    this.updateSyncState = method;
   }
 }
 

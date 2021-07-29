@@ -53,7 +53,10 @@ class NotificationsService {
         : await notificationsDb.find(
           query,
           'time device title details status machineId'
-        ).populate('device', 'name -_id', devices);
+        )
+          .skip(offset)
+          .limit(limit)
+          .populate('device', 'name -_id', devices).lean();
 
       const result = (op === 'count')
         ? notifications.map(element => {

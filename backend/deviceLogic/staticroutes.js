@@ -35,7 +35,7 @@ const { getMajorVersion } = require('../versioning');
  */
 const apply = async (device, user, data) => {
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const machineId = device.machineId;
   const majorAgentVersion = getMajorVersion(device.versions.agent);
 
@@ -47,10 +47,15 @@ const apply = async (device, user, data) => {
 
     let message = 'add-route';
     let titlePrefix = 'Add';
-    const params = { addr: data.destination, via: data.gateway };
+
+    const params = {
+      addr: data.destination,
+      via: data.gateway,
+      redistributeViaOSPF: data.redistributeViaOSPF
+    };
 
     if (data.ifname) {
-      params.pci = data.ifname;
+      params.devId = data.ifname;
     }
 
     if (data.metric) {
@@ -71,7 +76,7 @@ const apply = async (device, user, data) => {
         // Response data
         { method: 'staticroutes', data: { deviceId: device.id, routeId: routeId, message } },
         // Metadata
-        { priority: 'low', attempts: 1, removeOnComplete: false },
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null);
       logger.info('Add static route job queued', { params: { job } });

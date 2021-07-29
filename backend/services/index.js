@@ -17,6 +17,7 @@
 
 const AccessTokensService = require('./AccessTokensService');
 const AccountsService = require('./AccountsService');
+const ConfigurationService = require('./ConfigurationService');
 const DevicesService = require('./DevicesService');
 const JobsService = require('./JobsService');
 const MembersService = require('./MembersService');
@@ -30,10 +31,12 @@ const BillingService = require('./BillingService');
 const PathLabelsService = require('./PathLabelsService');
 const MLPoliciesService = require('./MultiLinkPoliciesService');
 const ApplicationsService = require('./ApplicationsService');
+const FirewallPoliciesService = require('./FirewallPoliciesService');
 
 module.exports = {
   AccessTokensService,
   AccountsService,
+  ConfigurationService,
   DevicesService,
   JobsService,
   MembersService,
@@ -46,5 +49,6 @@ module.exports = {
   BillingService,
   PathLabelsService,
   MLPoliciesService,
-  ApplicationsService
+  ApplicationsService,
+  FirewallPoliciesService
 };

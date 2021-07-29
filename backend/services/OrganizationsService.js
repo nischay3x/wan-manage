@@ -48,7 +48,8 @@ class OrganizationsService {
       'name',
       '_id',
       'account',
-      'group'
+      'group',
+      'encryptionMethod'
     ]);
     retOrg._id = retOrg._id.toString();
     retOrg.account = retOrg.account.toString();
@@ -65,7 +66,7 @@ class OrganizationsService {
    **/
   static async organizationsGET ({ offset, limit }, { user }) {
     try {
-      const orgs = await getUserOrganizations(user);
+      const orgs = await getUserOrganizations(user, offset, limit);
       const result = Object.keys(orgs).map((key) => {
         return OrganizationsService.selectOrganizationParams(orgs[key]);
       });
@@ -75,7 +76,8 @@ class OrganizationsService {
           _id: element._id.toString(),
           name: element.name,
           account: element.account ? element.account.toString() : '',
-          group: element.group
+          group: element.group,
+          encryptionMethod: element.encryptionMethod
         };
       });
 
@@ -122,7 +124,8 @@ class OrganizationsService {
           _id: updUser.defaultOrg._id.toString(),
           name: updUser.defaultOrg.name,
           account: updUser.defaultOrg.account ? updUser.defaultOrg.account.toString() : '',
-          group: updUser.defaultOrg.group
+          group: updUser.defaultOrg.group,
+          encryptionMethod: updUser.defaultOrg.encryptionMethod
         };
         return Service.successResponse(result, 201);
       }
@@ -214,12 +217,18 @@ class OrganizationsService {
       const deviceCount = await Devices.devices.countDocuments({ account: user.defaultAccount._id })
         .session(session);
 
+      const deviceOrgCount = await Devices.devices.countDocuments(
+        { account: user.defaultAccount._id, org: id }
+      ).session(session);
+
       // Delete all devices
       await Devices.devices.deleteMany({ org: id }, { session: session });
       // Unregister a device (by removing the removed org number)
       await Flexibilling.registerDevice({
         account: user.defaultAccount._id,
+        org: id,
         count: deviceCount,
+        orgCount: deviceOrgCount,
         increment: -orgDevices.length
       }, session);
 
@@ -252,10 +261,10 @@ class OrganizationsService {
       // are set properly for updating this organization
       const orgList = await getAccessTokenOrgList(user, undefined, false);
       if (orgList.includes(id)) {
-        const { name, group } = organizationRequest;
+        const { name, group, encryptionMethod } = organizationRequest;
         const resultOrg = await Organizations.findOneAndUpdate(
           { _id: id },
-          { $set: { name, group } },
+          { $set: { name, group, encryptionMethod } },
           { upsert: false, multi: false, new: true, runValidators: true }
         );
         // Update token

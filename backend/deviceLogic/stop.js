@@ -24,7 +24,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 const tunnelsModel = require('../models/tunnels');
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { getMajorVersion } = require('../versioning');
 
 /**
  * Creates and queues the stop-router job.
@@ -41,14 +40,10 @@ const apply = async (device, user, data) => {
   deviceStatus.setDeviceStatsField(device[0].machineId, 'state', 'pending');
 
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const machineID = device[0].machineId;
-  const majorAgentVersion = getMajorVersion(device[0].versions.agent);
+  const stopParams = {};
 
-  // Stop router command might change IP address of the
-  // interface connected to the MGMT. Tell the agent to
-  // reconnect to the MGMT after processing this command.
-  const stopParams = { reconnect: true };
   const tasks = [{ entity: 'agent', message: 'stop-router', params: stopParams }];
 
   try {
@@ -63,8 +58,7 @@ const apply = async (device, user, data) => {
         method: 'stop',
         data: {
           device: device[0]._id,
-          org: org,
-          shouldUpdateTunnel: majorAgentVersion === 0
+          org: org
         }
       },
       // Metadata

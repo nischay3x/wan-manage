@@ -18,12 +18,14 @@
 const configs = require('../configs')();
 const notificationsDb = require('../models/notifications');
 const organizations = require('../models/organizations');
+const accountsModel = require('../models/accounts');
+const devicesModel = require('../models/devices').devices;
 const { membership } = require('../models/membership');
 const logger = require('../logging/logging')({ module: module.filename, type: 'notifications' });
 const mailer = require('../utils/mailer')(
   configs.get('mailerHost'),
   configs.get('mailerPort'),
-  configs.get('mailerBypassCert')
+  configs.get('mailerBypassCert', 'boolean')
 );
 const mongoose = require('mongoose');
 
@@ -74,6 +76,8 @@ class NotificationsManager {
       });
 
       await notificationsDb.insertMany(notifications);
+      // Log notification for logging systems
+      logger.info('New notifications', { params: { notifications: notifications } });
     } catch (err) {
       logger.warn('Failed to store notifications in database', {
         params: { notifications: notifications, err: err.message }
@@ -94,18 +98,14 @@ class NotificationsManager {
     // 1. Get the list of account IDs with pending notifications.
     // 2. Go over the list, populate the users and send them emails.
     try {
-      const accountIDs = await notificationsDb.aggregate([
-        { $match: { status: 'unread' } },
-        { $group: { _id: '$account' } }
-      ]);
-
+      const accountIDs = await notificationsDb.distinct('account', { status: 'unread' });
       // Notify users only if there are unread notifications
       for (const accountID of accountIDs) {
         const res = await membership.aggregate([
           {
             $match: {
               $and: [
-                { account: accountID._id },
+                { account: accountID },
                 { to: 'account' },
                 { role: 'owner' }
               ]
@@ -140,21 +140,51 @@ class NotificationsManager {
           []
         );
         if (emailAddresses.length) {
+          const account = await accountsModel.findOne({ _id: accountID });
+          const messages = await notificationsDb.find(
+            { account: accountID, status: 'unread' },
+            'time device details machineId'
+          ).sort({ time: -1 })
+            .limit(configs.get('unreadNotificationsMaxSent', 'number'))
+            .populate('device', 'name -_id', devicesModel).lean();
+
+          const uiServerUrl = configs.get('uiServerUrl', 'list');
           await mailer.sendMailHTML(
             configs.get('mailerFromAddress'),
             emailAddresses,
             'Pending unread notifications',
             `<h2>${configs.get('companyName')} Notification Reminder</h2>
             <p style="font-size:16px">This email was sent to you since you have pending
-             unread notifications.
+             unread notifications in account
+             "${account.name} : ${account._id.toString().substring(0, 13)}".</p>
+             <i><small>
+             <ul>
+              ${messages.map(message => `
+              <li>
+                ${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}
+                device ${message.device.name}
+                (ID: ${message.machineId})
+                - ${message.details}
+              </li>
+              `).join('')}
+            </ul>
+            </small></i>
+            <p style="font-size:16px"> Further to this email,
+            all Notifications in your Account have been set to status Read.
             <br>To view the notifications, please check the
-            <a href="${configs.get('uiServerUrl')}/notifications">Notifications</a>
+            ${uiServerUrl.length > 1
+              ? ' Notifications '
+              : `<a href="${uiServerUrl[0]}/notifications">Notifications</a>`
+            }
              page in your flexiMange account.</br>
             </p>
-            <p style="font-size:14px;color:gray">Note: Unread notification email alerts
+            <p style="font-size:16px;color:gray">Note: Unread notification email alerts
              are sent to Account owners (not Users in Organization level).
               You can disable these emails in the
-               <a href="${configs.get('uiServerUrl')}/accounts/update">Account profile</a>
+              ${uiServerUrl.length > 1
+                ? ' Account profile '
+                : `<a href="${uiServerUrl[0]}/accounts/update">Account profile</a>`
+              }
                page in your flexiManage account. Alerts on new flexiEdge software versions
                or billing information are always sent, regardless of the notifications settings.
                More about notifications
@@ -167,6 +197,11 @@ class NotificationsManager {
           });
         }
       }
+      // Set status 'read' to all notifications
+      await notificationsDb.updateMany(
+        { status: 'unread' },
+        { $set: { status: 'read' } }
+      );
     } catch (err) {
       logger.warn('Failed to notify users about pending notifications', {
         params: { err: err.message }

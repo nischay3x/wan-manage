@@ -18,14 +18,18 @@
 // File used to dispatch the apply logic to the right function
 const start = require('./start');
 const stop = require('./stop');
+const reset = require('./reset');
 const modify = require('./modifyDevice');
 const tunnels = require('./tunnels');
 const staticroutes = require('./staticroutes');
 const upgrade = require('./applyUpgrade');
 const mlpolicy = require('./mlpolicy');
 const application = require('./application');
+const firewallPolicy = require('./firewallPolicy');
 const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
+const sync = require('./sync');
+const IKEv2 = require('./IKEv2');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -53,11 +57,16 @@ const methods = {
     complete: stop.complete,
     error: errorNOOP
   },
+  reset: {
+    apply: reset.apply,
+    complete: reset.complete,
+    error: reset.error
+  },
   modify: {
     apply: modify.apply,
     complete: modify.complete,
-    error: modify.error,
-    remove: modify.remove
+    error: errorNOOP,
+    remove: errorNOOP
   },
   tunnels: {
     apply: tunnels.apply.applyTunnelAdd,
@@ -99,25 +108,47 @@ const methods = {
     error: application.error,
     remove: application.remove
   },
+  firewallPolicy: {
+    apply: firewallPolicy.apply,
+    complete: firewallPolicy.complete,
+    error: firewallPolicy.error,
+    remove: firewallPolicy.remove
+  },
   appIdentification: {
     apply: appIdentification.apply,
     complete: appIdentification.complete,
     error: appIdentification.error,
     remove: appIdentification.remove
+  },
+  sync: {
+    apply: sync.apply,
+    complete: sync.complete,
+    error: sync.error,
+    remove: errorNOOP
+  },
+  ikev2: {
+    apply: IKEv2.apply,
+    complete: IKEv2.complete,
+    error: IKEv2.error,
+    remove: IKEv2.remove
   }
 };
 
-// Register remove callbacks for relevant methods.
+// Register remove/error callbacks for relevant methods.
 Object.entries(methods).forEach(([method, functions]) => {
   if (functions.hasOwnProperty('remove')) {
     deviceQueues.registerJobRemoveCallback(method, functions.remove);
   }
+  if (functions.hasOwnProperty('error')) {
+    deviceQueues.registerJobErrorCallback(method, functions.error);
+  }
 });
+
 /**
  * Calls the apply method for to the method
  *
  * @param  {Array}    devices     an array of devices
- * @param  {String}   method      apply methond to execute
+ * @param  {String}   method      apply method to execute
  * @param  {Object}   user        User data
  * @param  {Object}   data=null   additional data per caller's choice
  * @return {void}

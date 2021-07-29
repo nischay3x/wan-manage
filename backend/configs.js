@@ -28,22 +28,33 @@ const configEnv = {
   // This is the default configuration, override by the following sections
   default: {
     // URL of the rest server
-    restServerUrl: 'https://local.flexiwan.com:3443',
+    restServerUrl: ['https://local.flexiwan.com:3443'],
     // URL of the UI server
-    uiServerUrl: 'https://local.flexiwan.com:3000',
+    uiServerUrl: ['https://local.flexiwan.com:3000'],
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
     userTokenSecretKey: 'abcdefg1234567',
     // Whether to validate open API response. True for testing and dev, False for production,
     // to remove unneeded fields from the response, use validateOpenAPIResponse = { removeAdditional: 'failing' }
     validateOpenAPIResponse: true,
+    // Whether to validate open API request, now False for all.
+    // Not described in schema fields will be removed if true,
+    validateOpenAPIRequest: false,
     // Number of REST requests allowed in 5 min per IP address, more requests will be rate limited
     userIpReqRateLimit: 300,
     // Unread notification email period (in msec), a mail is sent once a period
     unreadNotificationPeriod: 86400000,
+    // Max.number of unread notifications included into periodic email
+    unreadNotificationsMaxSent: 50,
     // The duration of the user JWT token in seconds
     userTokenExpiration: 300,
     // The duration of the user refresh token in seconds
     userRefreshTokenExpiration: 604800,
+    // The time to wait for job response before declaring the job as timeout
+    jobTimeout: 180000,
+    // The time to wait for deviceSendMessage response before declaring the req as timeout
+    directMessageTimeout: 15000,
+    // The time to retain jobs until deleted from the database, in msec
+    jobRetainTimeout: 604800000,
     // Key used for device tokens, override default with environment variable DEVICE_SECRET_KEY
     deviceTokenSecretKey: 'abcdefg1234567',
     // Key used to validate google captcha token, generated at https://www.google.com/u/1/recaptcha/admin/create
@@ -104,7 +115,7 @@ const configEnv = {
     // Client static root directory
     clientStaticDir: 'public',
     // Mgmt-Agent protocol version
-    agentApiVersion: '1.0.0',
+    agentApiVersion: '4.0.0',
     // Mgmt log files
     logFilePath: './logs/app.log',
     reqLogFilePath: './logs/req.log',
@@ -140,7 +151,29 @@ const configEnv = {
     // Global applications file locations
     applicationsUrl: './applications.json',
     // Endpoint in our flexivpn server that create a dh key
-    createDiffieHellmanApi: 'http://localhost:5001/diffieHellman/create'
+    createDiffieHellmanApi: 'http://localhost:5001/diffieHellman/create',
+    // Default port for tunnels
+    tunnelPort: '4789',
+    // If to allow manager role to delete organizations, devices, tokens, tunnels, appIdentifications,
+    //  users, path labels, policies. Default = true
+    allowManagerToDel: true,
+    // How much time to keep stats in the analytics statistics database. 7200 is two hours, 172800 is two days
+    // It requires to re-index the analytics database whenever this is changed
+    // Re-index for TTL can be done on the fly. Use the following example:
+    // db.devicestats.getIndexes()
+    // db.runCommand({collMod:'devicestats', index:{name: "createdAt_1",expireAfterSeconds:7200}})
+    analyticsStatsKeepTime: 7200,
+    // Time interval to keep data in the analytics statistics database
+    // This value is for storing in the database, it's not impacting the interval presented in the UI
+    analyticsUpdateTime: 300,
+    // Do not allow organization LAN subnet overlaps for running devices flag. Default = true
+    forbidLanSubnetOverlaps: true,
+    // Expiration period in days for generated IKEv2 keys on the devices. Default = 360 days
+    ikev2ExpireDays: 360,
+    // Number of days before expiration to renew IKEv2 keys. Default = 30 days
+    ikev2RenewBeforeExpireDays: 30,
+    // IKEv2 lifetime parameter in seconds.
+    ikev2Lifetime: 3600
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -153,14 +186,14 @@ const configEnv = {
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
-    agentApiVersion: '2.0.0',
+    agentApiVersion: '4.0.0',
     // Kue prefix
     kuePrefix: 'testq'
   },
   // Override for production environment
   production: {
-    restServerUrl: 'https://app.flexiwan.com:443',
-    uiServerUrl: 'https://app.flexiwan.com:443',
+    restServerUrl: ['https://app.flexiwan.com:443'],
+    uiServerUrl: ['https://app.flexiwan.com:443'],
     shouldRedirectHttps: false,
     redirectHttpsPort: 443,
     agentBroker: 'app.flexiwan.com:443',
@@ -178,8 +211,8 @@ const configEnv = {
   },
   hosted: {
     // modify next params for hosted server
-    restServerUrl: 'https://hosted.server.com:443',
-    uiServerUrl: 'https://hosted.server.com:443',
+    restServerUrl: ['https://hosted.server.com:443'],
+    uiServerUrl: ['https://hosted.server.com:443'],
     agentBroker: 'hosted.server.com:443',
     corsWhiteList: 'https://hosted.server.com:443, http://hosted.server.com:80',
     billingRedirectOkUrl: 'https://hosted.server.com/ok.html',
@@ -198,8 +231,8 @@ const configEnv = {
   },
   // Override for manage environment for production
   manage: {
-    restServerUrl: 'https://manage.flexiwan.com:443',
-    uiServerUrl: 'https://manage.flexiwan.com:443',
+    restServerUrl: ['https://manage.flexiwan.com:443'],
+    uiServerUrl: ['https://manage.flexiwan.com:443'],
     shouldRedirectHttps: false,
     redirectHttpsPort: 443,
     kuePrefix: 'mngdeviceq',
@@ -219,8 +252,8 @@ const configEnv = {
   },
   // Override for appqa01 environment
   appqa01: {
-    restServerUrl: 'https://appqa01.flexiwan.com:443',
-    uiServerUrl: 'https://appqa01.flexiwan.com:443',
+    restServerUrl: ['https://appqa01.flexiwan.com:443'],
+    uiServerUrl: ['https://appqa01.flexiwan.com:443'],
     shouldRedirectHttps: false,
     redirectHttpsPort: 443,
     userTokenExpiration: 300,
@@ -242,8 +275,8 @@ const configEnv = {
   },
   // Override for appqa02 environment
   appqa02: {
-    restServerUrl: 'https://appqa02.flexiwan.com:443',
-    uiServerUrl: 'https://appqa02.flexiwan.com:443',
+    restServerUrl: ['https://appqa02.flexiwan.com:443'],
+    uiServerUrl: ['https://appqa02.flexiwan.com:443'],
     shouldRedirectHttps: false,
     redirectHttpsPort: 443,
     userTokenExpiration: 300,

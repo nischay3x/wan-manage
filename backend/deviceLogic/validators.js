@@ -17,7 +17,8 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
-
+const { generateTunnelParams } = require('../utils/tunnelUtils');
+const maxMetric = 2 * 10 ** 9;
 /**
  * Checks whether a value is empty
  * @param  {string}  val the value to be checked
@@ -40,27 +41,81 @@ const validateIPv4Mask = mask => {
 };
 
 /**
+ * Checks whether dhcp server configuration is valid
+ * Validate if any dhcp is assigned on a modified interface
+ * @param {Object} device - the device to validate
+ * @param {List} modifiedInterfaces - list of modified interfaces
+ * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
+ */
+const validateDhcpConfig = (device, modifiedInterfaces) => {
+  const assignedDhcps = device.dhcp.map(d => d.interface);
+  const modifiedDhcp = modifiedInterfaces.filter(i => {
+    // don't validate unassigned modified interface
+    if (!assignedDhcps.includes(i.devId)) {
+      return false;
+    }
+
+    // validate only critical fields
+    const orig = device.interfaces.find(intf => intf.devId === i.devId);
+    if (i.type !== orig.type ||
+      i.dhcp !== orig.dhcp ||
+      i.addr !== `${orig.IPv4}/${orig.IPv4Mask}` ||
+      i.gateway !== orig.gateway
+    ) {
+      return true;
+    } else {
+      return false;
+    }
+  });
+  if (modifiedDhcp.length > 0) {
+    // get first interface from device
+    const firstIf = device.interfaces.filter(i => i.devId === modifiedDhcp[0].devId);
+    const result = {
+      valid: false,
+      err: `DHCP defined on interface ${
+        firstIf[0].name
+      }, please remove it before modifying this interface`
+    };
+    return result;
+  }
+  return { valid: true, err: '' };
+};
+
+/**
  * Checks whether the device configuration is valid,
  * therefore the device can be started.
  * @param {Object}  device                 the device to check
- * @param {Boolean} checkLanOverlaps           if need to check LAN subnets overlap
+ * @param {Boolean} isRunning              is the device running
  * @param {[_id: objectId, name: string, subnet: string]} organizationLanSubnets to check overlaps
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets = []) => {
+const validateDevice = (device, isRunning = false, organizationLanSubnets = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
+  if (!Array.isArray(interfaces) || interfaces.length < 2) {
+    return {
+      valid: false,
+      err: 'There should be at least two interfaces'
+    };
+  }
   const assignedIfs = interfaces.filter(ifc => { return ifc.isAssigned; });
   const [wanIfcs, lanIfcs] = [
     assignedIfs.filter(ifc => { return ifc.type === 'WAN'; }),
     assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
 
-  if (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0)) {
+  if (isRunning && (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0))) {
     return {
       valid: false,
       err: 'There should be at least one LAN and one WAN interfaces'
+    };
+  }
+
+  if (assignedIfs.some(ifc => +ifc.metric >= maxMetric)) {
+    return {
+      valid: false,
+      err: `Metric should be lower than ${maxMetric}`
     };
   }
 
@@ -73,10 +128,12 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
       };
     }
 
-    if ((!net.isIPv4(ifc.IPv4) || ifc.IPv4Mask === '') && ifc.dhcp !== 'yes') {
+    if (!isIPv4Address(ifc.IPv4, ifc.IPv4Mask) && ifc.dhcp !== 'yes') {
       return {
         valid: false,
-        err: `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
+        err: ifc.IPv4 && ifc.IPv4Mask
+          ? `Invalid IP address for ${ifc.name}: ${ifc.IPv4}/${ifc.IPv4Mask}`
+          : `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
                       ? 'IPv4 mask' : 'IP address'}`
       };
     }
@@ -125,24 +182,32 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     }
   }
 
-  // LAN and WAN interfaces must not be on the same subnet
-  // WAN IP address and default GW IP addresses must be on the same subnet
-  for (const wanIfc of wanIfcs.filter(i => !(i.dhcp === 'yes' && i.IPv4 === ''))) {
-    for (const lanIfc of lanIfcs) {
-      const wanSubnet = `${wanIfc.IPv4}/${wanIfc.IPv4Mask}`;
-      const lanSubnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
-      // const defaultGwSubnet = `${device.defaultRoute}/32`;
-
-      if (cidr.overlap(wanSubnet, lanSubnet)) {
+  // Assigned interfaces must not be on the same subnet
+  const assignedNotEmptyIfs = assignedIfs.filter(i => isIPv4Address(i.IPv4, i.IPv4Mask));
+  for (const ifc1 of assignedNotEmptyIfs) {
+    for (const ifc2 of assignedNotEmptyIfs.filter(i => i.devId !== ifc1.devId)) {
+      const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
+      const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
+      if (ifc1Subnet !== ifc2Subnet && cidr.overlap(ifc1Subnet, ifc2Subnet)) {
         return {
           valid: false,
-          err: 'WAN and LAN IP addresses have an overlap'
+          err: 'IP addresses of the assigned interfaces have an overlap'
         };
       }
     }
   }
 
-  if (checkLanOverlaps && organizationLanSubnets.length > 0) {
+  // Checks if all assigned WAN interfaces metrics are different
+  const metricsArray = wanIfcs.map(i => Number(i.metric));
+  const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
+  if (hasDuplicates) {
+    return {
+      valid: false,
+      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
+    };
+  }
+
+  if (isRunning && organizationLanSubnets.length > 0) {
     // LAN subnet must not be overlap with other devices in this org
     for (const orgDevice of organizationLanSubnets) {
       for (const currentLanIfc of lanIfcs) {
@@ -167,18 +232,112 @@ const validateDevice = (device, checkLanOverlaps = false, organizationLanSubnets
     }
   }
 
-  // Checks if all interfaces metrics are different
-  const metricsArray = device.interfaces
-    .filter(i => i.type === 'WAN')
-    .map(i => Number(i.metric));
-  const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
-  if (hasDuplicates) {
-    return {
-      valid: false,
-      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
-    };
+  const lteInterface = assignedIfs.find(i => i.deviceType === 'lte');
+  if (lteInterface) {
+    const isEnabled = lteInterface.configuration && lteInterface.configuration.enable;
+    if (!isEnabled) {
+      return {
+        valid: false,
+        err: 'LTE interface is assigned but not enabled. Please enable or unassign it'
+      };
+    }
   }
 
+  const wifiInterface = assignedIfs.find(i => i.deviceType === 'wifi');
+  if (wifiInterface) {
+    const band2Enable = wifiInterface.configuration['2.4GHz'] &&
+      wifiInterface.configuration['2.4GHz'].enable;
+    const band5Enable = wifiInterface.configuration['5GHz'] &&
+      wifiInterface.configuration['5GHz'].enable;
+
+    if (band2Enable && band5Enable) {
+      return {
+        valid: false, err: 'Dual band at the same time is not supported. Please enable one of them'
+      };
+    } ;
+
+    if (!band2Enable && !band5Enable) {
+      return {
+        valid: false, err: 'Wifi access point must be enabled'
+      };
+    } ;
+
+    const key = band2Enable ? '2.4GHz' : '5GHz';
+    const ssid = wifiInterface.configuration[key] && wifiInterface.configuration[key].ssid;
+    const pass = wifiInterface.configuration[key] && wifiInterface.configuration[key].password;
+    if (!ssid) return { valid: false, err: 'SSID is not configured for WIFI interface' };
+    if (!pass) return { valid: false, err: 'Password is not configured for WIFI interface' };
+  }
+
+  // Firewall rules validation
+  if (device.firewall) {
+    const firewallRules = device.firewall.rules;
+    for (const rule of firewallRules) {
+      // protocols must be specified
+      const { trafficId, trafficTags, ipProtoPort } = rule.classification.destination;
+      if (rule.inbound !== 'nat1to1' && !trafficId && !trafficTags && ipProtoPort) {
+        const { protocols } = ipProtoPort;
+        if (!protocols || protocols.length === 0) {
+          return { valid: false, err: 'At least one protocol must be specified' };
+        }
+      }
+    };
+    const forwardedPorts = {};
+    const internalPorts = {};
+    for (const rule of firewallRules.filter(r => r.inbound === 'portForward')) {
+      const { internalIP, internalPortStart, classification } = rule;
+      const { source, destination } = classification;
+      if (!source && !destination) {
+        return { valid: false, message: 'Source or destination must be specified' };
+      }
+      const { ports: destPorts, interface: wanIfc } = destination.ipProtoPort;
+      if (isEmpty(internalIP)) {
+        return { valid: false, err: 'Internal IP address must be specified' };
+      }
+      if (isEmpty(internalPortStart)) {
+        return { valid: false, err: 'Internal start port must be specified' };
+      }
+      if (isEmpty(destPorts)) {
+        return { valid: false, err: 'Destination port must be specified' };
+      }
+      if (!internalPorts[internalIP]) {
+        internalPorts[internalIP] = [];
+      }
+      if (!internalPorts[wanIfc]) {
+        forwardedPorts[wanIfc] = [];
+      }
+      if (destPorts.includes('-')) {
+        const [portLow, portHigh] = destPorts.split('-');
+        for (let usedPort = +portLow; usedPort <= +portHigh; usedPort++) {
+          forwardedPorts[wanIfc].push(usedPort);
+          console.log(usedPort, +internalPortStart + usedPort - portLow);
+          internalPorts[internalIP].push(+internalPortStart + usedPort - portLow);
+        }
+      } else {
+        forwardedPorts[wanIfc].push(+destPorts);
+        internalPorts[internalIP].push(+internalPortStart);
+      }
+    }
+    // Forwarded destination port can be used only once
+    for (const wanIfc of Object.keys(forwardedPorts)) {
+      const destPortsArray = forwardedPorts[wanIfc];
+      const destPortsOverlapped = destPortsArray.length !== new Set(destPortsArray).size;
+      if (destPortsOverlapped) {
+        return { valid: false, err: 'Destination forwarded ports overlapped on ' + wanIfc };
+      }
+      if (destPortsArray.includes(4789)) {
+        return { valid: false, err: 'Not allowed to use port 4789 as forwarded on ' + wanIfc };
+      }
+    }
+    // Internal port can be used only once for one internal IP
+    for (const internalIP of Object.keys(internalPorts)) {
+      const internalPortsArray = internalPorts[internalIP];
+      const internalOverlapped = internalPortsArray.length !== new Set(internalPortsArray).size;
+      if (internalOverlapped) {
+        return { valid: false, err: 'Internal ports overlap for ' + internalIP };
+      }
+    }
+  }
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -204,8 +363,14 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
       // allow empty IP on WAN with dhcp client
       continue;
     }
+
+    if (ifc.deviceType === 'wifi') {
+      // allow empty IP on wifi access point interface
+      continue;
+    }
+
     const [ip, mask] = (ifc.addr || '/').split('/');
-    if (!net.isIPv4(ip) || !validateIPv4Mask(mask)) {
+    if (!isIPv4Address(ip, mask)) {
       return {
         valid: false,
         err: `Bad request: Invalid IP address ${ifc.addr}`
@@ -215,7 +380,86 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   return { valid: true, err: '' };
 };
 
+const isIPv4Address = (ip, mask) => {
+  if (!validateIPv4Mask(mask)) {
+    return false;
+  };
+  if (!net.isIPv4(ip)) {
+    return false;
+  };
+  const octets = ip.split('.');
+  if (['0', '255'].includes(octets[3])) {
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Checks whether static route is valid
+ * @param {Object} device - the device to validate
+ * @param {List} tunnels - list of tunnels nums of the device
+ * @param {Object} route - the added/modified route
+ * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
+ */
+const validateStaticRoute = (device, tunnels, route) => {
+  const { ifname, gateway } = route;
+  const gatewaySubnet = `${gateway}/32`;
+
+  if (ifname) {
+    const ifc = device.interfaces.find(i => i.devId === ifname);
+    if (ifc === undefined) {
+      return {
+        valid: false,
+        err: `Static route interface not found '${ifname}'`
+      };
+    };
+    if (!ifc.isAssigned) {
+      return {
+        valid: false,
+        err: `Static routes not allowed on unassigned interfaces '${ifname}'`
+      };
+    }
+    if (!cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
+      return {
+        valid: false,
+        err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+      };
+    }
+
+    // Don't allow putting static route on a bridged interface
+    const anotherBridgedIfc = device.interfaces.some(i => {
+      return i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned;
+    });
+    if (anotherBridgedIfc) {
+      return {
+        valid: false,
+        err: 'Specify interface in static route is not allowed on a bridged interface'
+      };
+    }
+  } else {
+    let valid = device.interfaces.filter(ifc => ifc.IPv4 && ifc.IPv4Mask).some(ifc =>
+      cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)
+    );
+    if (!valid) {
+      valid = tunnels.some(tunnel => {
+        const { ip1 } = generateTunnelParams(tunnel.num);
+        return cidr.overlap(`${ip1}/31`, gatewaySubnet);
+      });
+    }
+    if (!valid) {
+      return {
+        valid: false,
+        err: `Static route gateway ${gateway} not overlapped with any interface or tunnel`
+      };
+    }
+  }
+  return { valid: true, err: '' };
+};
+
 module.exports = {
+  isIPv4Address,
   validateDevice,
-  validateModifyDeviceMsg
+  validateDhcpConfig,
+  validateStaticRoute,
+  validateModifyDeviceMsg: validateModifyDeviceMsg
 };

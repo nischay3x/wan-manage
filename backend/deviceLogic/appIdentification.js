@@ -67,7 +67,7 @@ const apply = async (devices, user, data) => {
           }
         },
         // Metadata
-        { priority: 'low', attempts: 1, removeOnComplete: false },
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null);
       jobPromises.push(jobPromise);
@@ -117,6 +117,22 @@ const complete = async (jobId, res) => {
   } catch (error) {
     logger.error('Complete appIdentification job, failed', {
       params: { result: res, jobId: jobId, message: error.message }
+    });
+  }
+};
+
+/**
+ * Complete handler for sync job
+ * @return void
+ */
+const completeSync = async (jobId, jobsData) => {
+  try {
+    for (const data of jobsData) {
+      await complete(jobId, data);
+    }
+  } catch (err) {
+    logger.error('App identification sync complete callback failed', {
+      params: { jobsData, reason: err.message }
     });
   }
 };
@@ -199,7 +215,8 @@ const getOrgAppIdentifications = async (org) => {
  *  deviceJobResp - Parameters to include in the job response data together with the device Id
  * @throw exception on error
  */
-const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isInstall) => {
+const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isInstall,
+  sync = false) => {
   // find all devices that require a new update
   //  (don't have a pending job)
   // if isInstall==true, find devices older from latest the app update time
@@ -211,7 +228,26 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   let requestTime = null;
   let appRules = null;
   let updateAt = null;
-  if (isInstall) {
+
+  // On sync device, no client is allowed and device should be installed if has clients
+  if (sync && !client && isInstall) {
+    opDevices = await devices.find(
+      {
+        _id: { $in: deviceIdList },
+        $and: [
+          { 'appIdentification.clients': { $ne: [] } },
+          { 'appIdentification.clients': { $ne: null } }
+        ]
+      }, { _id: 1 });
+    if (opDevices.length) {
+      // get full application list for this organization
+      appRules = await getOrgAppIdentifications(org);
+      // Get latest update time
+      requestTime = (appRules.meta.importedUpdatedAt >= appRules.meta.customUpdatedAt)
+        ? appRules.meta.importedUpdatedAt : appRules.meta.customUpdatedAt;
+      update = { $set: { 'appIdentification.lastRequestTime': requestTime } };
+    }
+  } else if (isInstall) {
     // get full application list for this organization
     appRules = await getOrgAppIdentifications(org);
     // Get latest update time
@@ -224,8 +260,8 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
           _id: { $in: deviceIdList },
           'appIdentification.lastRequestTime': { $ne: requestTime },
           $or: [
-            // last update is not null or lower than latest
-            { 'appIdentification.lastUpdateTime': null },
+            // last update is null but client is not null, or lower than latest
+            ...((client != null) ? [{ 'appIdentification.lastUpdateTime': null }] : []),
             { 'appIdentification.lastUpdateTime': { $lt: updateAt } },
             // request time and update time are not equal - job failed or removed
             {
@@ -282,10 +318,14 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
       update.$pull = { 'appIdentification.clients': client };
     }
   }
-  await devices.updateMany(
-    { _id: { $in: deviceIdList } },
-    update
-  );
+  // Update op devices
+  const opDevicesIds = opDevices.map((d) => d._id);
+  if (opDevicesIds.length) {
+    await devices.updateMany(
+      { _id: { $in: opDevicesIds } },
+      update
+    );
+  }
 
   // return parameters
   const ret = {};
@@ -304,10 +344,45 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   return ret;
 };
 
+/**
+ * Creates the application identification section in the full sync job.
+ * @return Object
+ */
+const sync = async (deviceId, org) => {
+  const {
+    installIds,
+    message,
+    params,
+    deviceJobResp
+  } = await getDevicesAppIdentificationJobInfo(
+    org,
+    null,
+    [deviceId],
+    true,
+    true
+  );
+  const request = [];
+  const completeCbData = [];
+  let callComplete = false;
+  if (installIds[deviceId.toString()]) {
+    request.push({ entity: 'agent', message: message, params });
+    completeCbData.push({ deviceId, requestTime: deviceJobResp.requestTime });
+    callComplete = true;
+  }
+
+  return {
+    requests: request,
+    completeCbData,
+    callComplete
+  };
+};
+
 module.exports = {
   apply: apply,
   complete: complete,
+  completeSync: completeSync,
   error: error,
   remove: remove,
+  sync: sync,
   getDevicesAppIdentificationJobInfo: getDevicesAppIdentificationJobInfo
 };

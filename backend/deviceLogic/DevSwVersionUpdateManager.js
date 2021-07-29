@@ -27,7 +27,7 @@ const configs = require('../configs')();
 const mailer = require('../utils/mailer')(
   configs.get('mailerHost'),
   configs.get('mailerPort'),
-  configs.get('mailerBypassCert')
+  configs.get('mailerBypassCert', 'boolean')
 );
 
 const dummyVersionObject = {
@@ -124,28 +124,35 @@ class SwVersionUpdateManager {
     try {
       // eslint-disable-next-line no-template-curly-in-string
       const emailUrl = this.notificationEmailUri.replace('${version}', versions.device);
-      const res = await fetchUtils.fetchWithRetry(emailUrl, 3);
-      let { subject, body } = await res.json();
+      let { subject, body } = await fetchUtils.fetchWithRetry(emailUrl, 3);
       body = unescape(body);
 
       // Fetch all relevant memberships and send the notification email to their users.
       const accounts = await Accounts.find();
       for (const account of accounts) {
-        const memberships = await membership.find({
-          account: account._id,
-          to: 'account',
-          role: 'owner'
-        },
-        'user')
-          .populate('user');
+        try {
+          const memberships = await membership.find({
+            account: account._id,
+            to: 'account',
+            role: 'owner'
+          },
+          'user')
+            .populate('user');
 
-        // Send a reminder email to all email addresses that belong to the account
-        const emailAddresses = memberships.map(doc => { return doc.user.email; });
-        await mailer.sendMailHTML(configs.get('mailerFromAddress'), emailAddresses, subject, body);
-        logger.info('Version update email sent', {
-          params: { emailAddresses: emailAddresses },
-          periodic: { task: this.taskInfo }
-        });
+          // Send a reminder email to all email addresses that belong to the account
+          const emailAddresses = memberships.map(doc => { return doc.user.email; });
+          await mailer.sendMailHTML(
+            configs.get('mailerFromAddress'), emailAddresses, subject, body);
+          logger.info('Version update email sent', {
+            params: { emailAddresses: emailAddresses },
+            periodic: { task: this.taskInfo }
+          });
+        } catch (errAccount) {
+          logger.error('Version update email failed to send', {
+            params: { err: errAccount.message, accountId: account._id },
+            periodic: { task: this.taskInfo }
+          });
+        }
       }
     } catch (err) {
       logger.error('Failed to send version notification email to users', {
@@ -244,8 +251,7 @@ class SwVersionUpdateManager {
      */
   async pollDevSwRepo () {
     try {
-      const res = await fetchUtils.fetchWithRetry(this.swRepoUri, 3);
-      const body = await res.json();
+      const body = await fetchUtils.fetchWithRetry(this.swRepoUri, 3);
       const versions = this.createVersionsObject(body);
       const deadline = new Date(body.distributionDueDate);
 

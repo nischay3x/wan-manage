@@ -21,6 +21,7 @@ const isEqual = require('lodash/isEqual');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const MultiLinkPolicies = require('../models/mlpolicies');
 const { devices } = require('../models/devices');
+const pathLabelsModel = require('../models/pathlabels');
 const { ObjectId } = require('mongoose').Types;
 
 const emptyPrefix = {
@@ -37,7 +38,15 @@ const emptyApp = {
 };
 
 class MultiLinkPoliciesService {
-  static verifyRequestSchema (rules) {
+  static async verifyRequestSchema (mLPolicyRequest, org) {
+    const { _id, name, rules } = mLPolicyRequest;
+    // Check if any enabled rule exists
+    if (!rules.some(rule => rule.enabled)) {
+      return {
+        valid: false,
+        message: 'Policy must have at least one enabled rule'
+      };
+    }
     for (const rule of rules) {
       // At least application or prefix
       // should exist in the request
@@ -45,15 +54,68 @@ class MultiLinkPoliciesService {
       if (
         (!application && !prefix) ||
         (application && prefix)
-      ) return false;
+      ) {
+        return {
+          valid: false,
+          message: 'At least application or prefix should exist in the request'
+        };
+      };
 
       // Empty prefix is not allowed
-      if (prefix && isEqual(prefix, emptyPrefix)) return false;
+      if (prefix && isEqual(prefix, emptyPrefix)) {
+        return {
+          valid: false,
+          message: 'Empty prefix is not allowed'
+        };
+      };
 
       // Empty application is not allowed
-      if (application && isEqual(application, emptyApp)) return false;
-    }
-    return true;
+      if (application && isEqual(application, emptyApp)) {
+        return {
+          valid: false,
+          message: 'Empty application is not allowed'
+        };
+      };
+
+      // Any enabled rule must contain Path Labels
+      if (rule.enabled &&
+        (rule.action.links.length === 0 || rule.action.links[0].pathlabels.length === 0)) {
+        return {
+          valid: false,
+          message: 'Enabled rule must contain Path Labels'
+        };
+      }
+    };
+
+    // Duplicate names are not allowed in the same organization
+    const hasDuplicateName = await MultiLinkPolicies.findOne(
+      { org, name, _id: { $ne: _id } }
+    );
+    if (hasDuplicateName) {
+      return {
+        valid: false,
+        message: 'Duplicate names are not allowed in the same organization'
+      };
+    };
+
+    // Not allowed to assign path labels of a different organization
+    let orgPathLabels = await pathLabelsModel.find({ org }, '_id').lean();
+    orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
+    const notAllowedPathLabels = rules.map(rule =>
+      rule.action && !Array.isArray(rule.action.links) ? []
+        : rule.action.links.map(link =>
+          !Array.isArray(link.pathlabels) ? []
+            : link.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
+        )
+    ).flat(3);
+    if (notAllowedPathLabels.length) {
+      return {
+        valid: false,
+        message: 'Not allowed to assign path labels of a different organization'
+      };
+    };
+
+    return { valid: true, message: '' };
   }
 
   /**
@@ -72,13 +134,7 @@ class MultiLinkPoliciesService {
         {
           name: 1,
           description: 1,
-          rules: 1,
-          'rules.name': 1,
-          'rules.enabled': 1,
-          'rules.priority': 1,
-          'rules._id': 1,
-          'rules.classification': 1,
-          'rules.action': 1
+          rules: 1
         }
       )
         .lean()
@@ -113,6 +169,7 @@ class MultiLinkPoliciesService {
       // installed on at least one device
       const count = await devices.countDocuments({
         'policies.multilink.policy': id,
+        'policies.multilink.status': { $in: ['installing', 'installed'] },
         org: { $in: orgList }
       });
 
@@ -120,6 +177,18 @@ class MultiLinkPoliciesService {
         const message = 'Cannot delete a policy that is being used';
         return Service.rejectResponse(message, 400);
       }
+
+      await devices.updateMany({
+        org: { $in: orgList },
+        'policies.multilink.policy': id,
+        'policies.multilink.status': { $nin: ['installing', 'installed'] }
+      }, {
+        $set: {
+          'policies.multilink.policy': null,
+          'policies.multilink.status': '',
+          'policies.multilink.requestTime': null
+        }
+      });
 
       const { deletedCount } = await MultiLinkPolicies.deleteOne({
         org: { $in: orgList },
@@ -157,13 +226,7 @@ class MultiLinkPoliciesService {
         {
           name: 1,
           description: 1,
-          rules: 1,
-          'rules.name': 1,
-          'rules.enabled': 1,
-          'rules.priority': 1,
-          'rules._id': 1,
-          'rules.classification': 1,
-          'rules.action': 1
+          rules: 1
         }
       )
         .lean()
@@ -199,8 +262,11 @@ class MultiLinkPoliciesService {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Verify request schema
-      if (!MultiLinkPoliciesService.verifyRequestSchema(rules)) {
-        throw createError(400, 'Invalid policy schema');
+      const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
+        mLPolicyRequest, orgList[0]
+      );
+      if (!valid) {
+        throw createError(400, message);
       }
 
       const MLPolicy = await MultiLinkPolicies.findOneAndUpdate(
@@ -209,7 +275,7 @@ class MultiLinkPoliciesService {
           _id: id
         },
         {
-          org: user.defaultOrg._id.toString(),
+          org: orgList[0].toString(),
           name: name,
           description: description,
           rules: rules
@@ -218,13 +284,7 @@ class MultiLinkPoliciesService {
           fields: {
             name: 1,
             description: 1,
-            rules: 1,
-            'rules.name': 1,
-            'rules.enabled': 1,
-            'rules.priority': 1,
-            'rules._id': 1,
-            'rules.classification': 1,
-            'rules.action': 1
+            rules: 1
           },
           new: true
         }
@@ -289,8 +349,11 @@ class MultiLinkPoliciesService {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Verify request schema
-      if (!MultiLinkPoliciesService.verifyRequestSchema(rules)) {
-        throw createError(400, 'Invalid policy schema');
+      const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
+        mLPolicyRequest, orgList[0]
+      );
+      if (!valid) {
+        throw createError(400, message);
       }
 
       let result = await MultiLinkPolicies.create({

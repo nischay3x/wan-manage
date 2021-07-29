@@ -35,7 +35,7 @@ const { getMajorVersion } = require('../versioning');
  */
 const apply = async (device, user, data) => {
   const userName = user.username;
-  const org = user.defaultOrg._id.toString();
+  const org = data.org;
   const machineId = device.machineId;
   const majorAgentVersion = getMajorVersion(device.versions.agent);
 
@@ -116,7 +116,7 @@ const apply = async (device, user, data) => {
           }
         },
         // Metadata
-        { priority: 'low', attempts: 1, removeOnComplete: false },
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null);
 

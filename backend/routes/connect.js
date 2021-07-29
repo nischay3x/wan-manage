@@ -24,10 +24,11 @@ const tokens = require('../models/tokens');
 const { devices } = require('../models/devices');
 const jwt = require('jsonwebtoken');
 const mongoConns = require('../mongoConns.js')();
-const { checkDeviceVersion } = require('../versioning');
+const { verifyAgentVersion } = require('../versioning');
+const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-
+const url = require('url');
 // billing support
 const flexibilling = require('../flexibilling');
 
@@ -54,8 +55,41 @@ const genToken = function (data) {
   return jwt.sign(data, configs.get('deviceTokenSecretKey'));
 };
 
+// Express middleware for /register API
+const checkDeviceVersion = async (req, res, next) => {
+  const agentVer = req.body.fwagent_version;
+  const { valid, statusCode, err } = verifyAgentVersion(agentVer);
+  if (!valid) {
+    logger.warn('Device version validation failed', {
+      params: {
+        agentVersion: agentVer,
+        reason: err,
+        machineId: req.body.machine_id
+      },
+      req: req
+    });
+    const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
+    const { versions } = await swUpdater.getLatestSwVersions();
+    console.log('versions=' + versions);
+    res.setHeader('latestVersion', versions.device); // set last device version
+    return next(createError(statusCode, err));
+  }
+  next();
+};
+
 // Register device. When device connects for the first
 // time, it tries to authenticate by accessing this URL
+// Register Error Codes:
+// 400 - Wrong version or Too high Agent version
+// 401 - Invalid token
+// 402 - Maximum number of free devices reached
+// 403 - Too low Agent version
+// 404 - Token not found
+// 405 -
+// 406 -
+// 407 - Device Already Exists
+// 408 - Mongo error
+// 500 - General Error
 connectRouter.route('/register')
   .post(cors.cors, checkDeviceVersion, (req, res, next) => {
     var sourceIP = req.ip || 'Unknown';
@@ -78,36 +112,45 @@ connectRouter.route('/register')
               const ifs = JSON.parse(req.body.interfaces);
 
               // Get an interface with gateway and the lowest metric
-              const defaultIntf = ifs.reduce((res, intf) =>
+              const defaultIntf = ifs ? ifs.reduce((res, intf) =>
                 intf.gateway && (!res || +res.metric > +intf.metric)
-                  ? intf : res, undefined);
+                  ? intf : res, undefined) : undefined;
               const lowestMetric = defaultIntf && defaultIntf.metric
                 ? defaultIntf.metric : '0';
 
               let autoAssignedMetric = 100;
               ifs.forEach((intf) => {
+                intf.isAssigned = false;
+                intf.useStun = true;
+                intf.useFixedPublicPort = false;
+                intf.internetAccess = intf.internetAccess === undefined ? ''
+                  : intf.internetAccess ? 'yes' : 'no';
                 if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent
-                  intf.isAssigned = true;
-                  intf.PublicIP = sourceIP;
+                  intf.PublicIP = intf.public_ip || sourceIP;
+                  intf.PublicPort = intf.public_port || '';
+                  intf.NatType = intf.nat_type || '';
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   intf.gateway = req.body.default_route;
                   intf.metric = '0';
-                } else if (intf.gateway) {
-                  intf.isAssigned = true;
+                } else if (intf.gateway || intf.deviceType === 'lte') {
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
-                  intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
-                    ? '0' : intf.metric || (autoAssignedMetric++).toString();
-                  intf.PublicIP = intf.metric === lowestMetric ? sourceIP : '';
+                  if (intf.deviceType === 'lte') {
+                    // LTE devices are not enabled at registration stage so they can't have a metric
+                    intf.metric = '';
+                  } else {
+                    intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
+                      ? '0' : intf.metric || (autoAssignedMetric++).toString();
+                  }
+                  intf.PublicIP = intf.public_ip || (intf.metric === lowestMetric ? sourceIP : '');
+                  intf.PublicPort = intf.public_port || '';
+                  intf.NatType = intf.nat_type || '';
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
                   intf.routing = 'OSPF';
-                  if (ifs.length === 2) {
-                    intf.isAssigned = true;
-                  }
                   intf.gateway = '';
                   intf.metric = '';
                 }
@@ -128,12 +171,19 @@ connectRouter.route('/register')
               // Initialize session
               let session;
               let keepCount; // current number of docs per account
+              let keepOrgCount; // current number of docs per account
               mongoConns.getMainDB().startSession()
                 .then((_session) => {
                   session = _session;
                   return session.startTransaction();
                 })
                 .then(() => {
+                  return devices.countDocuments({
+                    account: account, org: decoded.org
+                  }).session(session);
+                })
+                .then((orgCount) => {
+                  keepOrgCount = orgCount;
                   return devices.countDocuments({ account: account }).session(session);
                 })
                 .then(async (count) => {
@@ -164,6 +214,8 @@ connectRouter.route('/register')
                       await flexibilling.registerDevice({
                         account: result[0].account,
                         count: keepCount,
+                        org: decoded.org,
+                        orgCount: keepOrgCount,
                         increment: 1
                       }, session);
 
@@ -198,7 +250,14 @@ connectRouter.route('/register')
                         });
                       res.statusCode = 200;
                       res.setHeader('Content-Type', 'application/json');
-                      res.json({ deviceToken: deviceToken, server: configs.get('agentBroker') });
+
+                      let server = configs.get('agentBroker');
+                      if (decoded.server) {
+                        const urlSchema = new url.URL(decoded.server);
+                        server = `${urlSchema.hostname}:${urlSchema.port}`;
+                      }
+
+                      res.json({ deviceToken: deviceToken, server: server });
                     }, async (err) => {
                       // abort transaction on error
                       if (session) {
@@ -239,4 +298,7 @@ connectRouter.route('/register')
   });
 
 // Default exports
-module.exports = connectRouter;
+module.exports = {
+  connectRouter: connectRouter,
+  checkDeviceVersion: checkDeviceVersion
+};

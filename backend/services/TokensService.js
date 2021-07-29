@@ -139,10 +139,43 @@ class TokensService {
   static async tokensPOST ({ org, tokenRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const body = jwt.sign({
+
+      const servers = configs.get('restServerUrl', 'list');
+      let server = tokenRequest.server;
+
+      // If no server specified by user, use the first one in the list
+      // If specified by user, check if it exists in the configs list
+      if (!server || server === '') {
+        server = servers[0];
+      } else {
+        const known = servers.find(ser => ser === server);
+        if (!known) {
+          throw new Error('Token error: Server is not allowed');
+        }
+      }
+
+      const tokenData = {
         org: orgList[0].toString(),
-        account: user.defaultAccount._id
-      }, configs.get('deviceTokenSecretKey'));
+        account: user.defaultAccount._id,
+        server: server
+      };
+      // Update token with repo if needed
+      const repoUrl = configs.get('SwRepositoryUrl');
+      const strippedUrl = repoUrl.split('/');
+      if (strippedUrl.length < 6) {
+        throw new Error('Token error: wrong configuration of repository url');
+      }
+      const repoServer = strippedUrl.slice(0, 3).join('/');
+      let repoName = strippedUrl[3];
+      if (repoName === 'info') repoName = 'flexiWAN'; // no repo specified, use default as flexiWAN
+      const typeSplit = strippedUrl[strippedUrl.length - 1].split('-');
+      let repoType = 'main';
+      if (typeSplit.length === 2) repoType = typeSplit[1];
+
+      if (repoName !== 'flexiWAN') { // Only set non default repo
+        tokenData.repo = `${repoServer}|${repoName}|${repoType}`;
+      }
+      const body = jwt.sign(tokenData, configs.get('deviceTokenSecretKey'));
 
       const token = await Tokens.create({
         name: tokenRequest.name,
