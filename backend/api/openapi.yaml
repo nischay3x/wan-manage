@@ -7626,7 +7626,7 @@ components:
         - destination: destination
           interface: interface
           gateway: gateway
-        deviceSpecifficRulesEnabled: true
+        deviceSpecificRulesEnabled: true
         firewallRules:
         - name: name
           direction: direction
@@ -7685,7 +7685,7 @@ components:
           items:
             $ref: '#/components/schemas/Interface'
           type: array
-        deviceSpecifficRulesEnabled:
+        deviceSpecificRulesEnabled:
           type: boolean
         firewallRules:
           items:
@@ -7778,7 +7778,7 @@ components:
           destination: 10.10.0.0
           gateway: 10.10.0.1
           interface: eth1
-        deviceSpecifficRulesEnabled: true
+        deviceSpecificRulesEnabled: true
         firewallRules:
         - description: description
           direction: outbound
@@ -7842,7 +7842,7 @@ components:
           items:
             $ref: '#/components/schemas/Interface'
           type: array
-        deviceSpecifficRulesEnabled:
+        deviceSpecificRulesEnabled:
           type: boolean
         firewallRules:
           items:

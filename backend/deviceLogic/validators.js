@@ -274,41 +274,68 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     const firewallRules = device.firewall.rules;
     for (const rule of firewallRules) {
       // protocols must be specified
-      if (rule.inbound !== 'nat1to1' && rule.classification.destination.ipProtoPort) {
-        const { protocols } = rule.classification.destination.ipProtoPort;
+      const { trafficId, trafficTags, ipProtoPort } = rule.classification.destination;
+      if (rule.inbound !== 'nat1to1' && !trafficId && !trafficTags && ipProtoPort) {
+        const { protocols } = ipProtoPort;
         if (!protocols || protocols.length === 0) {
           return { valid: false, err: 'At least one protocol must be specified' };
         }
       }
     };
-    const forwardedPorts = [];
+    const forwardedPorts = {};
+    const internalPorts = {};
     for (const rule of firewallRules.filter(r => r.inbound === 'portForward')) {
-      const destPorts = rule.classification.destination.ipProtoPort.ports;
-      if (isEmpty(rule.internalIP)) {
+      const { internalIP, internalPortStart, classification } = rule;
+      const { source, destination } = classification;
+      if (!source && !destination) {
+        return { valid: false, message: 'Source or destination must be specified' };
+      }
+      const { ports: destPorts, interface: wanIfc } = destination.ipProtoPort;
+      if (isEmpty(internalIP)) {
         return { valid: false, err: 'Internal IP address must be specified' };
       }
-      if (isEmpty(rule.internalPortStart)) {
+      if (isEmpty(internalPortStart)) {
         return { valid: false, err: 'Internal start port must be specified' };
       }
       if (isEmpty(destPorts)) {
         return { valid: false, err: 'Destination port must be specified' };
       }
+      if (!internalPorts[internalIP]) {
+        internalPorts[internalIP] = [];
+      }
+      if (!internalPorts[wanIfc]) {
+        forwardedPorts[wanIfc] = [];
+      }
       if (destPorts.includes('-')) {
         const [portLow, portHigh] = destPorts.split('-');
-        for (let usedPort = portLow; usedPort <= portHigh; usedPort++) {
-          forwardedPorts.push(usedPort.toString());
+        for (let usedPort = +portLow; usedPort <= +portHigh; usedPort++) {
+          forwardedPorts[wanIfc].push(usedPort);
+          console.log(usedPort, +internalPortStart + usedPort - portLow);
+          internalPorts[internalIP].push(+internalPortStart + usedPort - portLow);
         }
       } else {
-        forwardedPorts.push(destPorts);
+        forwardedPorts[wanIfc].push(+destPorts);
+        internalPorts[internalIP].push(+internalPortStart);
       }
     }
     // Forwarded destination port can be used only once
-    const portsOverlapped = forwardedPorts.length !== new Set(forwardedPorts).size;
-    if (portsOverlapped) {
-      return { valid: false, err: 'Not allowed to use destination forwarded port twice' };
+    for (const wanIfc of Object.keys(forwardedPorts)) {
+      const destPortsArray = forwardedPorts[wanIfc];
+      const destPortsOverlapped = destPortsArray.length !== new Set(destPortsArray).size;
+      if (destPortsOverlapped) {
+        return { valid: false, err: 'Destination forwarded ports overlapped on ' + wanIfc };
+      }
+      if (destPortsArray.includes(4789)) {
+        return { valid: false, err: 'Not allowed to use port 4789 as forwarded on ' + wanIfc };
+      }
     }
-    if (forwardedPorts.includes('4789')) {
-      return { valid: false, err: 'Not allowed to use port 4789 as forwarded' };
+    // Internal port can be used only once for one internal IP
+    for (const internalIP of Object.keys(internalPorts)) {
+      const internalPortsArray = internalPorts[internalIP];
+      const internalOverlapped = internalPortsArray.length !== new Set(internalPortsArray).size;
+      if (internalOverlapped) {
+        return { valid: false, err: 'Internal ports overlap for ' + internalIP };
+      }
     }
   }
   /*

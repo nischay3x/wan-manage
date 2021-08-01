@@ -777,7 +777,7 @@ const deviceSchema = new Schema({
       default: deviceFirewallPolicySchema
     }
   },
-  deviceSpecifficRulesEnabled: {
+  deviceSpecificRulesEnabled: {
     type: Boolean,
     default: true
   },

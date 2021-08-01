@@ -261,7 +261,7 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
-    retDevice.deviceSpecifficRulesEnabled = item.deviceSpecifficRulesEnabled;
+    retDevice.deviceSpecificRulesEnabled = item.deviceSpecificRulesEnabled;
     retDevice.firewall = {
       rules: retFirewallRules
     };
@@ -780,10 +780,16 @@ class DevicesService {
         account: delDevices[0].account
       }).session(session);
 
+      const orgCount = await devices.countDocuments({
+        account: delDevices[0].account, org: orgList[0]
+      }).session(session);
+
       // Unregister a device (by adding -1)
       await flexibilling.registerDevice({
         account: delDevices[0].account,
+        org: orgList[0],
         count: deviceCount,
+        orgCount: orgCount,
         increment: -1
       }, session);
 
@@ -897,6 +903,26 @@ class DevicesService {
                   if (numTunnels > 0) {
                   // eslint-disable-next-line max-len
                     throw new Error('Removed label used by existing tunnels, please delete related tunnels before');
+                  }
+                }
+              }
+              if (!updIntf.isAssigned || origIntf.type !== updIntf.type) {
+                // check firewall rules
+                if (deviceRequest.firewall) {
+                  const { rules } = deviceRequest.firewall;
+                  if (rules.some(r => r.direction === 'inbound' &&
+                    r.classification.destination.ipProtoPort.interface === origIntf.devId)) {
+                    throw new Error(
+                      `Not allowed to change WAN interface ${origIntf.name},\
+                      it is reffered in inbound firewall rules.`
+                    );
+                  }
+                  if (rules.some(r => r.direction === 'outbound' &&
+                    r.interfaces.includes(origIntf.devId))) {
+                    throw new Error(
+                      `Not allowed to change LAN interface ${origIntf.name},\
+                      it is reffered in outbound firewall rules.`
+                    );
                   }
                 }
               }
@@ -1149,7 +1175,7 @@ class DevicesService {
       const updRules = updDevice.firewall.rules.toObject();
       const origRules = origDevice.firewall.rules.toObject();
       const rulesModified =
-        origDevice.deviceSpecifficRulesEnabled !== updDevice.deviceSpecifficRulesEnabled ||
+        origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
         !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
           isEqual(
             omit(updatedRule, ['_id', 'name', 'classification']),
@@ -1177,7 +1203,7 @@ class DevicesService {
         };
         const jobs = await queueFirewallPolicyJob(
           [updDevice],
-          'install',
+          firewallPolicy || updDevice.deviceSpecificRulesEnabled ? 'install' : 'uninstall',
           requestTime,
           firewallPolicy,
           user,

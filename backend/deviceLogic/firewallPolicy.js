@@ -39,7 +39,7 @@ const prepareParameters = (policy, device) => {
   const policyRules = policy ? policy.rules.toObject()
     .filter(r => r.enabled)
     .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
-  const deviceRules = device.deviceSpecifficRulesEnabled ? device.firewall.rules.toObject()
+  const deviceRules = device.deviceSpecificRulesEnabled ? device.firewall.rules.toObject()
     .filter(r => r.enabled) : [];
   const firewallRules = [...policyRules, ...deviceRules]
     .sort((r1, r2) => r1.priority - r2.priority);
@@ -127,7 +127,7 @@ const prepareParameters = (policy, device) => {
       result[inbound].rules.push(jobRule);
       return result;
     }, {});
-  return params;
+  return isEmpty(params) ? undefined : params;
 };
 
 const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
@@ -138,7 +138,7 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
     await getDevicesAppIdentificationJobInfo(
       org,
       'firewall',
-      deviceList.map((d) => d._id),
+      deviceList.filter(d => op === 'install' || !d.deviceSpecificRulesEnabled).map(d => d._id),
       op === 'install'
     );
 

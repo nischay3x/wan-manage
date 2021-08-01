@@ -35,6 +35,13 @@ class FirewallPoliciesService {
           message: 'Wrong inbound rule type'
         };
       }
+      const { source, destination } = rule.classification;
+      if (!source && !destination) {
+        return {
+          valid: false,
+          message: 'Source or destination must be specified'
+        };
+      }
       for (const [side, { trafficTags, ipPort, ipProtoPort }]
         of Object.entries(rule.classification)) {
         // Only ip, ports and protocols allowed for inbound rule destination
