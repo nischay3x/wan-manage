@@ -47,22 +47,34 @@ class TunnelsService {
       retTunnel.deviceA.interfaces.filter((ifc) => {
         return ifc._id.toString() === '' + retTunnel.interfaceA;
       })[0];
+
     retTunnel.interfaceBDetails =
-      retTunnel.deviceB.interfaces.filter((ifc) => {
-        return ifc._id.toString() === '' + retTunnel.interfaceB;
-      })[0];
+      item.peer
+        ? {}
+        : retTunnel.deviceB.interfaces.filter((ifc) => {
+          return ifc._id.toString() === '' + retTunnel.interfaceB;
+        })[0];
 
     const tunnelId = retTunnel.num;
+
     // Add tunnel status
     retTunnel.tunnelStatusA =
       deviceStatus.getTunnelStatus(retTunnel.deviceA.machineId, tunnelId) || {};
-
-    // Add tunnel status
-    retTunnel.tunnelStatusB =
-      deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+    if (!item.peer) {
+      retTunnel.tunnelStatusB =
+        deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+    }
 
     retTunnel.deviceA = pick(retTunnel.deviceA, ['_id', 'name']);
-    retTunnel.deviceB = pick(retTunnel.deviceB, ['_id', 'name']);
+    if (!item.peer) {
+      retTunnel.deviceB = pick(retTunnel.deviceB, ['_id', 'name']);
+    }
+
+    if (item.peer) {
+      retTunnel.peer = {
+        name: item.peer.name
+      };
+    }
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -120,7 +132,8 @@ class TunnelsService {
         .limit(limit)
         .populate('deviceA', 'name interfaces machineId')
         .populate('deviceB', 'name interfaces machineId')
-        .populate('pathlabel');
+        .populate('pathlabel')
+        .populate('peer');
 
       // Populate interface details
       const tunnelMap = response.map((d) => {

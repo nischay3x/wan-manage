@@ -30,6 +30,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
+const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
@@ -41,6 +42,16 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   return intersection;
 };
 
+/**
+ * This function handles create tunnels operations and returns an array of jobs.
+ * @async
+ * @param  {string}   org  organization ID
+ * @param  {string}   user user id of the requesting user
+ * @param  {array}    opDevices array of selected devices
+ * @param  {array}    pathLabels array of selected path labels
+ * @param  {set}      reasons reference to Set of reasons
+ * @return {array}    A promises array of tunnels creations
+ */
 const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
   const devicesLen = opDevices.length;
   const tasks = [];
@@ -206,6 +217,113 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
 };
 
 /**
+ * This function handles create peers operations and returns an array of jobs.
+ * @async
+ * @param  {string}   org  organization ID
+ * @param  {string}   user user id of the requesting user
+ * @param  {array}    opDevices array of selected devices
+ * @param  {array}    pathLabels array of selected path labels
+ * @param  {array}    peersIds array of peers ids
+ * @param  {set}      reasons reference to Set of reasons
+ * @return {array}    A promises array of tunnels creations
+ */
+const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reasons) => {
+  const tasks = [];
+
+  // convert devices to object
+  // opDevices = opDevices.map(d => d.toObject());
+
+  // get peers configurations
+  const peers = await peersModel.find({ _id: { $in: peersIds } }).lean();
+
+  for (const device of opDevices) {
+    // Create the list of interfaces for the device.
+    // Add a set of the interface's path labels
+    const deviceIntfs = getInterfacesWithPathLabels(device);
+    logger.debug('Peer device info', { params: { deviceIntfs } });
+
+    if (deviceIntfs.length === 0) {
+      logger.info('Failed to create peer for device', {
+        params: {
+          device: device.hostname,
+          reason: 'no valid WAN interfaces'
+        }
+      });
+      reasons.add('Some devices have no valid WAN interfaces.');
+      continue;
+    }
+
+    // Create a peer for each WAN interface of the device according to the path
+    // labels assigned to the interfaces. If the list of path labels
+    // IDs contains the ID 'FFFFFF', create peers between all common
+    // path labels across all WAN interfaces.
+    const specifiedLabels = new Set(pathLabels);
+    const createForAllLabels = specifiedLabels.has('FFFFFF');
+    for (const wanIfc of deviceIntfs) {
+      const ifcLabels = wanIfc.labelsSet;
+
+      // If no path labels were specified by user,
+      // but interface has path labels, we don't create for peer for this interface.
+      if (specifiedLabels.size === 0) {
+        // If the WAN interface has path labels, we skip the creation for this interface
+        if (ifcLabels.size > 0) {
+          const reason =
+            `Paths labels were not specified -
+            The system didn't configure interfaces with path labels.`;
+          logger.info('Skip creation peer for interface', {
+            params: { device: device.hostname, interface: wanIfc.name, reason }
+          });
+          reasons.add(reason);
+          continue;
+        }
+
+        // Create peer configuration for the interface
+        for (const peer of peers) {
+          // If the peer already exists, skip the configuration
+          const peerFound = await getTunnel(org, null, wanIfc, null, peer._id);
+          if (peerFound.length > 0) {
+            logger.debug('Found existing peer', { params: { peer: peerFound } });
+            reasons.add('Some peers exist already.');
+            continue;
+          }
+
+          // generate peer configuration job
+          const promise = generateTunnelPromise(userName, org, null, device,
+            null, wanIfc, null, 'ikev2', peer);
+          tasks.push(promise);
+        }
+      } else {
+        for (const label of ifcLabels) {
+          const shouldSkipPeer = !createForAllLabels && !specifiedLabels.has(label);
+          if (shouldSkipPeer) {
+            // TBD: ?????
+            // reasons.add('Some devices have interfaces without specified Path Labels.');
+            continue;
+          }
+
+          for (const peer of peers) {
+            const peerFound = await getTunnel(org, label, wanIfc, null, peer._id);
+            if (peerFound.length > 0) {
+              logger.debug('Found existing peer with this path label',
+                { params: { peer: peerFound, label: label } });
+              reasons.add('Some tunnels exist already.');
+              continue;
+            }
+
+            // generate peer configuration job
+            const promise = generateTunnelPromise(
+              userName, org, label, device, null, wanIfc, null, 'ikev2', peer);
+            tasks.push(promise);
+          }
+        }
+      }
+    }
+  }
+
+  return tasks;
+};
+
+/**
  * This function is called when adding new tunnels
  * @async
  * @param  {Array}    devices   an array of the devices to be modified
@@ -235,60 +353,59 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('Peers identifiers were not specified');
   }
 
-  // For each device pair, create tunnels between WAN interfaces
-  const devicesLen = opDevices.length;
-  // For a regular tunnel we only allow more than two devices
-  if (devicesLen >= 2 || isPeer) {
-    const dbTasks = [];
-    const userName = user.username;
-    const org = data.org;
-
-    // array of common reasons of not created tunnels for some devices
-    // used to build a response message
-    const reasons = new Set(); // unique messages array
-
-    if (isPeer) {
-      const { tasks } = await handlePeers();
-      dbTasks.concat(tasks);
-    } else {
-      const tasks = await handleTunnels(
-        org, userName, opDevices, data.meta.pathLabels, reasons);
-      dbTasks.concat(tasks);
-    }
-
-    // Execute all promises
-    logger.debug('Running tunnel promises', { params: { tunnels: dbTasks.length } });
-
-    const promiseStatus = await Promise.allSettled(dbTasks);
-    const fulfilled = promiseStatus.reduce((arr, elem) => {
-      if (elem.status === 'fulfilled') {
-        const job = elem.value;
-        arr.push(job);
-      }
-      return arr;
-    }, []);
-
-    const status = fulfilled.length < dbTasks.length
-      ? 'partially completed' : 'completed';
-
-    const desired = dbTasks.flat().map(job => job.id);
-    const ids = fulfilled.flat().map(job => job.id);
-    let message = 'tunnels creation jobs added.';
-    if (desired.length === 0) {
-      message = 'No ' + message;
-    } else if (ids.length < desired.length) {
-      message = `${ids.length} of ${desired.length} ${message}`;
-    } else {
-      message = `${ids.length} ${message}`;
-    }
-    if (reasons.size > 0) {
-      message = `${message} ${Array.from(reasons).join(' ')}`;
-    }
-    return { ids, status, message };
-  } else {
+  // For a site-to-site tunnel we only allow more than two devices
+  if (!isPeer && opDevices.length < 2) {
     logger.error('At least 2 devices must be selected to create tunnels', { params: {} });
     throw new Error('At least 2 devices must be selected to create tunnels');
   }
+
+  let dbTasks = [];
+  const userName = user.username;
+  const org = data.org;
+
+  // array of common reasons of not created tunnels for some devices
+  // used to build a response message
+  const reasons = new Set(); // unique messages array
+
+  if (isPeer) {
+    const tasks = await handlePeers(
+      org, userName, opDevices, data.meta.pathLabels, data.peers, reasons);
+    dbTasks = dbTasks.concat(tasks);
+  } else {
+    const tasks = await handleTunnels(
+      org, userName, opDevices, data.meta.pathLabels, reasons);
+    dbTasks = dbTasks.concat(tasks);
+  }
+
+  // Execute all promises
+  logger.debug('Running tunnel promises', { params: { tunnels: dbTasks.length } });
+
+  const promiseStatus = await Promise.allSettled(dbTasks);
+  const fulfilled = promiseStatus.reduce((arr, elem) => {
+    if (elem.status === 'fulfilled') {
+      const job = elem.value;
+      arr.push(job);
+    }
+    return arr;
+  }, []);
+
+  const status = fulfilled.length < dbTasks.length
+    ? 'partially completed' : 'completed';
+
+  const desired = dbTasks.flat().map(job => job.id);
+  const ids = fulfilled.flat().map(job => job.id);
+  let message = 'tunnels creation jobs added.';
+  if (desired.length === 0) {
+    message = 'No ' + message;
+  } else if (ids.length < desired.length) {
+    message = `${ids.length} of ${desired.length} ${message}`;
+  } else {
+    message = `${ids.length} ${message}`;
+  }
+  if (reasons.size > 0) {
+    message = `${message} ${Array.from(reasons).join(' ')}`;
+  }
+  return { ids, status, message };
 };
 
 /**
@@ -353,18 +470,28 @@ const errorTunnelAdd = async (jobId, res) => {
  * @param  {string}   org         organization id the user belongs to
  * @param  {string}   pathLabel   path label id
  * @param  {Object}   wanIfcA     device A tunnel interface
- * @param  {Object}   wanIfcB     device B tunnel interface
+ * @param  {Object?}  wanIfcB     device B tunnel interface
+ * @param  {string?}  peerId      peerId
  */
-const getTunnel = (org, pathLabel, wanIfcA, wanIfcB) => {
-  return tunnelsModel.find({
-    $or: [
-      { interfaceA: wanIfcA._id, interfaceB: wanIfcB._id },
-      { interfaceB: wanIfcA._id, interfaceA: wanIfcB._id }
-    ],
+const getTunnel = (org, pathLabel, wanIfcA, wanIfcB, peerId = false) => {
+  const query = {
     isActive: true,
     pathlabel: pathLabel,
     org: org
-  });
+  };
+
+  // peers are not configured with deviceB and interfaceB
+  if (!peerId) {
+    query.$or = [
+      { interfaceA: wanIfcA._id, interfaceB: wanIfcB._id },
+      { interfaceB: wanIfcA._id, interfaceA: wanIfcB._id }
+    ];
+  } else {
+    query.interfaceA = wanIfcA._id;
+    query.peer = peerId;
+  }
+
+  return tunnelsModel.find(query);
 };
 
 /**
@@ -372,24 +499,27 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB) => {
  * all configurations for the tunnel into the device
  * @param  {string}   user         user id of the requesting user
  * @param  {string}   org          organization id the user belongs to
+ * @param  {string}   pathLabel    path label
  * @param  {Object}   deviceA      device A details
- * @param  {Object}   deviceB      device B details
- * @param  {Object}   deviceAIntf device A tunnel interface
- * @param  {Object}   deviceBIntf device B tunnel interface
+ * @param  {Object?}  deviceB      device B details
+ * @param  {Object}   deviceAIntf  device A tunnel interface
+ * @param  {Object?}  deviceBIntf  device B tunnel interface
  * @param  {string}   encryptionMethod key exchange method [none|ikev2|psk]
+ * @param  {boolean}  peer         peer configurations
  */
 const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
-  deviceAIntf, deviceBIntf, encryptionMethod) => {
-  logger.debug('Adding tunnel between devices', {
+  deviceAIntf, deviceBIntf, encryptionMethod = null, peer = null) => {
+  logger.debug(`Adding tunnel${peer ? '' : ' between devices'}`, {
     params: {
       deviceA: deviceA.hostname,
-      deviceB: deviceB.hostname,
+      deviceB: peer ? null : deviceB.hostname,
       interfaces: {
         interfaceA: deviceAIntf.name,
-        interfaceB: deviceBIntf.name
+        interfaceB: peer ? null : deviceBIntf.name
       },
       label: pathLabel,
-      encryptionMethod
+      encryptionMethod: encryptionMethod,
+      peer
     }
   });
 
@@ -414,7 +544,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
 
           // Configure tunnel using this num
           const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-            deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
+            deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
 
           return resolve(tunnelJobs);
         } else { // No deleted tunnel found, get a new one
@@ -434,7 +564,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
 
             // Configure tunnel using this num
             const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-              deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
+              deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
 
             return resolve(tunnelJobs);
           }, (err) => {
@@ -461,7 +591,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
                 logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
                 // Configure tunnel using this num
                 const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-                  deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel);
+                  deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
 
                 return resolve(tunnelJobs);
               }, (err) => {
@@ -509,9 +639,12 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
  * @param  {string} user          user id of the requesting user
  * @param  {string} org           user's organization id
  * @param  {string} devAMachineID device A host id
- * @param  {string} devBMachineID device B host id
+ * @param  {string?} devBMachineID device B host id
  * @param  {string} devAOid       device A database mongodb object id
- * @param  {string} devBOid       device B database mongodb object id
+ * @param  {string?} devBOid      device B database mongodb object id
+ * @param  {string} tunnelId      tunnel number
+ * @param  {string} pathLabel     pathLabel
+ * @param  {object?} peer         peer configurations
  * @return {void}
  */
 const queueTunnel = async (
@@ -526,7 +659,8 @@ const queueTunnel = async (
   devAOid,
   devBOid,
   tunnelId,
-  pathLabel
+  pathLabel,
+  peer = null
 ) => {
   try {
     const devices = { deviceA: devAOid, deviceB: devBOid };
@@ -549,7 +683,8 @@ const queueTunnel = async (
           deviceA: devAOid,
           deviceB: devBOid,
           pathlabel: pathLabel,
-          target: 'deviceAconf'
+          target: 'deviceAconf',
+          peer
         }
       },
       // Metadata
@@ -563,7 +698,7 @@ const queueTunnel = async (
       job: jobA
     });
 
-    const jobB = await deviceQueues.addJob(
+    const jobB = peer ? null : await deviceQueues.addJob(
       devBMachineID,
       user,
       org,
@@ -596,12 +731,19 @@ const queueTunnel = async (
       job: jobB
     });
 
-    return [jobA, jobB];
+    const res = [jobA];
+    if (jobB) res.push(jobB);
+    return res;
   } catch (err) {
     logger.error('Error queuing tunnel', {
       params: { deviceAId: devAMachineID, deviceBId: devBMachineID, message: err.message }
     });
-    throw new Error(`Error queuing tunnel for device IDs ${devAMachineID} and ${devBMachineID}`);
+    if (peer) {
+      throw new Error(
+        `Error queuing peer tunnel for device ID ${devAMachineID} and peer ${peer.name}`);
+    } else {
+      throw new Error(`Error queuing tunnel for device IDs ${devAMachineID} and ${devBMachineID}`);
+    }
   }
 };
 
@@ -611,10 +753,11 @@ const queueTunnel = async (
  * by the tunnel.
  * @param  {Object} tunnel    tunnel object
  * @param  {Object} deviceAIntf device A tunnel interface
- * @param  {Object} deviceBIntf device B tunnel interface
+ * @param  {Object?} deviceBIntf device B tunnel interface
  * @param  {pathLabel} path label used for this tunnel
  * @param  {Object} deviceA details of device A
- * @param  {Object} deviceB details of device B
+ * @param  {Object?} deviceB details of device B
+ * @param  {Object?}  peer peer configurations
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
@@ -623,7 +766,8 @@ const prepareTunnelAddJob = async (
   deviceBIntf,
   pathLabel,
   deviceA,
-  deviceB
+  deviceB,
+  peer = null
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -638,31 +782,30 @@ const prepareTunnelAddJob = async (
   } = prepareTunnelParams(
     tunnel,
     deviceAIntf,
-    deviceA.versions,
     deviceBIntf,
-    deviceB.versions,
-    pathLabel
+    pathLabel,
+    peer
   );
 
-  [paramsDeviceA, paramsDeviceB].forEach(({ src, dst, dstPort }) => {
+  const validateParams = [paramsDeviceA];
+  if (!peer) validateParams.push(paramsDeviceB);
+  validateParams.forEach(({ src, dst, dstPort }, idx) => {
     if (!src) {
       throw new Error('Source IP address is empty');
     }
     if (!dst) {
       throw new Error('Destination IP address is empty');
     }
-    if (!dstPort) {
+    if (!dstPort && !peer) {
       throw new Error('Destination port is empty');
     }
   });
-
-  const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
 
   if (tunnel.encryptionMethod === 'ikev2') {
     // construct IKEv2 tunnel
     paramsDeviceA.ikev2 = {
       role: 'initiator',
-      'remote-device-id': deviceB.machineId,
+      'remote-device-id': peer ? peer.remoteFQDN : deviceB.machineId,
       lifetime: configs.get('ikev2Lifetime', 'number'),
       ike: {
         'crypto-alg': 'aes-cbc',
@@ -676,14 +819,23 @@ const prepareTunnelAddJob = async (
         'dh-group': 'ecp-256',
         'key-size': 256
       },
-      certificate: deviceB.IKEv2.certificate
+      certificate: peer ? null : deviceB.IKEv2.certificate
     };
 
-    paramsDeviceB.ikev2 = {
-      role: 'responder',
-      'remote-device-id': deviceA.machineId,
-      certificate: deviceA.IKEv2.certificate
-    };
+    // for peers - we use psk with ikev2
+    if (peer) {
+      paramsDeviceA.ikev2['local-device-id'] = peer.localFQDN;
+      paramsDeviceA.ikev2.mode = 'psk';
+      paramsDeviceA.ikev2.psk = peer.psk;
+      delete paramsDeviceA.ikev2.certificate;
+    } else {
+      // no need to fill ikev2 for deviceB for peer
+      paramsDeviceB.ikev2 = {
+        role: 'responder',
+        'remote-device-id': deviceA.machineId,
+        certificate: deviceA.IKEv2.certificate
+      };
+    }
   } else if (tunnel.encryptionMethod === 'psk') {
     // construct static ipsec tunnel
     if (!tunnel.tunnelKeys) {
@@ -732,6 +884,8 @@ const prepareTunnelAddJob = async (
     paramsIpsecDeviceA['remote-sa'] = paramsSaBA;
     paramsDeviceA.ipsec = paramsIpsecDeviceA;
 
+    const majorAgentBVersion = getMajorVersion(deviceB.versions.agent);
+
     if (majorAgentBVersion < 4) { // version 1-3.X.X
       // The following looks as a wrong config in vpp 19.01 ipsec-gre interface,
       // spi isn't configured properly for SA
@@ -751,12 +905,14 @@ const prepareTunnelAddJob = async (
     params: paramsDeviceA
   });
 
-  // Saving configuration for device B
-  tasksDeviceB.push({
-    entity: 'agent',
-    message: 'add-tunnel',
-    params: paramsDeviceB
-  });
+  if (!peer) {
+    // Saving configuration for device B
+    tasksDeviceB.push({
+      entity: 'agent',
+      message: 'add-tunnel',
+      params: paramsDeviceB
+    });
+  }
 
   return [tasksDeviceA, tasksDeviceB];
 };
@@ -768,12 +924,10 @@ const prepareTunnelAddJob = async (
  * @param  {number}   tunnelnum    id of the tunnel to be added
  * @param  {string}   encryptionMethod key exchange method [none|ikev2|psk]
  * @param  {Object}   deviceA      details of device A
- * @param  {Object}   deviceB      details of device B
- * @param  {Object}   deviceAIntf device A tunnel interface
- * @param  {Object}   deviceBIntf device B tunnel interface
- * @param  {Callback} next         express next() callback
- * @param  {Callback} resolve      promise reject callback
- * @param  {Callback} reject       promise resolve callback
+ * @param  {Object?}  deviceB      details of device B
+ * @param  {Object}   deviceAIntf  device A tunnel interface
+ * @param  {Object?}  deviceBIntf  device B tunnel interface
+ * @param  {Object?}  peer         peer configurations
  * @return {void}
  */
 const addTunnel = async (
@@ -785,14 +939,16 @@ const addTunnel = async (
   deviceB,
   deviceAIntf,
   deviceBIntf,
-  pathLabel
+  pathLabel,
+  peer = null
 ) => {
   const devicesInfo = {
-    deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name },
-    deviceB: { hostname: deviceB.hostname, interface: deviceBIntf.name }
+    deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name }
   };
-
-  logger.info('Adding Tunnel between devices', {
+  if (!peer) {
+    devicesInfo.deviceB = { hostname: deviceB.hostname, interface: deviceBIntf.name };
+  }
+  logger.info('Adding Tunnel', {
     params: { devices: devicesInfo }
   });
 
@@ -812,11 +968,12 @@ const addTunnel = async (
       deviceBconf: false,
       deviceA: deviceA._id,
       interfaceA: deviceAIntf._id,
-      deviceB: deviceB._id,
-      interfaceB: deviceBIntf._id,
+      deviceB: peer ? null : deviceB._id,
+      interfaceB: peer ? null : deviceBIntf._id,
       pathlabel: pathLabel,
       encryptionMethod,
-      tunnelKeys
+      tunnelKeys,
+      peer: peer ? peer._id : null
     },
     // Options
     { upsert: true, new: true }
@@ -828,12 +985,21 @@ const addTunnel = async (
     deviceBIntf,
     pathLabel,
     deviceA,
-    deviceB
+    deviceB,
+    peer
   );
 
-  const tunnelJobs = await queueTunnel(
-    true,
-    'Create tunnel between (' +
+  let title = '';
+  if (peer) {
+    title += 'Create peer tunnel between (' +
+      deviceA.hostname +
+      ',' +
+      deviceAIntf.name +
+      ') and peer (' +
+      peer.name +
+      ')';
+  } else {
+    title += 'Create tunnel between (' +
       deviceA.hostname +
       ',' +
       deviceAIntf.name +
@@ -841,17 +1007,22 @@ const addTunnel = async (
       deviceB.hostname +
       ',' +
       deviceBIntf.name +
-      ')',
+      ')';
+  }
+  const tunnelJobs = await queueTunnel(
+    true,
+    title,
     tasksDeviceA,
     tasksDeviceB,
     user,
     org,
     deviceA.machineId,
-    deviceB.machineId,
+    peer ? null : deviceB.machineId,
     deviceA._id,
-    deviceB._id,
+    peer ? null : deviceB._id,
     tunnelnum,
-    pathLabel
+    pathLabel,
+    peer
   );
 
   return tunnelJobs;
@@ -971,7 +1142,8 @@ const applyTunnelDel = async (devices, user, data) => {
 const oneTunnelDel = async (tunnelID, user, org) => {
   const tunnelResp = await tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
     .populate('deviceA')
-    .populate('deviceB');
+    .populate('deviceB')
+    .populate('peer');
 
   logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
 
@@ -980,14 +1152,17 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   };
 
   // Define devices
-  const { num, deviceA, deviceB, pathLabel } = tunnelResp;
+  const { num, deviceA, deviceB, pathLabel, peer } = tunnelResp;
 
   // Check is tunnel used by any static route
+  // TODO: check
   const { ip1, ip2 } = generateTunnelParams(num);
-  const tunnelUsedByStaticRoute = (Array.isArray(deviceA.staticroutes) &&
+  const tunnelUsedByStaticRoute =
+    (Array.isArray(deviceA.staticroutes) &&
     deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
-    (Array.isArray(deviceB.staticroutes) &&
-    deviceB.staticroutes.some(s => [ip1, ip2].includes(s.gateway)));
+    (!peer && (Array.isArray(deviceB.staticroutes) &&
+    deviceB.staticroutes.some(s => [ip1, ip2].includes(s.gateway))));
+
   if (tunnelUsedByStaticRoute) {
     throw new Error(
       'Some static routes defined via removed tunnel, please remove static routes first'
@@ -997,11 +1172,11 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   // Populate interface details
   const deviceAIntf = tunnelResp.deviceA.interfaces
     .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceA; })[0];
-  const deviceBIntf = tunnelResp.deviceB.interfaces
+  const deviceBIntf = peer ? null : tunnelResp.deviceB.interfaces
     .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
 
   const tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
-    deviceAIntf, deviceBIntf, pathLabel);
+    deviceAIntf, deviceBIntf, pathLabel, peer);
 
   logger.info('Deleting tunnels from database');
   const resp = await tunnelsModel.findOneAndUpdate(
@@ -1041,23 +1216,24 @@ const completeTunnelDel = (jobId, res) => {
  * @param  {Object} tunnel      the tunnel object to be deleted
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object} deviceBIntf device B tunnel interface
+ * @param  {Object} peer        peer configurations
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelRemoveJob = (
-  tunnel, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions
-) => {
+const prepareTunnelRemoveJob = (tunnel, deviceAIntf, deviceBIntf, peer = null) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
   const {
     paramsDeviceA,
     paramsDeviceB
-  } = prepareTunnelParams(tunnel, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions);
+  } = prepareTunnelParams(tunnel, deviceAIntf, deviceBIntf, null, peer);
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceA });
 
-  // Saving configuration for device B
-  tasksDeviceB.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceB });
+  if (!peer) {
+    // Saving configuration for device B
+    tasksDeviceB.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceB });
+  }
 
   return [tasksDeviceA, tasksDeviceB];
 };
@@ -1081,37 +1257,50 @@ const delTunnel = async (
   deviceB,
   deviceAIntf,
   deviceBIntf,
-  pathLabel
+  pathLabel,
+  peer = null
 ) => {
   const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
     tunnel,
     deviceAIntf,
-    deviceA.versions,
     deviceBIntf,
-    deviceB.versions
+    peer
   );
   try {
+    let title = '';
+    if (peer) {
+      title = 'Delete peer tunnel between (' +
+      deviceA.hostname +
+      ',' +
+      deviceAIntf.name +
+      ') and peer (' +
+      peer.name +
+      ')';
+    } else {
+      title = 'Delete tunnel between (' +
+      deviceA.hostname +
+      ',' +
+      deviceAIntf.name +
+      ') and (' +
+      deviceB.hostname +
+      ',' +
+      deviceBIntf.name +
+      ')';
+    };
     const tunnelJobs = await queueTunnel(
       false,
-      'Delete tunnel between (' +
-        deviceA.hostname +
-        ',' +
-        deviceAIntf.name +
-        ') and (' +
-        deviceB.hostname +
-        ',' +
-        deviceBIntf.name +
-        ')',
+      title,
       tasksDeviceA,
       tasksDeviceB,
       user,
       org,
       deviceA.machineId,
-      deviceB.machineId,
+      peer ? null : deviceB.machineId,
       deviceA._id,
-      deviceB._id,
+      peer ? null : deviceB._id,
       tunnel.num,
-      pathLabel
+      pathLabel,
+      peer
     );
     logger.debug('Tunnel jobs queued', { params: { jobA: tunnelJobs[0], jobB: tunnelJobs[1] } });
     return tunnelJobs;
@@ -1145,11 +1334,13 @@ const sync = async (deviceId, org) => {
       interfaceB: 1,
       tunnelKeys: 1,
       encryptionMethod: 1,
-      pathlabel: 1
+      pathlabel: 1,
+      peer: 1
     }
   )
     .populate('deviceA', 'machineId interfaces versions IKEv2')
     .populate('deviceB', 'machineId interfaces versions IKEv2')
+    .populate('peer')
     .lean();
 
   // Create add-tunnel messages
@@ -1167,16 +1358,17 @@ const sync = async (deviceId, org) => {
       interfaceB,
       tunnelKeys,
       encryptionMethod,
-      pathlabel
+      pathlabel,
+      peer
     } = tunnel;
 
     const ifcA = deviceA.interfaces.find(
       (ifc) => ifc._id.toString() === interfaceA.toString()
     );
-    const ifcB = deviceB.interfaces.find(
+    const ifcB = peer ? null : deviceB.interfaces.find(
       (ifc) => ifc._id.toString() === interfaceB.toString()
     );
-    if (!tunnelKeys && encryptionMethod === 'psk') {
+    if (!tunnelKeys && encryptionMethod === 'psk' && peer === null) {
       // No keys for some reason, probably version 2 upgraded.
       // Tunnel keys will be generated in prepareTunnelAddJob.
       // Need to sync another side as well.
@@ -1193,7 +1385,8 @@ const sync = async (deviceId, org) => {
       ifcB,
       pathlabel,
       deviceA,
-      deviceB
+      deviceB,
+      peer
     );
     // Add the tunnel only for the device that is being synced
     const deviceTasks =
@@ -1237,72 +1430,86 @@ const sync = async (deviceId, org) => {
   };
 };
 
-/*
+/**
  * Prepares common parameters for add/remove tunnel jobs
  * @param  {Object} tunnel      the tunnel object
  * @param  {Object} deviceAIntf device A tunnel interface
- * @param  {Object} deviceBIntf device B tunnel interface
- * @param  {pathLabel} path label used for this tunnel
+ * @param  {Object?} deviceBIntf device B tunnel interface
+ * @param  {pathLabel?} path label used for this tunnel
+ * @param  {Object?}  peer peer configurations. If exists, fill peer configurations
 */
-const prepareTunnelParams = (
-  tunnel, deviceAIntf, deviceAVersions, deviceBIntf, deviceBVersions, pathLabel = null
-) => {
-  // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
-  const tunnelParams = generateTunnelParams(tunnel.num);
-
+const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null, peer = null) => {
   const paramsDeviceA = {};
   const paramsDeviceB = {};
 
+  let tunnelParams = null;
   // no additional header for not encrypted tunnels
   const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
-  const mtu = Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
 
-  const isLocal = !deviceAIntf.PublicIP || !deviceBIntf.PublicIP ||
-      deviceAIntf.PublicIP === deviceBIntf.PublicIP;
-
+  // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
+  paramsDeviceA.dev_id = deviceAIntf.devId;
   paramsDeviceA.src = deviceAIntf.IPv4;
-  paramsDeviceA.devId = deviceAIntf.devId;
-
-  paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
-  paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
-    ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
   paramsDeviceA['tunnel-id'] = tunnel.num;
 
-  paramsDeviceA['loopback-iface'] = {
-    addr: tunnelParams.ip1 + '/31',
-    mac: tunnelParams.mac1,
-    mtu: mtu,
-    routing: 'ospf',
-    multilink: {
+  if (peer) {
+    // destination
+    paramsDeviceA.peer = {};
+
+    paramsDeviceA.dst = peer.remoteIP;
+
+    // handle peer configurations
+    paramsDeviceA.peer.mtu = (deviceAIntf.mtu || 1500) - packetHeaderSize;
+    paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
-    }
-  };
-  paramsDeviceB['encryption-mode'] = tunnel.encryptionMethod;
-  paramsDeviceB.src = deviceBIntf.IPv4;
-  paramsDeviceB.devId = deviceBIntf.devId;
+    };
+    paramsDeviceA.peer.urls = peer.urls;
+    paramsDeviceA.peer.ips = peer.ips;
+  } else {
+    // destination
+    const isLocal = (!deviceAIntf.PublicIP || !deviceBIntf.PublicIP ||
+      deviceAIntf.PublicIP === deviceBIntf.PublicIP);
+    paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
+    paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
+      ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
 
-  paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
-  paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort || deviceAIntf.useFixedPublicPort)
-    ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
-  paramsDeviceB['tunnel-id'] = tunnel.num;
-  paramsDeviceB['loopback-iface'] = {
-    addr: tunnelParams.ip2 + '/31',
-    mac: tunnelParams.mac2,
-    mtu: mtu,
-    routing: 'ospf',
-    multilink: {
-      labels: pathLabel ? [pathLabel] : []
-    }
-  };
+    // mtu
+    const mtu = Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
 
-  paramsDeviceA.dev_id = paramsDeviceA.devId;
-  delete paramsDeviceA.devId;
+    // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
+    tunnelParams = generateTunnelParams(tunnel.num);
 
-  paramsDeviceB.dev_id = paramsDeviceB.devId;
-  delete paramsDeviceB.devId;
+    paramsDeviceA['loopback-iface'] = {
+      addr: tunnelParams.ip1 + '/31',
+      mac: tunnelParams.mac1,
+      mtu: mtu,
+      routing: 'ospf',
+      multilink: {
+        labels: pathLabel ? [pathLabel] : []
+      }
+    };
 
-  return { paramsDeviceA, paramsDeviceB, tunnelParams };
+    // handle params device B
+    paramsDeviceB['encryption-mode'] = tunnel.encryptionMethod;
+    paramsDeviceB.src = deviceBIntf.IPv4;
+    paramsDeviceB.dev_id = deviceBIntf.devId;
+
+    paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
+    paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort || deviceAIntf.useFixedPublicPort)
+      ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
+    paramsDeviceB['tunnel-id'] = tunnel.num;
+    paramsDeviceB['loopback-iface'] = {
+      addr: tunnelParams.ip2 + '/31',
+      mac: tunnelParams.mac2,
+      mtu: mtu,
+      routing: 'ospf',
+      multilink: {
+        labels: pathLabel ? [pathLabel] : []
+      }
+    };
+  }
+
+  return { paramsDeviceA, paramsDeviceB, tunnelParams: tunnelParams };
 };
 
 const getInterfacesWithPathLabels = device => {

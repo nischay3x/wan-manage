@@ -114,7 +114,8 @@ const tunnelSchema = new Schema({
   // The peer configuration for the tunnel
   peer: {
     type: Schema.Types.ObjectId,
-    ref: 'peers'
+    ref: 'peers',
+    default: null
   }
 }, {
   timestamps: true

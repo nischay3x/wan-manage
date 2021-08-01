@@ -8485,18 +8485,22 @@ components:
           type: object
         deviceB:
           type: object
+          nullable: true
         interfaceA:
           type: object
         interfaceB:
           type: object
+          nullable: true
         interfaceADetails:
           type: object
         interfaceBDetails:
           type: object
+          nullable: true
         tunnelStatusA:
           type: object
         tunnelStatusB:
           type: object
+          nullable: true
       type: object
     StaticRouteRequest:
       example:
