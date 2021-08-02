@@ -17,9 +17,11 @@
 
 const Service = require('./Service');
 const Peers = require('../models/peers');
+const Tunnels = require('../models/tunnels');
 const pick = require('lodash/pick');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const { reconstructTunnels } = require('../deviceLogic/modifyDevice');
 
 class PeersService {
   static selectPeerParams (item) {
@@ -92,40 +94,54 @@ class PeersService {
   }
 
   /**
-   * Update peer
+   * Update peer and reconstruct tunnels if needed
    **/
   static async peersIdPUT ({ id, org, peer }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const updatedPeer = await Peers.findOneAndUpdate(
-        { org: { $in: orgList }, _id: id },
-        {
-          name: peer.name,
-          localFQDN: peer.localFQDN,
-          remoteFQDN: peer.remoteFQDN,
-          remoteIP: peer.remoteIP,
-          psk: peer.psk,
-          urls: peer.urls,
-          ips: peer.ips
-        },
-        { new: true, runValidators: true }
-      );
+      const origPeer = await Peers.findOne({
+        org: { $in: orgList },
+        _id: id
+      });
 
-      if (updatedPeer) {
-        const hasTunnels = false; // TODO!!!!! //
-        // Check if has tunnels based on this peer, if so, send update tunnels jobs to devices
-        if (hasTunnels) {
-          // UPDATE EXISTING TUNNELS! // TODO!!!!!
-        }
-
-        return Service.successResponse(updatedPeer);
-      } else {
-        logger.error('Failed to update peer', {
+      if (!origPeer) {
+        logger.error('Failed to find peer', {
           params: { id, org, orgList, peer }
         });
-        throw new Error('The peer was not updated. Please check the ID or org paramter');
+        throw new Error('The peer was not updated. Please check the ID or org parameters');
       }
+
+      const isNeedToReconstructTunnels = (
+        origPeer.localFQDN !== peer.localFQDN ||
+        origPeer.remoteFQDN !== peer.remoteFQDN ||
+        origPeer.remoteIP !== peer.remoteIP ||
+        origPeer.psk !== peer.psk ||
+        origPeer.urls !== peer.urls ||
+        origPeer.ips !== peer.ips
+      );
+
+      origPeer.name = peer.name;
+      origPeer.localFQDN = peer.localFQDN;
+      origPeer.remoteFQDN = peer.remoteFQDN;
+      origPeer.remoteIP = peer.remoteIP;
+      origPeer.psk = peer.psk;
+      origPeer.urls = peer.urls;
+      origPeer.ips = peer.ips;
+
+      const updatedPeer = await origPeer.save();
+
+      let reconstructedTunnels = 0;
+      if (isNeedToReconstructTunnels) {
+        const tunnels = await Tunnels.find({ peer: id }, '_id').lean();
+        if (tunnels.length) {
+          const ids = tunnels.map(t => t._id);
+          const jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
+          reconstructedTunnels = jobs.length;
+        }
+      }
+
+      return Service.successResponse({ updatedPeer, reconstructedTunnels });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -141,10 +157,11 @@ class PeersService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const hasTunnels = false; // TODO!!!!! //
-      // Check if has tunnels based on this peer, if so, prevent deletion and return error
-      if (hasTunnels) {
-        throw new Error('There are tunnels based on this configuration. Please delete them first');
+      // Check if tunnels existing with this peer configurations
+      const tunnels = await Tunnels.find({ peer: id }).lean();
+      if (tunnels.length) {
+        const err = 'There are existing tunnels based on this configuration. Delete them first';
+        throw new Error(err);
       }
 
       const resp = await Peers.deleteOne({ _id: id, org: { $in: orgList } });

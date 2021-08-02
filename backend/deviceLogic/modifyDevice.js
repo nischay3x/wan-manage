@@ -644,18 +644,22 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
  * @param  {Array}   removedTunnels an array of ids of the removed tunnels
  * @param  {string}  org            the organization to which the tunnels belong
  * @param  {string}  username       name of the user that requested the device change
+ * @param  {boolean} sendRemoveJobs indicate if need to send remove tunnels first
  * @return {Array}                  array of add-tunnel jobs
  */
-const reconstructTunnels = async (removedTunnels, org, username) => {
+const reconstructTunnels = async (tunnelsIds, org, username, sendRemoveJobs = false) => {
   let jobs = [];
   try {
     const tunnels = await tunnelsModel
-      .find({ _id: { $in: removedTunnels }, isActive: true })
+      .find({ _id: { $in: tunnelsIds }, isActive: true })
       .populate('deviceA')
       .populate('deviceB')
       .populate('peer');
 
     for (const tunnel of tunnels) {
+      let tasksDeviceA = [];
+      let tasksDeviceB = [];
+
       const { deviceA, deviceB, pathlabel, peer } = tunnel;
       const ifcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
@@ -665,7 +669,14 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
         return ifc._id.toString() === tunnel.interfaceB.toString();
       });
 
-      const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
+      if (sendRemoveJobs) {
+        await setTunnelsPendingInDB([tunnel._id], org, true);
+        const [removeTasksA, removeTasksB] = prepareTunnelRemoveJob(tunnel, ifcA, ifcB, peer);
+        tasksDeviceA = tasksDeviceA.concat(removeTasksA);
+        tasksDeviceB = tasksDeviceB.concat(removeTasksB);
+      }
+
+      const [addTasksA, addTasksB] = await prepareTunnelAddJob(
         tunnel,
         ifcA,
         ifcB,
@@ -674,15 +685,33 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
         deviceB,
         peer
       );
+      tasksDeviceA = tasksDeviceA.concat(addTasksA);
+      tasksDeviceB = tasksDeviceB.concat(addTasksB);
+
       let title = '';
+      const actionType = sendRemoveJobs ? 'Reconstruct' : 'Add';
       if (peer) {
         // eslint-disable-next-line max-len
-        title = `Add peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and peer (${peer.name})`;
+        title = `${actionType} peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and peer (${peer.name})`;
       } else {
         // eslint-disable-next-line max-len
-        title = `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
+        title = `${actionType} tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
       };
-      const addTunnelsJobs = await queueTunnel(
+
+      // if sendRemoveJobsis true, we probably need to set aggregated request with pair
+      // or remove-tunnel and add-tunnel
+      [tasksDeviceA, tasksDeviceB] = [tasksDeviceA, tasksDeviceB].map(tasks => {
+        if (tasks.length > 1) {
+          return [{
+            entity: 'agent',
+            message: 'aggregated',
+            params: { requests: tasks }
+          }];
+        }
+        return tasks;
+      });
+
+      const tunnelJobs = await queueTunnel(
         true,
         // eslint-disable-next-line max-len
         title,
@@ -698,18 +727,18 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
         pathlabel,
         peer
       );
-      jobs = jobs.concat(addTunnelsJobs);
+      jobs = jobs.concat(tunnelJobs);
     }
   } catch (err) {
     logger.error('Failed to queue Add tunnel jobs', {
-      params: { err: err.message, removedTunnels }
+      params: { err: err.message, tunnelsIds }
     });
   };
   try {
-    await setTunnelsPendingInDB(removedTunnels, org, false);
+    await setTunnelsPendingInDB(tunnelsIds, org, false);
   } catch (err) {
     logger.error('Failed to set tunnel pending flag in db', {
-      params: { err: err.message, removedTunnels }
+      params: { err: err.message, tunnelsIds }
     });
   }
   return jobs;
@@ -1359,5 +1388,6 @@ module.exports = {
   apply: apply,
   complete: complete,
   completeSync: completeSync,
-  sync: sync
+  sync: sync,
+  reconstructTunnels
 };

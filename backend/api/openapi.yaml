@@ -1531,7 +1531,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Peer'
+                $ref: '#/components/schemas/PeersIdPUTResponse'
           description: Undated peer
         "400":
           content:
@@ -8453,6 +8453,16 @@ components:
           type: array
           items:
             type: string
+    PeersIdPUTResponse:
+      required:
+        - updatedPeer
+        - reconstructedTunnels
+      properties:
+        updatedPeer:
+          type: object
+          $ref: '#/components/schemas/Peer'
+        reconstructedTunnels:
+          type: integer
     Tunnel:
       example:
         tunnelStatusA: '{}'
