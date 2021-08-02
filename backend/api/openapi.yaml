@@ -8426,8 +8426,8 @@ components:
         remoteFQDN: 100.100.100.100
         psk: 123456f5621c1a95997997c8cd123456
         remoteIP: 100.100.100.100
-        monitoringType: ICMP
-        monitoringTarget: 100.100.100.100
+        urls: [acreto.com]
+        ips: [1.1.1.1, 8.8.8.8]
       properties:
         _id:
           maxLength: 24
@@ -8443,13 +8443,16 @@ components:
           type: string
         remoteIP:
           type: string
-        monitoringType:
-          type: string
-          enum:
-          - ICMP
-          - URL
-        monitoringTarget:
-          type: string
+          format: ipv4
+        ips:
+          type: array
+          items:
+            type: string
+            format: ipv4
+        urls:
+          type: array
+          items:
+            type: string
     Tunnel:
       example:
         tunnelStatusA: '{}'

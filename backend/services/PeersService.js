@@ -29,8 +29,8 @@ class PeersService {
       'localFQDN',
       'remoteFQDN',
       'remoteIP',
-      'monitoringType',
-      'monitoringTarget',
+      'urls',
+      'ips',
       'psk'
     ]);
 
@@ -104,12 +104,12 @@ class PeersService {
           name: peer.name,
           localFQDN: peer.localFQDN,
           remoteFQDN: peer.remoteFQDN,
-          remoteIP: peer.remoteFQDN,
+          remoteIP: peer.remoteIP,
           psk: peer.psk,
-          monitoringType: peer.monitoringType,
-          monitoringTarget: peer.monitoringTarget
+          urls: peer.urls,
+          ips: peer.ips
         },
-        { new: true }
+        { new: true, runValidators: true }
       );
 
       if (updatedPeer) {

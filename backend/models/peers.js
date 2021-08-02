@@ -54,16 +54,22 @@ const peerSchema = new Schema({
       message: 'Remote IP should be a valid ipv4 address'
     }
   },
-  monitoringType: {
+  urls: [{
     type: String,
-    enum: ['ICMP', 'URL'],
-    default: 'ICMP',
-    required: true
-  },
-  monitoringTarget: {
+    required: true,
+    validate: {
+      validator: validators.validateFQDN,
+      message: 'URL should be a valid FQDN'
+    }
+  }],
+  ips: [{
     type: String,
-    required: true
-  }
+    required: true,
+    validate: {
+      validator: validators.validateIPv4,
+      message: 'IP should be a valid ip address'
+    }
+  }]
 }, {
   timestamps: true
 });
