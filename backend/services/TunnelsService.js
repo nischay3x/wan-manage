@@ -43,34 +43,37 @@ class TunnelsService {
       '_id',
       'pathlabel']);
 
+    retTunnel.interfaceADetails = {};
+    retTunnel.interfaceBDetails = null;
+
+    retTunnel.tunnelStatusA = {};
+    retTunnel.tunnelStatusB = {};
+
+    const tunnelId = retTunnel.num;
+
     retTunnel.interfaceADetails =
       retTunnel.deviceA.interfaces.filter((ifc) => {
         return ifc._id.toString() === '' + retTunnel.interfaceA;
       })[0];
 
-    retTunnel.interfaceBDetails =
-      item.peer
-        ? {}
-        : retTunnel.deviceB.interfaces.filter((ifc) => {
+    retTunnel.tunnelStatusA =
+      deviceStatus.getTunnelStatus(retTunnel.deviceA.machineId, tunnelId) || {};
+
+    retTunnel.deviceA = pick(retTunnel.deviceA, ['_id', 'name']);
+
+    // fill remote side if not peer tunnel
+    if (!item.peer) {
+      retTunnel.interfaceBDetails =
+        retTunnel.deviceB.interfaces.filter((ifc) => {
           return ifc._id.toString() === '' + retTunnel.interfaceB;
         })[0];
 
-    const tunnelId = retTunnel.num;
-
-    // Add tunnel status
-    retTunnel.tunnelStatusA =
-      deviceStatus.getTunnelStatus(retTunnel.deviceA.machineId, tunnelId) || {};
-    if (!item.peer) {
       retTunnel.tunnelStatusB =
         deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
-    }
 
-    retTunnel.deviceA = pick(retTunnel.deviceA, ['_id', 'name']);
-    if (!item.peer) {
       retTunnel.deviceB = pick(retTunnel.deviceB, ['_id', 'name']);
-    }
-
-    if (item.peer) {
+    } else {
+      retTunnel.deviceB = {};
       retTunnel.peer = {
         name: item.peer.name
       };
