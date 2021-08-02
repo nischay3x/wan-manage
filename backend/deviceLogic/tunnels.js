@@ -230,9 +230,6 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
 const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reasons) => {
   const tasks = [];
 
-  // convert devices to object
-  // opDevices = opDevices.map(d => d.toObject());
-
   // get peers configurations
   const peers = await peersModel.find({ _id: { $in: peersIds } }).lean();
 
@@ -293,6 +290,26 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
           tasks.push(promise);
         }
       } else {
+        // If interface has more than one path label, we can't create peer for each one
+        if (ifcLabels.size > 1) {
+          let allLabelsSelected = createForAllLabels;
+          if (!allLabelsSelected) {
+            allLabelsSelected = ifcLabels.size === specifiedLabels.size;
+          }
+
+          if (allLabelsSelected) {
+            logger.debug('Interface has more than one path label.',
+              {
+                params: {
+                  ifcLabels,
+                  wanIfc
+                }
+              });
+            reasons.add('The system skipped interfaces that have multiple path labels.');
+            continue;
+          }
+        }
+
         for (const label of ifcLabels) {
           const shouldSkipPeer = !createForAllLabels && !specifiedLabels.has(label);
           if (shouldSkipPeer) {
