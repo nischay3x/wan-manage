@@ -123,17 +123,11 @@ const validateFirewallRules = (rules, device = undefined) => {
       };
       if (ipProtoPort && !trafficId && !trafficTags) {
         const { ip, ports, protocols } = ipProtoPort;
-        if (inbound === 'nat1to1') {
-          if (!ip) {
-            return { valid: false, err: 'IP must be specified for 1:1 NAT rule' };
-          };
-        } else {
-          if (!ip && !ports && !protocols) {
-            return { valid: false, err: 'IP, ports or protocols must be specified' };
-          };
-          if (!Array.isArray(protocols) || protocols.length === 0) {
-            return { valid: false, err: 'At least one protocol must be specified' };
-          }
+        if (inbound !== 'nat1to1' && !ip && !ports && !protocols) {
+          return { valid: false, err: 'IP, ports or protocols must be specified' };
+        };
+        if (!Array.isArray(protocols) || protocols.length === 0) {
+          return { valid: false, err: 'At least one protocol must be specified' };
         }
       };
       if (trafficTags) {
