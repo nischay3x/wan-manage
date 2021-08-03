@@ -1173,7 +1173,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
 
   // Check is tunnel used by any static route
   // TODO: check
-  const { ip1, ip2 } = generateTunnelParams(num);
+  const { ip1, ip2 } = generateTunnelParams(num, peer);
   const tunnelUsedByStaticRoute =
     (Array.isArray(deviceA.staticroutes) &&
     deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
@@ -1459,7 +1459,9 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
   const paramsDeviceA = {};
   const paramsDeviceB = {};
 
-  let tunnelParams = null;
+  // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
+  const tunnelParams = generateTunnelParams(tunnel.num, peer);
+
   // no additional header for not encrypted tunnels
   const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
 
@@ -1476,6 +1478,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     paramsDeviceA.dst = peer.remoteIP;
 
     // handle peer configurations
+    paramsDeviceA.peer.addr = tunnelParams.ip1 + '/32';
     paramsDeviceA.peer.mtu = (deviceAIntf.mtu || 1500) - packetHeaderSize;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
@@ -1492,9 +1495,6 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
 
     // mtu
     const mtu = Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
-
-    // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
-    tunnelParams = generateTunnelParams(tunnel.num);
 
     paramsDeviceA['loopback-iface'] = {
       addr: tunnelParams.ip1 + '/31',
@@ -1526,7 +1526,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     };
   }
 
-  return { paramsDeviceA, paramsDeviceB, tunnelParams: tunnelParams };
+  return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };
 
 const getInterfacesWithPathLabels = device => {
