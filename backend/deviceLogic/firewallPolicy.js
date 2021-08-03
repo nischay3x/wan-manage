@@ -295,28 +295,52 @@ const apply = async (deviceList, user, data) => {
         : [deviceList[0]._id];
 
       // Update devices policy in the database
-      const update = op === 'install'
-        ? {
-          $set: {
-            'policies.firewall': {
-              policy: firewallPolicy._id,
-              status: 'installing',
-              requestTime: requestTime
-            }
+      const updateOps = [];
+      if (op === 'install') {
+        updateOps.push({
+          updateMany: {
+            filter: { _id: { $in: deviceIds }, org: org },
+            update: {
+              $set: {
+                'policies.firewall': {
+                  policy: firewallPolicy._id,
+                  status: 'installing',
+                  requestTime: requestTime
+                }
+              }
+            },
+            upsert: false
           }
-        }
-        : {
-          $set: {
-            'policies.firewall.status': 'uninstalling',
-            'policies.firewall.requestTime': requestTime
+        });
+      } else {
+        updateOps.push({
+          updateMany: {
+            filter: { _id: { $in: deviceIds }, org: org, deviceSpecificRulesEnabled: false },
+            update: {
+              $set: {
+                'policies.firewall.status': 'uninstalling',
+                'policies.firewall.requestTime': requestTime
+              }
+            },
+            upsert: false
           }
-        };
-
-      await devices.updateMany(
-        { _id: { $in: deviceIds }, org: org },
-        update,
-        { upsert: false }
-      ).session(session);
+        });
+        updateOps.push({
+          updateMany: {
+            filter: { _id: { $in: deviceIds }, org: org, deviceSpecificRulesEnabled: true },
+            update: {
+              $set: {
+                'policies.firewall': {
+                  status: 'installing',
+                  requestTime: requestTime
+                }
+              }
+            },
+            upsert: false
+          }
+        });
+      }
+      await devices.bulkWrite(updateOps);
     });
   } catch (err) {
     throw err.name === 'MongoError'
