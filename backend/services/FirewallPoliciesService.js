@@ -25,7 +25,6 @@ const { validateFirewallRules } = require('../deviceLogic/validators');
 
 class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org) {
-
     const { _id, name, rules } = firewallPolicyRequest;
 
     // Duplicate names are not allowed in the same organization
