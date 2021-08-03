@@ -44,7 +44,7 @@ const {
   validateDhcpConfig,
   validateStaticRoute
 } = require('../deviceLogic/validators');
-const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
+const { getAllOrganizationLanSubnets, mapLteNames, mapWifiNames } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const wifiChannels = require('../utils/wifi-channels');
 const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
@@ -2525,70 +2525,5 @@ class DevicesService {
     }
   }
 }
-
-const mapWifiNames = agentData => {
-  const map = {
-    ap_status: 'accessPointStatus'
-  };
-  return renameKeys(agentData, map);
-};
-
-const mapLteNames = agentData => {
-  const map = {
-    sim_status: 'simStatus',
-    hardware_info: 'hardwareInfo',
-    packet_service_state: 'packetServiceState',
-    phone_number: 'phoneNumber',
-    system_info: 'systemInfo',
-    default_settings: 'defaultSettings',
-    pin_state: 'pinState',
-    connection_state: 'connectionState',
-    registration_network: 'registrationNetworkState',
-    APN: 'apn',
-    UserName: 'userName',
-    Password: 'password',
-    Auth: 'auth',
-    Vendor: 'vendor',
-    Model: 'model',
-    Imei: 'imei',
-    Downlink_speed: 'downlinkSpeed',
-    Uplink_speed: 'uplinkSpeed',
-    PIN1_RETRIES: 'pin1Retries',
-    PIN1_STATUS: 'pin1Status',
-    PUK1_RETRIES: 'puk1Retries',
-    network_error: 'networkError',
-    register_state: 'registrationState',
-    RSRP: 'rsrp',
-    RSRQ: 'rsrq',
-    RSSI: 'rssi',
-    SINR: 'sinr',
-    SNR: 'snr',
-    Cell_Id: 'cellId',
-    MCC: 'mcc',
-    MNC: 'mnc',
-    Operator_Name: 'operatorName'
-  };
-
-  return renameKeys(agentData, map);
-};
-
-const renameKeys = (obj, map) => {
-  Object.keys(obj).forEach(key => {
-    const newKey = map[key];
-    let value = obj[key];
-
-    if (value && typeof value === 'object') {
-      value = renameKeys(value, map);
-    }
-
-    if (newKey) {
-      obj[newKey] = value;
-      delete obj[key];
-    } else {
-      obj[key] = value;
-    }
-  });
-  return obj;
-};
 
 module.exports = DevicesService;
