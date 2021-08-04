@@ -118,7 +118,6 @@ class JobsService {
         );
       }
 
-      response.setHeader('Access-Control-Expose-Headers', '*');
       response.setHeader('records-total', result.length);
       return Service.successResponse(
         paginated(result, offset, limit, sortField, sortOrder)
