@@ -31,16 +31,13 @@ const randomNum = require('../utils/random-key');
         sa2: number
     }}
  */
-const generateTunnelParams = (tunnelNum, peer = null) => {
+const generateTunnelParams = (tunnelNum) => {
   const d2h = (d) => (('00' + (+d).toString(16)).substr(-2));
-
-  // we usr 100 for site-to-site tunnels and 200 for peers
-  const segment = peer ? '200' : '100';
 
   const h = (tunnelNum % 127 + 1) * 2;
   const l = Math.floor(tunnelNum / 127);
-  const ip1 = `10.${segment}.` + (+l).toString(10) + '.' + (+h).toString(10);
-  const ip2 = `10.${segment}.` + (+l).toString(10) + '.' + (+(h + 1)).toString(10);
+  const ip1 = '10.100.' + (+l).toString(10) + '.' + (+h).toString(10);
+  const ip2 = '10.100.' + (+l).toString(10) + '.' + (+(h + 1)).toString(10);
   const mac1 = '02:00:27:fd:' + d2h(l) + ':' + d2h(h);
   const mac2 = '02:00:27:fd:' + d2h(l) + ':' + d2h(h + 1);
   const sa1 = (l * 256 + h);

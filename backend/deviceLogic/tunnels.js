@@ -1173,7 +1173,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
 
   // Check is tunnel used by any static route
   // TODO: check
-  const { ip1, ip2 } = generateTunnelParams(num, peer);
+  const { ip1, ip2 } = generateTunnelParams(num);
   const tunnelUsedByStaticRoute =
     (Array.isArray(deviceA.staticroutes) &&
     deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
@@ -1460,7 +1460,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
   const paramsDeviceB = {};
 
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
-  const tunnelParams = generateTunnelParams(tunnel.num, peer);
+  const tunnelParams = generateTunnelParams(tunnel.num);
 
   // no additional header for not encrypted tunnels
   const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
