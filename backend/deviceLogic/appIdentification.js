@@ -57,7 +57,7 @@ const apply = async (devices, user, data) => {
       tasks.push({ entity: 'agent', message, params });
       const jobPromise = deviceQueues.addJob(machineId, userName, org,
         // Data
-        { title: title, tasks: tasks },
+        { title: `${title} ${device.name}`, tasks: tasks },
         // Response data
         {
           method: 'appIdentification',
