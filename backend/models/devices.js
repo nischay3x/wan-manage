@@ -246,6 +246,34 @@ const interfacesSchema = new Schema({
   deviceParams: {
     type: Object,
     default: {}
+  },
+  ospf: {
+    area: {
+      type: Schema.Types.Mixed,
+      default: 0,
+      required: true,
+      validate: {
+        validator: validators.validateOSPFArea,
+        message: 'area should be a vaild number'
+      }
+    },
+    keyId: {
+      type: String,
+      validate: {
+        validator: validators.validateIsInteger,
+        message: 'keyId should be an integer'
+      }
+    },
+    key: {
+      type: String,
+      maxlength: [16, 'Key length must be at most 16']
+    },
+    cost: {
+      type: Number,
+      validate: {
+        validator: validators.validateOSPFCost
+      }
+    }
   }
 }, {
   timestamps: true,
@@ -275,6 +303,7 @@ const staticroutesSchema = new Schema({
   // destination
   destination: {
     type: String,
+    required: [true, 'Destination name must be set'],
     validate: {
       validator: validators.validateIPv4WithMask,
       message: 'Destination should be a valid ipv4 with mask type'
@@ -283,6 +312,7 @@ const staticroutesSchema = new Schema({
   // gateway
   gateway: {
     type: String,
+    required: [true, 'Gateway name must be set'],
     validate: {
       validator: validators.validateIPv4,
       message: 'Gateway should be a valid ipv4 address'
@@ -290,7 +320,11 @@ const staticroutesSchema = new Schema({
   },
   // interface name
   ifname: {
-    type: String
+    type: String,
+    validate: {
+      validator: validators.validateDevId,
+      message: 'ifname should be a vaild interface devId'
+    }
   },
   // metric
   metric: {
@@ -300,6 +334,10 @@ const staticroutesSchema = new Schema({
       validator: validators.validateMetric,
       message: 'Metric should be a number'
     }
+  },
+  redistributeViaOSPF: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true
@@ -739,9 +777,9 @@ const deviceSchema = new Schema({
       default: deviceFirewallPolicySchema
     }
   },
-  firewallApplied: {
+  deviceSpecificRulesEnabled: {
     type: Boolean,
-    default: false
+    default: true
   },
   firewall: {
     rules: [firewallRuleSchema]
@@ -754,6 +792,32 @@ const deviceSchema = new Schema({
   IKEv2: {
     type: IKEv2Schema,
     default: IKEv2Schema
+  },
+  ospf: {
+    routerId: {
+      type: String,
+      required: false,
+      validate: {
+        validator: validators.validateIPv4,
+        message: props => `${props.value} should be a vaild ip address`
+      }
+    },
+    helloInterval: {
+      type: Number,
+      default: 10,
+      validate: {
+        validator: validators.validateOSPFInterval,
+        message: props => `${props.value} should be a vaild integer`
+      }
+    },
+    deadInterval: {
+      type: Number,
+      default: 40,
+      validate: {
+        validator: validators.validateOSPFInterval,
+        message: props => `${props.value} should be a vaild integer`
+      }
+    }
   }
 },
 {

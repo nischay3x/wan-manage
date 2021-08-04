@@ -28,7 +28,7 @@ const { verifyAgentVersion } = require('../versioning');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-
+const url = require('url');
 // billing support
 const flexibilling = require('../flexibilling');
 
@@ -171,12 +171,19 @@ connectRouter.route('/register')
               // Initialize session
               let session;
               let keepCount; // current number of docs per account
+              let keepOrgCount; // current number of docs per account
               mongoConns.getMainDB().startSession()
                 .then((_session) => {
                   session = _session;
                   return session.startTransaction();
                 })
                 .then(() => {
+                  return devices.countDocuments({
+                    account: account, org: decoded.org
+                  }).session(session);
+                })
+                .then((orgCount) => {
+                  keepOrgCount = orgCount;
                   return devices.countDocuments({ account: account }).session(session);
                 })
                 .then(async (count) => {
@@ -207,6 +214,8 @@ connectRouter.route('/register')
                       await flexibilling.registerDevice({
                         account: result[0].account,
                         count: keepCount,
+                        org: decoded.org,
+                        orgCount: keepOrgCount,
                         increment: 1
                       }, session);
 
@@ -241,7 +250,14 @@ connectRouter.route('/register')
                         });
                       res.statusCode = 200;
                       res.setHeader('Content-Type', 'application/json');
-                      res.json({ deviceToken: deviceToken, server: configs.get('agentBroker') });
+
+                      let server = configs.get('agentBroker');
+                      if (decoded.server) {
+                        const urlSchema = new url.URL(decoded.server);
+                        server = `${urlSchema.hostname}:${urlSchema.port}`;
+                      }
+
+                      res.json({ deviceToken: deviceToken, server: server });
                     }, async (err) => {
                       // abort transaction on error
                       if (session) {

@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2020  flexiWAN Ltd.
+// Copyright (C) 2019  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -14,17 +14,26 @@
 
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+const configs = require('../configs')();
 
-const Controller = require('./Controller');
-
-class ConfigurationController {
-  constructor (Service) {
-    this.service = Service;
+const getUiServerUrl = req => {
+  let uiServerUrl = null;
+  const uiServers = configs.get('uiServerUrl', 'list');
+  let refererHeader = req.get('Referer');
+  if (refererHeader) {
+    refererHeader = refererHeader.slice(0, -1); // no need the slash at end
+    const found = uiServers.find(s => s === refererHeader);
+    if (found) {
+      uiServerUrl = refererHeader;
+    } else {
+      uiServerUrl = uiServers[0];
+    }
+  } else {
+    uiServerUrl = uiServers[0];
   }
+  return uiServerUrl;
+};
 
-  async configurationRestServersGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.configurationRestServersGET);
-  }
-}
-
-module.exports = ConfigurationController;
+module.exports = {
+  getUiServerUrl
+};

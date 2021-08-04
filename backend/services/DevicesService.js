@@ -53,6 +53,8 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const cidr = require('cidr-tools');
+const { TypedError, ErrorTypes } = require('../utils/errors');
+
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -61,7 +63,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ org, deviceCommand }, { user }, response) {
+  static async devicesApplyPOST ({ org, deviceCommand }, { user, server }, response) {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -70,7 +72,7 @@ class DevicesService {
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -87,7 +89,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user }, response) {
+  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevice = await devices.find({
@@ -100,7 +102,7 @@ class DevicesService {
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse({ ids, status, message }, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -135,7 +137,9 @@ class DevicesService {
       // Internal array, objects
       'labels',
       'upgradeSchedule',
-      'sync']);
+      'sync',
+      'ospf'
+    ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
 
@@ -173,7 +177,8 @@ class DevicesService {
           'deviceParams',
           'dnsServers',
           'dnsDomains',
-          'useDhcpDnsServers'
+          'useDhcpDnsServers',
+          'ospf'
         ]);
         retIf._id = retIf._id.toString();
         // if device is not connected then internet access status is unknown
@@ -190,7 +195,8 @@ class DevicesService {
           'destination',
           'gateway',
           'ifname',
-          'metric'
+          'metric',
+          'redistributeViaOSPF'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;
@@ -255,7 +261,7 @@ class DevicesService {
     retDevice.interfaces = retInterfaces;
     retDevice.staticroutes = retStaticRoutes;
     retDevice.dhcp = retDhcpList;
-    retDevice.firewallApplied = item.firewallApplied;
+    retDevice.deviceSpecificRulesEnabled = item.deviceSpecificRulesEnabled;
     retDevice.firewall = {
       rules: retFirewallRules
     };
@@ -279,6 +285,7 @@ class DevicesService {
         .skip(offset)
         .limit(limit)
         .populate('interfaces.pathlabels', '_id name description color type')
+        .populate('policies.firewall.policy', '_id name description')
         .populate('policies.multilink.policy', '_id name description');
 
       const devicesMap = result.map(item => {
@@ -407,6 +414,7 @@ class DevicesService {
    * Returns Device Configuration
    **/
   static async devicesIdConfigurationGET ({ id, org }, { user }) {
+    let deviceStatus = 'unknown';
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.find({
@@ -419,15 +427,18 @@ class DevicesService {
 
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
-          configurations: []
+          error: null,
+          deviceStatus: 'disconnected',
+          configuration: []
         });
       }
+      deviceStatus = 'connected';
 
       const deviceConf = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-device-config' }
+        { entity: 'agent', message: 'get-device-config' },
+        configs.get('directMessageTimeout', 'number')
       );
 
       if (!deviceConf.ok) {
@@ -445,14 +456,13 @@ class DevicesService {
         : deviceConf.message.filter(item => item.params);
 
       return Service.successResponse({
-        status: 'connected',
+        error: null,
+        deviceStatus: 'connected',
         configuration
       });
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      return DevicesService.handleRequestError(e,
+        { deviceStatus: deviceStatus, configuration: [] });
     }
   }
 
@@ -470,79 +480,117 @@ class DevicesService {
         throw new Error('Device or Interface not found');
       };
 
-      const deviceStatus = connections.isConnected(deviceObject.machineId);
-      const selectedInterface = deviceObject.interfaces.find(i => {
-        return i._id.toString() === interfaceId;
-      });
-      let interfaceInfo = {};
+      const supportedMessages = {
+        lte: {
+          message: 'get-lte-info',
+          defaultResponse: {
+            connectivity: false,
+            simStatus: null,
+            signals: {},
+            hardwareInfo: {},
+            packetServiceState: {},
+            phoneNumber: null,
+            systemInfo: {},
+            defaultSettings: {},
+            pinState: {},
+            connectionState: null,
+            registrationNetworkState: {}
+          },
+          parseResponse: async response => {
+            response = mapLteNames(response);
+            let defaultApn = response.defaultSettings ? response.defaultSettings.apn : null;
+            const mcc = response.systemInfo.mcc;
+            const mnc = response.systemInfo.mnc;
 
-      const interfaceType = selectedInterface.deviceType;
-      if (deviceStatus) {
-        const agentMessages = {
-          lte: 'get-lte-info',
-          wifi: 'get-wifi-info'
-        }[interfaceType];
-
-        if (agentMessages) {
-          const response = await connections.deviceSendMessage(
-            null,
-            deviceObject.machineId,
-            {
-              entity: 'agent',
-              message: agentMessages,
-              params: { dev_id: selectedInterface.devId }
-            }
-          );
-          if (!response.ok) {
-            logger.error('Failed to get interface info', {
-              params: {
-                deviceId: id, response: response.message
+            if (mcc && mnc) {
+              const key = mcc + '-' + mnc;
+              if (apnsJson[key]) {
+                defaultApn = apnsJson[key];
               }
-            });
-            return Service.rejectResponse('Failed to get interface status', 500);
-          } else {
-            interfaceInfo = response.message;
+            }
+
+            // update pin state
+            await devices.updateOne(
+              { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+              {
+                $set: {
+                  'interfaces.$.deviceParams.initial_pin1_state': status.pinState,
+                  'interfaces.$.deviceParams.default_settings': status.defaultSettings
+                }
+              }
+            );
+
+            return {
+              ...response,
+              defaultSettings: {
+                ...response.defaultSettings,
+                apn: defaultApn
+              }
+            };
+          }
+        },
+        wifi: {
+          message: 'get-wifi-info',
+          defaultResponse: {
+            clients: [],
+            accessPointStatus: false
+          },
+          parseResponse: async response => {
+            response = mapWifiNames(response);
+            return { ...response, wifiChannels };
           }
         }
+      };
+
+      const ifc = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
+      const message = supportedMessages[ifc.deviceType];
+      if (!message) {
+        throw new Error('Unsupported request');
       }
 
-      if (interfaceType === 'wifi') {
-        interfaceInfo = { ...interfaceInfo, wifiChannels };
-      } else if (interfaceType === 'lte' && Object.keys(interfaceInfo).length > 0) {
-        let defaultApn = interfaceInfo.default_settings
-          ? interfaceInfo.default_settings.APN : null;
-        const mcc = interfaceInfo.system_info.MCC;
-        const mnc = interfaceInfo.system_info.MNC;
+      if (!connections.isConnected(deviceObject.machineId)) {
+        return Service.successResponse({
+          error: null,
+          deviceStatus: 'disconnected',
+          status: message.defaultResponse
+        });
+      }
 
-        if (!defaultApn && mcc && mnc) {
-          const key = mcc + '-' + mnc;
-          if (apnsJson[key]) {
-            defaultApn = apnsJson[key];
-          }
-        }
-
-        interfaceInfo = {
-          ...interfaceInfo,
-          default_settings: {
-            ...interfaceInfo.default_settings,
-            APN: defaultApn
-          }
-        };
-
-        // update pin state
-        await devices.updateOne(
-          { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+      let response = message.defaultResponse;
+      try {
+        response = await connections.deviceSendMessage(
+          null,
+          deviceObject.machineId,
           {
-            $set: {
-              'interfaces.$.deviceParams.initial_pin1_state': interfaceInfo.pin_state,
-              'interfaces.$.deviceParams.default_settings': interfaceInfo.default_settings
-            }
-          }
+            entity: 'agent',
+            message: message.message,
+            params: { dev_id: ifc.devId }
+          },
+          configs.get('directMessageTimeout', 'number')
         );
+      } catch (e) {
+        return DevicesService.handleRequestError(e,
+          { deviceStatus: 'connected', status: response });
+      }
+
+      if (!response.ok) {
+        logger.error('Failed to get interface info', {
+          params: {
+            deviceId: id, response: response.message
+          }
+        });
+        return Service.rejectResponse('Failed to get interface status', 500);
+      }
+
+      let status = response.message;
+      if (message.parseResponse) {
+        status = await message.parseResponse(status);
       }
 
       return Service.successResponse({
-        interfaceInfo
+        error: null,
+        deviceStatus: 'connected',
+        status
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -574,7 +622,8 @@ class DevicesService {
 
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
+          error: null,
+          deviceStatus: 'disconnected',
           logs: []
         });
       }
@@ -589,7 +638,8 @@ class DevicesService {
             lines: limit || '100',
             filter: filter || 'all'
           }
-        }
+        },
+        configs.get('directMessageTimeout', 'number')
       );
 
       if (!deviceLogs.ok) {
@@ -632,14 +682,12 @@ class DevicesService {
       }
 
       return Service.successResponse({
-        status: 'connected',
+        error: null,
+        deviceStatus: 'connected',
         logs: deviceLogs.message
       });
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      return DevicesService.handleRequestError(e, { deviceStatus: 'connected', logs: [] });
     }
   }
 
@@ -656,11 +704,13 @@ class DevicesService {
 
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
+          error: null,
+          deviceStatus: 'disconnected',
           traces: []
         });
       }
 
+      timeout = timeout || 5;
       const devicePacketTraces = await connections.deviceSendMessage(
         null,
         device[0].machineId,
@@ -668,10 +718,11 @@ class DevicesService {
           entity: 'agent',
           message: 'get-device-packet-traces',
           params: {
-            packets: packets || '100',
-            timeout: timeout || '5'
+            packets: packets || 100,
+            timeout: timeout
           }
-        }
+        },
+        timeout + configs.get('directMessageTimeout', 'number')
       );
 
       if (!devicePacketTraces.ok) {
@@ -685,14 +736,12 @@ class DevicesService {
       }
 
       return Service.successResponse({
-        status: 'connected',
+        error: null,
+        deviceStatus: 'connected',
         traces: devicePacketTraces.message
       });
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      return DevicesService.handleRequestError(e, { deviceStatus: 'connected', traces: [] });
     }
   }
 
@@ -731,10 +780,16 @@ class DevicesService {
         account: delDevices[0].account
       }).session(session);
 
+      const orgCount = await devices.countDocuments({
+        account: delDevices[0].account, org: orgList[0]
+      }).session(session);
+
       // Unregister a device (by adding -1)
       await flexibilling.registerDevice({
         account: delDevices[0].account,
+        org: orgList[0],
         count: deviceCount,
+        orgCount: orgCount,
         increment: -1
       }, session);
 
@@ -764,7 +819,7 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user }, response) {
+  static async devicesIdPUT ({ id, org, deviceRequest }, { user, server }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -851,6 +906,26 @@ class DevicesService {
                   }
                 }
               }
+              if (!updIntf.isAssigned || origIntf.type !== updIntf.type) {
+                // check firewall rules
+                if (deviceRequest.firewall) {
+                  const { rules } = deviceRequest.firewall;
+                  if (rules.some(r => r.direction === 'inbound' &&
+                    r.classification.destination.ipProtoPort.interface === origIntf.devId)) {
+                    throw new Error(
+                      `Not allowed to change WAN interface ${origIntf.name},\
+                      it is reffered in inbound firewall rules.`
+                    );
+                  }
+                  if (rules.some(r => r.direction === 'outbound' &&
+                    r.interfaces.includes(origIntf.devId))) {
+                    throw new Error(
+                      `Not allowed to change LAN interface ${origIntf.name},\
+                      it is reffered in outbound firewall rules.`
+                    );
+                  }
+                }
+              }
             }
 
             // Unassigned interfaces are not controlled from manage
@@ -888,6 +963,15 @@ class DevicesService {
             if (!updIntf.isAssigned && updIntf.mtu && updIntf.mtu !== origIntf.mtu) {
               throw new Error(
                 `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
+              );
+            }
+
+            // don't allow set OSPF keyID without key and vise versa
+            const keyId = updIntf.ospf.keyId;
+            const key = updIntf.ospf.key;
+            if ((keyId && !key) || (!keyId && key)) {
+              throw new Error(
+                `(${origIntf.name}) Not allowed to save OSPF key ID without key and vice versa`
               );
             }
 
@@ -944,8 +1028,44 @@ class DevicesService {
         deviceToValidate.interfaces = origDevice.interfaces;
       }
 
-      // validate DHCP info if it exists
+      // Map dhcp config if needed
       if (Array.isArray(deviceRequest.dhcp)) {
+        deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
+          const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
+          if (!ifc) return d;
+          const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
+          if (!origIfc) return d;
+
+          // if the interface is going to be unassigned now but it was assigned
+          // and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned interface in the bridge.
+          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
+          // now, the user unassigned the eth3. In this case we reassociate the dhcp to the eth4.
+          if (!ifc.isAssigned && origIfc.isAssigned) {
+            const anotherBridgedIfc = deviceRequest.interfaces.find(i =>
+              i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned);
+            if (anotherBridgedIfc) {
+              return { ...d, interface: anotherBridgedIfc.devId };
+            }
+          }
+
+          // if the IP of the interface is changed and it was in a bridge,
+          // we check if we can reassociate the dhcp to another assigned
+          // interface which has the orig IP.
+          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
+          // now, the user changed the IP of eth3. In this case we reassociate the dhcp to the eth4.
+          if (ifc.isAssigned && ifc.IPv4 !== origIfc.IPv4) {
+            const anotherAssignWithSameIp = deviceRequest.interfaces.find(i =>
+              i.devId !== ifc.devId && i.IPv4 === origIfc.IPv4 && i.isAssigned);
+            if (anotherAssignWithSameIp) {
+              return { ...d, interface: anotherAssignWithSameIp.devId };
+            }
+          }
+
+          return d;
+        });
+
+        // validate DHCP info if it exists
         for (const dhcpRequest of deviceRequest.dhcp) {
           DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
         }
@@ -1054,7 +1174,8 @@ class DevicesService {
       const modifyFirewallResult = { ids: [] };
       const updRules = updDevice.firewall.rules.toObject();
       const origRules = origDevice.firewall.rules.toObject();
-      const rulesModified = origDevice.firewallApplied !== updDevice.firewallApplied ||
+      const rulesModified =
+        origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
         !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
           isEqual(
             omit(updatedRule, ['_id', 'name', 'classification']),
@@ -1082,7 +1203,7 @@ class DevicesService {
         };
         const jobs = await queueFirewallPolicyJob(
           [updDevice],
-          'install',
+          firewallPolicy || updDevice.deviceSpecificRulesEnabled ? 'install' : 'uninstall',
           requestTime,
           firewallPolicy,
           user,
@@ -1091,7 +1212,7 @@ class DevicesService {
         modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
       }
       const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
-      DevicesService.setLocationHeader(response, modifyDevResult.ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, modifyDevResult.ids, orgList[0]);
       const deviceObj = DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
@@ -1125,7 +1246,8 @@ class DevicesService {
 
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
-          status: 'disconnected',
+          error: null,
+          deviceStatus: 'disconnected',
           osRoutes: [],
           vppRoutes: []
         });
@@ -1134,7 +1256,8 @@ class DevicesService {
       const deviceOsRoutes = await connections.deviceSendMessage(
         null,
         device[0].machineId,
-        { entity: 'agent', message: 'get-device-os-routes' }
+        { entity: 'agent', message: 'get-device-os-routes' },
+        configs.get('directMessageTimeout', 'number')
       );
 
       if (!deviceOsRoutes.ok) {
@@ -1148,16 +1271,15 @@ class DevicesService {
         return Service.rejectResponse('Failed to get device routes');
       }
       const response = {
-        status: 'connected',
+        error: null,
+        deviceStatus: 'connected',
         osRoutes: deviceOsRoutes.message,
         vppRoutes: []
       };
       return Service.successResponse(response);
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      return DevicesService.handleRequestError(e,
+        { deviceStatus: 'connected', osRoutes: [], vppRoutes: [] });
     }
   }
 
@@ -1194,7 +1316,8 @@ class DevicesService {
           gateway: value.gateway,
           ifname: value.ifname,
           metric: value.metric,
-          status: value.status
+          status: value.status,
+          redistributeViaOSPF: value.redistributeViaOSPF
         };
       });
       return Service.successResponse(routes);
@@ -1213,7 +1336,7 @@ class DevicesService {
    * route String Numeric ID of the Route to delete
    * no response value expected for this operation
    **/
-  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user }, response) {
+  static async devicesIdStaticroutesRouteDELETE ({ id, org, route }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const device = await devices.findOne(
@@ -1235,7 +1358,7 @@ class DevicesService {
       copy._id = route;
       copy.action = 'del';
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -1252,21 +1375,20 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns DeviceStaticRouteInformation
    **/
-  static async devicesIdStaticroutesPOST (request, { user }, response) {
+  static async devicesIdStaticroutesPOST (request, { user, server }, response) {
     const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const deviceObject = await devices.find({
+      let device = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
       });
-      if (!deviceObject || deviceObject.length === 0) {
+      if (!device) {
         return Service.rejectResponse('Device not found');
       }
-      if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
+      if (!device.isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
       }
-      const device = deviceObject[0];
 
       // eslint-disable-next-line new-cap
       const route = new staticroutes({
@@ -1275,6 +1397,15 @@ class DevicesService {
         ifname: staticRouteRequest.ifname,
         metric: staticRouteRequest.metric
       });
+
+      const error = route.validateSync();
+      if (error) {
+        logger.warn('static route validation failed',
+          {
+            params: { staticRouteRequest, error }
+          });
+        throw new Error(error.message);
+      }
 
       const tunnels = await tunnelsModel.find({
         isActive: true,
@@ -1289,14 +1420,14 @@ class DevicesService {
         throw new Error(err);
       }
 
-      await devices.findOneAndUpdate(
+      device = await devices.findOneAndUpdate(
         { _id: device._id },
         {
           $push: {
             staticroutes: route
           }
         },
-        { new: true }
+        { new: true, runValidators: true }
       );
 
       const copy = Object.assign({}, staticRouteRequest);
@@ -1304,7 +1435,7 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy._id = route.id;
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       const result = {
         _id: route._id.toString(),
         gateway: route.gateway,
@@ -1330,7 +1461,7 @@ class DevicesService {
    * staticRouteRequest StaticRouteRequest  (optional)
    * returns StaticRoute
    **/
-  static async devicesIdStaticroutesRoutePATCH (request, { user }, response) {
+  static async devicesIdStaticroutesRoutePATCH (request, { user, server }, response) {
     const { id, org, staticRouteRequest } = request;
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -1351,7 +1482,7 @@ class DevicesService {
       copy.method = 'staticroutes';
       copy.action = staticRouteRequest.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse({ deviceId: device.id });
     } catch (e) {
       return Service.rejectResponse(
@@ -1376,9 +1507,9 @@ class DevicesService {
 
     if (id) match.device = mongoose.Types.ObjectId(id);
     if (startTime && endTime) {
-      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
-    } else if (startTime) match.time = { $gte: startTime };
-    else if (endTime) match.time = { $lte: endTime };
+      match.$and = [{ time: { $gte: +startTime } }, { time: { $lte: +endTime } }];
+    } else if (startTime) match.time = { $gte: +startTime };
+    else if (endTime) match.time = { $lte: +endTime };
 
     const pipeline = [
       { $match: match },
@@ -1428,9 +1559,9 @@ class DevicesService {
 
     if (id) match.device = mongoose.Types.ObjectId(id);
     if (startTime && endTime) {
-      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
-    } else if (startTime) match.time = { $gte: startTime };
-    else if (endTime) match.time = { $lte: endTime };
+      match.$and = [{ time: { $gte: +startTime } }, { time: { $lte: +endTime } }];
+    } else if (startTime) match.time = { $gte: +startTime };
+    else if (endTime) match.time = { $lte: +endTime };
 
     const pipeline = [
       { $match: match },
@@ -1483,9 +1614,9 @@ class DevicesService {
     const match = { org: mongoose.Types.ObjectId(org) };
     if (id) match.device = mongoose.Types.ObjectId(id);
     if (startTime && endTime) {
-      match.$and = [{ time: { $gte: startTime } }, { time: { $lte: endTime } }];
-    } else if (startTime) match.time = { $gte: startTime };
-    else if (endTime) match.time = { $lte: endTime };
+      match.$and = [{ time: { $gte: +startTime } }, { time: { $lte: +endTime } }];
+    } else if (startTime) match.time = { $gte: +startTime };
+    else if (endTime) match.time = { $lte: +endTime };
 
     const pipeline = [
       { $match: match },
@@ -1613,7 +1744,7 @@ class DevicesService {
    * org String Organization to be filtered by (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdDhcpDhcpIdDELETE ({ id, dhcpId, force, org }, { user }, response) {
+  static async devicesIdDhcpDhcpIdDELETE ({ id, dhcpId, force, org }, { user, server }, response) {
     try {
       const isForce = (force === 'yes');
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -1646,7 +1777,7 @@ class DevicesService {
         copy._id = dhcpId;
         copy.action = 'del';
         const { ids } = await dispatcher.apply(device, copy.method, user, copy);
-        DevicesService.setLocationHeader(response, ids, orgList[0]);
+        DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       }
 
       // If force delete specified, delete the entry regardless of the job status
@@ -1724,7 +1855,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, { user }, response) {
+  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, { user, server }, res) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -1746,6 +1877,8 @@ class DevicesService {
       });
       if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
 
+      DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
+
       const dhcpData = {
         _id: dhcpId,
         interface: dhcpRequest.interface,
@@ -1765,7 +1898,7 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, res, ids, orgList[0]);
       return Service.successResponse(dhcpData, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -1784,7 +1917,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org }, { user }, response) {
+  static async devicesIdDhcpDhcpIdPATCH ({ id, dhcpId, org }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -1817,7 +1950,7 @@ class DevicesService {
       copy.method = 'dhcp';
       copy.action = dhcpObject.status === 'add-failed' ? 'add' : 'del';
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       const dhcpData = {
         _id: dhcpObject.id,
         interface: dhcpObject.interface,
@@ -1908,6 +2041,7 @@ class DevicesService {
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
+
     // check that DHCP Range Start/End IP are on the same subnet with interface IP
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
       throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
@@ -1939,7 +2073,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user }, response) {
+  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user, server }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -1962,6 +2096,22 @@ class DevicesService {
         return (s.interface === dhcpRequest.interface);
       });
       if (dhcpObject.length > 0) throw new Error('DHCP already configured for that interface');
+
+      // for bridge feature we allow to set only one dhcp config
+      // for one of the interface in the bridge
+      const interfaceObj = deviceObject.interfaces.find(i => i.devId === dhcpRequest.interface);
+      const addr = interfaceObj.IPv4;
+      const bridgedInterfacesIds = deviceObject.interfaces.filter(i => {
+        return i.devId !== dhcpRequest.interface && i.isAssigned && i.IPv4 === addr;
+      }).map(i => i.devId);
+
+      if (bridgedInterfacesIds.length) {
+        const dhcp = deviceObject.dhcp.map(d => d.interface);
+        const dhcpConfigured = bridgedInterfacesIds.some(i => dhcp.includes(i));
+        if (dhcpConfigured) {
+          throw new Error(`DHCP already configured for an interface in ${addr} bridge`);
+        }
+      }
 
       const dhcpData = {
         interface: dhcpRequest.interface,
@@ -1996,7 +2146,7 @@ class DevicesService {
       copy.org = orgList[0];
       const { ids } = await dispatcher.apply(deviceObject, copy.method, user, copy);
       const result = { ...dhcpData, _id: dhcp._id.toString() };
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(result, 202);
     } catch (e) {
       if (session) session.abortTransaction();
@@ -2048,27 +2198,33 @@ class DevicesService {
             onError: async (jobId, err) => {
               try {
                 err = JSON.parse(err.replace(/'/g, '"'));
+                const data = mapLteNames(err.data);
                 await devices.updateOne(
                   { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
                   {
                     $set: {
-                      'interfaces.$.deviceParams.initial_pin1_state': err.data
+                      'interfaces.$.deviceParams.initial_pin1_state': data
                     }
                   }
                 );
+                return JSON.stringify({ err_msg: err.err_msg, data: data });
               } catch (err) { }
             },
             onComplete: async (jobId, response) => {
               if (response.message && response.message.data) {
+                const data = mapLteNames(response.message.data);
+                response.message.data = data;
                 // update pin state
                 await devices.updateOne(
                   { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
                   {
                     $set: {
-                      'interfaces.$.deviceParams.initial_pin1_state': response.message.data
+                      'interfaces.$.deviceParams.initial_pin1_state': data
                     }
                   }
                 );
+
+                return data;
               }
             }
           }
@@ -2133,17 +2289,27 @@ class DevicesService {
         } else {
           const isConnected = connections.isConnected(deviceObject.machineId);
           if (!isConnected) {
-            return Service.rejectResponse('Device must be connected', 500);
+            return Service.successResponse({
+              error: null,
+              deviceStatus: 'disconnected'
+            });
           }
-          const response = await connections.deviceSendMessage(
-            null,
-            deviceObject.machineId,
-            {
-              entity: 'agent',
-              message: agentAction.message,
-              params: params
-            }
-          );
+
+          let response = {};
+          try {
+            response = await connections.deviceSendMessage(
+              null,
+              deviceObject.machineId,
+              {
+                entity: 'agent',
+                message: agentAction.message,
+                params: params
+              },
+              configs.get('directMessageTimeout', 'number')
+            );
+          } catch (e) {
+            return DevicesService.handleRequestError(e, { deviceStatus: 'connected' });
+          }
 
           if (!response.ok) {
             logger.error('Failed to perform interface operation', {
@@ -2153,10 +2319,10 @@ class DevicesService {
             });
 
             const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
-            const err = response.message.match(regex).join(',');
+            let err = response.message.match(regex).join(',');
 
             if (agentAction.onError) {
-              await agentAction.onError(null, err);
+              err = await agentAction.onError(null, err);
             }
 
             return Service.rejectResponse(err, 500);
@@ -2166,11 +2332,15 @@ class DevicesService {
             await agentAction.onComplete(null, response);
           }
 
-          return Service.successResponse(response, 200);
+          return Service.successResponse({
+            ...response,
+            deviceStatus: 'connected',
+            error: null
+          }, 200);
         }
       }
 
-      return Service.successResponse({}, 200);
+      return Service.successResponse({ deviceStatus: 'connected', error: null }, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Invalid input',
@@ -2233,7 +2403,10 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
       if (!connections.isConnected(deviceObject.machineId)) {
-        throw new Error('Device not connected');
+        return Service.successResponse({
+          error: null,
+          deviceStatus: 'disconnected'
+        });
       }
 
       const request = {
@@ -2247,10 +2420,78 @@ class DevicesService {
       const result = await connections.deviceSendMessage(
         null,
         deviceObject.machineId,
-        request
+        request,
+        100000 // 100 sec
       );
 
-      return Service.successResponse(result, 200);
+      return Service.successResponse({ ...result, error: null }, 200);
+    } catch (e) {
+      return DevicesService.handleRequestError(e, { deviceStatus: 'connected' });
+    }
+  }
+
+  /**
+   * Get OSPF configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by (optional)
+   * returns OSPF configuration
+   **/
+  static async devicesIdRoutingOSPFGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }
+      );
+
+      if (!device) throw new Error('Device not found');
+
+      return Service.successResponse(device.ospf, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify OSPF configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by
+   * ospfConfigs ospfConfigs
+   * returns OSPF configuration
+   **/
+  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        throw new Error('Device not found');
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: deviceObject._id },
+        { $set: { ospf: ospfConfigs } },
+        { new: true, runValidators: true }
+      );
+
+      const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+        org: orgList[0],
+        newDevice: updDevice
+      });
+      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      return Service.successResponse(ospfConfigs, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -2265,13 +2506,89 @@ class DevicesService {
    * @param {Array} jobsIds - array of jobs ids
    * @param {string} orgId - ID of the organzation
    */
-  static setLocationHeader (response, jobsIds, orgId) {
+  static setLocationHeader (server, response, jobsIds, orgId) {
     if (jobsIds.length) {
-      const locationHeader = `${configs.get('restServerUrl')}/api/jobs?status=all&ids=${
+      const locationHeader = `${server}/api/jobs?status=all&ids=${
         jobsIds.join('%2C')}&org=${orgId}`;
       response.setHeader('Location', locationHeader);
     }
   }
+
+  static handleRequestError (e, payload, code = 200) {
+    if (e instanceof TypedError && e.code === ErrorTypes.TIMEOUT.code) {
+      return Service.successResponse({ ...payload, error: 'timeout' }, code);
+    } else {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
 }
+
+const mapWifiNames = agentData => {
+  const map = {
+    ap_status: 'accessPointStatus'
+  };
+  return renameKeys(agentData, map);
+};
+
+const mapLteNames = agentData => {
+  const map = {
+    sim_status: 'simStatus',
+    hardware_info: 'hardwareInfo',
+    packet_service_state: 'packetServiceState',
+    phone_number: 'phoneNumber',
+    system_info: 'systemInfo',
+    default_settings: 'defaultSettings',
+    pin_state: 'pinState',
+    connection_state: 'connectionState',
+    registration_network: 'registrationNetworkState',
+    APN: 'apn',
+    UserName: 'userName',
+    Password: 'password',
+    Auth: 'auth',
+    Vendor: 'vendor',
+    Model: 'model',
+    Imei: 'imei',
+    Downlink_speed: 'downlinkSpeed',
+    Uplink_speed: 'uplinkSpeed',
+    PIN1_RETRIES: 'pin1Retries',
+    PIN1_STATUS: 'pin1Status',
+    PUK1_RETRIES: 'puk1Retries',
+    network_error: 'networkError',
+    register_state: 'registrationState',
+    RSRP: 'rsrp',
+    RSRQ: 'rsrq',
+    RSSI: 'rssi',
+    SINR: 'sinr',
+    SNR: 'snr',
+    Cell_Id: 'cellId',
+    MCC: 'mcc',
+    MNC: 'mnc',
+    Operator_Name: 'operatorName'
+  };
+
+  return renameKeys(agentData, map);
+};
+
+const renameKeys = (obj, map) => {
+  Object.keys(obj).forEach(key => {
+    const newKey = map[key];
+    let value = obj[key];
+
+    if (value && typeof value === 'object') {
+      value = renameKeys(value, map);
+    }
+
+    if (newKey) {
+      obj[newKey] = value;
+      delete obj[key];
+    } else {
+      obj[key] = value;
+    }
+  });
+  return obj;
+};
 
 module.exports = DevicesService;

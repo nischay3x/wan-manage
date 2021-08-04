@@ -18,14 +18,17 @@
 const { isIPv4Address } = require('./validators');
 const wifiChannels = require('../utils/wifi-channels');
 const Joi = require('@hapi/joi');
+const omitBy = require('lodash/omitBy');
+const omit = require('lodash/omit');
 
 /**
  * Builds collection of interfaces to be sent to device
  *
- * @param {*} deviceInterfaces interfaces stored in db
+ * @param {array} deviceInterfaces interfaces stored in db
+ * @param {object} globalOSPF global OSPF configuration to apply on each interfaces
  * @returns array of interfaces
  */
-const buildInterfaces = (deviceInterfaces) => {
+const buildInterfaces = (deviceInterfaces, globalOSPF) => {
   const interfaces = [];
   for (const ifc of deviceInterfaces) {
     // Skip unassigned/un-typed interfaces, as they
@@ -51,7 +54,8 @@ const buildInterfaces = (deviceInterfaces) => {
       configuration,
       dnsServers,
       dnsDomains,
-      useDhcpDnsServers
+      useDhcpDnsServers,
+      ospf
     } = ifc;
     // Non-DIA interfaces should not be
     // sent to the device
@@ -87,6 +91,25 @@ const buildInterfaces = (deviceInterfaces) => {
         ifcInfo.dnsServers = [];
       }
     }
+
+    if (ifc.routing === 'OSPF') {
+      ifcInfo.ospf = {
+        ...ospf,
+        ...globalOSPF
+      };
+
+      // remove empty values since they are optional
+      ifcInfo.ospf = omitBy(ifcInfo.ospf, val => val === '');
+
+      // No need to send this field for interfaces. We use them for other things in the system
+      const omitFields = ['routerId'];
+      ifcInfo.ospf = omit(ifcInfo.ospf, omitFields);
+    }
+
+    ifcInfo.bridge_addr = ifc.type === 'LAN' && deviceInterfaces.some(i => {
+      return devId !== i.devId && i.isAssigned && IPv4 === i.IPv4 && IPv4Mask === i.IPv4Mask;
+    }) ? ifcInfo.addr : null;
+
     interfaces.push(ifcInfo);
   }
 

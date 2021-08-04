@@ -41,6 +41,37 @@ paths:
       tags:
       - Version
       x-swagger-router-controller: Version
+  /configuration/restServers:
+    get:
+      operationId: configurationRestServersGET
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestServers'
+          description: Successful operation
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all flexiManage servers list
+      tags:
+      - Configuration
+      x-swagger-router-controller: Configuration
+      x-openapi-router-controller: ConfigurationController
+      x-openapi-router-service: ConfigurationService
   /tokens:
     get:
       operationId: tokensGET
@@ -1572,6 +1603,146 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/{id}/routing/ospf:
+    get:
+      operationId: devicesIdRoutingOSPFGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OspfConfigs'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get OSPF configuration
+      tags:
+      - Routing
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+    put:
+      operationId: devicesIdRoutingOSPFPUT
+      parameters:
+      - description: Numeric ID of the Device
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OspfConfigs'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OspfConfigs'
+          description: Successful operation
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OspfConfigs'
+          description: Operation queued for processing
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Modify OSPF configuration
+      tags:
+      - Routing
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/{id}/staticroutes:
     post:
       operationId: devicesIdStaticroutesPOST
@@ -1588,7 +1759,7 @@ paths:
         explode: true
         in: query
         name: org
-        required: false
+        required: true
         schema:
           type: string
       requestBody:
@@ -2735,7 +2906,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WifiAvailableNetworks'
+                $ref: '#/components/schemas/InterfaceOperationResponse'
           description: Successful operation
         "400":
           content:
@@ -6678,6 +6849,12 @@ components:
             $ref: '#/components/schemas/Error'
       description: Unauthorized
   schemas:
+    RestServers:
+      example: [https://manage.flexiwan.com,https://org.flexiwan.com]
+      # properties:
+      items:
+        type: string
+      type: array
     Version:
       properties:
         version:
@@ -6776,6 +6953,8 @@ components:
         name:
           type: string
         description:
+          type: string
+        server:
           type: string
       type: object
     AppIdentificationRules:
@@ -7218,7 +7397,7 @@ components:
         - destination: destination
           interface: interface
           gateway: gateway
-        firewallApplied: true
+        deviceSpecificRulesEnabled: true
         firewallRules:
         - name: name
           direction: direction
@@ -7277,7 +7456,7 @@ components:
           items:
             $ref: '#/components/schemas/Interface'
           type: array
-        firewallApplied:
+        deviceSpecificRulesEnabled:
           type: boolean
         firewallRules:
           items:
@@ -7370,7 +7549,7 @@ components:
           destination: 10.10.0.0
           gateway: 10.10.0.1
           interface: eth1
-        firewallApplied: true
+        deviceSpecificRulesEnabled: true
         firewallRules:
         - description: description
           direction: outbound
@@ -7434,7 +7613,7 @@ components:
           items:
             $ref: '#/components/schemas/Interface'
           type: array
-        firewallApplied:
+        deviceSpecificRulesEnabled:
           type: boolean
         firewallRules:
           items:
@@ -7577,6 +7756,22 @@ components:
         useDhcpDnsServers:
           description: In case of DHCP interface, use the DNS info received from DHCP server
           type: boolean
+        ospf:
+          type: object
+          properties:
+            keyId:
+              type: integer
+              nullable: true
+            key:
+              type: string
+            area:
+              oneOf:
+              - type: integer
+              - type: string
+                format: ipv4
+            cost:
+              type: integer
+              nullable: true
       type: object
     DeviceVersion:
       example:
@@ -7703,10 +7898,17 @@ components:
         username:
           type: string
       type: object
+    DeviceResponseStatus:
+      enum:
+      - timeout
+      - null
+      type: string
+      nullable: true
     DeviceConnectionStatus:
       enum:
       - connected
       - disconnected
+      - unknown
       type: string
     DeviceStatus:
       example:
@@ -7724,6 +7926,22 @@ components:
         - sync
         - connection
         - isApproved
+    OspfConfigs:
+      example:
+        helloInterval: 10
+        deadInterval: 40
+        routerId: A.B.C.D
+      properties:
+        helloInterval:
+          type: integer
+          description: The number of seconds for HelloInterval timer value
+        deadInterval:
+          type: integer
+          description: The number of seconds for RouterDeadInterval timer value used for Wait Timer and Inactivity Timer
+        routerId:
+          type: string
+          description: The Router ID of the router originating the LSA
+      type: object
     DeviceRouteInformation:
       example:
         osRoutes:
@@ -7743,7 +7961,9 @@ components:
         - metric: 6
         - metric: 6
       properties:
-        status:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
           $ref: '#/components/schemas/DeviceConnectionStatus'
         osRoutes:
           items:
@@ -7758,18 +7978,15 @@ components:
       example:
         metric: 0
         destination: destination
-        flags: flags
+        protocol: static
         interface: interface
         gateway: gateway
-        mask: mask
       properties:
         metric:
-          type: integer
+          type: string
         destination:
           type: string
-        mask:
-          type: string
-        flags:
+        protocol:
           type: string
         interface:
           type: string
@@ -7828,7 +8045,9 @@ components:
           - {}
         status: connected
       properties:
-        status:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
           $ref: '#/components/schemas/DeviceConnectionStatus'
         configuration:
           items:
@@ -7860,28 +8079,36 @@ components:
         useDHCP:
           type: boolean
       type: object
-    WifiAvailableNetworks:
+    InterfaceOperationResponse:
       example:
-        networks: 
-        - network 1
-        - network 2
         deviceStatus: connected
       properties:
-        networks:
-          items:
-            type: string
-          type: array
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
+          $ref: '#/components/schemas/DeviceConnectionStatus'
       type: object
     InterfaceStatus:
       example:
-        status: 
+        status:
           key: value
         deviceStatus: connected
+      required:
+        - deviceStatus
+        - status
       properties:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
         status:
+          oneOf:
+            - $ref: '#/components/schemas/LteStatus'
+            - $ref: '#/components/schemas/WifiStatus'
+            - type: object
+              minProperties: 0
+              maxProperties: 0
           type: object
         deviceStatus:
-          type: string
+          $ref: '#/components/schemas/DeviceConnectionStatus'
       type: object
     DeviceLog:
       example:
@@ -7890,7 +8117,9 @@ components:
         - logs
         status: connected
       properties:
-        status:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
           $ref: '#/components/schemas/DeviceConnectionStatus'
         logs:
           items:
@@ -7904,7 +8133,9 @@ components:
         - logs
         status: connected
       properties:
-        status:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
           $ref: '#/components/schemas/DeviceStatus'
         logs:
           items:
@@ -8011,9 +8242,10 @@ components:
       example:
         _id: _id
         destination: destination
-        interface: interface
+        ifname: interface devId
         gateway: gateway
         metric: metric
+        redistributeViaOSPF: true
       properties:
         _id:
           maxLength: 24
@@ -8027,13 +8259,16 @@ components:
           description: Gateway to use
           maxLength: 24
           type: string
-        interface:
-          description: Interface name
-          maxLength: 24
+        ifname:
+          description: Interface devId
           type: string
         metric:
           description: Route metric
           type: string
+        redistributeViaOSPF:
+          description: Indicates whether the path is redistributed using OSPF. 
+            Note that the "true" value will return if in the OSPF Global Settings, the redistribution option is enabled for all static routes
+          type: boolean
       type: object
     StaticRoute:
       example:
@@ -8042,6 +8277,7 @@ components:
         gateway: gateway
         metric: metric
         status: "completed"
+        redistributeViaOSPF: true
       properties:
         _id:
           type: string
@@ -8063,6 +8299,10 @@ components:
         status:
           description: Route status
           type: string
+        redistributeViaOSPF:
+          description: Indicates whether the path is redistributed using OSPF.
+            Note that the "true" value will return if in the OSPF Global Settings, the redistribution option is enabled for all static routes
+          type: boolean
       type: object
     DhcpMacAssign:
       example:
@@ -8977,6 +9217,125 @@ components:
                     type: string
                     pattern: ^(\d{8}|)$
                     description: PUK (Personal unblocking key) Code. 8 digits
+    WifiClient:
+      type: object
+      required:
+      - mac
+      - signal
+      - ip
+      properties:
+        mac:
+          type: string
+        signal:
+          type: string
+        ip:
+          type: string
+          description: WiFi client IP
+    WifiStatus:
+      type: object
+      required:
+      - clients
+      - accessPointStatus
+      properties:
+        clients:
+          items:
+            $ref: '#/components/schemas/WifiClient'
+          type: array
+        accessPointStatus:
+          type: boolean
+    LteStatus:
+      required:
+      - signals
+      - connectivity
+      - packetServiceState
+      - hardwareInfo
+      - systemInfo
+      - simStatus
+      - defaultSettings
+      - phoneNumber
+      - pinState
+      - connectionState
+      - registrationNetworkState
+      properties:
+        signals:
+          type: object
+          properties:
+            rssi:
+              type: string
+            rsrp:
+              type: string
+            rsrq:
+              type: string
+            sinr:
+              type: string
+            snr:
+              type: string
+            text:
+              type: string
+              enum: [Marginal, Very low, Low, Good, Very Good, Excellent]
+              description: Based on RSSI value (-50 -> Excellent, -60 -> Very Good, -70 -> Godd, -80 -> Low, -85 -> Very Low, -95 -> Marginal)
+        connectivity:
+          type: boolean
+        packetServiceState:
+          type: object
+          properties:
+            uplinkSpeed:
+              type: string
+            downlinkSpeed:
+              type: string
+        hardwareInfo:
+          type: object
+          properties:
+            vendor:
+              type: string
+            model:
+              type: string
+            imei:
+              type: string
+        systemInfo:
+          type: object
+          properties:
+            cellId:
+              type: string
+            operatorName:
+              type: string
+            mcc:
+              type: string
+            mnc:
+              type: string
+        simStatus:
+          type: string
+        defaultSettings:
+          type: object
+          properties:
+            apn:
+              type: string
+            userName:
+              type: string
+            password:
+              type: string
+            auth:
+              type: string
+        phoneNumber:
+          type: string
+        pinState:
+          type: object
+          properties:
+            pin1Status:
+              type: string
+            pin1Retries:
+              type: string
+            puk1Retries:
+              type: string
+        connectionState:
+          type: string
+        registrationNetworkState:
+          type: object
+          properties:
+            registerState:
+              type: string
+            networkError:
+              type: string
     LteConfiguration:
       required:
         - apn

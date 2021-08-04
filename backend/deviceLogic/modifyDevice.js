@@ -34,7 +34,9 @@ const has = require('lodash/has');
 const omit = require('lodash/omit');
 const differenceWith = require('lodash/differenceWith');
 const pullAllWith = require('lodash/pullAllWith');
+const omitBy = require('lodash/omitBy');
 const isEqual = require('lodash/isEqual');
+const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
@@ -43,7 +45,7 @@ const { buildInterfaces } = require('./interfaces');
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
  * @return {Array}            the same array after removing unnecessary fields
  */
-const prepareIfcParams = (interfaces, device) => {
+const prepareIfcParams = (interfaces, device, newDevice) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
@@ -56,6 +58,18 @@ const prepareIfcParams = (interfaces, device) => {
       if (label.type === 'DIA') labels.push(label._id);
     });
     newIfc.multilink = { labels };
+
+    // The agent should know if this interface should add to the bridge or removed from it, etc.
+    // So, we indicate it with the bridge_addr field.
+    // If this field is null, it means that this interface has no relation to a bridge.
+    // If this field should be in a bridge, we set in this field the bridge IP.
+    // We use the ip as key since it's the unique differentiate
+    // between bridges from the "flexiManage" perspective.
+    // We put this field only if the interface is LAN
+    // and other assigned interfaces have the same IP.
+    newIfc.bridge_addr = ifc.type === 'LAN' && ifc.isAssigned && newDevice.interfaces.some(i => {
+      return newIfc.dev_id !== i.devId && i.isAssigned && newIfc.addr === i.IPv4 + '/' + i.IPv4Mask;
+    }) ? newIfc.addr : null;
 
     if (ifc.isAssigned) {
       if (ifc.type !== 'WAN') {
@@ -79,6 +93,11 @@ const prepareIfcParams = (interfaces, device) => {
       delete newIfc.PublicPort; // used by flexiManage only for tunnels creation
 
       delete newIfc.useDhcpDnsServers; // used by flexiManage only for dns servers depiction
+
+      if (newIfc.ospf) {
+        // remove empty values since they are optional
+        newIfc.ospf = omitBy(newIfc.ospf, val => val === '');
+      }
     }
     return newIfc;
   });
@@ -90,9 +109,9 @@ const prepareIfcParams = (interfaces, device) => {
  * @param {*} interfaces
  * @returns array of interfaces
  */
-const transformInterfaces = (interfaces) => {
+const transformInterfaces = (interfaces, globalOSPF) => {
   return interfaces.map(ifc => {
-    return {
+    const ifcObg = {
       _id: ifc._id,
       devId: ifc.devId,
       dhcp: ifc.dhcp ? ifc.dhcp : 'no',
@@ -116,6 +135,16 @@ const transformInterfaces = (interfaces) => {
       dnsDomains: ifc.dnsDomains,
       useDhcpDnsServers: ifc.useDhcpDnsServers
     };
+
+    // add ospf data if relevant
+    if (ifcObg.routing === 'OSPF') {
+      ifcObg.ospf = {
+        ...ifc.ospf.toObject(),
+        helloInterval: globalOSPF.helloInterval,
+        deadInterval: globalOSPF.deadInterval
+      };
+    }
+    return ifcObg;
   });
 };
 
@@ -132,14 +161,14 @@ const transformInterfaces = (interfaces) => {
  * where 'requests' is an array of individual device modification
  * commands.
  */
-const prepareModificationMessage = (messageParams, device) => {
+const prepareModificationMessage = (messageParams, device, newDevice) => {
   const requests = [];
   const tasks = [];
   // Check against the old configured interfaces.
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
     const modifiedInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.interfaces, device
+      messageParams.modify_interfaces.interfaces, device, newDevice
     );
     if (modifiedInterfaces.length > 0) {
       requests.push(...modifiedInterfaces.map(item => {
@@ -152,10 +181,10 @@ const prepareModificationMessage = (messageParams, device) => {
     }
 
     const oldLteInterfaces = prepareIfcParams(
-      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device);
+      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device, newDevice);
 
     const newLteInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.lte_enable_disable, device
+      messageParams.modify_interfaces.lte_enable_disable, device, newDevice
     );
 
     // we send lte job if configuration or interface metric was changed
@@ -185,6 +214,26 @@ const prepareModificationMessage = (messageParams, device) => {
     }
   }
 
+  if (has(messageParams, 'modify_ospf')) {
+    const { remove, add } = messageParams.modify_ospf;
+
+    if (remove) {
+      requests.push({
+        entity: 'agent',
+        message: 'remove-ospf',
+        params: { ...remove }
+      });
+    }
+
+    if (add) {
+      requests.push({
+        entity: 'agent',
+        message: 'add-ospf',
+        params: { ...add }
+      });
+    }
+  }
+
   if (has(messageParams, 'modify_routes')) {
     const routeRequests = messageParams.modify_routes.routes.flatMap(item => {
       let items = [];
@@ -196,7 +245,8 @@ const prepareModificationMessage = (messageParams, device) => {
             addr: item.addr,
             via: item.old_route,
             devId: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
+            metric: item.metric ? parseInt(item.metric, 10) : undefined,
+            redistributeViaOSPF: item.redistributeViaOSPF
           }
         });
       }
@@ -208,7 +258,8 @@ const prepareModificationMessage = (messageParams, device) => {
             addr: item.addr,
             via: item.new_route,
             devId: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined
+            metric: item.metric ? parseInt(item.metric, 10) : undefined,
+            redistributeViaOSPF: item.redistributeViaOSPF
           }
         });
       }
@@ -229,8 +280,31 @@ const prepareModificationMessage = (messageParams, device) => {
     }
   }
 
+  if (has(messageParams, 'modify_router.assignBridges')) {
+    requests.push(...messageParams.modify_router.assignBridges.map(item => {
+      return {
+        entity: 'agent',
+        message: 'add-switch',
+        params: {
+          addr: item
+        }
+      };
+    }));
+  }
+  if (has(messageParams, 'modify_router.unassignBridges')) {
+    requests.push(...messageParams.modify_router.unassignBridges.map(item => {
+      return {
+        entity: 'agent',
+        message: 'remove-switch',
+        params: {
+          addr: item
+        }
+      };
+    }));
+  }
+
   if (has(messageParams, 'modify_router.assign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, device);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, device, newDevice);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -240,7 +314,7 @@ const prepareModificationMessage = (messageParams, device) => {
     }));
   }
   if (has(messageParams, 'modify_router.unassign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, device);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, device, newDevice);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -329,7 +403,7 @@ const queueJob = async (org, username, tasks, device) => {
  * @param  {string}  org           organization to which the user belongs
  * @return {Job}                   The queued modify-device job
  */
-const queueModifyDeviceJob = async (device, messageParams, user, org) => {
+const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org) => {
   const removedTunnels = [];
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
@@ -358,7 +432,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   }
 
   // Prepare device modification job, if nothing requires modification, return
-  const tasks = prepareModificationMessage(messageParams, device);
+  const tasks = prepareModificationMessage(messageParams, device, newDevice);
 
   if (tasks.length === 0 || tasks[0].length === 0) {
     return [];
@@ -496,6 +570,7 @@ const queueModifyDeviceJob = async (device, messageParams, user, org) => {
   const skipModifyJob = !has(messageParams, 'modify_router') &&
     !has(messageParams, 'modify_routes') &&
     !has(messageParams, 'modify_dhcp_config') &&
+    !has(messageParams, 'modify_ospf') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
       const propsModified = Object.keys(modifiedIfc).filter(prop => {
@@ -657,15 +732,18 @@ const setTunnelsPendingInDB = (tunnelIDs, org, flag) => {
 const prepareModifyRoutes = (origDevice, newDevice) => {
   // Handle changes in default route
   const routes = [];
+
   // Handle changes in static routes
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
+
     newDevice.staticroutes.map(route => {
       return ({
         destination: route.destination,
         gateway: route.gateway,
         ifname: route.ifname,
-        metric: route.metric
+        metric: route.metric,
+        redistributeViaOSPF: route.redistributeViaOSPF
       });
     }),
 
@@ -674,7 +752,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         destination: route.destination,
         gateway: route.gateway,
         ifname: route.ifname,
-        metric: route.metric
+        metric: route.metric,
+        redistributeViaOSPF: route.redistributeViaOSPF
       });
     })
   ];
@@ -706,7 +785,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       old_route: route.gateway,
       new_route: '',
       devId: route.ifname || undefined,
-      metric: route.metric || undefined
+      metric: route.metric || undefined,
+      redistributeViaOSPF: route.redistributeViaOSPF
     });
   });
   routesToAdd.forEach(route => {
@@ -715,11 +795,55 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       new_route: route.gateway,
       old_route: '',
       devId: route.ifname || undefined,
-      metric: route.metric || undefined
+      metric: route.metric || undefined,
+      redistributeViaOSPF: route.redistributeViaOSPF
     });
   });
 
   return { routes: routes };
+};
+
+/**
+ * Creates a modify-ospf object
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing an array of routes
+ */
+const transformOSPF = (ospf) => {
+  // Extract only global fields from ospf
+  // The rest fields are per interface and sent to device via add/modify-interface jobs
+  const globalFields = ['routerId'];
+  return pick(ospf, globalFields);
+};
+
+/**
+ * Creates add/remove-ospf jobs
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing add and remove ospf parameters
+ */
+const prepareModifyOSPF = (origDevice, newDevice) => {
+  const [origOSPF, newOSPF] = [
+    transformOSPF(origDevice.ospf),
+    transformOSPF(newDevice.ospf)
+  ];
+
+  if (isEqual(origOSPF, newOSPF)) {
+    return { remove: null, add: null };
+  }
+
+  // if newOSPF is with empty values - send only remove-ospf
+  if (!Object.keys(omitBy(newOSPF, val => val === '')).length) {
+    return { remove: origOSPF, add: null };
+  }
+
+  // if origOSPF is with empty values - send only add-ospf
+  if (!Object.keys(omitBy(origOSPF, val => val === '')).length) {
+    return { remove: null, add: newOSPF };
+  }
+
+  // if there is a change, send pair of remove-ospf and add-ospf
+  return { remove: origOSPF, add: newOSPF };
 };
 
 /**
@@ -792,6 +916,35 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
   return { dhcpRemove, dhcpAdd };
 };
 
+const getBridges = interfaces => {
+  const bridges = {};
+
+  for (const ifc of interfaces) {
+    const devId = ifc.devId;
+
+    if (ifc.IPv4 === '' && ifc.IPv4Mask === '') {
+      continue;
+    }
+    const addr = ifc.IPv4 + '/' + ifc.IPv4Mask;
+
+    const needsToBridge = interfaces.some(i => {
+      return devId !== i.devId && addr === i.IPv4 + '/' + i.IPv4Mask;
+    });
+
+    if (!needsToBridge) {
+      continue;
+    }
+
+    if (!bridges.hasOwnProperty(addr)) {
+      bridges[addr] = [];
+    }
+
+    bridges[addr].push(ifc.devId);
+  };
+
+  return bridges;
+};
+
 /**
  * Creates and queues the modify-device job. It compares
  * the current view of the device in the database with
@@ -819,12 +972,48 @@ const apply = async (device, user, data) => {
     modifyParams.modify_dhcp_config = modifyDHCP;
   }
 
+  // Create OSPF modification parameters
+  const { remove: removeOSPF, add: addOSPF } = prepareModifyOSPF(device[0], data.newDevice);
+  if (removeOSPF || addOSPF) {
+    modifyParams.modify_ospf = { remove: removeOSPF, add: addOSPF };
+  }
+
+  modifyParams.modify_router = {};
+  const oldBridges = getBridges(device[0].interfaces.filter(i => i.isAssigned));
+  const newBridges = getBridges(data.newDevice.interfaces.filter(i => i.isAssigned));
+
+  const assignBridges = [];
+  const unassignBridges = [];
+
+  // Check add-switch
+  for (const newBridge in newBridges) {
+    // if new bridges doesn't exists in old bridges, we need to add-switch
+    if (!oldBridges.hasOwnProperty(newBridge)) {
+      assignBridges.push(newBridge);
+    }
+  }
+  if (assignBridges.length) {
+    modifyParams.modify_router.assignBridges = assignBridges;
+  }
+
+  // Check remove-switch
+  for (const oldBridge in oldBridges) {
+    // if old bridges doesn't exists in new bridges, we need to remove-switch
+    if (!newBridges.hasOwnProperty(oldBridge)) {
+      unassignBridges.push(oldBridge);
+    }
+  }
+  if (unassignBridges.length) {
+    modifyParams.modify_router.unassignBridges = unassignBridges;
+  }
+
   // Create interfaces modification parameters
   // Compare the array of interfaces, and return
   // an array of the interfaces that have changed
   // First, extract only the relevant interface fields
   const [origInterfaces, origIsAssigned] = [
-    transformInterfaces(device[0].interfaces),
+    // add global ospf settings to each interface
+    transformInterfaces(device[0].interfaces, device[0].ospf),
     device[0].interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -835,7 +1024,8 @@ const apply = async (device, user, data) => {
   ];
 
   const [newInterfaces, newIsAssigned] = [
-    transformInterfaces(data.newDevice.interfaces),
+    // add global ospf settings to each interface
+    transformInterfaces(data.newDevice.interfaces, data.newDevice.ospf),
     data.newDevice.interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -855,7 +1045,6 @@ const apply = async (device, user, data) => {
   );
 
   if (assignedDiff.length > 0) {
-    modifyParams.modify_router = {};
     const toAssign = [];
     const toUnAssign = [];
     // Split interfaces into two arrays: one for the interfaces that
@@ -894,6 +1083,31 @@ const apply = async (device, user, data) => {
     return ifc.isAssigned === true;
   });
 
+  // If there are bridge changes, we need to check if we need to send a modify-interface message.
+  // For example:
+  // Suppose there is already an interface with some IP.
+  // Now, the user configures another interface with the same IP address.
+  // In this case, we need to send an add-switch job with the new interface,
+  // but we need to add the existing interface to this bridge,
+  // even if there are no changes in this interface.
+  const bridgeChanges = [...assignBridges, ...unassignBridges];
+  if (bridgeChanges.length) {
+    for (const changedBridge of bridgeChanges) {
+      const bridgeAddr = changedBridge;
+
+      // "newInterfaces" at this point contains only interfaces that do not assign now,
+      // but already assigned before.
+      // look at "pullAllWith(newInterfaces, [ifcInfo], isEqual);" above
+      const bridgedInterfaces = newInterfaces.filter(ni => ni.addr === bridgeAddr && ni.isAssigned);
+      bridgedInterfaces.forEach(ifc => {
+        // if interface doesn't exists in the assignedInterfacesDiff array, we push it
+        if (!assignedInterfacesDiff.some(i => i.devId === ifc.devId)) {
+          assignedInterfacesDiff.push(ifc);
+        };
+      });
+    }
+  }
+
   // add-lte job should be submitted even if unassigned interface
   // we send this job if configuration or interface metric was changed
   const oldLteInterfaces = device[0].interfaces.filter(item => item.deviceType === 'lte');
@@ -913,14 +1127,19 @@ const apply = async (device, user, data) => {
     modifyParams.modify_interfaces.lte_enable_disable = lteInterfacesDiff;
   }
 
-  const shouldQueueJob =
+  const modified =
       has(modifyParams, 'modify_routes') ||
       has(modifyParams, 'modify_router') ||
       has(modifyParams, 'modify_interfaces') ||
+      has(modifyParams, 'modify_ospf') ||
       has(modifyParams, 'modify_dhcp_config');
 
+  // Queue job only if the device has changed
   // Return empty jobs array if the device did not change
-  if (!shouldQueueJob) {
+  if (!modified) {
+    logger.warn('The device was not modified, nothing to apply', {
+      params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
+    });
     return {
       ids: [],
       status: 'completed',
@@ -928,49 +1147,36 @@ const apply = async (device, user, data) => {
     };
   }
 
-  const modified =
-  has(modifyParams, 'modify_routes') ||
-  has(modifyParams, 'modify_router') ||
-  has(modifyParams, 'modify_interfaces') ||
-  has(modifyParams, 'modify_dhcp_config');
-
   try {
-    // Queue job only if the device has changed
-    if (modified) {
-      // First, go over assigned and modified
-      // interfaces and make sure they are valid
-      const assign = has(modifyParams, 'modify_router.assign')
-        ? modifyParams.modify_router.assign
-        : [];
-      const unassign = has(modifyParams, 'modify_router.unassign')
-        ? modifyParams.modify_router.unassign
-        : [];
-      const modified = has(modifyParams, 'modify_interfaces')
-        ? modifyParams.modify_interfaces.interfaces
-        : [];
-      const interfaces = [...assign, ...modified];
-      const { valid, err } = validateModifyDeviceMsg(interfaces);
-      if (!valid) throw (new Error(err));
-      // Don't allow to modify/assign/unassign
-      // interfaces that are assigned with DHCP
-      const dhcpValidation = validateDhcpConfig(data.newDevice, [
-        ...interfaces,
-        ...unassign
-      ]);
-      if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
-      await setJobPendingInDB(device[0]._id, org, true);
-      // Queue device modification job
-      const jobs = await queueModifyDeviceJob(device[0], modifyParams, user, org);
-      return {
-        ids: jobs.flat().map(job => job.id),
-        status: 'completed',
-        message: ''
-      };
-    } else {
-      logger.warn('The device was not modified, nothing to apply', {
-        params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
-      });
-    }
+    // First, go over assigned and modified
+    // interfaces and make sure they are valid
+    const assign = has(modifyParams, 'modify_router.assign')
+      ? modifyParams.modify_router.assign
+      : [];
+    const unassign = has(modifyParams, 'modify_router.unassign')
+      ? modifyParams.modify_router.unassign
+      : [];
+    const modified = has(modifyParams, 'modify_interfaces')
+      ? modifyParams.modify_interfaces.interfaces
+      : [];
+    const interfaces = [...assign, ...modified];
+    const { valid, err } = validateModifyDeviceMsg(interfaces);
+    if (!valid) throw (new Error(err));
+    // Don't allow to modify/assign/unassign
+    // interfaces that are assigned with DHCP
+    const dhcpValidation = validateDhcpConfig(data.newDevice, [
+      ...interfaces,
+      ...unassign
+    ]);
+    if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
+    await setJobPendingInDB(device[0]._id, org, true);
+    // Queue device modification job
+    const jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
+    return {
+      ids: jobs.flat().map(job => job.id),
+      status: 'completed',
+      message: ''
+    };
   } catch (err) {
     logger.error('Failed to queue modify device job', {
       params: { err: err.message, device: device[0]._id }
@@ -1014,12 +1220,13 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const { interfaces, staticroutes, dhcp } = await devices.findOne(
+  const { interfaces, staticroutes, dhcp, ospf } = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
       staticroutes: 1,
       dhcp: 1,
+      ospf: 1,
       versions: 1
     }
   )
@@ -1028,8 +1235,21 @@ const sync = async (deviceId, org) => {
 
   // Prepare add-interface message
   const deviceConfRequests = [];
+
+  // build bridges
+  const bridges = getBridges(interfaces.filter(i => i.isAssigned));
+  Object.keys(bridges).forEach(item => {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-switch',
+      params: {
+        addr: item
+      }
+    });
+  });
+
   // build interfaces
-  buildInterfaces(interfaces).forEach(item => {
+  buildInterfaces(interfaces, ospf).forEach(item => {
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-interface',
@@ -1054,6 +1274,18 @@ const sync = async (deviceId, org) => {
     });
   }
 
+  // IMPORTANT: routing data should be before static routes!
+  let ospfData = transformOSPF(ospf);
+  // remove empty values because they are optional
+  ospfData = omitBy(ospfData, val => val === '');
+  if (!isEmpty(ospfData)) {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-ospf',
+      params: ospfData
+    });
+  }
+
   // Prepare add-route message
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
@@ -1062,7 +1294,8 @@ const sync = async (deviceId, org) => {
       addr: destination,
       via: gateway,
       dev_id: ifname || undefined,
-      metric: metric ? parseInt(metric, 10) : undefined
+      metric: metric ? parseInt(metric, 10) : undefined,
+      redistributeViaOSPF: route.redistributeViaOSPF
     };
 
     deviceConfRequests.push({

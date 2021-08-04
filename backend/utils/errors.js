@@ -1,3 +1,4 @@
+
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
 // Copyright (C) 2020  flexiWAN Ltd.
@@ -15,16 +16,34 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const Controller = require('./Controller');
+class TypedError extends Error {
+  constructor (errorType = ErrorTypes.ERROR, ...params) {
+    // Pass remaining arguments (including vendor specific ones) to parent constructor
+    super(...params);
 
-class ConfigurationController {
-  constructor (Service) {
-    this.service = Service;
+    // Maintains proper stack trace for where our error was thrown (only available on V8)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, TypedError);
+    }
+
+    // Custom information
+    this.code = errorType.code;
+    this.type = errorType.type;
   }
+};
 
-  async configurationRestServersGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.configurationRestServersGET);
+const ErrorTypes = {
+  ERROR: {
+    code: 0,
+    type: 'error'
+  },
+  TIMEOUT: {
+    code: 1,
+    type: 'timeout'
   }
-}
+};
 
-module.exports = ConfigurationController;
+module.exports = {
+  TypedError,
+  ErrorTypes
+};

@@ -39,7 +39,7 @@ const prepareParameters = (policy, device) => {
   const policyRules = policy ? policy.rules.toObject()
     .filter(r => r.enabled)
     .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
-  const deviceRules = device.firewallApplied ? device.firewall.rules.toObject()
+  const deviceRules = device.deviceSpecificRulesEnabled ? device.firewall.rules.toObject()
     .filter(r => r.enabled) : [];
   const firewallRules = [...policyRules, ...deviceRules]
     .sort((r1, r2) => r1.priority - r2.priority);
@@ -127,7 +127,7 @@ const prepareParameters = (policy, device) => {
       result[inbound].rules.push(jobRule);
       return result;
     }, {});
-  return params;
+  return isEmpty(params) ? undefined : params;
 };
 
 const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
@@ -138,7 +138,7 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
     await getDevicesAppIdentificationJobInfo(
       org,
       'firewall',
-      deviceList.map((d) => d._id),
+      deviceList.filter(d => op === 'install' || !d.deviceSpecificRulesEnabled).map(d => d._id),
       op === 'install'
     );
 
@@ -295,28 +295,52 @@ const apply = async (deviceList, user, data) => {
         : [deviceList[0]._id];
 
       // Update devices policy in the database
-      const update = op === 'install'
-        ? {
-          $set: {
-            'policies.firewall': {
-              policy: firewallPolicy._id,
-              status: 'installing',
-              requestTime: requestTime
-            }
+      const updateOps = [];
+      if (op === 'install') {
+        updateOps.push({
+          updateMany: {
+            filter: { _id: { $in: deviceIds }, org: org },
+            update: {
+              $set: {
+                'policies.firewall': {
+                  policy: firewallPolicy._id,
+                  status: 'installing',
+                  requestTime: requestTime
+                }
+              }
+            },
+            upsert: false
           }
-        }
-        : {
-          $set: {
-            'policies.firewall.status': 'uninstalling',
-            'policies.firewall.requestTime': requestTime
+        });
+      } else {
+        updateOps.push({
+          updateMany: {
+            filter: { _id: { $in: deviceIds }, org: org, deviceSpecificRulesEnabled: false },
+            update: {
+              $set: {
+                'policies.firewall.status': 'uninstalling',
+                'policies.firewall.requestTime': requestTime
+              }
+            },
+            upsert: false
           }
-        };
-
-      await devices.updateMany(
-        { _id: { $in: deviceIds }, org: org },
-        update,
-        { upsert: false }
-      ).session(session);
+        });
+        updateOps.push({
+          updateMany: {
+            filter: { _id: { $in: deviceIds }, org: org, deviceSpecificRulesEnabled: true },
+            update: {
+              $set: {
+                'policies.firewall': {
+                  status: 'installing',
+                  requestTime: requestTime
+                }
+              }
+            },
+            upsert: false
+          }
+        });
+      }
+      await devices.bulkWrite(updateOps);
     });
   } catch (err) {
     throw err.name === 'MongoError'
