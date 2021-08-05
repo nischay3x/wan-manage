@@ -34,7 +34,7 @@ const paginated = (data, offset, limit, sortField, sortOrder) => {
         va = va && va[field];
         vb = vb && vb[field];
       }
-      return (sortOrder === 'desc' ? 1 : -1) * (va > vb ? 1 : -1);
+      return (sortOrder === 'desc' ? 1 : -1) * (va < vb ? 1 : -1);
     });
   }
   if (offset !== undefined || limit !== undefined) {

@@ -248,7 +248,7 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
         ? appRules.meta.importedUpdatedAt : appRules.meta.customUpdatedAt;
       updateOps.push({
         updateMany: {
-          filter: { $in: opDevices.map((d) => d._id) },
+          filter: { _id: { $in: opDevices.map((d) => d._id) } },
           update: { $set: { 'appIdentification.lastRequestTime': requestTime } }
         }
       });
