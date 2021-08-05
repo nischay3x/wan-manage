@@ -1478,7 +1478,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     paramsDeviceA.dst = peer.remoteIP;
 
     // handle peer configurations
-    paramsDeviceA.peer.addr = tunnelParams.ip1 + '/32';
+    paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
     paramsDeviceA.peer.mtu = (deviceAIntf.mtu || 1500) - packetHeaderSize;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
