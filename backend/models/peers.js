@@ -32,19 +32,31 @@ const peerSchema = new Schema({
   // Name of the peer configuration - for UI purpose only
   name: {
     type: String,
-    required: [true, 'Name FQDN must be set']
+    required: [true, 'Name must be set']
   },
   localFQDN: {
     type: String,
-    required: [true, 'Local FQDN must be set']
+    required: [true, 'Local FQDN must be set'],
+    validate: {
+      validator: validators.validateStringNoSpaces,
+      message: 'Local FQDN cannot include spaces'
+    }
   },
   remoteFQDN: {
     type: String,
-    required: [true, 'Remote FQDN must be set']
+    required: [true, 'Remote FQDN must be set'],
+    validate: {
+      validator: validators.validateStringNoSpaces,
+      message: 'Remote FQDN cannot include spaces'
+    }
   },
   psk: {
     type: String,
-    required: [true, 'PSK must be set']
+    required: [true, 'PSK must be set'],
+    validate: {
+      validator: validators.validateStringNoSpaces,
+      message: 'PSK cannot include spaces'
+    }
   },
   remoteIP: {
     type: String,
@@ -74,7 +86,7 @@ const peerSchema = new Schema({
   timestamps: true
 });
 
-// Peer number per org must be unique
+// Peer name per org must be unique
 peerSchema.index({ name: 1, org: 1 }, { unique: true });
 
 // Default exports

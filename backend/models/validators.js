@@ -170,6 +170,7 @@ const validateOSPFArea = (val) => val !== null && (validateIPv4(val) || (validat
 const validateOSPFCost = (val) => val === null || (validateIsInteger(val) && +val >= 0 && +val < 65535);
 const validateOSPFInterval = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
 const validateFQDN = val => val && validator.isFQDN(val);
+const validateStringNoSpaces = str => { return str === '' || /^\S+$/i.test(str || ''); };
 
 module.exports = {
   validateDHCP,
@@ -212,5 +213,6 @@ module.exports = {
   validateOSPFArea,
   validateOSPFCost,
   validateOSPFInterval,
-  validateFQDN
+  validateFQDN,
+  validateStringNoSpaces
 };

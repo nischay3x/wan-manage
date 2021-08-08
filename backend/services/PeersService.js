@@ -86,7 +86,7 @@ class PeersService {
 
       // Change the duplicate error message to make it clearer
       if (e.name === 'MongoError' && e.code === 11000) {
-        msg = `Peer name ${peer.name} already exists for this organization`;
+        msg = `Peer name "${peer.name}" already exists for this organization`;
       }
 
       return Service.rejectResponse(msg, status);
