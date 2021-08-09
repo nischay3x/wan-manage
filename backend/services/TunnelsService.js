@@ -75,6 +75,7 @@ class TunnelsService {
     } else {
       retTunnel.deviceB = {};
       retTunnel.peer = {
+        _id: item.peer._id,
         name: item.peer.name
       };
     }
