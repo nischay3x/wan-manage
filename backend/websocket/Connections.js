@@ -544,33 +544,26 @@ class Connections {
           agent: Joi.object()
             .keys({ version: Joi.string().required() })
             .required(),
-          components: Joi.object({
-            agent: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .required(),
-            router: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .required(),
-            vpp: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .required(),
-            frr: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .required(),
-            edgeui: Joi.object()
-              .keys({ version: Joi.string().required() })
-              .optional()
-          }),
-          network: Joi.object().optional(),
-          tunnels: Joi.array().optional(),
-          reconfig: Joi.string().allow('').optional(),
-          ikev2: Joi.object({
-            certificateExpiration: Joi.string().allow('').optional(),
-            error: Joi.string().allow('').optional()
-          }).allow({}).optional()
+          router: Joi.object()
+            .keys({ version: Joi.string().required() })
+            .required(),
+          vpp: Joi.object()
+            .keys({ version: Joi.string().required() })
+            .required(),
+          frr: Joi.object()
+            .keys({ version: Joi.string().required() })
+            .required(),
+          edgeui: Joi.object()
+            .keys({ version: Joi.string().required() })
+            .optional()
         }),
         network: Joi.object().optional(),
-        reconfig: Joi.string().allow('').optional()
+        tunnels: Joi.array().optional(),
+        reconfig: Joi.string().allow('').optional(),
+        ikev2: Joi.object({
+          certificateExpiration: Joi.string().allow('').optional(),
+          error: Joi.string().allow('').optional()
+        }).allow({}).optional()
       }).custom((obj, helpers) => {
         for (const [component, info] of Object.entries(
           obj.components
