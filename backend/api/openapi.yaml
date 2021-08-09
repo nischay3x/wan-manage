@@ -3357,6 +3357,22 @@ paths:
         schema:
           type: integer
         style: form
+      - description: The field by which the data will be ordered
+        explode: true
+        in: query
+        name: sortField
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Sorting order
+        explode: true
+        in: query
+        name: sortOrder
+        required: false
+        schema:
+          type: string
+        style: form
       - description: A filter on specific job ids (comma separated)
         explode: true
         in: query
