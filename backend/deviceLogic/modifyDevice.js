@@ -1171,6 +1171,11 @@ const apply = async (device, user, data) => {
     newLteInterfaces,
     oldLteInterfaces,
     (origIfc, newIfc) => {
+      // no need to send job if LTE configuration changed but LTE is disable
+      if (!origIfc.configuration.enable && !newIfc.configuration.enable) {
+        return true;
+      }
+
       return isEqual(origIfc.configuration, newIfc.configuration) &&
         isEqual(origIfc.metric, newIfc.metric);
     }
