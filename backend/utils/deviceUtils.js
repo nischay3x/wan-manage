@@ -78,6 +78,13 @@ const mapWifiNames = agentData => {
   return renameKeys(agentData, map);
 };
 
+/**
+ * Map the LTE keys that come from the agent into one convention.
+ * The keys from the agent are a bit messy, some with uppercase and some with lowercase, etc.
+ * So this function is mapping between agent to an object with names in one convention.
+ * @param {Object}  agentData LTE data from agent
+ * @return {Object} Mapped object
+ */
 const mapLteNames = agentData => {
   const map = {
     sim_status: 'simStatus',
