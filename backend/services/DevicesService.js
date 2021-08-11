@@ -54,6 +54,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
+const TunnelsService = require('./TunnelsService');
 
 class DevicesService {
   /**
@@ -1679,6 +1680,39 @@ class DevicesService {
         endTime: endTime
       });
       return Service.successResponse(stats);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Retrieve device tunnels
+   *
+   * id Object Numeric ID of the Device to fetch information about
+   * returns List
+   **/
+  static async devicesIdTunnelsGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const tunnels = await tunnelsModel.find({
+        isActive: true,
+        org: { $in: orgList },
+        $or: [{ deviceA: id }, { deviceB: id }]
+      }).populate('deviceA', 'name interfaces machineId')
+        .populate('deviceB', 'name interfaces machineId')
+        .populate('pathlabel')
+        .populate('peer')
+        .lean();
+
+      const tunnelMap = tunnels.map((d) => {
+        return TunnelsService.selectTunnelParams(d);
+      });
+
+      return Service.successResponse(tunnelMap);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
