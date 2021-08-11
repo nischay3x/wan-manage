@@ -72,7 +72,6 @@ class JobsService {
    **/
   static async jobsGET (requestParams, { user }, response) {
     const { org, offset, limit, sortField, sortOrder, status, ids } = requestParams;
-    console.log(requestParams, offset, limit, sortField, sortOrder, status);
     try {
       const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
       // Check state provided is allowed
@@ -119,7 +118,6 @@ class JobsService {
         );
       }
 
-      response.setHeader('Access-Control-Expose-Headers', '*');
       response.setHeader('records-total', result.length);
       return Service.successResponse(
         paginated(result, offset, limit, sortField, sortOrder)

@@ -31,6 +31,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const url = require('url');
 // billing support
 const flexibilling = require('../flexibilling');
+const { mapLteNames } = require('../utils/deviceUtils');
 
 const connectRouter = express.Router();
 connectRouter.use(bodyParser.json());
@@ -138,6 +139,7 @@ connectRouter.route('/register')
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   if (intf.deviceType === 'lte') {
+                    intf.deviceParams = mapLteNames(intf.deviceParams);
                     // LTE devices are not enabled at registration stage so they can't have a metric
                     intf.metric = '';
                   } else {
