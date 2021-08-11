@@ -172,21 +172,22 @@ class TunnelsService {
       ];
       if (filters) {
         const matchFilters = {};
-        for (const filter of Array.isArray(filters) ? filters : [filters]) {
-          const [key, operation, value] = filter.split('|');
-          if (value) {
-            switch (operation) {
+        const parsedFilters = JSON.parse(filters);
+        for (const filter of parsedFilters) {
+          const { key, op, val } = filter;
+          if (key && val) {
+            switch (op) {
               case '==':
-                matchFilters[key] = value;
+                matchFilters[key] = val;
                 break;
               case '!=':
-                matchFilters[key] = { $ne: value };
+                matchFilters[key] = { $ne: val };
                 break;
               case 'contains':
-                matchFilters[key] = { $regex: value };
+                matchFilters[key] = { $regex: val };
                 break;
               case '!contains':
-                matchFilters[key] = { $regex: '^((?!' + value + ').)*$' };
+                matchFilters[key] = { $regex: '^((?!' + val + ').)*$' };
                 break;
               default:
                 break;
