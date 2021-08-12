@@ -63,12 +63,13 @@ class TokensService {
   static async tokensIdDELETE ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const res = await Tokens.remove({
+
+      const { deletedCount } = await Tokens.deleteOne({
         _id: id,
         org: { $in: orgList }
       });
 
-      if (res.n === 0) {
+      if (deletedCount === 0) {
         return Service.rejectResponse('Token not found', 404);
       }
 
