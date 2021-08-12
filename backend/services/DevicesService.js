@@ -311,7 +311,7 @@ class DevicesService {
       // are found in the database. This is done to prevent a partial
       // schedule of the devices in case of a user's mistake.
       if (numOfIdsFound < devicesUpgradeRequest.devices.length) {
-        return Service.rejectResponse('Some devices were not found');
+        return Service.rejectResponse('Some devices were not found', 404);
       }
 
       const set = {
@@ -758,12 +758,12 @@ class DevicesService {
       await session.startTransaction();
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const delDevices = await devices.findOne({
+      const delDevice = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
       }).session(session);
 
-      if (!delDevices) {
+      if (!delDevice) {
         session.abortTransaction();
         return Service.rejectResponse('Device for deletion not found', 404);
       }
@@ -780,18 +780,18 @@ class DevicesService {
         throw new Error('All device tunnels must be deleted before deleting a device');
       }
 
-      connections.deviceDisconnect(delDevices.machineId);
+      connections.deviceDisconnect(delDevice.machineId);
       const deviceCount = await devices.countDocuments({
-        account: delDevices.account
+        account: delDevice.account
       }).session(session);
 
       const orgCount = await devices.countDocuments({
-        account: delDevices.account, org: orgList[0]
+        account: delDevice.account, org: orgList[0]
       }).session(session);
 
       // Unregister a device (by adding -1)
       await flexibilling.registerDevice({
-        account: delDevices.account,
+        account: delDevice.account,
         org: orgList[0],
         count: deviceCount,
         orgCount: orgCount,
