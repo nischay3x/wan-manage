@@ -63,10 +63,14 @@ class TokensService {
   static async tokensIdDELETE ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      await Tokens.remove({
+      const res = await Tokens.remove({
         _id: id,
         org: { $in: orgList }
       });
+
+      if (res.n === 0) {
+        return Service.rejectResponse('Token not found', 404);
+      }
 
       return Service.successResponse(null, 204);
     } catch (e) {
@@ -81,6 +85,10 @@ class TokensService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const result = await Tokens.findOne({ _id: id, org: { $in: orgList } });
+
+      if (!result) {
+        return Service.rejectResponse('Token not found', 404);
+      }
 
       const token = {
         _id: result.id,
@@ -112,6 +120,10 @@ class TokensService {
         { _id: id, org: { $in: orgList } },
         { $set: tokenRequest },
         { useFindAndModify: false, upsert: false, runValidators: true, new: true });
+
+      if (!result) {
+        return Service.rejectResponse('Token not found', 404);
+      }
 
       const token = {
         _id: result.id,
