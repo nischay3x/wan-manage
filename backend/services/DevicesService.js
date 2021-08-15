@@ -98,7 +98,7 @@ class DevicesService {
       })
         .populate('interfaces.pathlabels', '_id name description color type'); ;
 
-      if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
+      if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
@@ -311,7 +311,7 @@ class DevicesService {
       // are found in the database. This is done to prevent a partial
       // schedule of the devices in case of a user's mistake.
       if (numOfIdsFound < devicesUpgradeRequest.devices.length) {
-        return Service.rejectResponse('Some devices were not found');
+        return Service.rejectResponse('Some devices were not found', 404);
       }
 
       const set = {
@@ -350,7 +350,7 @@ class DevicesService {
       const options = { upsert: false, useFindAndModify: false };
       const res = await devices.updateOne(query, set, options);
       if (res.n === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       } else {
         return Service.successResponse(null, 204);
       }
@@ -477,7 +477,7 @@ class DevicesService {
       }).lean();
 
       if (!deviceObject) {
-        throw new Error('Device or Interface not found');
+        return Service.rejectResponse('Device or Interface not found', 404);
       };
 
       const supportedMessages = {
@@ -617,7 +617,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -699,7 +699,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -757,6 +757,17 @@ class DevicesService {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const delDevice = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      }).session(session);
+
+      if (!delDevice) {
+        session.abortTransaction();
+        return Service.rejectResponse('Device for deletion not found', 404);
+      }
+
       const tunnelCount = await tunnelsModel.countDocuments({
         $or: [{ deviceA: id }, { deviceB: id }],
         isActive: true,
@@ -769,24 +780,18 @@ class DevicesService {
         throw new Error('All device tunnels must be deleted before deleting a device');
       }
 
-      const delDevices = await devices.find({
-        _id: mongoose.Types.ObjectId(id),
-        org: { $in: orgList }
-      }).session(session);
-
-      if (!delDevices.length) throw new Error('Device for deletion not found');
-      connections.deviceDisconnect(delDevices[0].machineId);
+      connections.deviceDisconnect(delDevice.machineId);
       const deviceCount = await devices.countDocuments({
-        account: delDevices[0].account
+        account: delDevice.account
       }).session(session);
 
       const orgCount = await devices.countDocuments({
-        account: delDevices[0].account, org: orgList[0]
+        account: delDevice.account, org: orgList[0]
       }).session(session);
 
       // Unregister a device (by adding -1)
       await flexibilling.registerDevice({
-        account: delDevices[0].account,
+        account: delDevice.account,
         org: orgList[0],
         count: deviceCount,
         orgCount: orgCount,
@@ -832,6 +837,10 @@ class DevicesService {
       })
         .session(session)
         .populate('interfaces.pathlabels', '_id name description color type');
+
+      if (!origDevice) {
+        return Service.rejectResponse('Device not found', 404);
+      }
 
       // Don't allow any changes if the device is not approved
       if (!origDevice.isApproved && !deviceRequest.isApproved) {
@@ -1241,7 +1250,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -1299,7 +1308,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       const device = deviceObject[0];
@@ -1346,12 +1355,17 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+
       const deleteRoute = device.staticroutes.filter((s) => {
         return (s.id === route);
       });
+      if (deleteRoute.length !== 1) {
+        return Service.rejectResponse('Static route not found', 404);
+      }
 
-      if (deleteRoute.length !== 1) throw new Error('Static route not found');
       const copy = Object.assign({}, deleteRoute[0].toObject());
       copy.org = orgList[0];
       copy.method = 'staticroutes';
@@ -1384,7 +1398,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!device.isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
@@ -1470,7 +1484,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
@@ -1760,12 +1774,12 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       const deleteDhcp = device.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
 
-      if (deleteDhcp.length !== 1) throw new Error('DHCP ID not found');
+      if (deleteDhcp.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       const deleteDhcpObj = deleteDhcp[0].toObject();
 
@@ -1821,11 +1835,11 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       const resultDhcp = device.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (resultDhcp.length !== 1) throw new Error('DHCP ID not found');
+      if (resultDhcp.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       const result = {
         _id: resultDhcp[0].id,
@@ -1863,7 +1877,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -1875,7 +1889,7 @@ class DevicesService {
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
+      if (dhcpFiltered.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
 
@@ -1925,7 +1939,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -1937,7 +1951,7 @@ class DevicesService {
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
+      if (dhcpFiltered.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
       const dhcpObject = dhcpFiltered[0].toObject();
 
       // allow to patch only in the case of failed
@@ -1989,7 +2003,7 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       let result = [];
       const start = offset || 0;
       const size = limit || device.dhcp.length;
@@ -2084,7 +2098,7 @@ class DevicesService {
         org: { $in: orgList }
       }).session(session);
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -2170,7 +2184,7 @@ class DevicesService {
       }).lean();
 
       if (!deviceObject) {
-        throw new Error('Device or Interface not found');
+        return Service.rejectResponse('Device or Interface not found', 404);
       };
 
       const selectedIf = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
@@ -2397,7 +2411,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -2447,7 +2461,7 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
 
       return Service.successResponse(device.ospf, 200);
     } catch (e) {
@@ -2474,7 +2488,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
