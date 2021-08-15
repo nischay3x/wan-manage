@@ -20,7 +20,6 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
-const firewallPoliciesModel = require('../models/firewallPolicies');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -32,12 +31,9 @@ const net = require('net');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
-const omit = require('lodash/omit');
-const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { queueFirewallPolicyJob } = require('../deviceLogic/firewallPolicy');
 const { validateOperations } = require('../deviceLogic/interfaces');
 const {
   validateDevice,
@@ -1162,56 +1158,12 @@ class DevicesService {
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      let modifyDevResult = { ids: [] };
-      if (origDevice) {
-        modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
-          org: orgList[0],
-          newDevice: updDevice
-        });
-      }
+      const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
+        org: orgList[0],
+        newDevice: updDevice
+      });
 
-      // If firewall rules modified then need to send install firewall policy job to the device
-      const modifyFirewallResult = { ids: [] };
-      const updRules = updDevice.firewall.rules.toObject();
-      const origRules = origDevice.firewall.rules.toObject();
-      const rulesModified =
-        origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
-        !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
-          isEqual(
-            omit(updatedRule, ['_id', 'name', 'classification']),
-            omit(origRules[index], ['_id', 'name', 'classification'])
-          ) &&
-          isEqual(
-            omit(updatedRule.classification.source, ['_id']),
-            omit(origRules[index].classification.source, ['_id'])
-          ) &&
-          isEqual(
-            omit(updatedRule.classification.destination, ['_id']),
-            omit(origRules[index].classification.destination, ['_id'])
-          )
-        ));
-
-      if (rulesModified) {
-        const requestTime = Date.now();
-        const { firewall } = updDevice.policies;
-        let firewallPolicy;
-        if (firewall && firewall.status && firewall.status.startsWith('install')) {
-          firewallPolicy = await firewallPoliciesModel.findOne(
-            { org: orgList[0], _id: firewall.policy },
-            { rules: 1, name: 1 }
-          ).session(session);
-        };
-        const jobs = await queueFirewallPolicyJob(
-          [updDevice],
-          firewallPolicy || updDevice.deviceSpecificRulesEnabled ? 'install' : 'uninstall',
-          requestTime,
-          firewallPolicy,
-          user,
-          orgList[0]
-        );
-        modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
-      }
-      const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
+      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
       DevicesService.setLocationHeader(server, response, modifyDevResult.ids, orgList[0]);
       const deviceObj = DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
