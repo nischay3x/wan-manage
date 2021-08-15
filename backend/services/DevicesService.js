@@ -838,6 +838,10 @@ class DevicesService {
         .session(session)
         .populate('interfaces.pathlabels', '_id name description color type');
 
+      if (!origDevice) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+
       // Don't allow any changes if the device is not approved
       if (!origDevice.isApproved && !deviceRequest.isApproved) {
         throw new Error('Device must be first approved');
