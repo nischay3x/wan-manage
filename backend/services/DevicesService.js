@@ -918,15 +918,15 @@ class DevicesService {
                   if (rules.some(r => r.direction === 'inbound' &&
                     r.classification.destination.ipProtoPort.interface === origIntf.devId)) {
                     throw new Error(
-                      `Not allowed to change WAN interface ${origIntf.name},\
-                      it is reffered in inbound firewall rules.`
+                      `WAN interface ${origIntf.name} \
+                      has firewall rules. Please remove rules before modifying.`
                     );
                   }
                   if (rules.some(r => r.direction === 'outbound' &&
                     r.interfaces.includes(origIntf.devId))) {
                     throw new Error(
-                      `Not allowed to change LAN interface ${origIntf.name},\
-                      it is reffered in outbound firewall rules.`
+                      `LAN Interface ${origIntf.name} \
+                      has firewall rules. Please remove rules before modifying.`
                     );
                   }
                 }
@@ -959,7 +959,7 @@ class DevicesService {
             if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
               if (updIntf.metric && updIntf.metric !== origIntf.metric) {
                 throw new Error(
-                  `Not allowed to change metric of unassigned interfaces (${origIntf.name})`
+                  `Changing metric of unassigned interfaces (${origIntf.name}) is not allowed`
                 );
               }
               updIntf.metric = origIntf.metric;
@@ -967,7 +967,7 @@ class DevicesService {
             // don't update MTU on an unassigned interface,
             if (!updIntf.isAssigned && updIntf.mtu && updIntf.mtu !== origIntf.mtu) {
               throw new Error(
-                `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
+                `Changing MTU of unassigned interfaces (${origIntf.name}) is not allowed`
               );
             }
 
