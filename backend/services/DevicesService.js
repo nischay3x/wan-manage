@@ -911,24 +911,24 @@ class DevicesService {
                   }
                 }
               }
-              if (!updIntf.isAssigned || origIntf.type !== updIntf.type) {
-                // check firewall rules
-                if (deviceRequest.firewall) {
-                  const { rules } = deviceRequest.firewall;
-                  if (rules.some(r => r.direction === 'inbound' &&
-                    r.classification.destination.ipProtoPort.interface === origIntf.devId)) {
-                    throw new Error(
-                      `WAN interface ${origIntf.name} \
-                      has firewall rules. Please remove rules before modifying.`
-                    );
-                  }
-                  if (rules.some(r => r.direction === 'outbound' &&
-                    r.interfaces.includes(origIntf.devId))) {
-                    throw new Error(
-                      `LAN Interface ${origIntf.name} \
-                      has firewall rules. Please remove rules before modifying.`
-                    );
-                  }
+            }
+            if (!updIntf.isAssigned || origIntf.type !== updIntf.type) {
+              // check firewall rules
+              if (deviceRequest.firewall) {
+                const { rules } = deviceRequest.firewall;
+                if (rules.some(r => r.direction === 'inbound' &&
+                  r.classification.destination.ipProtoPort.interface === origIntf.devId)) {
+                  throw new Error(
+                    `WAN interface ${origIntf.name} \
+                    has firewall rules. Please remove rules before modifying.`
+                  );
+                }
+                if (rules.some(r => r.direction === 'outbound' &&
+                  r.interfaces.includes(origIntf.devId))) {
+                  throw new Error(
+                    `LAN Interface ${origIntf.name} \
+                    has firewall rules. Please remove rules before modifying.`
+                  );
                 }
               }
             }
