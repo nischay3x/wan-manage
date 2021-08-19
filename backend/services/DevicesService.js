@@ -664,6 +664,9 @@ class DevicesService {
           case 'agentui':
             errorMessage = 'Failed to get flexiEdge UI logs';
             break;
+          case 'application_ids':
+            errorMessage = 'Failed to get Application Identification logs';
+            break;
           default:
             errorMessage = 'Failed to get device logs';
         }
