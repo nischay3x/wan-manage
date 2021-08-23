@@ -121,14 +121,11 @@ const validateFirewallRules = (rules, device = undefined) => {
           return { valid: false, err: 'IP or ports range must be specified' };
         }
       };
-      if (ipProtoPort && !trafficId && !trafficTags) {
-        const { ip, ports, protocols } = ipProtoPort;
-        if (inbound !== 'nat1to1' && !ip && !ports && !protocols) {
-          return { valid: false, err: 'IP, ports or protocols must be specified' };
-        };
+      if (ipProtoPort && inbound !== 'nat1to1' && !trafficId && !trafficTags) {
+        const { protocols } = ipProtoPort;
         if (!Array.isArray(protocols) || protocols.length === 0) {
           return { valid: false, err: 'At least one protocol must be specified' };
-        }
+        };
       };
       if (trafficTags) {
         // Traffic Tags not allowed for source
