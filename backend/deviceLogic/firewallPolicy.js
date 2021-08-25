@@ -39,8 +39,7 @@ const isEmpty = require('lodash/isEmpty');
 */
 const getDevicesFirewallJobInfo = async (device) => {
   let op = 'install';
-  const { policy: id } = device.policies.firewall;
-  const firewallPolicy = await getFirewallPolicy(id);
+  const { policy: firewallPolicy } = device.policies.firewall;
   const policyParams = getFirewallParameters(firewallPolicy, device);
   if (!policyParams) op = 'uninstall';
   // Extract applications information
