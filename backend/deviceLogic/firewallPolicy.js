@@ -30,6 +30,7 @@ const appComplete = require('./appIdentification').complete;
 const appError = require('./appIdentification').error;
 const appRemove = require('./appIdentification').remove;
 const isEmpty = require('lodash/isEmpty');
+const { validateFirewallRules } = require('../deviceLogic/validators');
 
 /**
  * Gets the device firewall data needed for creating a job
@@ -384,6 +385,22 @@ const apply = async (deviceList, user, data) => {
     deviceIds = data.devices
       ? await getOpDevices(data.devices, org, firewallPolicy)
       : [deviceList[0]._id];
+
+    if (op === 'install') {
+      const reqDevices = await devices.find(
+        { org: org, _id: { $in: deviceIds }, deviceSpecificRulesEnabled: 1 },
+        { name: 1, interfaces: 1, 'firewall.rules': 1 }
+      );
+      for (const dev of reqDevices) {
+        const { valid, err } = validateFirewallRules(
+          [...firewallPolicy.rules.toObject(), ...dev.firewall.rules.toObject()],
+          dev.interfaces
+        );
+        if (!valid) {
+          throw createError(500, `Can't install policy on ${dev.name}: ${err}`);
+        }
+      }
+    }
 
     // Update devices policy in the database
     await updateDevicesBeforeJob(deviceIds, op, requestTime, firewallPolicy, org);
