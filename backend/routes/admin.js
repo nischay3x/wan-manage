@@ -66,6 +66,18 @@ adminRouter
     // mapping orgs to account - orgId -> accountId
     const orgs = { /* orgId -> accountId */ };
 
+    // get billing summary
+    const billing = {};
+    const accountsCopy = [...accounts.data];
+    do {
+      const AccountsForProcessing = accountsCopy.splice(0, 500);
+      const ids = AccountsForProcessing.map(a => a.account_id);
+      const summary = await flexibilling.getMaxDevicesRegisteredSummmaryByAccounts(ids);
+      summary.forEach(s => {
+        billing[s.account] = s;
+      });
+    } while (accountsCopy.length > 0);
+
     try {
       for (const account of accounts.data) {
         const accountId = account.account_id;
@@ -80,7 +92,7 @@ adminRouter
 
         try {
           // fill billing
-          const summary = await flexibilling.getMaxDevicesRegisteredSummmary(accountId);
+          const summary = billing[accountId];
           const accountBillingInfo = {
             current: summary ? summary.current : null,
             max: summary ? summary.max : null,
@@ -356,14 +368,6 @@ const getAccountsData = async req => {
                 organizations: '$organizations'
               }
             },
-            {
-              $lookup: {
-                from: 'devices',
-                localField: 'account_id',
-                foreignField: 'account',
-                as: 'devices'
-              }
-            },
             // lookup organizations to get organizations names
             {
               $lookup: {
@@ -377,6 +381,15 @@ const getAccountsData = async req => {
               $unwind: {
                 path: '$organizations',
                 preserveNullAndEmptyArrays: true
+              }
+            },
+            // lookup devices by orgId
+            {
+              $lookup: {
+                from: 'devices',
+                localField: 'organizations._id',
+                foreignField: 'org',
+                as: 'devices'
               }
             },
             // lookup tunnels by orgId
