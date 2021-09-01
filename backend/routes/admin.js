@@ -183,13 +183,14 @@ adminRouter
             if (!org.bytes) {
               org.bytes = {};
             }
-            org.bytes[monthName] = current.device_bytes;
+            org.bytes[monthName] = current.devices_bytes;
 
             if (!result[monthName]) {
-              result[monthName] = 0;
+              result[monthName] = { bytes: 0 };
             }
 
-            result[monthName] += current.device_bytes;
+            result[monthName].bytes += current.devices_bytes;
+            result[monthName].devices = current.devices_count;
 
             return result;
           } catch (err) {
@@ -327,7 +328,8 @@ const getDevicesTraffic = async () => {
       {
         $group: {
           _id: { org: '$org', month: '$month', account: '$account' },
-          device_bytes: { $sum: '$bytes' }
+          devices_bytes: { $sum: '$bytes' },
+          devices_count: { $push: '$bytes' }
         }
       },
       {
@@ -336,7 +338,8 @@ const getDevicesTraffic = async () => {
           org: '$_id.org',
           account: '$_id.account',
           month: { $toDate: '$_id.month' },
-          device_bytes: '$device_bytes'
+          devices_bytes: '$devices_bytes',
+          devices_count: { $size: '$devices_count' }
         }
       }
     ]).allowDiskUse(true);
