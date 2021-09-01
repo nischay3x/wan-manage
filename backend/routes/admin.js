@@ -536,7 +536,7 @@ const getAccountsData = async req => {
             }
           },
           { $unwind: '$user' },
-          { $project: { email: '$user.email', role: 1 } }
+          { $project: { email: '$user.email', role: 1, name: '$user.name' } }
         ],
         as: 'users'
       }
