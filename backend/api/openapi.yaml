@@ -8207,6 +8207,7 @@ components:
         __v: 6
         deviceBconf: true
         _id: _id
+        tunnelStatus: 'Connected'
       properties:
         num:
           type: integer
@@ -8238,6 +8239,11 @@ components:
           type: object
         tunnelStatusB:
           type: object
+        tunnelStatus:
+          enum:
+            - Connected
+            - Not Connected
+          type: string
       type: object
     StaticRouteRequest:
       example:

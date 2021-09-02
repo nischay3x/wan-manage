@@ -87,6 +87,14 @@ class TunnelsService {
     const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
+      const connectedTunnels = [];
+      for (const machineId in deviceStatus.status) {
+        if (deviceStatus.status[machineId].tunnelStatus) {
+          for (const tunnelId in deviceStatus.status[machineId].tunnelStatus) {
+            connectedTunnels.push(`${tunnelId}:${machineId}`);
+          }
+        }
+      }
       const pipeline = [
         {
           $match: {
@@ -166,7 +174,24 @@ class TunnelsService {
             deviceBconf: 1,
             encryptionMethod: 1,
             'pathlabel.name': 1,
-            'pathlabel.color': 1
+            'pathlabel.color': 1,
+            tunnelStatus: {
+              $cond: [{
+                $and: [{
+                  $in: [
+                    {
+                      $concat: [{ $toString: '$num' }, ':', '$deviceA.machineId']
+                    }, connectedTunnels
+                  ]
+                }, {
+                  $in: [
+                    {
+                      $concat: [{ $toString: '$num' }, ':', '$deviceB.machineId']
+                    }, connectedTunnels
+                  ]
+                }]
+              }, 'Connected', 'Not Connected']
+            }
           }
         }
       ];
