@@ -53,6 +53,9 @@ const HANDLERS = {
     // 2. for each tunnel, set to pending trigger the TUNNEL_PENDING handler
     // 3. get static routes connected to this tunnel
     // 4. for each route, trigger the 
+    for tunnel in tunnels:
+      set tunnel to pending
+      TUNNEL_IS_PENDING(tunnel_id)
   },
   INTERFACE_IP_RESTORED: async (deviceId, interfaceId) => {
 
