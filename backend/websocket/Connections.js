@@ -19,6 +19,7 @@ const configs = require('../configs')();
 const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
+const deviceEvents = require('../deviceLogic/events');
 const createError = require('http-errors');
 const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
@@ -492,6 +493,8 @@ class Connections {
         });
 
         try {
+          await deviceEvents.check(origDevice.interfaces, interfaces);
+
           // Update interfaces in DB
           const updDevice = await devices.findOneAndUpdate(
             { machineId },
