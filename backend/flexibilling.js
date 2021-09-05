@@ -28,7 +28,7 @@ class FlexiBilling {
   }
 
   async getMaxDevicesRegisteredSummmaryByAccounts (accounts) {
-    return null;
+    return [];
   }
 
   async getMaxDevicesAllowed (id) {
