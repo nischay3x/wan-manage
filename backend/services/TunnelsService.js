@@ -18,40 +18,16 @@
 const Service = require('./Service');
 const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
-const pick = require('lodash/pick');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class TunnelsService {
   /**
-   * Select the API fields from mongo Tunnel Object
+   * Extends mongo results with tunnel status info
    *
    * @param {mongo Tunnel Object} item
    */
-  static selectTunnelParams (item) {
-    // Pick relevant fields
-    const retTunnel = pick(item, [
-      'num',
-      'isActive',
-      'interfaceA',
-      'interfaceB',
-      'deviceA',
-      'deviceAconf',
-      'deviceB',
-      'deviceBconf',
-      'encryptionMethod',
-      '_id',
-      'pathlabel']);
-
-    retTunnel.interfaceADetails =
-      retTunnel.deviceA.interfaces.filter((ifc) => {
-        return ifc._id.toString() === '' + retTunnel.interfaceA;
-      })[0];
-    retTunnel.interfaceBDetails =
-      retTunnel.deviceB.interfaces.filter((ifc) => {
-        return ifc._id.toString() === '' + retTunnel.interfaceB;
-      })[0];
-
+  static selectTunnelParams (retTunnel) {
     const tunnelId = retTunnel.num;
     // Add tunnel status
     retTunnel.tunnelStatusA =
@@ -60,9 +36,6 @@ class TunnelsService {
     // Add tunnel status
     retTunnel.tunnelStatusB =
       deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
-
-    retTunnel.deviceA = pick(retTunnel.deviceA, ['_id', 'name']);
-    retTunnel.deviceB = pick(retTunnel.deviceB, ['_id', 'name']);
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -104,26 +77,179 @@ class TunnelsService {
   /**
    * Retrieve device tunnels information
    *
-   * id String Numeric ID of the Device to fetch tunnel information about
-   * offset Integer The number of items to skip before starting to collect the result set (optional)
-   * limit Integer The numbers of items to return (optional)
-   * returns List
+   * @param {Integer} offset The number of items to skip before collecting the result (optional)
+   * @param {Integer} limit The numbers of items to return (optional)
+   * @param {String} sortField The field by which the data will be ordered (optional)
+   * @param {String} sortOrder Sorting order [asc|desc] (optional)
+   * @param {Array} filters Array of filter strings in format 'key|operation|value' (optional)
    **/
-  static async tunnelsGET ({ org, offset, limit }, { user }) {
+  static async tunnelsGET (requestParams, { user }, response) {
+    const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const response = await Tunnels.find({
-        org: { $in: orgList },
-        isActive: true
-      })
-        .skip(offset)
-        .limit(limit)
-        .populate('deviceA', 'name interfaces machineId')
-        .populate('deviceB', 'name interfaces machineId')
-        .populate('pathlabel');
+      const connectedTunnels = [];
+      for (const machineId in deviceStatus.status) {
+        if (deviceStatus.status[machineId].tunnelStatus) {
+          for (const tunnelId in deviceStatus.status[machineId].tunnelStatus) {
+            connectedTunnels.push(`${tunnelId}:${machineId}`);
+          }
+        }
+      }
+      const pipeline = [
+        {
+          $match: {
+            org: mongoose.Types.ObjectId(orgList[0]),
+            isActive: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'devices',
+            localField: 'deviceA',
+            foreignField: '_id',
+            as: 'deviceA'
+          }
+        },
+        { $unwind: '$deviceA' },
+        {
+          $lookup: {
+            from: 'devices',
+            localField: 'deviceB',
+            foreignField: '_id',
+            as: 'deviceB'
+          }
+        },
+        { $unwind: '$deviceB' },
+        {
+          $lookup: {
+            from: 'pathlabels',
+            localField: 'pathlabel',
+            foreignField: '_id',
+            as: 'pathlabel'
+          }
+        },
+        {
+          $unwind: {
+            path: '$pathlabel',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $addFields: {
+            interfaceADetails: {
+              $filter: {
+                input: '$deviceA.interfaces',
+                as: 'f',
+                cond: {
+                  $eq: ['$$f._id', '$interfaceA']
+                }
+              }
+            },
+            interfaceBDetails: {
+              $filter: {
+                input: '$deviceB.interfaces',
+                as: 'f',
+                cond: {
+                  $eq: ['$$f._id', '$interfaceB']
+                }
+              }
+            }
+          }
+        },
+        { $unwind: '$interfaceADetails' },
+        { $unwind: '$interfaceBDetails' },
+        {
+          $project: {
+            num: 1,
+            isActive: 1,
+            'interfaceADetails.name': 1,
+            'interfaceBDetails.name': 1,
+            'deviceA.name': 1,
+            'deviceA.machineId': 1,
+            'deviceA._id': 1,
+            'deviceB.name': 1,
+            'deviceB.machineId': 1,
+            'deviceB._id': 1,
+            deviceAconf: 1,
+            deviceBconf: 1,
+            encryptionMethod: 1,
+            'pathlabel.name': 1,
+            'pathlabel.color': 1,
+            tunnelStatus: {
+              $cond: [{
+                $and: [{
+                  $in: [
+                    {
+                      $concat: [{ $toString: '$num' }, ':', '$deviceA.machineId']
+                    }, connectedTunnels
+                  ]
+                }, {
+                  $in: [
+                    {
+                      $concat: [{ $toString: '$num' }, ':', '$deviceB.machineId']
+                    }, connectedTunnels
+                  ]
+                }]
+              }, 'Connected', 'Not Connected']
+            }
+          }
+        }
+      ];
+      if (filters) {
+        const matchFilters = {};
+        const parsedFilters = JSON.parse(filters);
+        for (const filter of parsedFilters) {
+          const { key, op, val } = filter;
+          if (key && val) {
+            switch (op) {
+              case '==':
+                matchFilters[key] = val;
+                break;
+              case '!=':
+                matchFilters[key] = { $ne: val };
+                break;
+              case 'contains':
+                matchFilters[key] = { $regex: val };
+                break;
+              case '!contains':
+                matchFilters[key] = { $regex: '^((?!' + val + ').)*$' };
+                break;
+              default:
+                break;
+            }
+          }
+        }
+        if (Object.keys(matchFilters).length > 0) {
+          pipeline.push({
+            $match: matchFilters
+          });
+        }
+      }
+      if (sortField) {
+        const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
+        pipeline.push({
+          $sort: { [sortField]: order }
+        });
+      };
+      const paginationParams = [{
+        $skip: offset > 0 ? +offset : 0
+      }];
+      if (limit !== undefined) {
+        paginationParams.push({ $limit: +limit });
+      };
+      pipeline.push({
+        $facet: {
+          records: paginationParams,
+          meta: [{ $count: 'total' }]
+        }
+      });
 
-      // Populate interface details
-      const tunnelMap = response.map((d) => {
+      const paginated = await Tunnels.aggregate(pipeline).allowDiskUse(true);
+      if (paginated[0].meta.length > 0) {
+        response.setHeader('records-total', paginated[0].meta[0].total);
+      };
+
+      const tunnelMap = paginated[0].records.map((d) => {
         return TunnelsService.selectTunnelParams(d);
       });
 
