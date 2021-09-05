@@ -89,6 +89,7 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
  */
 const validateFirewallRules = (rules, interfaces = undefined) => {
   const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
+  const usedInboundPorts = [];
   // Common rules validation
   for (const rule of rules) {
     const { direction, inbound, classification } = rule;
@@ -97,20 +98,40 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
       return { valid: false, err: 'Wrong inbound rule type' };
     }
     const { destination } = classification;
-    // Destination must be specified for inbound rules
-    if (direction === 'inbound' && !destination) {
-      return { valid: false, err: 'Destination must be specified for inbound rule' };
-    }
-
-    for (const [side, { trafficId, trafficTags, ipPort, ipProtoPort }]
-      of Object.entries(classification)) {
-      // Only ip, ports and protocols allowed for inbound rule destination
-      if (!ipProtoPort && side === 'destination' && direction === 'inbound') {
+    if (direction === 'inbound') {
+      // Destination must be specified for inbound rules
+      if (!destination || !destination.ipProtoPort) {
+        return { valid: false, err: 'Destination must be specified for inbound rules' };
+      }
+      // Ports must be specified in edgeAccess and portForward inbound rules
+      if (inbound !== 'nat1to1' && !destination.ipProtoPort.ports) {
         return {
           valid: false,
-          err: 'Only ip, ports and protocols allowed for inbound rule destination'
+          err: 'Ports must be specified in edgeAccess and portForward inbound rules'
         };
       }
+      // Inbound rules destination ports can't be overlapped
+      if (direction === 'inbound' && destination.ipProtoPort.ports) {
+        const { ports } = destination.ipProtoPort;
+        let portLow, portHigh;
+        if (ports.includes('-')) {
+          [portLow, portHigh] = ports.split('-').map(p => +p);
+        } else {
+          portLow = portHigh = +ports;
+        }
+        for (const [usedPortLow, usedPortHigh] of usedInboundPorts) {
+          if ((usedPortLow <= portLow && portLow <= usedPortHigh) ||
+            (usedPortLow <= portHigh && portHigh <= usedPortHigh) ||
+            (portLow <= usedPortLow && usedPortLow <= portHigh) ||
+            (portLow <= usedPortHigh && usedPortHigh <= portHigh)) {
+            return { valid: false, err: `Inbound rule destination ports ${ports} overlapped` };
+          }
+        }
+        usedInboundPorts.push([portLow, portHigh]);
+      }
+    }
+    for (const side of ['source', 'destination']) {
+      const { trafficId, trafficTags, ipPort, ipProtoPort } = classification[side] || {};
       // trafficId cannot be empty string or null
       if (isEmpty(trafficId) && trafficId !== undefined) {
         return { valid: false, err: 'Traffic name must be specified' };
@@ -398,8 +419,10 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
 
   // Firewall rules validation
   if (device.firewall) {
-    const { interfaces, firewall } = device;
-    const { valid, err } = validateFirewallRules(firewall.rules, interfaces);
+    const { interfaces, firewall, policies } = device;
+    const globalRules = policies && policies.firewall && policies.firewall.policy &&
+      policies.firewall.status.startsWith('install') ? policies.firewall.policy.rules : [];
+    const { valid, err } = validateFirewallRules([...globalRules, ...firewall.rules], interfaces);
     if (!valid) {
       return { valid, err };
     }
