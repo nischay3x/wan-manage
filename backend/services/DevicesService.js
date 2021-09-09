@@ -20,7 +20,6 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
-const firewallPoliciesModel = require('../models/firewallPolicies');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -32,12 +31,9 @@ const net = require('net');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
-const omit = require('lodash/omit');
-const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { queueFirewallPolicyJob } = require('../deviceLogic/firewallPolicy');
 const { validateOperations } = require('../deviceLogic/interfaces');
 const {
   validateDevice,
@@ -99,7 +95,7 @@ class DevicesService {
       })
         .populate('interfaces.pathlabels', '_id name description color type'); ;
 
-      if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
+      if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
@@ -312,7 +308,7 @@ class DevicesService {
       // are found in the database. This is done to prevent a partial
       // schedule of the devices in case of a user's mistake.
       if (numOfIdsFound < devicesUpgradeRequest.devices.length) {
-        return Service.rejectResponse('Some devices were not found');
+        return Service.rejectResponse('Some devices were not found', 404);
       }
 
       const set = {
@@ -351,7 +347,7 @@ class DevicesService {
       const options = { upsert: false, useFindAndModify: false };
       const res = await devices.updateOne(query, set, options);
       if (res.n === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       } else {
         return Service.successResponse(null, 204);
       }
@@ -478,7 +474,7 @@ class DevicesService {
       }).lean();
 
       if (!deviceObject) {
-        throw new Error('Device or Interface not found');
+        return Service.rejectResponse('Device or Interface not found', 404);
       };
 
       const supportedMessages = {
@@ -618,7 +614,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -669,6 +665,9 @@ class DevicesService {
           case 'agentui':
             errorMessage = 'Failed to get flexiEdge UI logs';
             break;
+          case 'application_ids':
+            errorMessage = 'Failed to get Application Identification logs';
+            break;
           default:
             errorMessage = 'Failed to get device logs';
         }
@@ -700,7 +699,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -758,6 +757,17 @@ class DevicesService {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const delDevice = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      }).session(session);
+
+      if (!delDevice) {
+        session.abortTransaction();
+        return Service.rejectResponse('Device for deletion not found', 404);
+      }
+
       const tunnelCount = await tunnelsModel.countDocuments({
         $or: [{ deviceA: id }, { deviceB: id }],
         isActive: true,
@@ -770,24 +780,18 @@ class DevicesService {
         throw new Error('All device tunnels must be deleted before deleting a device');
       }
 
-      const delDevices = await devices.find({
-        _id: mongoose.Types.ObjectId(id),
-        org: { $in: orgList }
-      }).session(session);
-
-      if (!delDevices.length) throw new Error('Device for deletion not found');
-      connections.deviceDisconnect(delDevices[0].machineId);
+      connections.deviceDisconnect(delDevice.machineId);
       const deviceCount = await devices.countDocuments({
-        account: delDevices[0].account
+        account: delDevice.account
       }).session(session);
 
       const orgCount = await devices.countDocuments({
-        account: delDevices[0].account, org: orgList[0]
+        account: delDevice.account, org: orgList[0]
       }).session(session);
 
       // Unregister a device (by adding -1)
       await flexibilling.registerDevice({
-        account: delDevices[0].account,
+        account: delDevice.account,
         org: orgList[0],
         count: deviceCount,
         orgCount: orgCount,
@@ -832,7 +836,12 @@ class DevicesService {
         org: { $in: orgList }
       })
         .session(session)
+        .populate('policies.firewall.policy', '_id name rules')
         .populate('interfaces.pathlabels', '_id name description color type');
+
+      if (!origDevice) {
+        return Service.rejectResponse('Device not found', 404);
+      }
 
       // Don't allow any changes if the device is not approved
       if (!origDevice.isApproved && !deviceRequest.isApproved) {
@@ -907,25 +916,61 @@ class DevicesService {
                   }
                 }
               }
-              if (!updIntf.isAssigned || origIntf.type !== updIntf.type) {
-                // check firewall rules
-                if (deviceRequest.firewall) {
-                  const { rules } = deviceRequest.firewall;
-                  if (rules.some(r => r.direction === 'inbound' &&
-                    r.classification.destination.ipProtoPort.interface === origIntf.devId)) {
-                    throw new Error(
-                      `Not allowed to change WAN interface ${origIntf.name},\
-                      it is reffered in inbound firewall rules.`
-                    );
+            }
+            // check firewall rules
+            if (deviceRequest.firewall) {
+              let hadInbound = false;
+              let hadOutbound = false;
+              let hasInbound = false;
+              let hasOutbound = false;
+              for (const rule of deviceRequest.firewall.rules) {
+                if (rule.direction === 'inbound') {
+                  if (rule.classification.destination.ipProtoPort.interface === origIntf.devId) {
+                    hadInbound = true;
                   }
-                  if (rules.some(r => r.direction === 'outbound' &&
-                    r.interfaces.includes(origIntf.devId))) {
-                    throw new Error(
-                      `Not allowed to change LAN interface ${origIntf.name},\
-                      it is reffered in outbound firewall rules.`
-                    );
+                  if (rule.classification.destination.ipProtoPort.interface === updIntf.devId) {
+                    hasInbound = true;
                   }
                 }
+                if (rule.direction === 'outbound') {
+                  if (rule.interfaces.includes(origIntf.devId)) {
+                    hadOutbound = true;
+                  }
+                  if (rule.interfaces.includes(updIntf.devId)) {
+                    hasOutbound = true;
+                  }
+                }
+              }
+              if (origIntf.type !== updIntf.type) {
+                if (hadInbound && updIntf.type !== 'WAN') {
+                  throw new Error(
+                    `WAN interface ${origIntf.name} \
+                    has firewall rules. Please remove rules before modifying.`
+                  );
+                }
+                if (hadOutbound && updIntf.type !== 'LAN') {
+                  throw new Error(
+                    `LAN Interface ${origIntf.name} \
+                    has firewall rules. Please remove rules before modifying.`
+                  );
+                }
+              }
+              if ((hasOutbound || hasInbound) && !updIntf.isAssigned) {
+                throw new Error(
+                  `Installing firewall on unassigned interface ${origIntf.name} is not allowed`
+                );
+              }
+              if (hasOutbound && updIntf.type !== 'LAN') {
+                throw new Error(
+                  `${updIntf.type} Interface ${origIntf.name} configured with outbound rules. \
+                  Outbound rules are allowed on LAN only.`
+                );
+              }
+              if (hasInbound && updIntf.type !== 'WAN') {
+                throw new Error(
+                  `${updIntf.type} Interface ${origIntf.name} configured with inbound rules. \
+                  Inbound rules are allowed on WAN only.`
+                );
               }
             }
 
@@ -955,7 +1000,7 @@ class DevicesService {
             if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
               if (updIntf.metric && updIntf.metric !== origIntf.metric) {
                 throw new Error(
-                  `Not allowed to change metric of unassigned interfaces (${origIntf.name})`
+                  `Changing metric of unassigned interfaces (${origIntf.name}) is not allowed`
                 );
               }
               updIntf.metric = origIntf.metric;
@@ -963,7 +1008,7 @@ class DevicesService {
             // don't update MTU on an unassigned interface,
             if (!updIntf.isAssigned && updIntf.mtu && updIntf.mtu !== origIntf.mtu) {
               throw new Error(
-                `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
+                `Changing MTU of unassigned interfaces (${origIntf.name}) is not allowed`
               );
             }
 
@@ -1122,7 +1167,12 @@ class DevicesService {
           throw new Error(err);
         }
       }
-
+      // Need to validate device specific rules combined with global policy rules
+      if (deviceToValidate.firewall) {
+        deviceToValidate.policies = {
+          firewall: origDevice.policies.firewall.toObject()
+        };
+      }
       const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
 
       if (!valid) {
@@ -1163,56 +1213,12 @@ class DevicesService {
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      let modifyDevResult = { ids: [] };
-      if (origDevice) {
-        modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
-          org: orgList[0],
-          newDevice: updDevice
-        });
-      }
+      const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
+        org: orgList[0],
+        newDevice: updDevice
+      });
 
-      // If firewall rules modified then need to send install firewall policy job to the device
-      const modifyFirewallResult = { ids: [] };
-      const updRules = updDevice.firewall.rules.toObject();
-      const origRules = origDevice.firewall.rules.toObject();
-      const rulesModified =
-        origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
-        !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
-          isEqual(
-            omit(updatedRule, ['_id', 'name', 'classification']),
-            omit(origRules[index], ['_id', 'name', 'classification'])
-          ) &&
-          isEqual(
-            omit(updatedRule.classification.source, ['_id']),
-            omit(origRules[index].classification.source, ['_id'])
-          ) &&
-          isEqual(
-            omit(updatedRule.classification.destination, ['_id']),
-            omit(origRules[index].classification.destination, ['_id'])
-          )
-        ));
-
-      if (rulesModified) {
-        const requestTime = Date.now();
-        const { firewall } = updDevice.policies;
-        let firewallPolicy;
-        if (firewall && firewall.status && firewall.status.startsWith('install')) {
-          firewallPolicy = await firewallPoliciesModel.findOne(
-            { org: orgList[0], _id: firewall.policy },
-            { rules: 1, name: 1 }
-          ).session(session);
-        };
-        const jobs = await queueFirewallPolicyJob(
-          [updDevice],
-          firewallPolicy || updDevice.deviceSpecificRulesEnabled ? 'install' : 'uninstall',
-          requestTime,
-          firewallPolicy,
-          user,
-          orgList[0]
-        );
-        modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
-      }
-      const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
+      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
       DevicesService.setLocationHeader(server, response, modifyDevResult.ids, orgList[0]);
       const deviceObj = DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
@@ -1242,7 +1248,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -1300,7 +1306,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       const device = deviceObject[0];
@@ -1347,12 +1353,17 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+
       const deleteRoute = device.staticroutes.filter((s) => {
         return (s.id === route);
       });
+      if (deleteRoute.length !== 1) {
+        return Service.rejectResponse('Static route not found', 404);
+      }
 
-      if (deleteRoute.length !== 1) throw new Error('Static route not found');
       const copy = Object.assign({}, deleteRoute[0].toObject());
       copy.org = orgList[0];
       copy.method = 'staticroutes';
@@ -1385,7 +1396,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!device.isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
@@ -1471,7 +1482,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
@@ -1794,12 +1805,12 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       const deleteDhcp = device.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
 
-      if (deleteDhcp.length !== 1) throw new Error('DHCP ID not found');
+      if (deleteDhcp.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       const deleteDhcpObj = deleteDhcp[0].toObject();
 
@@ -1855,11 +1866,11 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       const resultDhcp = device.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (resultDhcp.length !== 1) throw new Error('DHCP ID not found');
+      if (resultDhcp.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       const result = {
         _id: resultDhcp[0].id,
@@ -1897,7 +1908,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -1909,7 +1920,7 @@ class DevicesService {
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
+      if (dhcpFiltered.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
 
@@ -1959,7 +1970,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -1971,7 +1982,7 @@ class DevicesService {
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
+      if (dhcpFiltered.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
       const dhcpObject = dhcpFiltered[0].toObject();
 
       // allow to patch only in the case of failed
@@ -2023,7 +2034,7 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       let result = [];
       const start = offset || 0;
       const size = limit || device.dhcp.length;
@@ -2118,7 +2129,7 @@ class DevicesService {
         org: { $in: orgList }
       }).session(session);
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -2204,7 +2215,7 @@ class DevicesService {
       }).lean();
 
       if (!deviceObject) {
-        throw new Error('Device or Interface not found');
+        return Service.rejectResponse('Device or Interface not found', 404);
       };
 
       const selectedIf = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
@@ -2431,7 +2442,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -2481,7 +2492,7 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
 
       return Service.successResponse(device.ospf, 200);
     } catch (e) {
@@ -2508,7 +2519,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
