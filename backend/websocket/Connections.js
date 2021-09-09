@@ -774,9 +774,10 @@ class Connections {
    * org verification.
    * @param  {string}   org               organization that owns the device
    * @param  {string}   device            device machine id
-   * @param  {Object}   msg               message to be sent to the device
-   * @param  {String}   jobid             sends the job ID to the agent, if job is created
-   * @param  {Callback} responseValidator a validator for validating the device response
+   * @param  {object}   msg               message to be sent to the device
+   * @param  {number}   timeout           The number of seconds to wait for an answer
+   * @param  {string}   jobid             sends the job ID to the agent, if job is created
+   * @param  {function} responseValidator a validator for validating the device response
    * @return {Promise}                    A promise the message has been sent
    */
   deviceSendMessage (
