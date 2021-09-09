@@ -1239,17 +1239,17 @@ const completeTunnelDel = (jobId, res) => {
 const prepareTunnelRemoveJob = (tunnel, deviceAIntf, deviceBIntf, peer = null) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
-  const {
-    paramsDeviceA,
-    paramsDeviceB
-  } = prepareTunnelParams(tunnel, deviceAIntf, deviceBIntf, null, peer);
+
+  const removeParams = {
+    'tunnel-id': tunnel.num
+  };
 
   // Saving configuration for device A
-  tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceA });
+  tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: removeParams });
 
   if (!peer) {
     // Saving configuration for device B
-    tasksDeviceB.push({ entity: 'agent', message: 'remove-tunnel', params: paramsDeviceB });
+    tasksDeviceB.push({ entity: 'agent', message: 'remove-tunnel', params: removeParams });
   }
 
   return [tasksDeviceA, tasksDeviceB];
