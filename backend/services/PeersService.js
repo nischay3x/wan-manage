@@ -19,6 +19,7 @@ const Service = require('./Service');
 const Peers = require('../models/peers');
 const Tunnels = require('../models/tunnels');
 const pick = require('lodash/pick');
+const isEqual = require('lodash/isEqual');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { reconstructTunnels } = require('../deviceLogic/modifyDevice');
@@ -116,9 +117,13 @@ class PeersService {
         origPeer.localFQDN !== peer.localFQDN ||
         origPeer.remoteFQDN !== peer.remoteFQDN ||
         origPeer.remoteIP !== peer.remoteIP ||
-        origPeer.psk !== peer.psk ||
-        origPeer.urls !== peer.urls ||
-        origPeer.ips !== peer.ips
+        origPeer.psk !== peer.psk
+      );
+
+      // for these fields, no need to recreate but to modify
+      const isNeedToModifyTunnels = (
+        !isEqual(origPeer.urls, peer.urls) ||
+        !isEqual(origPeer.ips, peer.ips)
       );
 
       origPeer.name = peer.name;
@@ -132,11 +137,18 @@ class PeersService {
       const updatedPeer = await origPeer.save();
 
       let reconstructedTunnels = 0;
-      if (isNeedToReconstructTunnels) {
+      if (isNeedToReconstructTunnels || isNeedToModifyTunnels) {
         const tunnels = await Tunnels.find({ peer: id }, '_id').lean();
         if (tunnels.length) {
           const ids = tunnels.map(t => t._id);
-          const jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
+
+          let jobs = [];
+          if (isNeedToReconstructTunnels) {
+            jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
+          } else {
+            // TODO: Change the line below and send only modify-tunnel jobs
+            jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
+          }
           reconstructedTunnels = jobs.length;
         }
       }
