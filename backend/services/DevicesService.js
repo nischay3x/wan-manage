@@ -64,6 +64,7 @@ class DevicesService {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevices = await devices.find({ org: { $in: orgList } })
+        .populate('policies.firewall.policy', '_id name rules')
         .populate('interfaces.pathlabels', '_id name description color type');
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
@@ -92,6 +93,7 @@ class DevicesService {
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
       })
+        .populate('policies.firewall.policy', '_id name rules')
         .populate('interfaces.pathlabels', '_id name description color type'); ;
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
