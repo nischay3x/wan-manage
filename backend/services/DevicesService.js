@@ -274,19 +274,154 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async devicesGET ({ org, offset, limit }, { user }) {
+  static async devicesGET (requestParams, { user }, response) {
+    const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await devices.find({ org: { $in: orgList } })
-        .skip(offset)
-        .limit(limit)
-        .populate('interfaces.pathlabels', '_id name description color type')
-        .populate('policies.firewall.policy', '_id name description')
-        .populate('policies.multilink.policy', '_id name description');
+      const connectedDevices = [];
+      const devicesByState = {};
+      for (const machineId in deviceStatus.status) {
+        connectedDevices.push(machineId);
+        if (deviceStatus.status[machineId].state) {
+          const { state } = deviceStatus.status[machineId];
+          if (!devicesByState[state]) {
+            devicesByState[state] = [];
+          }
+          devicesByState[state].push(machineId);
+        }
+      }
+      const devicesStates = Object.keys(devicesByState);
 
-      const devicesMap = result.map(item => {
-        return DevicesService.selectDeviceParams(item);
+      const pipeline = [
+        {
+          $match: {
+            org: mongoose.Types.ObjectId(orgList[0])
+          }
+        },
+        {
+          $lookup: {
+            from: 'multilinkpolicies',
+            localField: 'policies.multilink.policy',
+            foreignField: '_id',
+            as: 'policies.multilink.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.firewall.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'firewallpolicies',
+            localField: 'policies.firewall.policy',
+            foreignField: '_id',
+            as: 'policies.firewall.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.firewall.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'pathlabels',
+            localField: 'interfaces.pathlabels',
+            foreignField: '_id',
+            as: 'pathlabels'
+          }
+        },
+        {
+          $project: {
+            _id: { $toString: '$_id' },
+            isApproved: 1,
+            name: 1,
+            hostname: 1,
+            machineId: 1,
+            sync: 1,
+            versions: 1,
+            interfaces: { isAssigned: 1, type: 1, IPv4: 1, PublicIP: 1 },
+            pathlabels: { name: 1, description: 1, color: 1, type: 1 },
+            'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
+            'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            'deviceStatus.state': devicesStates.length > 0 ? {
+              $switch: {
+                branches: devicesStates.map(state => (
+                  { case: { $in: ['$machineId', devicesByState[state]] }, then: state }
+                )),
+                default: 'pending'
+              }
+            } : 'pending',
+            isConnected: {
+              $cond: [{
+                $in: ['$machineId', connectedDevices]
+              }, true, false]
+            }
+          }
+        }
+      ];
+
+      if (filters) {
+        const matchFilters = {};
+        const parsedFilters = JSON.parse(filters);
+        for (const filter of parsedFilters) {
+          const { key, op, val } = filter;
+          if (key && val) {
+            switch (op) {
+              case '==':
+                matchFilters[key] = val;
+                break;
+              case '!=':
+                matchFilters[key] = { $ne: val };
+                break;
+              case 'contains':
+                matchFilters[key] = { $regex: val };
+                break;
+              case '!contains':
+                matchFilters[key] = { $regex: '^((?!' + val + ').)*$' };
+                break;
+              default:
+                break;
+            }
+          }
+        }
+        if (Object.keys(matchFilters).length > 0) {
+          pipeline.push({
+            $match: matchFilters
+          });
+        }
+      }
+      if (sortField) {
+        const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
+        pipeline.push({
+          $sort: { [sortField]: order }
+        });
+      };
+      const paginationParams = [{
+        $skip: offset > 0 ? +offset : 0
+      }];
+      if (limit !== undefined) {
+        paginationParams.push({ $limit: +limit });
+      };
+      pipeline.push({
+        $facet: {
+          records: paginationParams,
+          meta: [{ $count: 'total' }]
+        }
       });
+
+      const paginated = await devices.aggregate(pipeline).allowDiskUse(true);
+      if (paginated[0].meta.length > 0) {
+        response.setHeader('records-total', paginated[0].meta[0].total);
+      };
+      const devicesMap = paginated[0].records.map(d => ({
+        ...d,
+        deviceStatus: d.isConnected
+          ? deviceStatus.getDeviceStatus(d.machineId) || {} : {}
+      }));
 
       return Service.successResponse(devicesMap);
     } catch (e) {
