@@ -59,7 +59,14 @@ class Mailer {
       to: to,
       subject: subject,
       generateTextFromHTML: true,
-      html: html
+      html: html + `<p style='color:#bbbbbb;'>You are receiving this email because 
+      you created an account on flexiWAN. 
+      If you wish to delete your account on flexiWAN, 
+      please open a support ticket by sending an email to
+      <a href="mailto:yourfriends@flexiwan.com">yourfriends@flexiwan.com</a> and put in 
+      the subject "Request to delete my account".
+      The request must be sent from the email of the account owner 
+      that opened the account on flexiWAN..</p>`
     };
 
     const p = new Promise((resolve, reject) => {
