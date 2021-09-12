@@ -17,26 +17,12 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // File used to dispatch the apply logic to the right function
-const start = require('./start');
-const stop = require('./stop');
-const reset = require('./reset');
-const modify = require('./modifyDevice');
-const tunnels = require('./tunnels');
-const staticroutes = require('./staticroutes');
-const upgrade = require('./applyUpgrade');
-const mlpolicy = require('./mlpolicy');
-const firewallPolicy = require('./firewallPolicy');
-const dhcp = require('./dhcp');
-const appIdentification = require('./appIdentification');
-const sync = require('./sync');
-const IKEv2 = require('./IKEv2');
-const configs = require('../configs')();
-const deviceQueues = require('../utils/deviceQueue')(
-  configs.get('kuePrefix'),
-  configs.get('redisUrl')
-);
-
-const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const mongoose = require('mongoose');
+const { devices } = require('../models/devices');
+const tunnelsModel = require('../models/tunnels');
+const notificationsMgr = require('../notifications/notifications')();
+const cidr = require('cidr-tools');
+const keyBy = require('lodash/keyBy');
 
 const EVENTS = {
   DEVICE_DISCONNECTED: 'DEVICE_DISCONNECTED',
@@ -44,27 +30,68 @@ const EVENTS = {
   INTERFACE_CONNECTIVITY_RESTORED: 'INTERFACE_CONNECTIVITY_RESTORED',
   INTERFACE_IP_LOST: 'INTERFACE_IP_LOST',
   INTERFACE_IP_RESTORED: 'INTERFACE_IP_RESTORED',
-  TUNNEL_IS_PENDING: 'TUNNEL_IS_PENDING'
+  TUNNEL_SET_TO_PENDING: 'TUNNEL_SET_TO_PENDING',
+  STATIC_ROUTE_SET_TO_PENDING: 'STATIC_ROUTE_SET_TO_PENDING'
 };
 
 const HANDLERS = {
-  INTERFACE_IP_LOST: async (deviceId, interfaceId) => {
-    // 1. get device tunnels that interfaceId is the interface
-    // 2. for each tunnel, set to pending trigger the TUNNEL_PENDING handler
-    // 3. get static routes connected to this tunnel
-    // 4. for each route, trigger the 
-    for tunnel in tunnels:
-      set tunnel to pending
-      TUNNEL_IS_PENDING(tunnel_id)
-  },
-  INTERFACE_IP_RESTORED: async (deviceId, interfaceId) => {
+  INTERFACE_IP_LOST: async (device, origIfc, ifc) => {
+    // set tunnels as pending
+    const tunnels = await tunnelsModel.find({
+      $or: [
+        { deviceA: device._id, interfaceA: ifc._id },
+        { deviceB: device._id, interfaceB: ifc._id }
+      ],
+      isActive: true,
+      configStatus: { $ne: 'incomplete' }
+    }).lean();
 
+    for (const tunnel of tunnels) {
+      const reason = `Interface ${ifc.name} in device ${device.name} has no IP address`;
+      await setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+    };
+
+    // set static routes as pending
+    const staticRoutes = device.staticroutes.filter(s => {
+      if (s.configStatus === 'incomplete') return false;
+
+      const isSameIfc = s.ifname === ifc.devId;
+
+      const gatewaySubnet = `${s.gateway}/32`;
+      const isOverlapping = cidr.overlap(`${origIfc.IPv4}/${origIfc.IPv4Mask}`, gatewaySubnet);
+      return isSameIfc || isOverlapping;
+    });
+
+    for (const route of staticRoutes) {
+      const reason = `Interface ${origIfc.name} in device ${device.name} has no IP address`;
+      await setIncompleteRouteStatus(route, true, reason, device);
+    }
   },
+  INTERFACE_IP_RESTORED: async (device, origIfc, ifc) => {},
   INTERFACE_CONNECTIVITY_LOST: async () => {},
   INTERFACE_CONNECTIVITY_RESTORED: async () => {},
-  TUNNEL_IS_PENDING: async tunnelId => {
-    // 1. get device tunnels that interfaceId is the interface
-    // 2. for each tunnel, trigger the TUNNEL_PENDING handler
+  TUNNEL_SET_TO_PENDING: async (tunnel, device, reason) => {
+    await notificationsMgr.sendNotifications([{
+      org: tunnel.org,
+      title: `Tunnel number ${tunnel.num} is in pending state`,
+      time: new Date(),
+      device: device._id,
+      machineId: device.machineId,
+      details: reason
+    }]);
+
+    // send remove job ??
+    // get static routes via this tunnel and set them as pending
+  },
+  STATIC_ROUTE_SET_TO_PENDING: async (route, device, reason) => {
+    await notificationsMgr.sendNotifications([{
+      org: device.org,
+      title: `Static route via ${route.gateway} is in pending state`,
+      time: new Date(),
+      device: device._id,
+      machineId: device.machineId,
+      details: reason
+    }]);
   }
 };
 
@@ -77,11 +104,87 @@ const trigger = async (eventType, ...args) => {
   return res;
 };
 
-const check = async (origInterfaces, newInterfaces) => {
-  
+const check = async (origDevice, newInterfaces) => {
+  const orig = keyBy(origDevice.interfaces, 'devId');
+  const updated = keyBy(newInterfaces, 'devId');
 
+  for (const devId in orig) {
+    const origIfc = orig[devId];
+    const updatedIfc = updated[devId];
+
+    if (origIfc.IPv4 !== updatedIfc.IPv4) {
+      if (updatedIfc.IPv4 === '') {
+        await trigger(EVENTS.INTERFACE_IP_LOST, origDevice, origIfc, updatedIfc);
+      }
+
+      if (origIfc.IPv4 === '') {
+        await trigger(EVENTS.INTERFACE_IP_RESTORED, origDevice, origIfc, updatedIfc);
+      }
+    }
+  }
+
+  const a = 'a;';
+  return a;
+};
+
+/**
+ * Set incomplete state for tunnel if needed and send notification
+ * @param  {number} num  tunnel number
+ * @param  {string} org  organization id
+ * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
+ * @param  {string} reason  incomplete reason
+ * @param  {object} device  device of incomplete tunnel
+ * @return void
+ */
+const setIncompleteTunnelStatus = async (num, org, isIncomplete, reason, device) => {
+  const tunnel = await tunnelsModel.findOneAndUpdate(
+    // Query, use the org and tunnel number
+    { org, num },
+    {
+      $set: {
+        configStatus: isIncomplete ? 'incomplete' : '',
+        configStatusReason: isIncomplete ? reason : ''
+      }
+    },
+    // Options
+    { upsert: false, new: true }
+  ).lean();
+
+  if (isIncomplete) {
+    await trigger(EVENTS.TUNNEL_SET_TO_PENDING, tunnel, device, reason);
+  }
+};
+
+/**
+ * Set incomplete state for static route if needed
+ * @param  {number} routeId  static route id
+ * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
+ * @param  {string} reason  incomplete reason
+ * @param  {object} device  device of incomplete tunnel
+ * @return void
+ */
+const setIncompleteRouteStatus = async (route, isIncomplete, reason, device) => {
+  await devices.findOneAndUpdate(
+    { _id: mongoose.Types.ObjectId(device._id) },
+    {
+      $set: {
+        'staticroutes.$[elem].configStatus': isIncomplete ? 'incomplete' : '',
+        'staticroutes.$[elem].configStatusReason': isIncomplete ? reason : ''
+      }
+    },
+    {
+      arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(route._id) }]
+    }
+  );
+
+  if (isIncomplete) {
+    await trigger(
+      EVENTS.STATIC_ROUTE_SET_TO_PENDING, route, device, reason);
+  }
 };
 
 module.exports = {
-  check
+  check,
+  trigger,
+  EVENTS
 };

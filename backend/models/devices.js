@@ -21,6 +21,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const { firewallRuleSchema } = require('./firewallRule');
+const { configStatusObj } = require('./schemas/configStatus');
 
 /**
  * Interfaces Database Schema
@@ -338,7 +339,8 @@ const staticroutesSchema = new Schema({
   redistributeViaOSPF: {
     type: Boolean,
     default: false
-  }
+  },
+  ...configStatusObj
 }, {
   timestamps: true
 });

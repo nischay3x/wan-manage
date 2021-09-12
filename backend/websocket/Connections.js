@@ -493,7 +493,7 @@ class Connections {
         });
 
         try {
-          await deviceEvents.check(origDevice.interfaces, interfaces);
+          await deviceEvents.check(origDevice.toObject(), deviceInfo.message.network.interfaces);
 
           // Update interfaces in DB
           const updDevice = await devices.findOneAndUpdate(
