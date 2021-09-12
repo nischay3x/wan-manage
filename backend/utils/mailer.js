@@ -60,7 +60,7 @@ class Mailer {
       subject: subject,
       generateTextFromHTML: true,
       html: html + `<p style='color:#bbbbbb;'>You are receiving this email because 
-      you created an account on flexiWAN. 
+      you are registered on flexiWAN. 
       If you wish to delete your account on flexiWAN, 
       please open a support ticket by sending an email to
       <a href="mailto:yourfriends@flexiwan.com">yourfriends@flexiwan.com</a> and put in 
