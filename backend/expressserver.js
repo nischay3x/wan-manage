@@ -236,7 +236,7 @@ class ExpressServer {
 
     const validator = new OpenApiValidator({
       apiSpec: this.openApiPath,
-      validateRequests: true,
+      validateRequests: configs.get('validateOpenAPIRequest', 'boolean'),
       validateResponses: configs.get('validateOpenAPIResponse', 'boolean')
     });
 

@@ -27,6 +27,10 @@ class FlexiBilling {
     return null;
   }
 
+  async getMaxDevicesRegisteredSummmaryByAccounts (accounts) {
+    return [];
+  }
+
   async getMaxDevicesAllowed (id) {
     return config.billing.subscription.max_devices;
   }

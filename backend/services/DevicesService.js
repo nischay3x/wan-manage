@@ -837,6 +837,7 @@ class DevicesService {
         org: { $in: orgList }
       })
         .session(session)
+        .populate('policies.firewall.policy', '_id name rules')
         .populate('interfaces.pathlabels', '_id name description color type');
 
       if (!origDevice) {
@@ -1167,7 +1168,12 @@ class DevicesService {
           throw new Error(err);
         }
       }
-
+      // Need to validate device specific rules combined with global policy rules
+      if (deviceToValidate.firewall) {
+        deviceToValidate.policies = {
+          firewall: origDevice.policies.firewall.toObject()
+        };
+      }
       const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
 
       if (!valid) {

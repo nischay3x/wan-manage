@@ -1388,6 +1388,30 @@ paths:
         schema:
           type: integer
         style: form
+      - description: The field by which the data will be ordered
+        explode: true
+        in: query
+        name: sortField
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Sorting order
+        explode: true
+        in: query
+        name: sortOrder
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Stringified array of filter objects
+        explode: true
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: string
+        style: form
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -8183,6 +8207,7 @@ components:
         __v: 6
         deviceBconf: true
         _id: _id
+        tunnelStatus: 'Connected'
       properties:
         num:
           type: integer
@@ -8214,6 +8239,11 @@ components:
           type: object
         tunnelStatusB:
           type: object
+        tunnelStatus:
+          enum:
+            - Connected
+            - Not Connected
+          type: string
       type: object
     StaticRouteRequest:
       example:
