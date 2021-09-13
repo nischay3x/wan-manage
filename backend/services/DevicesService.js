@@ -192,7 +192,9 @@ class DevicesService {
           'gateway',
           'ifname',
           'metric',
-          'redistributeViaOSPF'
+          'redistributeViaOSPF',
+          'configStatus',
+          'configStatusReason'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;

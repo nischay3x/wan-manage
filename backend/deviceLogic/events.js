@@ -36,7 +36,7 @@ const EVENTS = {
 
 const HANDLERS = {
   INTERFACE_IP_LOST: async (device, origIfc, ifc) => {
-    // set tunnels as pending
+    // set related tunnels as pending
     const tunnels = await tunnelsModel.find({
       $or: [
         { deviceA: device._id, interfaceA: ifc._id },
@@ -51,7 +51,7 @@ const HANDLERS = {
       await setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
     };
 
-    // set static routes as pending
+    // set related static routes as pending
     const staticRoutes = device.staticroutes.filter(s => {
       if (s.configStatus === 'incomplete') return false;
 
