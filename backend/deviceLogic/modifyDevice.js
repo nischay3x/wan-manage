@@ -757,7 +757,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
 
-    newDevice.staticroutes.map(route => {
+    newDevice.staticroutes.filter(r => r.configStatus !== 'incomplete').map(route => {
       return ({
         destination: route.destination,
         gateway: route.gateway,
@@ -767,7 +767,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       });
     }),
 
-    origDevice.staticroutes.map(route => {
+    origDevice.staticroutes.filter(r => r.configStatus !== 'incomplete').map(route => {
       return ({
         destination: route.destination,
         gateway: route.gateway,
@@ -1345,6 +1345,11 @@ const sync = async (deviceId, org) => {
   // Prepare add-route message
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
     const { ifname, gateway, destination, metric } = route;
+
+    // skip pending routes
+    if (route.configStatus === 'incomplete') {
+      return;
+    }
 
     const params = {
       addr: destination,

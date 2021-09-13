@@ -275,6 +275,11 @@ const interfacesSchema = new Schema({
         validator: validators.validateOSPFCost
       }
     }
+  },
+  // false if ip configured in flexiManage but don't exists in the agent
+  hasIpOnDevice: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true,

@@ -493,14 +493,21 @@ class Connections {
         });
 
         try {
-          await deviceEvents.check(origDevice.toObject(), deviceInfo.message.network.interfaces);
-
           // Update interfaces in DB
-          const updDevice = await devices.findOneAndUpdate(
+          let updDevice = await devices.findOneAndUpdate(
             { machineId },
             { $set: { interfaces } },
             { new: true, runValidators: true }
           ).populate('interfaces.pathlabels', '_id type');
+
+          // IMPORTANT! events check should be called after saving the new interfaces
+          const deviceChanged = await deviceEvents.check(
+            origDevice.toObject(), deviceInfo.message.network.interfaces);
+
+          // if event happened and device is changed due to events triggers, fetch the device again
+          if (deviceChanged) {
+            updDevice = await devices.findOne({ machineId });
+          }
 
           // Update the reconfig hash before applying to prevent infinite loop
           this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);

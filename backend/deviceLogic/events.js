@@ -36,18 +36,21 @@ const EVENTS = {
 
 const HANDLERS = {
   INTERFACE_IP_LOST: async (device, origIfc, ifc) => {
+    // mark interface as lost IP
+    await setInterfaceHasIP(device._id, origIfc._id, false);
+
     // set related tunnels as pending
     const tunnels = await tunnelsModel.find({
       $or: [
-        { deviceA: device._id, interfaceA: ifc._id },
-        { deviceB: device._id, interfaceB: ifc._id }
+        { deviceA: device._id, interfaceA: origIfc._id },
+        { deviceB: device._id, interfaceB: origIfc._id }
       ],
       isActive: true,
       configStatus: { $ne: 'incomplete' }
     }).lean();
 
     for (const tunnel of tunnels) {
-      const reason = `Interface ${ifc.name} in device ${device.name} has no IP address`;
+      const reason = `Interface ${origIfc.name} in device ${device.name} has no IP address`;
       await setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
     };
 
@@ -67,7 +70,39 @@ const HANDLERS = {
       await setIncompleteRouteStatus(route, true, reason, device);
     }
   },
-  INTERFACE_IP_RESTORED: async (device, origIfc, ifc) => {},
+  INTERFACE_IP_RESTORED: async (device, origIfc, ifc) => {
+    // mark interface as lost IP
+    await setInterfaceHasIP(device._id, origIfc._id, true);
+
+    // unset related tunnels as pending
+    const tunnels = await tunnelsModel.find({
+      $or: [
+        { deviceA: device._id, interfaceA: origIfc._id },
+        { deviceB: device._id, interfaceB: origIfc._id }
+      ],
+      isActive: true,
+      configStatus: 'incomplete'
+    }).lean();
+
+    for (const tunnel of tunnels) {
+      await setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
+    };
+
+    // unset related static routes as pending
+    const staticRoutes = device.staticroutes.filter(s => {
+      if (s.configStatus !== 'incomplete') return false;
+
+      const isSameIfc = s.ifname === ifc.devId;
+
+      const gatewaySubnet = `${s.gateway}/32`;
+      const isOverlapping = cidr.overlap(`${origIfc.IPv4}/${origIfc.IPv4Mask}`, gatewaySubnet);
+      return isSameIfc || isOverlapping;
+    });
+
+    for (const route of staticRoutes) {
+      await setIncompleteRouteStatus(route, false, '', device);
+    }
+  },
   INTERFACE_CONNECTIVITY_LOST: async () => {},
   INTERFACE_CONNECTIVITY_RESTORED: async () => {},
   TUNNEL_SET_TO_PENDING: async (tunnel, device, reason) => {
@@ -107,24 +142,28 @@ const trigger = async (eventType, ...args) => {
 const check = async (origDevice, newInterfaces) => {
   const orig = keyBy(origDevice.interfaces, 'devId');
   const updated = keyBy(newInterfaces, 'devId');
+  let deviceChanged = false;
 
   for (const devId in orig) {
     const origIfc = orig[devId];
     const updatedIfc = updated[devId];
 
+    // Check if ip lost
     if (origIfc.IPv4 !== updatedIfc.IPv4) {
       if (updatedIfc.IPv4 === '') {
         await trigger(EVENTS.INTERFACE_IP_LOST, origDevice, origIfc, updatedIfc);
+        deviceChanged = true;
       }
+    }
 
-      if (origIfc.IPv4 === '') {
-        await trigger(EVENTS.INTERFACE_IP_RESTORED, origDevice, origIfc, updatedIfc);
-      }
+    // Check if ip restored
+    if (origIfc.hasIpOnDevice === false && updatedIfc.IPv4 !== '') {
+      await trigger(EVENTS.INTERFACE_IP_RESTORED, origDevice, origIfc, updatedIfc);
+      deviceChanged = true;
     }
   }
 
-  const a = 'a;';
-  return a;
+  return deviceChanged;
 };
 
 /**
@@ -181,6 +220,27 @@ const setIncompleteRouteStatus = async (route, isIncomplete, reason, device) => 
     await trigger(
       EVENTS.STATIC_ROUTE_SET_TO_PENDING, route, device, reason);
   }
+};
+
+/**
+ * Set IP exists on the interface
+ * @param  {number} deviceId device id
+ * @param  {number} ifcId    interface id
+ * @param  {boolean} hasIP  indicate if ip exists in the device side
+ * @return void
+ */
+const setInterfaceHasIP = async (deviceId, ifcId, hasIP) => {
+  await devices.findOneAndUpdate(
+    { _id: deviceId },
+    {
+      $set: {
+        'interfaces.$[elem].hasIpOnDevice': hasIP
+      }
+    },
+    {
+      arrayFilters: [{ 'elem._id': ifcId }]
+    }
+  );
 };
 
 module.exports = {

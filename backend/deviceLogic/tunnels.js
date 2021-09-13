@@ -1141,7 +1141,8 @@ const sync = async (deviceId, org) => {
       $and: [
         { org },
         { $or: [{ deviceA: deviceId }, { deviceB: deviceId }] },
-        { isActive: true }
+        { isActive: true },
+        { configStatus: { $ne: 'incomplete' } } // skip pending tunnels on sync
       ]
     },
     {
