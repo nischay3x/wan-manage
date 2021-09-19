@@ -207,7 +207,7 @@ const enforceHeaderFields = (header) => {
 };
 
 /**
- * Convert a logging message intu pure javascript object
+ * Convert a logging message into pure javascript object
  * @param   {Object} obj (e.g. mongodb model)
  * @returns {Object} pure javascript object
  */
