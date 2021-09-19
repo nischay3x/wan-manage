@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2020  flexiWAN Ltd.
+// Copyright (C) 2021  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -106,6 +106,7 @@ class JobsService {
             await deviceQueues.iterateJobsByOrg(orgList[0].toString(), s, (job) => {
               const parsedJob = JobsService.selectJobsParams(job);
               result.push(parsedJob);
+              return true; // Mark job as done
             });
           })
         );
@@ -114,6 +115,7 @@ class JobsService {
           status, (job) => {
             const parsedJob = JobsService.selectJobsParams(job);
             result.push(parsedJob);
+            return true; // Mark job as done
           }
         );
       }

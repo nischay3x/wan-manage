@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2021  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -18,6 +18,8 @@
 require('winston-mongodb');
 const os = require('os');
 const configs = require('../configs')();
+const mapValues = require('lodash/mapValues');
+const isPlainObject = require('lodash/isPlainObject');
 const { createLogger, format, transports } = require('winston');
 const { combine, timestamp, json, colorize, printf } = format;
 const maxLevelLength = 'verbose'.length; // Used for log header alignment
@@ -202,6 +204,18 @@ const enforceHeaderFields = (header) => {
   }
 };
 
+const deepObjectConvert = (obj) => {
+  return (obj)
+    ? (obj.toJSON)
+      ? obj.toJSON()
+      : isPlainObject(obj)
+        ? mapValues(obj, deepObjectConvert)
+        : (Array.isArray(obj))
+          ? obj.map(deepObjectConvert)
+          : obj
+    : obj;
+};
+
 module.exports = function (header) {
   // Enforce passing global header fields upon requiring the log.
   // This code throws if not all mandatory fields are passed
@@ -211,42 +225,42 @@ module.exports = function (header) {
     error: function (msg, ctx = {}) {
       getLogger().error({
         message: msg,
-        ctx: ctx,
+        ctx: deepObjectConvert(ctx),
         header: header
       });
     },
     warn: function (msg, ctx = {}) {
       getLogger().warn({
         message: msg,
-        ctx: ctx,
+        ctx: deepObjectConvert(ctx),
         header: header
       });
     },
     info: function (msg, ctx = {}) {
       getLogger().info({
         message: msg,
-        ctx: ctx,
+        ctx: deepObjectConvert(ctx),
         header: header
       });
     },
     verbose: function (msg, ctx = {}) {
       getLogger().verbose({
         message: msg,
-        ctx: ctx,
+        ctx: deepObjectConvert(ctx),
         header: header
       });
     },
     debug: function (msg, ctx = {}) {
       getLogger().debug({
         message: msg,
-        ctx: ctx,
+        ctx: deepObjectConvert(ctx),
         header: header
       });
     },
     silly: function (msg, ctx = {}) {
       getLogger().silly({
         message: msg,
-        ctx: ctx,
+        ctx: deepObjectConvert(ctx),
         header: header
       });
     }

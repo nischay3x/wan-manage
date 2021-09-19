@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2021  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -25,7 +25,7 @@
 const kue = require('kue');
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-
+const CHUNK_SIZE = 1000; // Chunk of jobs handled at once
 class JobError extends Error {
   constructor (...args) {
     const [message, job] = args;
@@ -308,23 +308,80 @@ class DeviceQueues {
   }
 
   /**
+     * Set Immediate Promise to let other functions to operate during heavy tasks
+     * @param  None
+     * @return Promise
+     */
+  setImmediatePromise () {
+    return new Promise((resolve) => {
+      setImmediate(() => resolve());
+    });
+  }
+
+  /**
      * Iterates over jobs of specific state
      * @param  {string}   state    queue state ('complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
+     * @param  {integer}  from     index to start looking from (could be negative)
+     * @param  {integer}  to       index to end looking from (could be negative)
+     * @param  {string}   dir      order to return data 'asc' or 'desc'
+     * @param  {integer}  limit    limit the number of processed jobs, -1 for no limit
+     *                             the callback should return 'true' for processed job
      * @return {void}
      */
-  iterateJobs (state, callback) {
+  iterateJobs (state, callback, from = 0, to = -1, dir = 'asc', limit = -1) {
     return new Promise((resolve, reject) => {
-      kue.Job.rangeByState(state, 0, -1, 'asc', async function (err, jobs) {
-        if (err) {
+      let done = 0;
+
+      // Define single batch Iteration
+      const singleBatchIteration = (batchFrom, batchTo) => {
+        return new Promise((resolve, reject) => {
+          kue.Job.rangeByState(state, batchFrom, batchTo, dir, async function (err, jobs) {
+            if (err) {
+              return reject(
+                new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
+              );
+            }
+
+            for (const job of jobs) {
+              if (limit > 0 && done >= limit) break;
+              if (callback(job)) done += 1;
+            };
+            resolve();
+          });
+        });
+      };
+
+      this.getCount(state)
+        .then(async (count) => {
+          if (from < 0) from = count + from + 1;
+          if (to < 0) to = count + to + 1;
+          let loopFrom = from;
+          let loopDelta = CHUNK_SIZE;
+          if (dir === 'desc') {
+            loopFrom = to - CHUNK_SIZE;
+            loopDelta = -CHUNK_SIZE;
+          }
+          for (
+            let chunkFrom = loopFrom;
+            (chunkFrom + CHUNK_SIZE >= from && chunkFrom <= to);
+            chunkFrom += loopDelta
+          ) {
+            if (limit > 0 && done >= limit) break;
+            await singleBatchIteration(
+              Math.max(chunkFrom, from),
+              Math.min(chunkFrom + CHUNK_SIZE - 1, to - 1)
+            );
+            await this.setImmediatePromise();
+          };
+          resolve();
+        })
+        .catch((err) => {
           return reject(
-            new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
+            new Error('DeviceQueues: Get count error, state=' + state + ', err=' + err)
           );
-        }
-        jobs.forEach((job) => callback(job));
-        return resolve();
-      });
+        });
     });
   }
 
@@ -332,35 +389,39 @@ class DeviceQueues {
      * Iterates over jobs of specific state and organization
      * The current implementation get all jobs and filter the org specific ones
      * This implementation doesn't scale for a large system
-     * TBD: For a large deployment, two improvements could be done:
-     *   a) Manage a separate redis queue holding the jobs for a org,
-     *      the job can be added when adding the job in kue, and
-     *      delete it using the periodic kue management
-     *   b) Get partial jobs and not all, when org get more,
-     *      get more messages from the queue
      * @param  {string}   org      organization to iterate jobs for
      * @param  {string}   state    queue state ('complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
+     * @param  {integer}  from     index to start looking from (could be negative)
+     * @param  {integer}  to       index to end looking from (could be negative)
+     * @param  {string}   dir      order to return data 'asc' or 'desc'
+     * @param  {integer}  skip     org jobs to skip before starting to iterate
+     * @param  {integer}  limit    limit the number of processed jobs, -1 for no limit
+     *                             the callback should return 'true' for processed job
      * @return {void}
      */
-  iterateJobsByOrg (org, state, callback) {
+  iterateJobsByOrg (org, state, callback, from = 0, to = -1, dir = 'asc', skip = 0, limit = -1) {
     return new Promise((resolve, reject) => {
-      try {
-        kue.Job.rangeByState(state, 0, -1, 'asc', function (err, jobs) {
-          if (err) {
-            return reject(
-              new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
-            );
+      let skipped = 0;
+
+      const orgCallback = (orgJob) => {
+        if (orgJob.data.metadata.org === org) {
+          if (skipped < skip) skipped += 1;
+          else {
+            if (callback(orgJob)) return true; // job done
           }
-          jobs.forEach(async (job) => {
-            if (job.data.metadata.org === org) callback(job);
-          });
+        }
+        return false;
+      };
+
+      this.iterateJobs(state, orgCallback, from, to, dir, limit)
+        .then(() => {
           return resolve();
+        })
+        .catch((err) => {
+          return reject(err);
         });
-      } catch (err) {
-        return reject(err);
-      }
     });
   }
 
