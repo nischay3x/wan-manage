@@ -88,7 +88,7 @@ const deviceProcessor = async (job) => {
     // 3. Update transaction job progress
     async.waterfall(operations, async (error, results) => {
       if (error) {
-        logger.error('Job error', { params: { job: logJob, err: error.message }, job: logJob });
+        logger.error('Job error', { params: { job: job, err: error.message }, job: job });
         // Call error callback only if the job reached maximal retries
         // We check if the remaining attempts are less than 1 instead of 0
         // since this code runs before the number of attempts is decreased.
@@ -122,11 +122,11 @@ const deviceProcessor = async (job) => {
       } else {
         logger.info('Job completed', {
           params: {
-            job: logJob,
+            job: job,
             results: results.message,
             deviceHash: results['router-cfg-hash'] || 'n/a'
           },
-          job: logJob
+          job: job
         });
         // Dispatch the response for Job completion
         // In the past this was called from job complete event but there were some missing events
