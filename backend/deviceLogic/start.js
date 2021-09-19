@@ -27,7 +27,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { jobLogger } = require('../logging/logging-utils');
 const { buildInterfaces } = require('./interfaces');
 
 /**
@@ -92,7 +91,7 @@ const apply = async (device, user, data) => {
         null
       );
 
-    logger.info('Start device job queued', { job: jobLogger(job) });
+    logger.info('Start device job queued', { job: job });
     return { ids: [job.id], status: 'completed', message: '' };
   } catch (err) {
     logger.error('Start device job failed', { params: { machineId, error: err.message } });

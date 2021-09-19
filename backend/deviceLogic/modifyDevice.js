@@ -36,7 +36,6 @@ const {
   getDevicesFirewallJobInfo
 } = require('./firewallPolicy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const { jobLogger } = require('../logging/logging-utils');
 const has = require('lodash/has');
 const omit = require('lodash/omit');
 const differenceWith = require('lodash/differenceWith');
@@ -403,7 +402,7 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
     null
   );
 
-  logger.info('Modify device job queued', { params: { job: jobLogger(job) } });
+  logger.info('Modify device job queued', { params: { job } });
   return job;
 };
 /**

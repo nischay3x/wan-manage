@@ -20,7 +20,6 @@ const periodic = require('./periodic')();
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const upgrade = require('../deviceLogic/applyUpgrade');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
-const { jobLogger } = require('../logging/logging-utils');
 const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 const { devices } = require('../models/devices');
 
@@ -115,7 +114,7 @@ class DeviceSwUpgrade {
           jobResults.forEach(job => {
             logger.info('Upgrade device job queued', {
               params: { jobId: job.id, version: version },
-              job: jobLogger(job),
+              job: job,
               periodic: { task: this.taskInfo }
             });
           });

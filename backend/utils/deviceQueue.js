@@ -25,7 +25,6 @@
 const kue = require('kue');
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { jobLogger } = require('../logging/logging-utils');
 const CHUNK_SIZE = 1000; // Chunk of jobs handled at once
 class JobError extends Error {
   constructor (...args) {
@@ -153,7 +152,7 @@ class DeviceQueues {
       } catch (err) {
         logger.debug('Failed to process job', {
           params: { job: job, deviceId: deviceId, err: err.message },
-          job: jobLogger(job)
+          job: job
         });
         if (!job.data.ignoreFailure) {
           return done(err, false);

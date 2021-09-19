@@ -28,7 +28,6 @@ const dispatcher = require('../deviceLogic/dispatcher');
 const { updateSyncStatus, updateSyncStatusBasedOnJobResult } =
   require('../deviceLogic/sync');
 const connections = require('../websocket/Connections')();
-const { jobLogger } = require('../logging/logging-utils');
 
 /**
  * A callback that is called when a device connects to the MGMT
@@ -67,11 +66,8 @@ exports.deviceConnectionClosed = async (deviceId) => {
  * @return {Promise}     a promise for processing the job
  */
 const deviceProcessor = async (job) => {
-  // limit the print job tasks param size
-  const logJob = jobLogger(job);
-
   // Job is passed twice - for event data and event header.
-  logger.info('Processing job', { params: { job: logJob }, job: logJob });
+  logger.info('Processing job', { params: { job: job }, job: job });
 
   // Get tasks
   const tasks = job.data.message.tasks;

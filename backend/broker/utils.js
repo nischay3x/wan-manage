@@ -17,7 +17,6 @@
 
 const connections = require('../websocket/Connections')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { jobLogger } = require('../logging/logging-utils');
 
 /**
  * Handler function for sending a message to the the device
@@ -32,8 +31,7 @@ const { jobLogger } = require('../logging/logging-utils');
  * @return {void}
  */
 const sendMsg = (org, machineID, msg, job, curTask, tasksLength) => (inp, done) => {
-  const logJob = jobLogger(job);
-  logger.debug('Starting new task', { params: { message: msg, input: inp }, job: logJob });
+  logger.debug('Starting new task', { params: { message: msg, input: inp }, job: job });
   connections.deviceSendMessage(org, machineID, msg, undefined, job.id)
     .then((rmsg) => {
       if (rmsg !== null && rmsg.ok === 1) {
@@ -47,14 +45,14 @@ const sendMsg = (org, machineID, msg, job, curTask, tasksLength) => (inp, done) 
     }, (err) => {
       logger.error('Task failed', {
         params: { err: err.message, job: job.id },
-        job: logJob
+        job: job
       });
       done(err, false);
     })
     .catch((err) => {
       logger.error('Task failed', {
         params: { err: err.message, job: job.id },
-        job: logJob
+        job: job
       });
       done(err, false);
     });

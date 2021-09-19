@@ -18,7 +18,10 @@
 require('winston-mongodb');
 const os = require('os');
 const configs = require('../configs')();
-const { deepObjectConvert } = require('./logging-utils');
+const mapValues = require('lodash/mapValues');
+const isPlainObject = require('lodash/isPlainObject');
+const pick = require('lodash/pick');
+const kue = require('kue');
 const { createLogger, format, transports } = require('winston');
 const { combine, timestamp, json, colorize, printf } = format;
 const maxLevelLength = 'verbose'.length; // Used for log header alignment
@@ -201,6 +204,45 @@ const enforceHeaderFields = (header) => {
         header.hasOwnProperty('type'))) {
     throw (new Error('Not all header fields were passed when requiring a logger'));
   }
+};
+
+/**
+ * Convert a logging message intu pure javascript object
+ * @param   {Object} obj (e.g. mongodb model)
+ * @returns {Object} pure javascript object
+ */
+const deepObjectConvert = (obj) => {
+  return (obj)
+    ? (obj instanceof kue.Job)
+      ? jobLogger(obj)
+      : (obj.toJSON)
+        ? obj.toJSON()
+        : isPlainObject(obj)
+          ? mapValues(obj, deepObjectConvert)
+          : (Array.isArray(obj))
+            ? obj.map(deepObjectConvert)
+            : obj
+    : obj;
+};
+
+/**
+ * Generate job logging info
+ * @param   {Job Object} job
+ * @returns {Object} javascript object for logging
+ */
+const jobLogger = (job) => {
+  // Create a job logger object and limit tasks size
+  const logJob = pick(job, [
+    'id', 'type', 'data.message.title', 'data.metadata',
+    'created_at', 'started_at'
+  ]);
+  if (job.data.message && job.data.message.tasks) {
+    logJob.data.message.tasks = job.data.message.tasks.map(
+      t => JSON.stringify(t).substring(0, 2048)
+    );
+  }
+  if (job.data.response) logJob.data.response = deepObjectConvert(job.data.response);
+  return logJob;
 };
 
 module.exports = function (header) {

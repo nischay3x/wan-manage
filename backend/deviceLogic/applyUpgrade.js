@@ -24,7 +24,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { jobLogger } = require('../logging/logging-utils');
 
 /**
  * Queues upgrade jobs to a list of devices.
@@ -102,7 +101,7 @@ const apply = async (devicesIn, user, data) => {
   jobResults.forEach(job => {
     logger.info('Upgrade device job queued', {
       params: { jobId: job.id, version: version },
-      job: jobLogger(job)
+      job: job
     });
   });
 
@@ -185,7 +184,7 @@ const remove = async (job) => {
       await setQueuedUpgradeFlag([device], org, false);
     } catch (err) {
       logger.error('Failed to update jobQueued field in database', {
-        params: { job: jobLogger(job), err: err.message }
+        params: { job: job, err: err.message }
       });
     }
   }

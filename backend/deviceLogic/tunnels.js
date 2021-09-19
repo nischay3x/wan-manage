@@ -31,7 +31,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { jobLogger } = require('../logging/logging-utils');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -570,7 +569,7 @@ const queueTunnel = async (
 
     logger.info(`${isAdd ? 'Add' : 'Del'} tunnel job queued - deviceA`, {
       params: { devices: devices },
-      job: jobLogger(jobA)
+      job: jobA
     });
 
     const jobB = await deviceQueues.addJob(
@@ -603,7 +602,7 @@ const queueTunnel = async (
 
     logger.info(`${isAdd ? 'Add' : 'Del'} tunnel job queued - deviceB`, {
       params: { devices: devices },
-      job: jobLogger(jobB)
+      job: jobB
     });
 
     return [jobA, jobB];
@@ -1123,9 +1122,7 @@ const delTunnel = async (
       tunnel.num,
       pathLabel
     );
-    logger.debug('Tunnel jobs queued', {
-      params: { jobA: jobLogger(tunnelJobs[0]), jobB: jobLogger(tunnelJobs[1]) }
-    });
+    logger.debug('Tunnel jobs queued', { params: { jobA: tunnelJobs[0], jobB: tunnelJobs[1] } });
     return tunnelJobs;
   } catch (err) {
     logger.error('Delete tunnel error', { params: { reason: err.message } });
