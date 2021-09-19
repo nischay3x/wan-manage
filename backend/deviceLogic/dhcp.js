@@ -23,6 +23,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const { jobLogger } = require('../logging/logging-utils');
 const { getMajorVersion } = require('../versioning');
 
 /**
@@ -120,6 +121,7 @@ const apply = async (device, user, data) => {
         // Complete callback
         null);
 
+      logger.info('Add DHCP job queued', { params: { job: jobLogger(job) } });
       return { ids: [job.id], status: 'completed', message: '' };
     } catch (err) {
       logger.error('Add DHCP job failed', { params: { machineId, error: err.message } });
