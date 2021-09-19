@@ -28,7 +28,7 @@ const dispatcher = require('../deviceLogic/dispatcher');
 const { updateSyncStatus, updateSyncStatusBasedOnJobResult } =
   require('../deviceLogic/sync');
 const connections = require('../websocket/Connections')();
-const omit = require('lodash/omit');
+const { jobLogger } = require('../logging/logging-utils');
 
 /**
  * A callback that is called when a device connects to the MGMT
@@ -68,10 +68,7 @@ exports.deviceConnectionClosed = async (deviceId) => {
  */
 const deviceProcessor = async (job) => {
   // limit the print job tasks param size
-  const logJob = omit(job, ['data.message.tasks']);
-  logJob.data.message.tasks = job.data.message.tasks.map(
-    t => JSON.stringify(t).substring(0, 2048)
-  );
+  const logJob = jobLogger(job);
 
   // Job is passed twice - for event data and event header.
   logger.info('Processing job', { params: { job: logJob }, job: logJob });

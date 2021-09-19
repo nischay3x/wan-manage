@@ -574,7 +574,7 @@ const remove = async (job) => {
 
   if (['inactive', 'delayed'].includes(job._state)) {
     logger.info('Policy job removed', {
-      params: { job: job }
+      params: { jobId: job.id }
     });
 
     // Set the status to "job deleted" only

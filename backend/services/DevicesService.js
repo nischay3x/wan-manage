@@ -32,6 +32,7 @@ const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const { jobLogger } = require('../logging/logging-utils');
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
 const { validateOperations } = require('../deviceLogic/interfaces');
@@ -2290,7 +2291,7 @@ class DevicesService {
                 // Complete callback
                 callback
               );
-            logger.info('Interface action job queued', { params: { job } });
+            logger.info('Interface action job queued', { params: { job: jobLogger(job) } });
           } catch (err) {
             logger.error('Interface action job failed', {
               params: { machineId: deviceObject.machineId, error: err.message }

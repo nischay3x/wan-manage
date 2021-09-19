@@ -24,6 +24,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const { jobLogger } = require('../logging/logging-utils');
 const { getMajorVersion } = require('../versioning');
 
 /**
@@ -169,8 +170,7 @@ const apply = async (devicesIn, user, data) => {
   const jobResults = await queueCreateIKEv2Jobs(opDevices, userName, org);
   jobResults.forEach(job => {
     logger.info('Create IKEv2 certificate device job queued', {
-      params: { jobId: job.id },
-      job: job
+      params: { job: jobLogger(job) }
     });
   });
 
@@ -349,13 +349,13 @@ const error = async (jobId, res) => {
  */
 const remove = async (job) => {
   if (['inactive', 'delayed', 'active'].includes(job._state)) {
-    logger.info('Device IKEv2 job removed', { params: { job: job } });
+    logger.info('Device IKEv2 job removed', { params: { jobId: job.id } });
     try {
       const { device } = job.data.response.data;
       await setIKEv2QueuedFlag([device], false);
     } catch (err) {
       logger.error('Failed to update jobQueued field in database', {
-        params: { job: job, err: err.message }
+        params: { jobId: job.id, err: err.message }
       });
     }
   }

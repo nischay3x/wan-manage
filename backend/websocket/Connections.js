@@ -25,6 +25,7 @@ const { devices } = require('../models/devices');
 const Accounts = require('../models/accounts');
 const tunnelsModel = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
+const { jobLogger } = require('../logging/logging-utils');
 const notificationsMgr = require('../notifications/notifications')();
 const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
@@ -669,8 +670,7 @@ class Connections {
           origDevice.org
         ).then(jobResults => {
           logger.info('Create a new IKEv2 certificate device job queued', {
-            params: { jobId: jobResults[0].id },
-            job: jobResults[0]
+            params: { job: jobLogger(jobResults[0]) }
           });
         });
       }

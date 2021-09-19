@@ -25,6 +25,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { getMajorVersion } = require('../versioning');
+const { jobLogger } = require('../logging/logging-utils');
 
 /**
  * Queues an add appIdentification or delete appIdentification job to a device.
@@ -81,7 +82,7 @@ const apply = async (devices, user, data) => {
       arr.push(job);
       logger.info('App Identification Job Queued', {
         params: {
-          jobResponse: job.data.response, jobId: job.id
+          job: jobLogger(job)
         }
       });
     } else {
@@ -107,7 +108,6 @@ const apply = async (devices, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('appIdentification job complete', { params: { result: res, jobId: jobId } });
   try {
     await devices.findOneAndUpdate(
       { _id: mongoose.Types.ObjectId(res.deviceId) },

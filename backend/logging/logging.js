@@ -18,8 +18,7 @@
 require('winston-mongodb');
 const os = require('os');
 const configs = require('../configs')();
-const mapValues = require('lodash/mapValues');
-const isPlainObject = require('lodash/isPlainObject');
+const { deepObjectConvert } = require('./logging-utils');
 const { createLogger, format, transports } = require('winston');
 const { combine, timestamp, json, colorize, printf } = format;
 const maxLevelLength = 'verbose'.length; // Used for log header alignment
@@ -202,18 +201,6 @@ const enforceHeaderFields = (header) => {
         header.hasOwnProperty('type'))) {
     throw (new Error('Not all header fields were passed when requiring a logger'));
   }
-};
-
-const deepObjectConvert = (obj) => {
-  return (obj)
-    ? (obj.toJSON)
-      ? obj.toJSON()
-      : isPlainObject(obj)
-        ? mapValues(obj, deepObjectConvert)
-        : (Array.isArray(obj))
-          ? obj.map(deepObjectConvert)
-          : obj
-    : obj;
 };
 
 module.exports = function (header) {

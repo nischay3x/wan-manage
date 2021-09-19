@@ -24,6 +24,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const tunnelsModel = require('../models/tunnels');
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const { jobLogger } = require('../logging/logging-utils');
 
 /**
  * Creates and queues the stop-router job.
@@ -67,7 +68,7 @@ const apply = async (device, user, data) => {
       null
     );
 
-    logger.info('Stop device job queued', { params: { job } });
+    logger.info('Stop device job queued', { params: { job: jobLogger(job) } });
     return { ids: [job.id], status: 'completed', message: '' };
   } catch (err) {
     logger.error('Stop device job failed', { params: { machineID, error: err.message } });

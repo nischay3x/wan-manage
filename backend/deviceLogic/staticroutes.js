@@ -23,6 +23,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const { jobLogger } = require('../logging/logging-utils');
 const { getMajorVersion } = require('../versioning');
 
 /**
@@ -79,7 +80,7 @@ const apply = async (device, user, data) => {
         { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null);
-      logger.info('Add static route job queued', { params: { job } });
+      logger.info('Add static route job queued', { params: { job: jobLogger(job) } });
       return { ids: [job.id], status: 'completed', message: '' };
     } catch (err) {
       logger.error('Add static route job failed', { params: { machineId, error: err.message } });
@@ -172,7 +173,7 @@ const error = async (jobId, res) => {
  */
 const remove = async (job) => {
   if (['inactive', 'delayed', 'active'].includes(job._state)) {
-    logger.info('Rolling back device changes for removed task', { params: { job: job } });
+    logger.info('Rolling back device changes for removed task', { params: { jobId: job.id } });
     const deviceId = job.data.response.data.deviceId;
     const routeId = job.data.response.data.routeId;
 
@@ -185,7 +186,7 @@ const remove = async (job) => {
         }
       );
     } catch (error) {
-      logger.warn('Failed to update database', { params: { job: job } });
+      logger.warn('Failed to update database', { params: { jobId: job.id } });
     }
   }
 };

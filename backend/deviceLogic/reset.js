@@ -22,6 +22,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const { jobLogger } = require('../logging/logging-utils');
 
 /**
  * Creates and queues the reset-device job.
@@ -63,7 +64,7 @@ const apply = async (device, user, data) => {
       null
     );
 
-    logger.info('Reset device job queued', { params: { job } });
+    logger.info('Reset device job queued', { params: { job: jobLogger(job) } });
     return { ids: [job.id], status: 'completed', message: '' };
   } catch (err) {
     logger.error('Reset device job failed to be queued', {
