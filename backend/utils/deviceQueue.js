@@ -52,7 +52,6 @@ class DeviceQueues {
     this.removeJobs = this.removeJobs.bind(this);
     this.removeJobIdsByOrg = this.removeJobIdsByOrg.bind(this);
     this.getLastJob = this.getLastJob.bind(this);
-    this.getQueueJobsByState = this.getQueueJobsByState.bind(this);
     this.getOPendingJobsCount = this.getOPendingJobsCount.bind(this);
     this.registerJobRemoveCallback = this.registerJobRemoveCallback.bind(this);
     this.unregisterJobRemoveCallback = this.unregisterJobRemoveCallback.bind(this);
@@ -330,33 +329,34 @@ class DeviceQueues {
      *                             the callback should return 'true' for processed job
      * @return {void}
      */
-  iterateJobs (state, callback, from = 0, to = -1, dir = 'asc', limit = -1) {
+  iterateJobs (state, callback, deviceId = null, from = 0, to = -1, dir = 'asc', limit = -1) {
     return new Promise((resolve, reject) => {
       let done = 0;
 
       // Define single batch Iteration
       const singleBatchIteration = (batchFrom, batchTo) => {
         return new Promise((resolve, reject) => {
-          kue.Job.rangeByState(state, batchFrom, batchTo, dir, async function (err, jobs) {
+          const handleFunc = async (err, jobs) => {
             if (err) {
               return reject(
                 new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
               );
             }
-
             for (const job of jobs) {
               if (limit > 0 && done >= limit) break;
               if (callback(job)) done += 1;
             };
             resolve();
-          });
+          };
+          if (deviceId) kue.Job.rangeByType(deviceId, state, batchFrom, batchTo, dir, handleFunc);
+          else kue.Job.rangeByState(state, batchFrom, batchTo, dir, handleFunc);
         });
       };
 
-      this.getCount(state)
+      this.getCount(state, deviceId)
         .then(async (count) => {
-          if (from < 0) from = count + from + 1;
-          if (to < 0) to = count + to + 1;
+          if (from < 0) from = (count > -from) ? (count + from) : 0;
+          if (to < 0) to = (count > -to) ? (count + to) : 0;
           let loopFrom = from;
           let loopDelta = CHUNK_SIZE;
           if (dir === 'desc') {
@@ -371,7 +371,7 @@ class DeviceQueues {
             if (limit > 0 && done >= limit) break;
             await singleBatchIteration(
               Math.max(chunkFrom, from),
-              Math.min(chunkFrom + CHUNK_SIZE - 1, to - 1)
+              Math.min(chunkFrom + CHUNK_SIZE, to)
             );
             await this.setImmediatePromise();
           };
@@ -401,7 +401,8 @@ class DeviceQueues {
      *                             the callback should return 'true' for processed job
      * @return {void}
      */
-  iterateJobsByOrg (org, state, callback, from = 0, to = -1, dir = 'asc', skip = 0, limit = -1) {
+  iterateJobsByOrg (org, state, callback,
+    deviceId = null, from = 0, to = -1, dir = 'asc', skip = 0, limit = -1) {
     return new Promise((resolve, reject) => {
       let skipped = 0;
 
@@ -415,7 +416,7 @@ class DeviceQueues {
         return false;
       };
 
-      this.iterateJobs(state, orgCallback, from, to, dir, limit)
+      this.iterateJobs(state, orgCallback, deviceId, from, to, dir, limit)
         .then(() => {
           return resolve();
         })
@@ -488,39 +489,22 @@ class DeviceQueues {
   }
 
   /**
-   * Gets all jobs of a specific status and range in
-   * the queue of the device specified by "deviceId"
-   * @param  {string} deviceId device UUID
-   * @param  {string}  state   job state (complete/failed/etc.)
-   * @param  {number}  from    start index
-   * @param  {number}  to      stop index
-   * @return {Promise}         a list of job ids with the requested state
-   */
-  getQueueJobsByState (deviceId, state, from = 0, to = -1) {
-    return new Promise((resolve, reject) => {
-      kue.Job.rangeByType(deviceId, state, from, to, 'asc', (err, ids) => {
-        if (err) return resolve([]);
-        resolve(ids);
-      });
-    });
-  }
-
-  /**
    * Gets the number of pending (waiting/running) jobs
    * for the device specified by "deviceId"
    * @param  {string} deviceId device UUID
    * @return {Promise}         a list of job ids of pending jobs
    */
   async getOPendingJobsCount (deviceId) {
-    let pendingJobs = [];
+    let count = 0;
     for (const state of [
       'inactive',
       'active'
     ]) {
-      const jobIds = await this.getQueueJobsByState(deviceId, state);
-      pendingJobs = pendingJobs.concat(jobIds);
+      await this.iterateJobs(state, (job) => {
+        count += 1;
+      }, deviceId, 0, -1, 'asc');
     }
-    return pendingJobs.length;
+    return count;
   }
 
   /**
@@ -531,13 +515,14 @@ class DeviceQueues {
    * @return {Promise}         last queued job
    */
   async getLastJob (deviceId, state) {
-    let allJobs = [];
+    const allJobs = [];
     const states = (state) ? [state] : ['complete', 'failed', 'inactive', 'delayed', 'active'];
     for (const _state of states) {
       // We call getQueueJobsByState() with 'from' and 'to'
       // set to -1 to get only the last job in the queue
-      const jobIds = await this.getQueueJobsByState(deviceId, _state, -1, -1);
-      allJobs = allJobs.concat(jobIds);
+      await this.iterateJobs(_state, (job) => {
+        allJobs.push(job);
+      }, deviceId, -1, -1, 'asc');
     }
 
     // Find the job with the highest ID
@@ -549,13 +534,16 @@ class DeviceQueues {
      * @param  {string} state queue state ('complete', 'failed', 'inactive', 'delayed', 'active')
      * @return {number}       Number of jobs
      */
-  async getCount (state) {
+  async getCount (state, deviceId = null) {
     return new Promise((resolve, reject) => {
-      this.queue[state + 'Count']((err, total) => {
+      const handleFunc = (err, total) => {
         if (err) {
           return reject(new Error('DeviceQueues: getCount error, state=' + state + ', err=' + err));
         } else return resolve(total);
-      });
+      };
+
+      if (deviceId) this.queue[state + 'Count'](deviceId, handleFunc);
+      else this.queue[state + 'Count'](handleFunc);
     });
   }
 

@@ -162,7 +162,7 @@ describe('Initialization', () => {
     await deviceQueues.iterateJobs('complete', (rjob) => {
       testDataResult.push(rjob.data.message.testdata);
       return true;
-    }, 0, -1, 'desc', -1);
+    }, null, 0, -1, 'desc', -1);
     expect(testDataResult).toStrictEqual(testDataList.reverse());
     done();
   });
@@ -175,7 +175,7 @@ describe('Initialization', () => {
     await deviceQueues.iterateJobs('complete', (rjob) => {
       testDataResult.push(rjob.data.message.testdata);
       return true;
-    }, 0, -1, 'asc', 2);
+    }, null, 0, -1, 'asc', 2);
     expect(testDataResult).toStrictEqual(testDataList);
     done();
   });
@@ -186,14 +186,40 @@ describe('Initialization', () => {
     await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
       testDataResult.push(rjob.data.message.testdata);
       return true;
-    }, 0, -1, 'desc', 1, 2);
+    }, null, 0, -1, 'desc', 1, 2);
     expect(testDataResult).toStrictEqual(testDataList.slice(0, 2).reverse());
     testDataResult = [];
     await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
       testDataResult.push(rjob.data.message.testdata);
       return true;
-    }, 0, -1, 'desc', 0, 2);
+    }, null, 0, -1, 'desc', 0, 2);
     expect(testDataResult).toStrictEqual(testDataList.slice(-2).reverse());
+    done();
+  });
+
+  test('Chcek completed by org, device filter', async (done) => {
+    const testDataList = ['BBB1', 'DDD1', 'DDD2'];
+    let testDataResult = [];
+    await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
+      testDataResult.push(rjob.data.message.testdata);
+      return true;
+    }, 'BBB', 0, -1, 'desc');
+    expect(testDataResult).toStrictEqual(testDataList.slice(0, 1).reverse());
+    testDataResult = [];
+    await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
+      testDataResult.push(rjob.data.message.testdata);
+      return true;
+    }, 'DDD', 0, -1, 'desc');
+    expect(testDataResult).toStrictEqual(testDataList.slice(-2).reverse());
+    done();
+  });
+
+  test('Get last job', async (done) => {
+    let lastJob;
+    lastJob = await deviceQueues.getLastJob('BBB');
+    expect(lastJob.data.message.testdata).toBe('BBB1');
+    lastJob = await deviceQueues.getLastJob('DDD');
+    expect(lastJob.data.message.testdata).toBe('DDD2');
     done();
   });
 
@@ -239,8 +265,12 @@ describe('Initialization', () => {
       }
     );
     logger.verbose('Job ID = ' + job.id);
-    const c = await deviceQueues.getCount('inactive');
+    let c = await deviceQueues.getCount('inactive');
     expect(c).toBe(1);
+    c = await deviceQueues.getOPendingJobsCount('CCC');
+    expect(c).toBe(1);
+    c = await deviceQueues.getOPendingJobsCount('DDD');
+    expect(c).toBe(0);
     deviceQueues.resumeQueue('CCC');
   });
 });
