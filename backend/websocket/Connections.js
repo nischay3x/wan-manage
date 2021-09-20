@@ -500,9 +500,10 @@ class Connections {
             { new: true, runValidators: true }
           ).populate('interfaces.pathlabels', '_id type');
 
+          const message = deviceInfo.message;
           // IMPORTANT! events check should be called after saving the new interfaces
           const deviceChanged = await deviceEvents.check(
-            origDevice.toObject(), deviceInfo.message.network.interfaces);
+            origDevice.toObject(), message.network.interfaces, message.stats.running);
 
           // if event happened and device is changed due to events triggers, fetch the device again
           if (deviceChanged) {
@@ -568,6 +569,7 @@ class Connections {
               .keys({ version: Joi.string().required() })
               .optional()
           }),
+          stats: joi.object().optional(),
           network: joi.object().optional(),
           tunnels: joi.array().optional(),
           reconfig: joi.string().allow('').optional(),

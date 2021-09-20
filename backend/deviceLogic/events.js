@@ -23,6 +23,7 @@ const tunnelsModel = require('../models/tunnels');
 const notificationsMgr = require('../notifications/notifications')();
 const cidr = require('cidr-tools');
 const keyBy = require('lodash/keyBy');
+const { generateTunnelParams } = require('../utils/tunnelUtils');
 
 const EVENTS = {
   DEVICE_DISCONNECTED: 'DEVICE_DISCONNECTED',
@@ -31,6 +32,7 @@ const EVENTS = {
   INTERFACE_IP_LOST: 'INTERFACE_IP_LOST',
   INTERFACE_IP_RESTORED: 'INTERFACE_IP_RESTORED',
   TUNNEL_SET_TO_PENDING: 'TUNNEL_SET_TO_PENDING',
+  TUNNEL_SET_TO_ACTIVE: 'TUNNEL_SET_TO_ACTIVE',
   STATIC_ROUTE_SET_TO_PENDING: 'STATIC_ROUTE_SET_TO_PENDING'
 };
 
@@ -115,8 +117,35 @@ const HANDLERS = {
       details: reason
     }]);
 
-    // send remove job ??
+    const { ip1, ip2 } = generateTunnelParams(tunnel.num);
     // get static routes via this tunnel and set them as pending
+    const staticRoutes = await devices.aggregate([
+      { $match: { org: tunnel.org } }, // org match is very important here
+      { $project: { _id: 0, staticroutes: 1 } },
+      { $unwind: '$staticroutes' },
+      { $replaceRoot: '$staticroutes' },
+      { $match: { configStatus: { $ne: 'incomplete' }, $or: [{ gateway: ip1 }, { gateway: ip2 }] } }
+    ]).allowDiskUse(true);
+
+    for (const route of staticRoutes) {
+      const reason = `Tunnel ${tunnel.num} is in pending state`;
+      await setIncompleteRouteStatus(route, true, reason, device);
+    }
+  },
+  TUNNEL_SET_TO_ACTIVE: async (tunnel, device, reason) => {
+    const { ip1, ip2 } = generateTunnelParams(tunnel.num);
+    // get static routes via this tunnel and unset them as pending
+    const staticRoutes = await devices.aggregate([
+      { $match: { org: tunnel.org } }, // org match is very important here
+      { $project: { _id: 0, staticroutes: 1 } },
+      { $unwind: '$staticroutes' },
+      { $replaceRoot: '$staticroutes' },
+      { $match: { configStatus: 'incomplete', $or: [{ gateway: ip1 }, { gateway: ip2 }] } }
+    ]).allowDiskUse(true);
+
+    for (const route of staticRoutes) {
+      await setIncompleteRouteStatus(route, false, '', device);
+    }
   },
   STATIC_ROUTE_SET_TO_PENDING: async (route, device, reason) => {
     await notificationsMgr.sendNotifications([{
@@ -139,7 +168,7 @@ const trigger = async (eventType, ...args) => {
   return res;
 };
 
-const check = async (origDevice, newInterfaces) => {
+const check = async (origDevice, newInterfaces, routerIsRunning) => {
   const orig = keyBy(origDevice.interfaces, 'devId');
   const updated = keyBy(newInterfaces, 'devId');
   let deviceChanged = false;
@@ -148,22 +177,69 @@ const check = async (origDevice, newInterfaces) => {
     const origIfc = orig[devId];
     const updatedIfc = updated[devId];
 
-    // Check if ip lost
-    if (origIfc.IPv4 !== updatedIfc.IPv4) {
-      if (updatedIfc.IPv4 === '') {
-        await trigger(EVENTS.INTERFACE_IP_LOST, origDevice, origIfc, updatedIfc);
-        deviceChanged = true;
-      }
+    // no need to send events for unassigned interfaces
+    if (!origIfc.isAssigned) {
+      continue;
     }
 
-    // Check if ip restored
-    if (origIfc.hasIpOnDevice === false && updatedIfc.IPv4 !== '') {
+    if (isIpLost(origIfc, updatedIfc, routerIsRunning)) {
+      await trigger(EVENTS.INTERFACE_IP_LOST, origDevice, origIfc, updatedIfc);
+      deviceChanged = true;
+    }
+
+    if (isIpRestored(origIfc, updatedIfc)) {
       await trigger(EVENTS.INTERFACE_IP_RESTORED, origDevice, origIfc, updatedIfc);
       deviceChanged = true;
     }
   }
 
   return deviceChanged;
+};
+
+/**
+ * Check if IP is lost on an interface
+ * @param  {object} origIfc  interface from flexiManage DB
+ * @param  {object} updatedIfc  incoming interface info from device
+ * @param  {boolean} routerIsRunning  indicate if router is in running state
+ * @return {boolean} if need to trigger event of ip lost
+ */
+const isIpLost = (origIfc, updatedIfc, routerIsRunning) => {
+  // check if the real ip is different than flexiManage configuration
+  if (origIfc.IPv4 === updatedIfc.IPv4) {
+    return false;
+  }
+
+  // check if incoming interface is without ip address
+  if (updatedIfc.IPv4 !== '') {
+    return false;
+  }
+
+  // no need to trigger event for LAN interface if router is not running
+  if (origIfc.type === 'LAN' && !routerIsRunning) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Check if IP is restored on an interface
+ * @param  {object} origIfc  interface from flexiManage DB
+ * @param  {object} updatedIfc  incoming interface info from device
+ * @return {boolean} if need to trigger event of ip restored
+ */
+const isIpRestored = (origIfc, updatedIfc) => {
+  // check if the interface is marked without IP
+  if (origIfc.hasIpOnDevice !== false) {
+    return false;
+  }
+
+  // check if the incoming interface has ip address
+  if (updatedIfc.IPv4 === '') {
+    return false;
+  }
+
+  return true;
 };
 
 /**
@@ -191,6 +267,8 @@ const setIncompleteTunnelStatus = async (num, org, isIncomplete, reason, device)
 
   if (isIncomplete) {
     await trigger(EVENTS.TUNNEL_SET_TO_PENDING, tunnel, device, reason);
+  } else {
+    await trigger(EVENTS.TUNNEL_SET_TO_ACTIVE, tunnel, device, reason);
   }
 };
 
