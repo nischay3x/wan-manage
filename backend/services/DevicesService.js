@@ -20,6 +20,7 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
+const notificationsModel = require('../models/notifications');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { deviceStats } = require('../models/analytics/deviceStats');
@@ -335,10 +336,11 @@ class DevicesService {
             foreignField: '_id',
             as: 'pathlabels'
           }
-        },
-        {
+        }
+      ];
+      if (requestParams.response === 'summary') {
+        pipeline.push({
           $project: {
-            _id: { $toString: '$_id' },
             isApproved: 1,
             name: 1,
             hostname: 1,
@@ -363,8 +365,10 @@ class DevicesService {
               }, true, false]
             }
           }
-        }
-      ];
+        });
+      } else if (requestParams.response === 'ids') {
+        pipeline.push({ $project: { _id: { $toString: '$_id' } } });
+      }
 
       if (filters) {
         const matchFilters = {};
@@ -419,12 +423,57 @@ class DevicesService {
       if (paginated[0].meta.length > 0) {
         response.setHeader('records-total', paginated[0].meta[0].total);
       };
-      const devicesMap = paginated[0].records.map(d => ({
-        ...d,
-        deviceStatus: d.isConnected
-          ? deviceStatus.getDeviceStatus(d.machineId) || {} : {}
-      }));
 
+      let devicesMap;
+      if (requestParams.response === 'summary') {
+        const pendingNotificationsArr = await notificationsModel.aggregate([
+          {
+            $match: {
+              status: 'unread',
+              device: { $in: paginated[0].records.map(d => d._id) }
+            }
+          },
+          {
+            $group: {
+              _id: '$device',
+              count: { $sum: 1 }
+            }
+          },
+          {
+            $project: {
+              _id: { $toString: '$_id' },
+              count: 1
+            }
+          }
+        ]);
+        devicesMap = paginated[0].records.map(d => {
+          const _id = d._id.toString();
+          const { count } = pendingNotificationsArr.find(n => n._id === _id) || { count: 0 };
+          return {
+            ...d,
+            _id: _id,
+            pendingNotifications: count,
+            deviceStatus: d.isConnected
+              ? deviceStatus.getDeviceStatus(d.machineId) || {} : {}
+          };
+        });
+      } else if (requestParams.response === 'ids') {
+        devicesMap = paginated[0].records.map(d => d._id);
+      } else {
+        const pathLabels = await pathLabelsModel.find({
+          org: { $in: orgList }
+        }, '_id name description color type').lean();
+        devicesMap = paginated[0].records.map(d => {
+          d.interfaces = d.interfaces.map(ifc => {
+            ifc.pathlabels = ifc.pathlabels.map(pl => {
+              const pathLabel = pathLabels.find(p => pl._id.toString() === p._id.toString());
+              return { ...pathLabel, _id: pl._id.toString() } || null;
+            });
+            return ifc;
+          });
+          return DevicesService.selectDeviceParams(d);
+        });
+      }
       return Service.successResponse(devicesMap);
     } catch (e) {
       return Service.rejectResponse(

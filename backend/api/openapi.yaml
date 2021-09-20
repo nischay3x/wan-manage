@@ -613,6 +613,17 @@ paths:
         schema:
           type: integer
         style: form
+      - description: Type of returned data
+        explode: true
+        in: query
+        name: response
+        required: false
+        schema:
+          enum:
+          - detailed
+          - summary
+          - ids
+          type: string
       - description: The numbers of items to return
         explode: true
         in: query
@@ -658,7 +669,13 @@ paths:
             application/json:
               schema:
                 items:
-                  $ref: '#/components/schemas/Device'
+                  oneOf:
+                    - $ref: '#/components/schemas/Device'
+                    - $ref: '#/components/schemas/DeviceSummary'
+                    - type: object
+                    - type: string
+                      maxLength: 24
+                      minLength: 24
                 type: array
                 x-content-type: application/json
           description: Successful operation
@@ -7643,6 +7660,90 @@ components:
         firewallRules:
           items:
             $ref: '#/components/schemas/FirewallRule'
+          type: array
+        versions:
+          $ref: '#/components/schemas/DeviceVersion'
+        sync:
+          $ref: '#/components/schemas/DeviceSyncStatus'
+      type: object
+    DeviceSummary:
+      example:
+        _id: _id
+        name: name
+        isConnected: true
+        deviceStatus: deviceStatus
+        pathlabels:
+        - label
+        - label
+        machineId: machineId
+        hostname: hostname
+        interfaces:
+        - IPv4: IPv4
+          type: type
+          PublicIP: PublicIP
+          isAssigned: true
+        versions:
+          agent: agent
+          router: router
+          device: device
+          vpp: vpp
+          frr: frr
+        isApproved: true
+        sync: sync status
+        pendingNotifications: 0
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        machineId:
+          type: string
+        name:
+          type: string
+        isApproved:
+          type: boolean
+        isConnected:
+          type: boolean
+        hostname:
+          type: string
+        deviceStatus:
+          type: object
+        policies:
+          type: object
+        interfaces:
+          items:
+            type: object
+            properties:
+              IPv4:
+                type: string
+              PublicIP:
+                type: string
+              isAssigned:
+                type: boolean
+              type:
+                enum:
+                - WAN
+                - LAN
+                - NONE
+                type: string
+          type: array
+        pendingNotifications:
+          type: integer
+        pathlabels:
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              description:
+                type: string
+              color:
+                type: string
+              type:
+                enum:
+                - DIA
+                - Tunnel
+                type: string
           type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
