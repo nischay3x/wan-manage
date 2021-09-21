@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2021  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -25,7 +25,7 @@
 const kue = require('kue');
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-
+const CHUNK_SIZE = 1000; // Chunk of jobs handled at once
 class JobError extends Error {
   constructor (...args) {
     const [message, job] = args;
@@ -52,7 +52,6 @@ class DeviceQueues {
     this.removeJobs = this.removeJobs.bind(this);
     this.removeJobIdsByOrg = this.removeJobIdsByOrg.bind(this);
     this.getLastJob = this.getLastJob.bind(this);
-    this.getQueueJobsByState = this.getQueueJobsByState.bind(this);
     this.getOPendingJobsCount = this.getOPendingJobsCount.bind(this);
     this.registerJobRemoveCallback = this.registerJobRemoveCallback.bind(this);
     this.unregisterJobRemoveCallback = this.unregisterJobRemoveCallback.bind(this);
@@ -308,23 +307,82 @@ class DeviceQueues {
   }
 
   /**
+     * Set Immediate Promise to let other functions to operate during heavy tasks
+     * @param  None
+     * @return Promise
+     */
+  setImmediatePromise () {
+    return new Promise((resolve) => {
+      setImmediate(() => resolve());
+    });
+  }
+
+  /**
      * Iterates over jobs of specific state
      * @param  {string}   state    queue state ('complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
+     * @param  {string}   deviceId the deviceId (UUID) to filter by
+     * @param  {integer}  from     index to start looking from (could be negative)
+     * @param  {integer}  to       index to end looking from (could be negative)
+     * @param  {string}   dir      order to return data 'asc' or 'desc'
+     * @param  {integer}  limit    limit the number of processed jobs, -1 for no limit
+     *                             the callback should return 'true' for processed job
      * @return {void}
      */
-  iterateJobs (state, callback) {
+  iterateJobs (state, callback, deviceId = null, from = 0, to = -1, dir = 'asc', limit = -1) {
     return new Promise((resolve, reject) => {
-      kue.Job.rangeByState(state, 0, -1, 'asc', async function (err, jobs) {
-        if (err) {
+      let done = 0;
+
+      // Define single batch Iteration
+      const singleBatchIteration = (batchFrom, batchTo) => {
+        return new Promise((resolve, reject) => {
+          const handleFunc = async (err, jobs) => {
+            if (err) {
+              return reject(
+                new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
+              );
+            }
+            for (const job of jobs) {
+              if (limit > 0 && done >= limit) break;
+              if (callback(job)) done += 1;
+            };
+            resolve();
+          };
+          if (deviceId) kue.Job.rangeByType(deviceId, state, batchFrom, batchTo, dir, handleFunc);
+          else kue.Job.rangeByState(state, batchFrom, batchTo, dir, handleFunc);
+        });
+      };
+
+      this.getCount(state, deviceId)
+        .then(async (count) => {
+          if (from < 0) from = (count > -from) ? (count + from) : 0;
+          if (to < 0) to = (count > -to) ? (count + to) : 0;
+          let loopFrom = from;
+          let loopDelta = CHUNK_SIZE;
+          if (dir === 'desc') {
+            loopFrom = to - CHUNK_SIZE;
+            loopDelta = -CHUNK_SIZE;
+          }
+          for (
+            let chunkFrom = loopFrom;
+            (chunkFrom + CHUNK_SIZE >= from && chunkFrom <= to);
+            chunkFrom += loopDelta
+          ) {
+            if (limit > 0 && done >= limit) break;
+            await singleBatchIteration(
+              Math.max(chunkFrom, from),
+              Math.min(chunkFrom + CHUNK_SIZE, to)
+            );
+            await this.setImmediatePromise();
+          };
+          resolve();
+        })
+        .catch((err) => {
           return reject(
-            new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
+            new Error('DeviceQueues: Get count error, state=' + state + ', err=' + err)
           );
-        }
-        jobs.forEach((job) => callback(job));
-        return resolve();
-      });
+        });
     });
   }
 
@@ -332,35 +390,41 @@ class DeviceQueues {
      * Iterates over jobs of specific state and organization
      * The current implementation get all jobs and filter the org specific ones
      * This implementation doesn't scale for a large system
-     * TBD: For a large deployment, two improvements could be done:
-     *   a) Manage a separate redis queue holding the jobs for a org,
-     *      the job can be added when adding the job in kue, and
-     *      delete it using the periodic kue management
-     *   b) Get partial jobs and not all, when org get more,
-     *      get more messages from the queue
      * @param  {string}   org      organization to iterate jobs for
      * @param  {string}   state    queue state ('complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
+     * @param  {string}   deviceId the deviceId (UUID) to filter by
+     * @param  {integer}  from     index to start looking from (could be negative)
+     * @param  {integer}  to       index to end looking from (could be negative)
+     * @param  {string}   dir      order to return data 'asc' or 'desc'
+     * @param  {integer}  skip     org jobs to skip before starting to iterate
+     * @param  {integer}  limit    limit the number of processed jobs, -1 for no limit
+     *                             the callback should return 'true' for processed job
      * @return {void}
      */
-  iterateJobsByOrg (org, state, callback) {
+  iterateJobsByOrg (org, state, callback,
+    deviceId = null, from = 0, to = -1, dir = 'asc', skip = 0, limit = -1) {
     return new Promise((resolve, reject) => {
-      try {
-        kue.Job.rangeByState(state, 0, -1, 'asc', function (err, jobs) {
-          if (err) {
-            return reject(
-              new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
-            );
+      let skipped = 0;
+
+      const orgCallback = (orgJob) => {
+        if (orgJob.data.metadata.org === org) {
+          if (skipped < skip) skipped += 1;
+          else {
+            if (callback(orgJob)) return true; // job done
           }
-          jobs.forEach(async (job) => {
-            if (job.data.metadata.org === org) callback(job);
-          });
+        }
+        return false;
+      };
+
+      this.iterateJobs(state, orgCallback, deviceId, from, to, dir, limit)
+        .then(() => {
           return resolve();
+        })
+        .catch((err) => {
+          return reject(err);
         });
-      } catch (err) {
-        return reject(err);
-      }
     });
   }
 
@@ -427,39 +491,22 @@ class DeviceQueues {
   }
 
   /**
-   * Gets all jobs of a specific status and range in
-   * the queue of the device specified by "deviceId"
-   * @param  {string} deviceId device UUID
-   * @param  {string}  state   job state (complete/failed/etc.)
-   * @param  {number}  from    start index
-   * @param  {number}  to      stop index
-   * @return {Promise}         a list of job ids with the requested state
-   */
-  getQueueJobsByState (deviceId, state, from = 0, to = -1) {
-    return new Promise((resolve, reject) => {
-      kue.Job.rangeByType(deviceId, state, from, to, 'asc', (err, ids) => {
-        if (err) return resolve([]);
-        resolve(ids);
-      });
-    });
-  }
-
-  /**
    * Gets the number of pending (waiting/running) jobs
    * for the device specified by "deviceId"
    * @param  {string} deviceId device UUID
    * @return {Promise}         a list of job ids of pending jobs
    */
   async getOPendingJobsCount (deviceId) {
-    let pendingJobs = [];
+    let count = 0;
     for (const state of [
       'inactive',
       'active'
     ]) {
-      const jobIds = await this.getQueueJobsByState(deviceId, state);
-      pendingJobs = pendingJobs.concat(jobIds);
+      await this.iterateJobs(state, (job) => {
+        count += 1;
+      }, deviceId, 0, -1, 'asc');
     }
-    return pendingJobs.length;
+    return count;
   }
 
   /**
@@ -470,13 +517,13 @@ class DeviceQueues {
    * @return {Promise}         last queued job
    */
   async getLastJob (deviceId, state) {
-    let allJobs = [];
+    const allJobs = [];
     const states = (state) ? [state] : ['complete', 'failed', 'inactive', 'delayed', 'active'];
     for (const _state of states) {
-      // We call getQueueJobsByState() with 'from' and 'to'
-      // set to -1 to get only the last job in the queue
-      const jobIds = await this.getQueueJobsByState(deviceId, _state, -1, -1);
-      allJobs = allJobs.concat(jobIds);
+      // Iterate last job per state and push to allJobs
+      await this.iterateJobs(_state, (job) => {
+        allJobs.push(job);
+      }, deviceId, -1, -1, 'asc');
     }
 
     // Find the job with the highest ID
@@ -488,13 +535,16 @@ class DeviceQueues {
      * @param  {string} state queue state ('complete', 'failed', 'inactive', 'delayed', 'active')
      * @return {number}       Number of jobs
      */
-  async getCount (state) {
+  async getCount (state, deviceId = null) {
     return new Promise((resolve, reject) => {
-      this.queue[state + 'Count']((err, total) => {
+      const handleFunc = (err, total) => {
         if (err) {
           return reject(new Error('DeviceQueues: getCount error, state=' + state + ', err=' + err));
         } else return resolve(total);
-      });
+      };
+
+      if (deviceId) this.queue[state + 'Count'](deviceId, handleFunc);
+      else this.queue[state + 'Count'](handleFunc);
     });
   }
 

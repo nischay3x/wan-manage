@@ -81,7 +81,7 @@ const apply = async (devices, user, data) => {
       arr.push(job);
       logger.info('App Identification Job Queued', {
         params: {
-          jobResponse: job.data.response, jobId: job.id
+          job: job
         }
       });
     } else {
@@ -107,7 +107,6 @@ const apply = async (devices, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('appIdentification job complete', { params: { result: res, jobId: jobId } });
   try {
     await devices.findOneAndUpdate(
       { _id: mongoose.Types.ObjectId(res.deviceId) },

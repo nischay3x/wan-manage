@@ -139,7 +139,6 @@ const setQueuedUpgradeFlag = (deviceID, org, flag) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('Device Upgrade complete', { params: { result: res, jobId: jobId } });
   try {
     await setQueuedUpgradeFlag([res.device], res.org, false);
   } catch (err) {
