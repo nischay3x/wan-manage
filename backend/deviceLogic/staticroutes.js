@@ -97,8 +97,6 @@ const apply = async (device, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('Add static route job complete', { params: { result: res, jobId: jobId } });
-
   if (!res || !res.deviceId || !res.message || !res.routeId) {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
     return;

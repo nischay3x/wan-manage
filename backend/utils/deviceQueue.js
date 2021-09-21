@@ -520,8 +520,7 @@ class DeviceQueues {
     const allJobs = [];
     const states = (state) ? [state] : ['complete', 'failed', 'inactive', 'delayed', 'active'];
     for (const _state of states) {
-      // We call getQueueJobsByState() with 'from' and 'to'
-      // set to -1 to get only the last job in the queue
+      // Iterate last job per state and push to allJobs
       await this.iterateJobs(_state, (job) => {
         allJobs.push(job);
       }, deviceId, -1, -1, 'asc');

@@ -187,7 +187,6 @@ const apply = async (devicesIn, user, data) => {
  */
 const complete = async (jobId, res) => {
   if (res.action === 'update-public-certificate') {
-    logger.info('Device update IKEv2 job complete', { params: { result: res, jobId: jobId } });
     // send job to initiator to confirm that remote cert was applied on responder
     if (Array.isArray(res.reinitiateTunnels) && res.reinitiateTunnels.length) {
       const tasks = res.reinitiateTunnels.map(tunnelnum => {
@@ -219,8 +218,6 @@ const complete = async (jobId, res) => {
       );
     }
   } else if (res.action === 'get-device-certificate') {
-    logger.info('Device create IKEv2 job complete', { params: { result: res, jobId: jobId } });
-
     let certificate = res.agentMessage.certificate;
     certificate = Array.isArray(certificate) ? certificate.join('') : certificate;
     const expireTime = certificate && res.agentMessage.expiration

@@ -1253,7 +1253,6 @@ const complete = async (jobId, res) => {
   if (res.firewallPolicy) {
     firewallPolicyComplete(jobId, res.firewallPolicy);
   }
-  logger.info('Device modification complete', { params: { result: res, jobId: jobId } });
 };
 
 /**
