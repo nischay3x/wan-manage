@@ -322,6 +322,7 @@ class DeviceQueues {
      * @param  {string}   state    queue state ('complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
+     * @param  {string}   deviceId the deviceId (UUID) to filter by
      * @param  {integer}  from     index to start looking from (could be negative)
      * @param  {integer}  to       index to end looking from (could be negative)
      * @param  {string}   dir      order to return data 'asc' or 'desc'
@@ -393,6 +394,7 @@ class DeviceQueues {
      * @param  {string}   state    queue state ('complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
+     * @param  {string}   deviceId the deviceId (UUID) to filter by
      * @param  {integer}  from     index to start looking from (could be negative)
      * @param  {integer}  to       index to end looking from (could be negative)
      * @param  {string}   dir      order to return data 'asc' or 'desc'
