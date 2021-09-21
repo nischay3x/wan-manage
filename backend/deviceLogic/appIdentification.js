@@ -300,6 +300,9 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
       });
     }
   } else {
+    // no need to remove app identifications, they will be stored in device's local db
+    opDevices = [];
+    /*
     opDevices = await devices.find(
       {
         _id: { $in: deviceIdList },
@@ -356,6 +359,7 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
         }
       });
     }
+    */
   }
 
   // Update devices in db
