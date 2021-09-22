@@ -434,6 +434,11 @@ class DevicesService {
           'ipList',
           'policies',
           'pathlabels',
+          'versions',
+          'staticroutes',
+          'dhcp',
+          'deviceSpecificRulesEnabled',
+          'firewall',
           'upgradeSchedule',
           'sync',
           'ospf'
