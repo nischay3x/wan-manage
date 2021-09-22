@@ -285,8 +285,8 @@ class DevicesService {
       const devicesByState = {};
       for (const machineId in deviceStatus.status) {
         connectedDevices.push(machineId);
-        if (deviceStatus.status[machineId].state) {
-          const { state } = deviceStatus.status[machineId];
+        const { state } = deviceStatus.status[machineId];
+        if (state) {
           if (!devicesByState[state]) {
             devicesByState[state] = [];
           }
