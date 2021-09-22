@@ -336,21 +336,10 @@ class DevicesService {
             foreignField: '_id',
             as: 'pathlabels'
           }
-        }
-      ];
-      if (requestParams.response === 'summary') {
-        pipeline.push({
-          $project: {
-            isApproved: 1,
-            name: 1,
-            hostname: 1,
-            machineId: 1,
-            sync: 1,
-            versions: 1,
-            interfaces: { isAssigned: 1, type: 1, IPv4: 1, PublicIP: 1 },
-            pathlabels: { name: 1, description: 1, color: 1, type: 1 },
-            'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
-            'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+        },
+        {
+          $addFields: {
+            _id: { $toString: '$_id' },
             'deviceStatus.state': devicesStates.length > 0 ? {
               $switch: {
                 branches: devicesStates.map(state => (
@@ -365,10 +354,8 @@ class DevicesService {
               }, true, false]
             }
           }
-        });
-      } else if (requestParams.response === 'ids') {
-        pipeline.push({ $project: { _id: { $toString: '$_id' } } });
-      }
+        }
+      ];
 
       if (filters) {
         const matchFilters = {};
@@ -412,6 +399,83 @@ class DevicesService {
       if (limit !== undefined) {
         paginationParams.push({ $limit: +limit });
       };
+
+      if (requestParams.response === 'summary') {
+        pipeline.push({
+          $project: {
+            isApproved: 1,
+            name: 1,
+            hostname: 1,
+            machineId: 1,
+            sync: 1,
+            versions: 1,
+            interfaces: { isAssigned: 1, type: 1, IPv4: 1, PublicIP: 1 },
+            pathlabels: { name: 1, description: 1, color: 1, type: 1 },
+            'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
+            'policies.firewall': { status: 1, policy: { name: 1, description: 1 } }
+          }
+        });
+      } else if (requestParams.response === 'ids') {
+        pipeline.push({ $project: { _id: 1 } });
+      } else {
+        // fields to return in detailed response
+        const respFields = [
+          'org',
+          'description',
+          'deviceToken',
+          'machineId',
+          'site',
+          'hostname',
+          'serial',
+          'name',
+          'isApproved',
+          'fromToken',
+          'account',
+          'ipList',
+          'policies',
+          'pathlabels',
+          'upgradeSchedule',
+          'sync',
+          'ospf'
+        ];
+        // populate pathlabels for every interface
+        pipeline.push({
+          $unwind: {
+            path: '$interfaces',
+            preserveNullAndEmptyArrays: true
+          }
+        }, {
+          $lookup: {
+            from: 'pathlabels',
+            localField: 'interfaces.pathlabels',
+            foreignField: '_id',
+            as: 'interfaces.pathlabels'
+          }
+        }, {
+          $addFields: {
+            'interfaces.pathlabels': {
+              $map: {
+                input: '$interfaces.pathlabels',
+                as: 'pl',
+                in: {
+                  _id: { $toString: '$$pl._id' },
+                  name: '$$pl.name',
+                  description: '$$pl.description',
+                  color: '$$pl.color',
+                  type: '$$pl.type'
+                }
+              }
+            }
+          }
+        }, {
+          $group: {
+            _id: '$_id',
+            // name: { $first: '$name' },
+            ...respFields.reduce((r, f) => ({ ...r, [f]: { $first: '$' + f } }), { }),
+            interfaces: { $push: '$interfaces' }
+          }
+        });
+      }
       pipeline.push({
         $facet: {
           records: paginationParams,
@@ -426,6 +490,7 @@ class DevicesService {
 
       let devicesMap;
       if (requestParams.response === 'summary') {
+        // add pending notifications count for the summary request
         const pendingNotificationsArr = await notificationsModel.aggregate([
           {
             $match: {
@@ -447,30 +512,18 @@ class DevicesService {
           }
         ]);
         devicesMap = paginated[0].records.map(d => {
-          const _id = d._id.toString();
-          const { count } = pendingNotificationsArr.find(n => n._id === _id) || { count: 0 };
+          const { count } = pendingNotificationsArr.find(n => n._id === d._id) || { count: 0 };
           return {
             ...d,
-            _id: _id,
             pendingNotifications: count,
             deviceStatus: d.isConnected
               ? deviceStatus.getDeviceStatus(d.machineId) || {} : {}
           };
         });
       } else if (requestParams.response === 'ids') {
-        devicesMap = paginated[0].records.map(d => d._id);
+        devicesMap = paginated[0].records;
       } else {
-        const pathLabels = await pathLabelsModel.find({
-          org: { $in: orgList }
-        }, '_id name description color type').lean();
         devicesMap = paginated[0].records.map(d => {
-          d.interfaces = d.interfaces.map(ifc => {
-            ifc.pathlabels = ifc.pathlabels.map(pl => {
-              const pathLabel = pathLabels.find(p => pl._id.toString() === p._id.toString());
-              return { ...pathLabel, _id: pl._id.toString() } || null;
-            });
-            return ifc;
-          });
           return DevicesService.selectDeviceParams(d);
         });
       }
