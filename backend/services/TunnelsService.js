@@ -166,6 +166,8 @@ class TunnelsService {
             'interfaceBDetails.name': 1,
             'interfaceADetails.PublicPort': 1,
             'interfaceBDetails.PublicPort': 1,
+            'interfaceADetails.PublicIP': 1,
+            'interfaceBDetails.PublicIP': 1,
             'deviceA.name': 1,
             'deviceA.machineId': 1,
             'deviceA._id': 1,
