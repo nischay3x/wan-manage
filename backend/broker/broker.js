@@ -105,9 +105,15 @@ const deviceProcessor = async (job) => {
         }
         try {
           if (connections.isConnected(mId)) {
-            const { deviceObj } = connections.getDeviceInfo(mId);
-            // This call takes care of setting the legacy device sync status to not-synced.
-            await updateSyncStatusBasedOnJobResult(org, deviceObj, mId, false);
+            const deviceInfo = connections.getDeviceInfo(mId);
+            if (deviceInfo) {
+              // This call takes care of setting the legacy device sync status to not-synced.
+              await updateSyncStatusBasedOnJobResult(org, deviceInfo.deviceObj, mId, false);
+            } else {
+              logger.warn('Failed to update sync status, no device info returned', {
+                params: { machineId: mId }
+              });
+            }
           } else {
             logger.warn('Failed to update sync status, device not connected', {
               params: { machineId: mId }
@@ -139,8 +145,14 @@ const deviceProcessor = async (job) => {
         // Device configuration hash is included in every job
         // response. Use it to update the device's sync status
         try {
-          const { deviceObj } = connections.getDeviceInfo(mId);
-          await updateSyncStatus(org, deviceObj, mId, results['router-cfg-hash']);
+          const deviceInfo = connections.getDeviceInfo(mId);
+          if (deviceInfo) {
+            await updateSyncStatus(org, deviceInfo.deviceObj, mId, results['router-cfg-hash']);
+          } else {
+            logger.warn('Device sync status update failed, no device info returned', {
+              params: { machineId: mId }
+            });
+          }
         } catch (err) {
           logger.error('Device sync status update failed', {
             params: { err: err.message, machineId: mId }
