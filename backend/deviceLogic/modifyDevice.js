@@ -463,11 +463,14 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       .populate('deviceB');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, pathlabel, num, _id } = tunnel;
-      // Since the interface changes have already been updated in the database
+      let { deviceA, deviceB, pathlabel, num, _id, configStatus } = tunnel;
+      // IMPORTANT: Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
-      if (deviceA._id.toString() === device._id.toString()) deviceA = device;
-      else deviceB = device;
+      if (deviceA._id.toString() === device._id.toString()) {
+        deviceA = device;
+      } else {
+        deviceB = device;
+      };
 
       const ifcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
@@ -499,16 +502,33 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           machineB: deviceB.machineId,
           tunnelNum: tunnel.num
         };
-        // skip interfaces without IP or GW
-        const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
-          (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
 
-        if (missingNetParameters(modifiedIfcA) || missingNetParameters(modifiedIfcB)) {
-          logger.info('Missing network parameters, the tunnel will not be rebuilt', {
-            params: loggerParams
-          });
+        const isIncomplete = configStatus === 'incomplete';
+        // for incomplete tunnel wed send only remove-tunnel message
+        /// so no need to check for missing IP.
+        if (!isIncomplete) {
+          // skip interfaces without IP or GW
+          const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
+            (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
+
+          if (missingNetParameters(modifiedIfcA) || missingNetParameters(modifiedIfcB)) {
+            logger.info('Missing network parameters, the tunnel will not be rebuilt', {
+              params: loggerParams
+            });
+            continue;
+          }
+        }
+
+        // if *orig* interface had no ip address and now the ip is restored
+        // no need to send remove-tunnel since this tunnel is removed once the ip is lost
+        if (
+          (ifcA.hasIpOnDevice === false && modifiedIfcA.addr !== '') ||
+          (ifcB.hasIpOnDevice === false && modifiedIfcB.addr !== '')
+        ) {
+          removedTunnels.push(tunnel._id);
           continue;
         }
+
         // if dhcp was changed from 'no' to 'yes'
         // then we need to wait for a new config from the agent
         const waitingDhcpInfo =
@@ -656,7 +676,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
   let jobs = [];
   try {
     const tunnels = await tunnelsModel
-      .find({ _id: { $in: removedTunnels }, isActive: true })
+      .find({ _id: { $in: removedTunnels }, isActive: true, configStatus: { $ne: 'incomplete' } })
       .populate('deviceA')
       .populate('deviceB');
 

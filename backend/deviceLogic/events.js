@@ -97,7 +97,7 @@ const HANDLERS = {
       const isSameIfc = s.ifname === ifc.devId;
 
       const gatewaySubnet = `${s.gateway}/32`;
-      const isOverlapping = cidr.overlap(`${origIfc.IPv4}/${origIfc.IPv4Mask}`, gatewaySubnet);
+      const isOverlapping = cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
       return isSameIfc || isOverlapping;
     });
 
@@ -123,7 +123,9 @@ const HANDLERS = {
       { $match: { org: tunnel.org } }, // org match is very important here
       { $project: { _id: 0, staticroutes: 1 } },
       { $unwind: '$staticroutes' },
-      { $replaceRoot: '$staticroutes' },
+      // filter our non object documents before 'replaceRoot` stage
+      { $match: { staticroutes: { $exists: true, $not: { $type: 'array' }, $type: 'object' } } },
+      { $replaceRoot: { newRoot: '$staticroutes' } },
       { $match: { configStatus: { $ne: 'incomplete' }, $or: [{ gateway: ip1 }, { gateway: ip2 }] } }
     ]).allowDiskUse(true);
 
@@ -139,7 +141,9 @@ const HANDLERS = {
       { $match: { org: tunnel.org } }, // org match is very important here
       { $project: { _id: 0, staticroutes: 1 } },
       { $unwind: '$staticroutes' },
-      { $replaceRoot: '$staticroutes' },
+      // filter our non object documents before 'replaceRoot` stage
+      { $match: { staticroutes: { $exists: true, $not: { $type: 'array' }, $type: 'object' } } },
+      { $replaceRoot: { newRoot: '$staticroutes' } },
       { $match: { configStatus: 'incomplete', $or: [{ gateway: ip1 }, { gateway: ip2 }] } }
     ]).allowDiskUse(true);
 
