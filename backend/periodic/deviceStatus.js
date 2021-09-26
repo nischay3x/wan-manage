@@ -165,6 +165,13 @@ class DeviceStatus {
             // Update device status according to the last update entry in the list
             const lastUpdateEntry = msg.message[msg.message.length - 1];
             const deviceInfo = connections.getDeviceInfo(deviceID);
+            if (!deviceInfo) {
+              logger.warn('Failed to get device info', {
+                params: { deviceID: deviceID, message: msg },
+                periodic: { task: this.taskInfo }
+              });
+              return;
+            }
             this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
