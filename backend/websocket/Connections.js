@@ -681,8 +681,7 @@ class Connections {
           origDevice.org
         ).then(jobResults => {
           logger.info('Create a new IKEv2 certificate device job queued', {
-            params: { jobId: jobResults[0].id },
-            job: jobResults[0]
+            params: { job: jobResults[0] }
           });
         });
       }
