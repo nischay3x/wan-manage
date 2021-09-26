@@ -270,10 +270,6 @@ const queueFullSyncJob = async (device, hash, org) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('Sync device job complete', {
-    params: { result: res, jobId: jobId }
-  });
-
   const { handlers, machineId } = res;
 
   // Reset hash value for full-sync messages
