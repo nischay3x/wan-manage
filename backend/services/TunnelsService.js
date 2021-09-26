@@ -175,6 +175,8 @@ class TunnelsService {
             encryptionMethod: 1,
             'pathlabel.name': 1,
             'pathlabel.color': 1,
+            configStatus: 1,
+            configStatusReason: 1,
             tunnelStatus: {
               $cond: [{
                 $and: [{
