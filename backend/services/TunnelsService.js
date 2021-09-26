@@ -20,6 +20,7 @@ const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
+const { getFilterExpression } = require('../utils/filterUtils');
 
 class TunnelsService {
   /**
@@ -200,32 +201,27 @@ class TunnelsService {
         }
       ];
       if (filters) {
-        const matchFilters = {};
+        const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
         for (const filter of parsedFilters) {
           const { key, op, val } = filter;
-          if (key && val) {
-            switch (op) {
-              case '==':
-                matchFilters[key] = val;
-                break;
-              case '!=':
-                matchFilters[key] = { $ne: val };
-                break;
-              case 'contains':
-                matchFilters[key] = { $regex: val };
-                break;
-              case '!contains':
-                matchFilters[key] = { $regex: '^((?!' + val + ').)*$' };
-                break;
-              default:
-                break;
+          if (key) {
+            const filterExpr = getFilterExpression(op, val);
+            if (filterExpr !== undefined) {
+              if (key.includes('?')) {
+                const cond = op.includes('!') ? '$and' : '$or';
+                matchFilters.push({
+                  [cond]: ['A', 'B'].map(side => ({ [key.replace(/\?/g, side)]: filterExpr }))
+                });
+              } else {
+                matchFilters.push({ [key]: filterExpr });
+              }
             }
           }
         }
-        if (Object.keys(matchFilters).length > 0) {
+        if (matchFilters.length > 0) {
           pipeline.push({
-            $match: matchFilters
+            $match: { $and: matchFilters }
           });
         }
       }
