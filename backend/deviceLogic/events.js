@@ -25,22 +25,152 @@ const cidr = require('cidr-tools');
 const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const mongoConns = require('../mongoConns.js')();
 
-const EVENTS = {
-  DEVICE_DISCONNECTED: 'DEVICE_DISCONNECTED',
-  INTERFACE_CONNECTIVITY_LOST: 'INTERFACE_CONNECTIVITY_LOST',
-  INTERFACE_CONNECTIVITY_RESTORED: 'INTERFACE_CONNECTIVITY_RESTORED',
-  INTERFACE_IP_LOST: 'INTERFACE_IP_LOST',
-  INTERFACE_IP_RESTORED: 'INTERFACE_IP_RESTORED',
-  TUNNEL_SET_TO_PENDING: 'TUNNEL_SET_TO_PENDING',
-  TUNNEL_SET_TO_ACTIVE: 'TUNNEL_SET_TO_ACTIVE',
-  STATIC_ROUTE_SET_TO_PENDING: 'STATIC_ROUTE_SET_TO_PENDING'
-};
+class Events {
+  constructor () {
+    this.session = null;
+  }
 
-const HANDLERS = {
-  INTERFACE_IP_LOST: async (device, origIfc, ifc) => {
+  async createSession () {
+    this.session = await mongoConns.getMainDB().startSession();
+    this.session.startTransaction();
+  }
+
+  async closeSession () {
+    if (this.session) {
+      this.session.endSession();
+      this.session = null;
+    }
+  }
+
+  async staticRouteSetToPending (route, device, reason) {
+    await notificationsMgr.sendNotifications([{
+      org: device.org,
+      title: `Static route via ${route.gateway} is in pending state`,
+      time: new Date(),
+      device: device._id,
+      machineId: device.machineId,
+      details: reason
+    }]);
+  }
+
+  /**
+   * Set IP exists on the interface
+   * @param  {number} deviceId device id
+   * @param  {number} ifcId    interface id
+   * @param  {boolean} hasIP  indicate if ip exists in the device side
+   * @return void
+  */
+  async setInterfaceHasIP (deviceId, ifcId, hasIP) {
+    await devices.findOneAndUpdate(
+      { _id: deviceId },
+      {
+        $set: {
+          'interfaces.$[elem].hasIpOnDevice': hasIP
+        }
+      },
+      {
+        arrayFilters: [{ 'elem._id': ifcId }]
+      }
+    ).session(this.session);
+  };
+
+  /**
+   * Set incomplete state for tunnel if needed and send notification
+   * @param  {number} num  tunnel number
+   * @param  {string} org  organization id
+   * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
+   * @param  {string} reason  incomplete reason
+   * @param  {object} device  device of incomplete tunnel
+   * @return void
+  */
+  async setIncompleteTunnelStatus (num, org, isIncomplete, reason, device) {
+    const tunnel = await tunnelsModel.findOneAndUpdate(
+      // Query, use the org and tunnel number
+      { org, num },
+      {
+        $set: {
+          configStatus: isIncomplete ? 'incomplete' : '',
+          configStatusReason: isIncomplete ? reason : ''
+        }
+      },
+      // Options
+      { upsert: false, new: true }
+    ).session(this.session).lean();
+
+    if (isIncomplete) {
+      await this.tunnelSetToPending(tunnel, device, reason);
+    } else {
+      await this.tunnelSetToActive(tunnel, device, reason);
+    }
+  };
+
+  async interfaceConnectivityLost (device, origIfc) {
+    logger.info('Interface connectivity changed to offline', { params: { origIfc } });
+    await notificationsMgr.sendNotifications([{
+      org: device.org,
+      title: 'Interface connection change',
+      time: new Date(),
+      device: device._id,
+      machineId: device.machineId,
+      details: `Interface ${origIfc.name} state changed to "offline"`
+    }]);
+  };
+
+  async interfaceConnectivityRestored (device, origIfc) {
+    logger.info('Interface connectivity changed to online', { params: { origIfc } });
+    await notificationsMgr.sendNotifications([{
+      org: device.org,
+      title: 'Interface connection change',
+      time: new Date(),
+      device: device._id,
+      machineId: device.machineId,
+      details: `Interface ${origIfc.name} state changed to "online"`
+    }]);
+  };
+
+  async interfaceIpRestored (device, origIfc, ifc) {
+    logger.info('Interface IP restored', { params: { device, origIfc, ifc } });
+
     // mark interface as lost IP
-    await setInterfaceHasIP(device._id, origIfc._id, false);
+    await this.setInterfaceHasIP(device._id, origIfc._id, true);
+
+    // unset related tunnels as pending
+    const tunnels = await tunnelsModel.find({
+      $or: [
+        { deviceA: device._id, interfaceA: origIfc._id },
+        { deviceB: device._id, interfaceB: origIfc._id }
+      ],
+      isActive: true,
+      configStatus: 'incomplete'
+    }).session(this.session).lean();
+
+    for (const tunnel of tunnels) {
+      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
+    };
+
+    // unset related static routes as pending
+    const staticRoutes = device.staticroutes.filter(s => {
+      if (s.configStatus !== 'incomplete') return false;
+
+      const isSameIfc = s.ifname === ifc.devId;
+
+      const gatewaySubnet = `${s.gateway}/32`;
+      const isOverlapping = cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
+      return isSameIfc || isOverlapping;
+    });
+
+    for (const route of staticRoutes) {
+      await this.setIncompleteRouteStatus(route, false, '', device);
+    }
+  };
+
+  async interfaceIpLost (device, origIfc, ifc) {
+    logger.info('Interface IP lost', { params: { device, origIfc, ifc } });
+
+    // mark interface as lost IP
+    await this.setInterfaceHasIP(device._id, origIfc._id, false);
 
     // set related tunnels as pending
     const tunnels = await tunnelsModel.find({
@@ -50,11 +180,11 @@ const HANDLERS = {
       ],
       isActive: true,
       configStatus: { $ne: 'incomplete' }
-    }).lean();
+    }).session(this.session).lean();
 
     for (const tunnel of tunnels) {
       const reason = `Interface ${origIfc.name} in device ${device.name} has no IP address`;
-      await setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
     };
 
     // set related static routes as pending
@@ -70,63 +200,11 @@ const HANDLERS = {
 
     for (const route of staticRoutes) {
       const reason = `Interface ${origIfc.name} in device ${device.name} has no IP address`;
-      await setIncompleteRouteStatus(route, true, reason, device);
+      await this.setIncompleteRouteStatus(route, true, reason, device);
     }
-  },
-  INTERFACE_IP_RESTORED: async (device, origIfc, ifc) => {
-    // mark interface as lost IP
-    await setInterfaceHasIP(device._id, origIfc._id, true);
+  };
 
-    // unset related tunnels as pending
-    const tunnels = await tunnelsModel.find({
-      $or: [
-        { deviceA: device._id, interfaceA: origIfc._id },
-        { deviceB: device._id, interfaceB: origIfc._id }
-      ],
-      isActive: true,
-      configStatus: 'incomplete'
-    }).lean();
-
-    for (const tunnel of tunnels) {
-      await setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
-    };
-
-    // unset related static routes as pending
-    const staticRoutes = device.staticroutes.filter(s => {
-      if (s.configStatus !== 'incomplete') return false;
-
-      const isSameIfc = s.ifname === ifc.devId;
-
-      const gatewaySubnet = `${s.gateway}/32`;
-      const isOverlapping = cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
-      return isSameIfc || isOverlapping;
-    });
-
-    for (const route of staticRoutes) {
-      await setIncompleteRouteStatus(route, false, '', device);
-    }
-  },
-  INTERFACE_CONNECTIVITY_LOST: async (device, origIfc) => {
-    await notificationsMgr.sendNotifications([{
-      org: device.org,
-      title: 'Interface connection change',
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: `Interface ${origIfc.name} state changed to "offline"`
-    }]);
-  },
-  INTERFACE_CONNECTIVITY_RESTORED: async (device, origIfc) => {
-    await notificationsMgr.sendNotifications([{
-      org: device.org,
-      title: 'Interface connection change',
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: `Interface ${origIfc.name} state changed to "online"`
-    }]);
-  },
-  TUNNEL_SET_TO_PENDING: async (tunnel, device, reason) => {
+  async tunnelSetToPending (tunnel, device, reason) {
     await notificationsMgr.sendNotifications([{
       org: tunnel.org,
       title: `Tunnel number ${tunnel.num} is in pending state`,
@@ -146,14 +224,15 @@ const HANDLERS = {
       { $match: { staticroutes: { $exists: true, $not: { $type: 'array' }, $type: 'object' } } },
       { $replaceRoot: { newRoot: '$staticroutes' } },
       { $match: { configStatus: { $ne: 'incomplete' }, $or: [{ gateway: ip1 }, { gateway: ip2 }] } }
-    ]).allowDiskUse(true);
+    ]).session(this.session).allowDiskUse(true);
 
     for (const route of staticRoutes) {
       const reason = `Tunnel ${tunnel.num} is in pending state`;
-      await setIncompleteRouteStatus(route, true, reason, device);
+      await this.setIncompleteRouteStatus(route, true, reason, device);
     }
-  },
-  TUNNEL_SET_TO_ACTIVE: async (tunnel, device, reason) => {
+  };
+
+  async tunnelSetToActive (tunnel, device, reason) {
     const { ip1, ip2 } = generateTunnelParams(tunnel.num);
     // get static routes via this tunnel and unset them as pending
     const staticRoutes = await devices.aggregate([
@@ -164,76 +243,87 @@ const HANDLERS = {
       { $match: { staticroutes: { $exists: true, $not: { $type: 'array' }, $type: 'object' } } },
       { $replaceRoot: { newRoot: '$staticroutes' } },
       { $match: { configStatus: 'incomplete', $or: [{ gateway: ip1 }, { gateway: ip2 }] } }
-    ]).allowDiskUse(true);
+    ]).session(this.session).allowDiskUse(true);
 
     for (const route of staticRoutes) {
-      await setIncompleteRouteStatus(route, false, '', device);
+      await this.setIncompleteRouteStatus(route, false, '', device);
     }
-  },
-  STATIC_ROUTE_SET_TO_PENDING: async (route, device, reason) => {
-    await notificationsMgr.sendNotifications([{
-      org: device.org,
-      title: `Static route via ${route.gateway} is in pending state`,
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: reason
-    }]);
-  }
-};
+  };
 
-const trigger = async (eventType, ...args) => {
-  try {
-    if (!EVENTS[eventType]) {
-      logger.error('event not found', { params: { eventType, ...args } });
-      throw new Error('Event not found');
-    }
-
-    const res = await HANDLERS[eventType](...args);
-    return res;
-  } catch (err) {
-    logger.error('failed to trigger event', { params: { err: err.message, eventType, ...args } });
-  }
-};
-
-const check = async (origDevice, newInterfaces, routerIsRunning) => {
-  const orig = keyBy(origDevice.interfaces, 'devId');
-  const updated = keyBy(newInterfaces, 'devId');
-  let deviceChanged = false;
-
-  for (const devId in orig) {
-    const origIfc = orig[devId];
-    const updatedIfc = updated[devId];
-
-    // no need to send events for unassigned interfaces
-    if (!origIfc.isAssigned) {
-      continue;
-    }
-
-    if (isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
-      logger.info('Interface connectivity changed', { params: { origIfc, updatedIfc } });
-      if (updatedIfc.internetAccess) {
-        await trigger(EVENTS.INTERFACE_CONNECTIVITY_RESTORED, origDevice, origIfc);
-      } else {
-        await trigger(EVENTS.INTERFACE_CONNECTIVITY_LOST, origDevice, origIfc);
+  /**
+   * Set incomplete state for static route if needed
+   * @param  {number} routeId  static route id
+   * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
+   * @param  {string} reason  incomplete reason
+   * @param  {object} device  device of incomplete tunnel
+   * @return void
+  */
+  async setIncompleteRouteStatus (route, isIncomplete, reason, device) {
+    await devices.findOneAndUpdate(
+      { _id: mongoose.Types.ObjectId(device._id) },
+      {
+        $set: {
+          'staticroutes.$[elem].configStatus': isIncomplete ? 'incomplete' : '',
+          'staticroutes.$[elem].configStatusReason': isIncomplete ? reason : ''
+        }
+      },
+      {
+        arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(route._id) }]
       }
-    }
+    ).session(this.session);
 
-    if (isIpLost(origIfc, updatedIfc, routerIsRunning)) {
-      logger.info('Interface IP lost', { params: { origIfc, updatedIfc, routerIsRunning } });
-      await trigger(EVENTS.INTERFACE_IP_LOST, origDevice, origIfc, updatedIfc);
-      deviceChanged = true;
+    if (isIncomplete) {
+      await this.staticRouteSetToPending(route, device, reason);
     }
+  };
 
-    if (isIpRestored(origIfc, updatedIfc)) {
-      logger.info('Interface IP restored', { params: { origIfc, updatedIfc } });
-      await trigger(EVENTS.INTERFACE_IP_RESTORED, origDevice, origIfc, updatedIfc);
-      deviceChanged = true;
+  async check (origDevice, newInterfaces, routerIsRunning) {
+    try {
+      const orig = keyBy(origDevice.interfaces, 'devId');
+      const updated = keyBy(newInterfaces, 'devId');
+      let deviceChanged = false;
+
+      await this.createSession();
+
+      for (const devId in orig) {
+        const origIfc = orig[devId];
+        const updatedIfc = updated[devId];
+
+        // no need to send events for unassigned interfaces
+        if (!origIfc.isAssigned) {
+          continue;
+        }
+
+        if (isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
+          if (updatedIfc.internetAccess) {
+            await this.interfaceConnectivityRestored(origDevice, origIfc);
+          } else {
+            await this.interfaceConnectivityLost(origDevice, origIfc);
+          }
+        }
+
+        if (isIpLost(origIfc, updatedIfc, routerIsRunning)) {
+          await this.interfaceIpLost(origDevice, origIfc, updatedIfc);
+          deviceChanged = true;
+        }
+
+        if (isIpRestored(origIfc, updatedIfc)) {
+          await this.interfaceIpRestored(origDevice, origIfc, updatedIfc);
+          deviceChanged = true;
+        }
+      }
+
+      await this.session.commitTransaction();
+
+      return deviceChanged;
+    } catch (err) {
+      await this.session.abortTransaction();
+      logger.error('events check failed', { params: { err: err.message } });
+    } finally {
+      this.closeSession();
     }
   }
-
-  return deviceChanged;
-};
+}
 
 /**
  * Check if WAN interface lost connectivity
@@ -306,87 +396,11 @@ const isIpRestored = (origIfc, updatedIfc) => {
   return true;
 };
 
-/**
- * Set incomplete state for tunnel if needed and send notification
- * @param  {number} num  tunnel number
- * @param  {string} org  organization id
- * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
- * @param  {string} reason  incomplete reason
- * @param  {object} device  device of incomplete tunnel
- * @return void
- */
-const setIncompleteTunnelStatus = async (num, org, isIncomplete, reason, device) => {
-  const tunnel = await tunnelsModel.findOneAndUpdate(
-    // Query, use the org and tunnel number
-    { org, num },
-    {
-      $set: {
-        configStatus: isIncomplete ? 'incomplete' : '',
-        configStatusReason: isIncomplete ? reason : ''
-      }
-    },
-    // Options
-    { upsert: false, new: true }
-  ).lean();
-
-  if (isIncomplete) {
-    await trigger(EVENTS.TUNNEL_SET_TO_PENDING, tunnel, device, reason);
-  } else {
-    await trigger(EVENTS.TUNNEL_SET_TO_ACTIVE, tunnel, device, reason);
+let events = null;
+module.exports = function () {
+  if (events) return events;
+  else {
+    events = new Events();
+    return events;
   }
-};
-
-/**
- * Set incomplete state for static route if needed
- * @param  {number} routeId  static route id
- * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
- * @param  {string} reason  incomplete reason
- * @param  {object} device  device of incomplete tunnel
- * @return void
- */
-const setIncompleteRouteStatus = async (route, isIncomplete, reason, device) => {
-  await devices.findOneAndUpdate(
-    { _id: mongoose.Types.ObjectId(device._id) },
-    {
-      $set: {
-        'staticroutes.$[elem].configStatus': isIncomplete ? 'incomplete' : '',
-        'staticroutes.$[elem].configStatusReason': isIncomplete ? reason : ''
-      }
-    },
-    {
-      arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(route._id) }]
-    }
-  );
-
-  if (isIncomplete) {
-    await trigger(
-      EVENTS.STATIC_ROUTE_SET_TO_PENDING, route, device, reason);
-  }
-};
-
-/**
- * Set IP exists on the interface
- * @param  {number} deviceId device id
- * @param  {number} ifcId    interface id
- * @param  {boolean} hasIP  indicate if ip exists in the device side
- * @return void
- */
-const setInterfaceHasIP = async (deviceId, ifcId, hasIP) => {
-  await devices.findOneAndUpdate(
-    { _id: deviceId },
-    {
-      $set: {
-        'interfaces.$[elem].hasIpOnDevice': hasIP
-      }
-    },
-    {
-      arrayFilters: [{ 'elem._id': ifcId }]
-    }
-  );
-};
-
-module.exports = {
-  check,
-  trigger,
-  EVENTS
 };
