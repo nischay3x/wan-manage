@@ -442,30 +442,6 @@ class Connections {
             return i;
           }
 
-          // from device internetAccess type is boolean, in management it is enum yes/no
-          const prevInternetAccess = i.internetAccess === 'yes';
-          if (updatedConfig.internetAccess !== undefined &&
-            i.monitorInternet && updatedConfig.internetAccess !== prevInternetAccess) {
-            const newInterfaceState = updatedConfig.internetAccess ? 'online' : 'offline';
-            const details = `Interface ${i.name} state changed to "${newInterfaceState}"`;
-            logger.info(details, {
-              params: {
-                machineId,
-                updatedConfig
-              }
-            });
-            notificationsMgr.sendNotifications([
-              {
-                org: origDevice.org,
-                title: 'Interface connection change',
-                time: new Date(),
-                device: origDevice._id,
-                machineId,
-                details
-              }
-            ]);
-          };
-
           const updInterface = {
             ...i.toJSON(),
             PublicIP: updatedConfig.public_ip && i.useStun

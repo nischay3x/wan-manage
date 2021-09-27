@@ -24,6 +24,7 @@ const notificationsMgr = require('../notifications/notifications')();
 const cidr = require('cidr-tools');
 const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 const EVENTS = {
   DEVICE_DISCONNECTED: 'DEVICE_DISCONNECTED',
@@ -105,8 +106,26 @@ const HANDLERS = {
       await setIncompleteRouteStatus(route, false, '', device);
     }
   },
-  INTERFACE_CONNECTIVITY_LOST: async () => {},
-  INTERFACE_CONNECTIVITY_RESTORED: async () => {},
+  INTERFACE_CONNECTIVITY_LOST: async (device, origIfc) => {
+    await notificationsMgr.sendNotifications([{
+      org: device.org,
+      title: 'Interface connection change',
+      time: new Date(),
+      device: device._id,
+      machineId: device.machineId,
+      details: `Interface ${origIfc.name} state changed to "offline"`
+    }]);
+  },
+  INTERFACE_CONNECTIVITY_RESTORED: async (device, origIfc) => {
+    await notificationsMgr.sendNotifications([{
+      org: device.org,
+      title: 'Interface connection change',
+      time: new Date(),
+      device: device._id,
+      machineId: device.machineId,
+      details: `Interface ${origIfc.name} state changed to "online"`
+    }]);
+  },
   TUNNEL_SET_TO_PENDING: async (tunnel, device, reason) => {
     await notificationsMgr.sendNotifications([{
       org: tunnel.org,
@@ -164,12 +183,17 @@ const HANDLERS = {
 };
 
 const trigger = async (eventType, ...args) => {
-  if (!EVENTS[eventType]) {
-    throw new Error('Event not found');
-  }
+  try {
+    if (!EVENTS[eventType]) {
+      logger.error('event not found', { params: { eventType, ...args } });
+      throw new Error('Event not found');
+    }
 
-  const res = await HANDLERS[eventType](...args);
-  return res;
+    const res = await HANDLERS[eventType](...args);
+    return res;
+  } catch (err) {
+    logger.error('failed to trigger event', { params: { err: err.message, eventType, ...args } });
+  }
 };
 
 const check = async (origDevice, newInterfaces, routerIsRunning) => {
@@ -186,18 +210,54 @@ const check = async (origDevice, newInterfaces, routerIsRunning) => {
       continue;
     }
 
+    if (isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
+      logger.info('Interface connectivity changed', { params: { origIfc, updatedIfc } });
+      if (updatedIfc.internetAccess) {
+        await trigger(EVENTS.INTERFACE_CONNECTIVITY_RESTORED, origDevice, origIfc);
+      } else {
+        await trigger(EVENTS.INTERFACE_CONNECTIVITY_LOST, origDevice, origIfc);
+      }
+    }
+
     if (isIpLost(origIfc, updatedIfc, routerIsRunning)) {
+      logger.info('Interface IP lost', { params: { origIfc, updatedIfc, routerIsRunning } });
       await trigger(EVENTS.INTERFACE_IP_LOST, origDevice, origIfc, updatedIfc);
       deviceChanged = true;
     }
 
     if (isIpRestored(origIfc, updatedIfc)) {
+      logger.info('Interface IP restored', { params: { origIfc, updatedIfc } });
       await trigger(EVENTS.INTERFACE_IP_RESTORED, origDevice, origIfc, updatedIfc);
       deviceChanged = true;
     }
   }
 
   return deviceChanged;
+};
+
+/**
+ * Check if WAN interface lost connectivity
+ * @param  {object} origIfc  interface from flexiManage DB
+ * @param  {object} updatedIfc  incoming interface info from device
+ * @return {boolean} if need to trigger event of internet connectivity lost
+ */
+const isInterfaceConnectivityChanged = (origIfc, updatedIfc) => {
+  // from device internetAccess type is boolean, in management it is enum yes/no
+  const prevInternetAccess = origIfc.internetAccess === 'yes';
+
+  if (updatedIfc.internetAccess === undefined) {
+    return false;
+  }
+
+  if (!origIfc.monitorInternet) {
+    return false;
+  }
+
+  if (updatedIfc.internetAccess === prevInternetAccess) {
+    return false;
+  }
+
+  return true;
 };
 
 /**
