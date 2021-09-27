@@ -110,6 +110,12 @@ const tunnelSchema = new Schema({
   pendingTunnelModification: {
     type: Boolean,
     default: false
+  },
+  // Tunnel status
+  status: {
+    type: String,
+    enum: ['', 'up', 'down'],
+    default: ''
   }
 }, {
   timestamps: true

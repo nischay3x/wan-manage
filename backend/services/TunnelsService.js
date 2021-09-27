@@ -20,6 +20,7 @@ const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
+const statusesInDb = require('../periodic/statusesInDb')();
 const { getFilterExpression } = require('../utils/filterUtils');
 
 class TunnelsService {
@@ -37,6 +38,12 @@ class TunnelsService {
     // Add tunnel status
     retTunnel.tunnelStatusB =
       deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+
+    // if no filter or ordering by status then db can be not updated,
+    // we get the status directly from memory
+    retTunnel.tunnelStatus =
+      retTunnel.tunnelStatusA.status === 'up' && retTunnel.tunnelStatusB.status === 'up'
+        ? 'Connected' : 'Not Connected';
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -88,13 +95,10 @@ class TunnelsService {
     const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const connectedTunnels = [];
-      for (const machineId in deviceStatus.status) {
-        if (deviceStatus.status[machineId].tunnelStatus) {
-          for (const tunnelId in deviceStatus.status[machineId].tunnelStatus) {
-            connectedTunnels.push(`${tunnelId}:${machineId}`);
-          }
-        }
+      if ((filters && filters.includes('tunnelStatus')) || sortField === 'tunnelStatus') {
+        // need to update changed statuses from memory to DB
+        await statusesInDb.updateConnectionStatuses(orgList[0]);
+        await statusesInDb.updateTunnelsStatuses(orgList[0]);
       }
       const pipeline = [
         {
@@ -172,9 +176,11 @@ class TunnelsService {
             'deviceA.name': 1,
             'deviceA.machineId': 1,
             'deviceA._id': 1,
+            'deviceA.isConnected': 1,
             'deviceB.name': 1,
             'deviceB.machineId': 1,
             'deviceB._id': 1,
+            'deviceB.isConnected': 1,
             deviceAconf: 1,
             deviceBconf: 1,
             encryptionMethod: 1,
@@ -182,19 +188,10 @@ class TunnelsService {
             'pathlabel.color': 1,
             tunnelStatus: {
               $cond: [{
-                $and: [{
-                  $in: [
-                    {
-                      $concat: [{ $toString: '$num' }, ':', '$deviceA.machineId']
-                    }, connectedTunnels
-                  ]
-                }, {
-                  $in: [
-                    {
-                      $concat: [{ $toString: '$num' }, ':', '$deviceB.machineId']
-                    }, connectedTunnels
-                  ]
-                }]
+                $and: [
+                  { $eq: ['$deviceA.isConnected', true] },
+                  { $eq: ['$deviceB.isConnected', true] },
+                  { $eq: ['$status', 'up'] }]
               }, 'Connected', 'Not Connected']
             }
           }

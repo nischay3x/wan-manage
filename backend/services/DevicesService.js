@@ -23,6 +23,7 @@ const pathLabelsModel = require('../models/pathlabels');
 const notificationsModel = require('../models/notifications');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
+const statusesInDb = require('../periodic/statusesInDb')();
 const { deviceStats } = require('../models/analytics/deviceStats');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
@@ -51,6 +52,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
+const { getFilterExpression } = require('../utils/filterUtils');
 
 class DevicesService {
   /**
@@ -281,20 +283,11 @@ class DevicesService {
     const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const connectedDevices = [];
-      const devicesByState = {};
-      for (const machineId in deviceStatus.status) {
-        connectedDevices.push(machineId);
-        const { state } = deviceStatus.status[machineId];
-        if (state) {
-          if (!devicesByState[state]) {
-            devicesByState[state] = [];
-          }
-          devicesByState[state].push(machineId);
-        }
+      if ((filters && /state|isConnected/.test(filters)) || /state|isConnected/.test(sortField)) {
+        // need to update changed statuses from memory to DB
+        await statusesInDb.updateConnectionStatuses(orgList[0]);
+        await statusesInDb.updateDevicesStatuses(orgList[0]);
       }
-      const devicesStates = Object.keys(devicesByState);
-
       const pipeline = [
         {
           $match: {
@@ -340,50 +333,28 @@ class DevicesService {
         {
           $addFields: {
             _id: { $toString: '$_id' },
-            'deviceStatus.state': devicesStates.length > 0 ? {
-              $switch: {
-                branches: devicesStates.map(state => (
-                  { case: { $in: ['$machineId', devicesByState[state]] }, then: state }
-                )),
-                default: 'pending'
-              }
-            } : 'pending',
-            isConnected: {
-              $cond: [{
-                $in: ['$machineId', connectedDevices]
-              }, true, false]
+            'deviceStatus.state': {
+              $cond: [{ $eq: ['$isConnected', true] }, '$status', 'pending']
             }
           }
         }
       ];
 
       if (filters) {
-        const matchFilters = {};
+        const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
         for (const filter of parsedFilters) {
           const { key, op, val } = filter;
-          if (key && val) {
-            switch (op) {
-              case '==':
-                matchFilters[key] = val;
-                break;
-              case '!=':
-                matchFilters[key] = { $ne: val };
-                break;
-              case 'contains':
-                matchFilters[key] = { $regex: val };
-                break;
-              case '!contains':
-                matchFilters[key] = { $regex: '^((?!' + val + ').)*$' };
-                break;
-              default:
-                break;
+          if (key) {
+            const filterExpr = getFilterExpression(op, val);
+            if (filterExpr !== undefined) {
+              matchFilters.push({ [key]: filterExpr });
             }
           }
         }
-        if (Object.keys(matchFilters).length > 0) {
+        if (matchFilters.length > 0) {
           pipeline.push({
-            $match: matchFilters
+            $match: { $and: matchFilters }
           });
         }
       }
@@ -404,6 +375,7 @@ class DevicesService {
         pipeline.push({
           $project: {
             isApproved: 1,
+            isConnected: 1,
             name: 1,
             hostname: 1,
             machineId: 1,
@@ -518,12 +490,12 @@ class DevicesService {
         ]);
         devicesMap = paginated[0].records.map(d => {
           const { count } = pendingNotificationsArr.find(n => n._id === d._id) || { count: 0 };
-          return {
-            ...d,
-            pendingNotifications: count,
-            deviceStatus: d.isConnected
-              ? deviceStatus.getDeviceStatus(d.machineId) || {} : {}
-          };
+          d.pendingNotifications = count;
+          // get the actual status from memory if it was not updated in DB
+          d.isConnected = connections.isConnected(d.machineId);
+          d.deviceStatus = d.isConnected
+            ? deviceStatus.getDeviceStatus(d.machineId) || {} : {};
+          return d;
         });
       } else if (requestParams.response === 'ids') {
         devicesMap = paginated[0].records;
@@ -2759,7 +2731,7 @@ class DevicesService {
    * Sets Location header of the response, used in some integrations
    * @param {Object} response - response to http request
    * @param {Array} jobsIds - array of jobs ids
-   * @param {string} orgId - ID of the organzation
+   * @param {string} orgId - ID of the organization
    */
   static setLocationHeader (server, response, jobsIds, orgId) {
     if (jobsIds.length) {

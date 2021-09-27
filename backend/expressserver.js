@@ -45,6 +45,7 @@ const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
 const notifyUsers = require('./periodic/notifyUsers')();
 const appRules = require('./periodic/appRules')();
+const statusesInDb = require('./periodic/statusesInDb')();
 
 // rate limiter
 const rateLimit = require('express-rate-limit');
@@ -124,6 +125,7 @@ class ExpressServer {
     deviceSwUpgrade.start();
     notifyUsers.start();
     appRules.start();
+    statusesInDb.start();
 
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
@@ -299,9 +301,11 @@ class ExpressServer {
         case 'EACCES':
           console.error(bind + ' requires elevated privileges');
           process.exit(1);
+          break;
         case 'EADDRINUSE':
           console.error(bind + ' is already in use');
           process.exit(1);
+          break;
         default:
           throw error;
       }

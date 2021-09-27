@@ -758,6 +758,32 @@ class Connections {
   }
 
   /**
+   * Gets all organizations ids with updated connection status
+   * @return {Array} array of org ids
+   */
+  getConnectionStatusOrgs () {
+    return this.devices.getConnectionStatusOrgs();
+  }
+
+  /**
+   * Gets all devices with updated connection status
+   * @param  {string} org the org id
+   * @return {Object} an object of devices ids of the org grouped by status
+   */
+  getConnectionStatusByOrg (org) {
+    return this.devices.getConnectionStatusByOrg(org);
+  }
+
+  /**
+   * Deletes devices connection status for the org.
+   * @param  {string} org the org id
+   * @return {void}
+   */
+  clearConnectionStatusByOrg (org) {
+    return this.devices.clearConnectionStatusByOrg(org);
+  }
+
+  /**
    * Returns the device info by device ID
    * @param  {string} deviceID device machine id
    * @return {Object}          contains socket, org, deviceObj

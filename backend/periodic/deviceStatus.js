@@ -59,6 +59,16 @@ class DeviceStatus {
     this.removeDeviceStatus = this.removeDeviceStatus.bind(this);
     this.deviceConnectionClosed = this.deviceConnectionClosed.bind(this);
 
+    this.devicesStatusByOrg = {};
+    this.setDevicesStatusByOrg = this.setDevicesStatusByOrg.bind(this);
+    this.getDevicesStatusByOrg = this.getDevicesStatusByOrg.bind(this);
+    this.clearDevicesStatusByOrg = this.clearDevicesStatusByOrg.bind(this);
+
+    this.tunnelsStatusByOrg = {};
+    this.setTunnelsStatusByOrg = this.setTunnelsStatusByOrg.bind(this);
+    this.getTunnelsStatusByOrg = this.getTunnelsStatusByOrg.bind(this);
+    this.clearTunnelsStatusByOrg = this.clearTunnelsStatusByOrg.bind(this);
+
     // Task information
     this.updateSyncStatus = async () => {};
     this.taskInfo = {
@@ -359,6 +369,7 @@ class DeviceStatus {
         machineId: machineId,
         details: `Router state changed to "${devStatus === 'running' ? 'Running' : 'Not running'}"`
       });
+      this.setDevicesStatusByOrg(org, deviceObj, devStatus);
     }
 
     this.setDeviceStatsField(deviceID, 'state', devStatus);
@@ -379,6 +390,12 @@ class DeviceStatus {
       Object.entries(tunnelStatus).forEach(ent => {
         const [tunnelID, tunnelState] = ent;
         const firstTunnelUpdate = !this.status[deviceID].tunnelStatus[tunnelID];
+
+        // Update changed tunnel status in memory by org
+        if ((firstTunnelUpdate ||
+          tunnelState.status !== this.status[deviceID].tunnelStatus[tunnelID].status)) {
+          this.setTunnelsStatusByOrg(org, tunnelID, tunnelState.status);
+        }
 
         // Generate a notification if tunnel status has changed since
         // the last update, and only if the new status is 'down'
@@ -594,6 +611,94 @@ class DeviceStatus {
    */
   deviceConnectionClosed (deviceID) {
     this.removeDeviceStatus(deviceID);
+  }
+
+  /**
+   * Sets the devices status information in memory by org
+   * @param  {string} org       org id
+   * @param  {string} deviceID  device id
+   * @param  {string} status    status
+   * @return {void}
+   */
+  setDevicesStatusByOrg (org, deviceID, status) {
+    if (org && deviceID && status !== undefined) {
+      if (!this.devicesStatusByOrg[org]) {
+        this.devicesStatusByOrg[org] = {};
+      }
+      this.devicesStatusByOrg[org][deviceID] = status;
+    }
+  }
+
+  /**
+   * Gets all organizations ids with updated devices status
+   * @return {Array} array of org ids
+   */
+  getDevicesStatusOrgs () {
+    return Object.keys(this.devicesStatusByOrg);
+  }
+
+  /**
+   * Gets all devices with updated status of the org
+   * @param  {string} org the org id
+   * @return {Object} an object of devices ids of the org
+   */
+  getDevicesStatusByOrg (org) {
+    return this.devicesStatusByOrg[org];
+  }
+
+  /**
+   * Deletes devices status of the org in memory
+   * @param  {string} org the org id
+   * @return {void}
+   */
+  clearDevicesStatusByOrg (org) {
+    if (org && this.devicesStatusByOrg[org]) {
+      delete this.devicesStatusByOrg[org];
+    }
+  }
+
+  /**
+   * Sets the tunnels status information in memory by org
+   * @param  {string} org       org id
+   * @param  {string} tunnelNum  tunnel's number
+   * @param  {string} status    status
+   * @return {void}
+   */
+  setTunnelsStatusByOrg (org, tunnelNum, status) {
+    if (org && tunnelNum && status !== undefined) {
+      if (!this.tunnelsStatusByOrg[org]) {
+        this.tunnelsStatusByOrg[org] = {};
+      }
+      this.tunnelsStatusByOrg[org][tunnelNum] = status;
+    }
+  }
+
+  /**
+   * Gets all organizations ids with updated tunnels status
+   * @return {Array} array of org ids
+   */
+  getTunnelsStatusOrgs () {
+    return Object.keys(this.tunnelsStatusByOrg);
+  }
+
+  /**
+   * Gets all tunnels with updated status of the org
+   * @param  {string} org the org id
+   * @return {Object} an object of tunnels ids of the org
+   */
+  getTunnelsStatusByOrg (org) {
+    return this.tunnelsStatusByOrg[org];
+  }
+
+  /**
+   * Deletes tunnels status of the org in memory
+   * @param  {string} org the org id
+   * @return {void}
+   */
+  clearTunnelsStatusByOrg (org) {
+    if (org && this.tunnelsStatusByOrg[org]) {
+      delete this.tunnelsStatusByOrg[org];
+    }
   }
 }
 
