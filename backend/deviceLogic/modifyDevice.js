@@ -718,8 +718,8 @@ const reconstructTunnels = async (tunnelsIds, org, username, sendRemoveJobs = fa
         title = `${actionType} tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
       };
 
-      // if sendRemoveJobsis true, we probably need to set aggregated request with pair
-      // or remove-tunnel and add-tunnel
+      // if sendRemoveJobs is true, we probably need to set aggregated request with pair
+      // of remove-tunnel and add-tunnel
       [tasksDeviceA, tasksDeviceB] = [tasksDeviceA, tasksDeviceB].map(tasks => {
         if (tasks.length > 1) {
           return [{
