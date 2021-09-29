@@ -285,13 +285,13 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       if ((filters && /state|isConnected/.test(filters)) || /state|isConnected/.test(sortField)) {
         // need to update changed statuses from memory to DB
-        await statusesInDb.updateConnectionStatuses(orgList[0]);
-        await statusesInDb.updateDevicesStatuses(orgList[0]);
+        await statusesInDb.updateConnectionStatuses(orgList);
+        await statusesInDb.updateDevicesStatuses(orgList);
       }
       const pipeline = [
         {
           $match: {
-            org: mongoose.Types.ObjectId(orgList[0])
+            org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
           }
         },
         {

@@ -97,13 +97,13 @@ class TunnelsService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       if ((filters && filters.includes('tunnelStatus')) || sortField === 'tunnelStatus') {
         // need to update changed statuses from memory to DB
-        await statusesInDb.updateConnectionStatuses(orgList[0]);
-        await statusesInDb.updateTunnelsStatuses(orgList[0]);
+        await statusesInDb.updateConnectionStatuses(orgList);
+        await statusesInDb.updateTunnelsStatuses(orgList);
       }
       const pipeline = [
         {
           $match: {
-            org: mongoose.Types.ObjectId(orgList[0]),
+            org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) },
             isActive: true
           }
         },

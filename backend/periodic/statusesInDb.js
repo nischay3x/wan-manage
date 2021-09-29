@@ -76,116 +76,116 @@ class StatusesInDb {
   * @return {void}
   */
   runTask () {
-    for (const org of connections.getConnectionStatusOrgs()) {
-      this.updateConnectionStatuses(org);
-    }
-    for (const org of deviceStatus.getDevicesStatusOrgs()) {
-      this.updateDevicesStatuses(org);
-    }
-    for (const org of deviceStatus.getTunnelsStatusOrgs()) {
-      this.updateTunnelsStatuses(org);
-    }
+    this.updateConnectionStatuses(connections.getConnectionStatusOrgs());
+    this.updateDevicesStatuses(deviceStatus.getDevicesStatusOrgs());
+    this.updateTunnelsStatuses(deviceStatus.getTunnelsStatusOrgs());
   }
 
   /**
   * Stores modified connection statuses from memory to DB
   * @async
-  * @param  {string} org the org id
+  * @param  {array} orgs organizations ids array
   * @return {void}
   */
-  async updateConnectionStatuses (org) {
-    const connectionStatuses = connections.getConnectionStatusByOrg(org);
-    if (connectionStatuses && Object.keys(connectionStatuses).length > 0) {
-      const devicesByStatus = {};
-      for (const deviceId in connectionStatuses) {
-        const status = connectionStatuses[deviceId];
-        if (!devicesByStatus[status]) devicesByStatus[status] = [];
-        devicesByStatus[status].push(mongoose.Types.ObjectId(deviceId));
+  async updateConnectionStatuses (orgs) {
+    for (const org of orgs) {
+      const connectionStatuses = connections.getConnectionStatusByOrg(org);
+      if (connectionStatuses && Object.keys(connectionStatuses).length > 0) {
+        const devicesByStatus = {};
+        for (const deviceId in connectionStatuses) {
+          const status = connectionStatuses[deviceId];
+          if (!devicesByStatus[status]) devicesByStatus[status] = [];
+          devicesByStatus[status].push(mongoose.Types.ObjectId(deviceId));
+        }
+        const updateOps = [];
+        for (const status in devicesByStatus) {
+          updateOps.push({
+            updateMany: {
+              filter: { _id: { $in: devicesByStatus[status] } },
+              update: { $set: { isConnected: (status === 'true') } }
+            }
+          });
+        }
+        // Update in db
+        if (updateOps.length > 0) {
+          await devices.collection.bulkWrite(updateOps);
+        }
+        // Clear in memory
+        connections.clearConnectionStatusByOrg(org);
       }
-      const updateOps = [];
-      for (const status in devicesByStatus) {
-        updateOps.push({
-          updateMany: {
-            filter: { _id: { $in: devicesByStatus[status] } },
-            update: { $set: { isConnected: (status === 'true') } }
-          }
-        });
-      }
-      // Update in db
-      if (updateOps.length > 0) {
-        await devices.collection.bulkWrite(updateOps);
-      }
-      // Clear in memory
-      connections.clearConnectionStatusByOrg(org);
     }
   }
 
   /**
   * Stores modified devices statuses from memory to DB
   * @async
-  * @param  {string} org the org id
+  * @param  {array} orgs organizations ids array
   * @return {void}
   */
-  async updateDevicesStatuses (org) {
-    const devicesStatuses = deviceStatus.getDevicesStatusByOrg(org);
-    if (devicesStatuses && Object.keys(devicesStatuses).length > 0) {
-      const devicesByStatus = {};
-      for (const deviceId in devicesStatuses) {
-        const status = devicesStatuses[deviceId];
-        if (!devicesByStatus[status]) devicesByStatus[status] = [];
-        devicesByStatus[status].push(mongoose.Types.ObjectId(deviceId));
+  async updateDevicesStatuses (orgs) {
+    for (const org of orgs) {
+      const devicesStatuses = deviceStatus.getDevicesStatusByOrg(org);
+      if (devicesStatuses && Object.keys(devicesStatuses).length > 0) {
+        const devicesByStatus = {};
+        for (const deviceId in devicesStatuses) {
+          const status = devicesStatuses[deviceId];
+          if (!devicesByStatus[status]) devicesByStatus[status] = [];
+          devicesByStatus[status].push(mongoose.Types.ObjectId(deviceId));
+        }
+        const updateOps = [];
+        for (const status in devicesByStatus) {
+          updateOps.push({
+            updateMany: {
+              filter: { _id: { $in: devicesByStatus[status] } },
+              update: { $set: { status: status } }
+            }
+          });
+        }
+        // Update in db
+        if (updateOps.length) {
+          await devices.collection.bulkWrite(updateOps);
+        }
+        // Clear in memory
+        deviceStatus.clearDevicesStatusByOrg(org);
       }
-      const updateOps = [];
-      for (const status in devicesByStatus) {
-        updateOps.push({
-          updateMany: {
-            filter: { _id: { $in: devicesByStatus[status] } },
-            update: { $set: { status: status } }
-          }
-        });
-      }
-      // Update in db
-      if (updateOps.length) {
-        await devices.collection.bulkWrite(updateOps);
-      }
-      // Clear in memory
-      deviceStatus.clearDevicesStatusByOrg(org);
     }
   }
 
   /**
   * Stores modified tunnels statuses from memory to DB
   * @async
-  * @param  {string} org the org id
+  * @param  {array} orgs organizations ids array
   * @return {void}
   */
-  async updateTunnelsStatuses (org) {
-    const tunnelsStatuses = deviceStatus.getTunnelsStatusByOrg(org);
-    if (tunnelsStatuses && Object.keys(tunnelsStatuses).length > 0) {
-      const tunnelsByStatus = {};
-      for (const tunnelNum in tunnelsStatuses) {
-        const status = tunnelsStatuses[tunnelNum];
-        if (!tunnelsByStatus[status]) tunnelsByStatus[status] = [];
-        tunnelsByStatus[status].push(+tunnelNum);
+  async updateTunnelsStatuses (orgs) {
+    for (const org of orgs) {
+      const tunnelsStatuses = deviceStatus.getTunnelsStatusByOrg(org);
+      if (tunnelsStatuses && Object.keys(tunnelsStatuses).length > 0) {
+        const tunnelsByStatus = {};
+        for (const tunnelNum in tunnelsStatuses) {
+          const status = tunnelsStatuses[tunnelNum];
+          if (!tunnelsByStatus[status]) tunnelsByStatus[status] = [];
+          tunnelsByStatus[status].push(+tunnelNum);
+        }
+        const updateOps = [];
+        for (const status in tunnelsByStatus) {
+          updateOps.push({
+            updateMany: {
+              filter: {
+                org: mongoose.Types.ObjectId(org),
+                num: { $in: tunnelsByStatus[status] }
+              },
+              update: { $set: { status: status } }
+            }
+          });
+        }
+        // Update in db
+        if (updateOps.length) {
+          await tunnels.collection.bulkWrite(updateOps);
+        }
+        // Clear in memory
+        deviceStatus.clearTunnelsStatusByOrg(org);
       }
-      const updateOps = [];
-      for (const status in tunnelsByStatus) {
-        updateOps.push({
-          updateMany: {
-            filter: {
-              org: mongoose.Types.ObjectId(org),
-              num: { $in: tunnelsByStatus[status] }
-            },
-            update: { $set: { status: status } }
-          }
-        });
-      }
-      // Update in db
-      if (updateOps.length) {
-        await tunnels.collection.bulkWrite(updateOps);
-      }
-      // Clear in memory
-      deviceStatus.clearTunnelsStatusByOrg(org);
     }
   }
 }
