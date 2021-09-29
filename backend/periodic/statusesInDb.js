@@ -21,6 +21,7 @@ const connections = require('../websocket/Connections')();
 const mongoose = require('mongoose');
 const tunnels = require('../models/tunnels');
 const { devices } = require('../models/devices');
+const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 
 /***
  * This class periodically updates devices/tunnels statuses from memory to db
@@ -108,10 +109,16 @@ class StatusesInDb {
         }
         // Update in db
         if (updateOps.length > 0) {
-          await devices.collection.bulkWrite(updateOps);
+          try {
+            // Clear in memory before updating the db
+            connections.clearConnectionStatusByOrg(org);
+            await devices.collection.bulkWrite(updateOps);
+          } catch (err) {
+            logger.warn('Failed to update connection status in database', {
+              params: { message: err.message }
+            });
+          }
         }
-        // Clear in memory
-        connections.clearConnectionStatusByOrg(org);
       }
     }
   }
@@ -143,10 +150,16 @@ class StatusesInDb {
         }
         // Update in db
         if (updateOps.length) {
-          await devices.collection.bulkWrite(updateOps);
+          try {
+            // Clear in memory before updating the db
+            deviceStatus.clearDevicesStatusByOrg(org);
+            await devices.collection.bulkWrite(updateOps);
+          } catch (err) {
+            logger.warn('Failed to update devices status in database', {
+              params: { message: err.message }
+            });
+          }
         }
-        // Clear in memory
-        deviceStatus.clearDevicesStatusByOrg(org);
       }
     }
   }
@@ -181,10 +194,16 @@ class StatusesInDb {
         }
         // Update in db
         if (updateOps.length) {
-          await tunnels.collection.bulkWrite(updateOps);
+          try {
+            // Clear in memory before updating the db
+            deviceStatus.clearTunnelsStatusByOrg(org);
+            await tunnels.collection.bulkWrite(updateOps);
+          } catch (err) {
+            logger.warn('Failed to update tunnels status in database', {
+              params: { message: err.message }
+            });
+          }
         }
-        // Clear in memory
-        deviceStatus.clearTunnelsStatusByOrg(org);
       }
     }
   }
