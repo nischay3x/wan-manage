@@ -107,7 +107,6 @@ const apply = async (device, user, data) => {
  * @return {void}
  */
 const complete = (jobId, res) => {
-  logger.info('Start Machine complete', { params: { result: res, jobId: jobId } });
   if (!res || !res.device || !res.org) {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
     return;

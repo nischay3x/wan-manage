@@ -433,8 +433,6 @@ const applyTunnelAdd = async (devices, user, data) => {
  * @return {void}
  */
 const completeTunnelAdd = (jobId, res) => {
-  logger.info('Tunnel add complete. Updating tunnel connectivity',
-    { params: { result: res, jobId: jobId } });
   if (!res || !res.tunnelId || !res.target || !res.username || !res.org) {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
     return;
@@ -1223,7 +1221,6 @@ const oneTunnelDel = async (tunnelID, user, org) => {
  * @return {void}
  */
 const completeTunnelDel = (jobId, res) => {
-  logger.info('Complete tunnel deletion job', { params: { jobId: jobId, result: res } });
 };
 
 /**

@@ -402,7 +402,7 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
     null
   );
 
-  logger.info('Modify device job queued', { params: { jobId: job.id, tasks } });
+  logger.info('Modify device job queued', { params: { job } });
   return job;
 };
 /**
@@ -1308,7 +1308,6 @@ const complete = async (jobId, res) => {
   if (res.firewallPolicy) {
     firewallPolicyComplete(jobId, res.firewallPolicy);
   }
-  logger.info('Device modification complete', { params: { result: res, jobId: jobId } });
 };
 
 /**
@@ -1453,7 +1452,7 @@ const error = async (jobId, res) => {
   });
 
   // Call firewallPolicy error callback if needed
-  if (res.firewallPolicy) {
+  if (res && res.firewallPolicy) {
     firewallPolicyError(jobId, res.firewallPolicy);
   }
 };
@@ -1469,7 +1468,7 @@ const error = async (jobId, res) => {
 const remove = async (job) => {
   if (['inactive', 'delayed'].includes(job._state)) {
     logger.info('Modify device job removed', {
-      params: { job: job }
+      params: { jobId: job.id }
     });
     // Call firewallPolicy remove callback if needed
     const { firewallPolicy } = job.data.response.data;

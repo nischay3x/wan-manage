@@ -169,8 +169,7 @@ const apply = async (devicesIn, user, data) => {
   const jobResults = await queueCreateIKEv2Jobs(opDevices, userName, org);
   jobResults.forEach(job => {
     logger.info('Create IKEv2 certificate device job queued', {
-      params: { jobId: job.id },
-      job: job
+      params: { job: job }
     });
   });
 
@@ -188,7 +187,6 @@ const apply = async (devicesIn, user, data) => {
  */
 const complete = async (jobId, res) => {
   if (res.action === 'update-public-certificate') {
-    logger.info('Device update IKEv2 job complete', { params: { result: res, jobId: jobId } });
     // send job to initiator to confirm that remote cert was applied on responder
     if (Array.isArray(res.reinitiateTunnels) && res.reinitiateTunnels.length) {
       const tasks = res.reinitiateTunnels.map(tunnelnum => {
@@ -220,8 +218,6 @@ const complete = async (jobId, res) => {
       );
     }
   } else if (res.action === 'get-device-certificate') {
-    logger.info('Device create IKEv2 job complete', { params: { result: res, jobId: jobId } });
-
     let certificate = res.agentMessage.certificate;
     certificate = Array.isArray(certificate) ? certificate.join('') : certificate;
     const expireTime = certificate && res.agentMessage.expiration
@@ -350,13 +346,13 @@ const error = async (jobId, res) => {
  */
 const remove = async (job) => {
   if (['inactive', 'delayed', 'active'].includes(job._state)) {
-    logger.info('Device IKEv2 job removed', { params: { job: job } });
+    logger.info('Device IKEv2 job removed', { params: { jobId: job.id } });
     try {
       const { device } = job.data.response.data;
       await setIKEv2QueuedFlag([device], false);
     } catch (err) {
       logger.error('Failed to update jobQueued field in database', {
-        params: { job: job, err: err.message }
+        params: { jobId: job.id, err: err.message }
       });
     }
   }

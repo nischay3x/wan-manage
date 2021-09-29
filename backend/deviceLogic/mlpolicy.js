@@ -299,10 +299,6 @@ const apply = async (deviceList, user, data) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('Policy job completed', {
-    params: { result: res, jobId: jobId }
-  });
-
   const { op, org } = res.policy;
   const { _id } = res.policy.device;
   try {
@@ -401,7 +397,7 @@ const remove = async (job) => {
 
   if (['inactive', 'delayed'].includes(job._state)) {
     logger.info('Policy job removed', {
-      params: { job: job }
+      params: { jobId: job.id }
     });
 
     // Set the status to "job deleted" only
