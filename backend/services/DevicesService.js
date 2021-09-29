@@ -859,6 +859,11 @@ class DevicesService {
         orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
       }
 
+      const origTunnels = await tunnelsModel.find({
+        isActive: true,
+        $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+      }).lean();
+
       // Make sure interfaces are not deleted, only modified
       if (Array.isArray(deviceRequest.interfaces)) {
         // not allowed to assign path labels of a different organization
@@ -1120,12 +1125,8 @@ class DevicesService {
 
       // validate static routes
       if (Array.isArray(deviceRequest.staticroutes)) {
-        const tunnels = await tunnelsModel.find({
-          isActive: true,
-          $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
-        }, { num: 1 }).lean();
         for (const route of deviceRequest.staticroutes) {
-          const { valid, err } = validateStaticRoute(deviceToValidate, tunnels, route);
+          const { valid, err } = validateStaticRoute(deviceToValidate, origTunnels, route);
           if (!valid) {
             logger.warn('Wrong static route parameters',
               {
@@ -1216,7 +1217,9 @@ class DevicesService {
       // device itself, add a 'modify' job to the device's queue.
       const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
         org: orgList[0],
-        newDevice: updDevice
+        newDevice: updDevice,
+        origTunnels: origTunnels,
+        updatedTunnels: origTunnels // tunnels are not changed here but in other places
       });
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;

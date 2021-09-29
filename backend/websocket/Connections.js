@@ -473,6 +473,13 @@ class Connections {
           let session = null;
           let updDevice = null;
 
+          // store the orig tunnels before events
+          const origTunnels = await tunnelsModel.find({
+            isActive: true,
+            $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+          }).lean();
+          let updatedTunnels = origTunnels;
+
           try {
             session = await mongoConns.getMainDB().startSession();
             await session.startTransaction();
@@ -498,6 +505,12 @@ class Connections {
             // fetch the device again
             if (deviceChanged) {
               updDevice = await devices.findOne({ machineId }).session(session);
+
+              // get updated tunnels
+              updatedTunnels = await tunnelsModel.find({
+                isActive: true,
+                $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+              }).session(session).lean();
             }
             await session.commitTransaction();
           } catch (err) {
@@ -521,7 +534,12 @@ class Connections {
           await modifyDeviceDispatcher.apply(
             [origDevice],
             { username: 'system' },
-            { newDevice: updDevice, org: origDevice.org.toString() }
+            {
+              org: origDevice.org.toString(),
+              newDevice: updDevice,
+              origTunnels: origTunnels,
+              updatedTunnels: updatedTunnels
+            }
           );
         } catch (err) {
           logger.error('Failed to apply new configuration from device', {

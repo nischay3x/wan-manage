@@ -36,6 +36,9 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
+const { publicPortLimiter } = require('./eventsRateLimiter');
+const DeviceEvents = require('../deviceLogic/events');
+const mongoConns = require('../mongoConns.js')();
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -417,15 +420,27 @@ const apply = async (device, user, data) => {
   const { _id, machineId, hostname, org, versions } = device[0];
 
   // Reset auto sync in database
-  await devices.findOneAndUpdate(
+  const updDevice = await devices.findOneAndUpdate(
     { org, _id },
     {
       'sync.state': 'syncing',
       'sync.autoSync': 'on',
       'sync.trials': 0
     },
-    { sync: 1 }
-  );
+    { sync: 1, new: true }
+  ).lean();
+
+  // reset public port event rate limiter
+  const released = await publicPortLimiter.delete(_id.toString());
+  if (released) {
+    // TODO: make code nicer
+    const session = await mongoConns.getMainDB().startSession();
+    await session.startTransaction();
+    const events = new DeviceEvents(session);
+    await events.removePendingStateFromTunnels(updDevice);
+    await session.commitTransaction();
+    await session.endSession();
+  }
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(

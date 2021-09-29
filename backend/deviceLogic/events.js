@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// File used to dispatch the apply logic to the right function
 const mongoose = require('mongoose');
 const { devices } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
@@ -25,6 +24,7 @@ const cidr = require('cidr-tools');
 const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const { publicPortLimiter } = require('./eventsRateLimiter');
 
 class Events {
   constructor (session) {
@@ -124,11 +124,36 @@ class Events {
     await this.setInterfaceHasIP(device._id, origIfc._id, true);
 
     // unset related tunnels as pending
+    await this.removePendingStateFromTunnels(device, origIfc);
+
+    // unset related static routes as pending
+    const staticRoutes = device.staticroutes.filter(s => {
+      if (s.configStatus !== 'incomplete') return false;
+
+      const isSameIfc = s.ifname === ifc.devId;
+
+      const gatewaySubnet = `${s.gateway}/32`;
+      const isOverlapping = cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
+      return isSameIfc || isOverlapping;
+    });
+
+    for (const route of staticRoutes) {
+      await this.setIncompleteRouteStatus(route, false, '', device);
+    }
+  };
+
+  async removePendingStateFromTunnels (device, origIfc = null) {
+    const orQuery = [];
+    if (origIfc) {
+      orQuery.push({ deviceA: device._id, interfaceA: origIfc._id });
+      orQuery.push({ deviceB: device._id, interfaceB: origIfc._id });
+    } else {
+      orQuery.push({ deviceA: device._id });
+      orQuery.push({ deviceB: device._id });
+    };
+
     const tunnels = await tunnelsModel.find({
-      $or: [
-        { deviceA: device._id, interfaceA: origIfc._id },
-        { deviceB: device._id, interfaceB: origIfc._id }
-      ],
+      $or: orQuery,
       isActive: true,
       configStatus: 'incomplete'
     })
@@ -147,22 +172,7 @@ class Events {
         await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
       }
     };
-
-    // unset related static routes as pending
-    const staticRoutes = device.staticroutes.filter(s => {
-      if (s.configStatus !== 'incomplete') return false;
-
-      const isSameIfc = s.ifname === ifc.devId;
-
-      const gatewaySubnet = `${s.gateway}/32`;
-      const isOverlapping = cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
-      return isSameIfc || isOverlapping;
-    });
-
-    for (const route of staticRoutes) {
-      await this.setIncompleteRouteStatus(route, false, '', device);
-    }
-  };
+  }
 
   async interfaceIpLost (device, origIfc, ifc) {
     logger.info('Interface IP lost', { params: { device, origIfc, ifc } });
@@ -171,19 +181,8 @@ class Events {
     await this.setInterfaceHasIP(device._id, origIfc._id, false);
 
     // set related tunnels as pending
-    const tunnels = await tunnelsModel.find({
-      $or: [
-        { deviceA: device._id, interfaceA: origIfc._id },
-        { deviceB: device._id, interfaceB: origIfc._id }
-      ],
-      isActive: true,
-      configStatus: { $ne: 'incomplete' }
-    }).session(this.session).lean();
-
-    for (const tunnel of tunnels) {
-      const reason = `Interface ${origIfc.name} in device ${device.name} has no IP address`;
-      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
-    };
+    const reason = `Interface ${origIfc.name} in device ${device.name} has no IP address`;
+    await this.setPendingStateToTunnels(device, origIfc, reason);
 
     // set related static routes as pending
     const staticRoutes = device.staticroutes.filter(s => {
@@ -201,6 +200,21 @@ class Events {
       await this.setIncompleteRouteStatus(route, true, reason, device);
     }
   };
+
+  async setPendingStateToTunnels (device, origIfc, reason) {
+    const tunnels = await tunnelsModel.find({
+      $or: [
+        { deviceA: device._id, interfaceA: origIfc._id },
+        { deviceB: device._id, interfaceB: origIfc._id }
+      ],
+      isActive: true,
+      configStatus: { $ne: 'incomplete' }
+    }).session(this.session).lean();
+
+    for (const tunnel of tunnels) {
+      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+    };
+  }
 
   async tunnelSetToPending (tunnel, device, reason) {
     await notificationsMgr.sendNotifications([{
@@ -308,6 +322,33 @@ class Events {
           await this.interfaceIpRestored(origDevice, origIfc, updatedIfc);
           deviceChanged = true;
         }
+
+        if (isPublicPortChanged(origIfc, updatedIfc)) {
+          try {
+            const res = await publicPortLimiter.consume(origDevice._id);
+            // release pending tunnels
+            if (res.consumedPoints === 1) {
+              deviceChanged = true;
+              await this.removePendingStateFromTunnels(origDevice, origIfc);
+            }
+          } catch (err) {
+            // if rate limiting exceeded, we set tunnels as pending
+            logger.error('Public port rate limit exceeded. tunnels will set as pending', {
+              params: {
+                deviceId: origDevice._id,
+                origPort: origIfc.PublicPort,
+                newPort: updatedIfc.public_port.toString()
+              }
+            });
+
+            if (err.consumedPoints === publicPortLimiter.points + 1) {
+              deviceChanged = true;
+              // eslint-disable-next-line max-len
+              const reason = `The public port for interface ${origIfc.name} in device ${origDevice.name} is changing at a high rate`;
+              await this.setPendingStateToTunnels(origDevice, origIfc, reason);
+            }
+          }
+        }
       }
       return deviceChanged;
     } catch (err) {
@@ -382,6 +423,24 @@ const isIpRestored = (origIfc, updatedIfc) => {
 
   // check if the incoming interface has ip address
   if (updatedIfc.IPv4 === '') {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Check if public port is changed
+ * @param  {object} origIfc  interface from flexiManage DB
+ * @param  {object} updatedIfc  incoming interface info from device
+ * @return {boolean} if need to trigger event of ip restored
+ */
+const isPublicPortChanged = (origIfc, updatedIfc) => {
+  if (updatedIfc.public_port === '') {
+    return false;
+  }
+
+  if (origIfc.PublicPort === updatedIfc.public_port.toString()) {
     return false;
   }
 

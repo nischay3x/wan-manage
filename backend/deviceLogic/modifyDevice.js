@@ -45,6 +45,7 @@ const isEqual = require('lodash/isEqual');
 const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
+const keyBy = require('lodash/keyBy');
 const { buildInterfaces } = require('./interfaces');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
@@ -413,9 +414,11 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
  * @param  {Object}  messageParams device changes that will be sent to the device
  * @param  {Object}  user          the user that created the request
  * @param  {string}  org           organization to which the user belongs
+ * @param  {[tunnelIds]} pendingTunnels array of tunnels id that they are already pending
  * @return {Job}                   The queued modify-device job
  */
-const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org) => {
+const queueModifyDeviceJob = async (device, newDevice,
+  messageParams, user, org, pendingTunnels) => {
   const removedTunnels = [];
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
@@ -538,10 +541,17 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
 
         // if *orig* interface had no ip address and now the ip is restored
         // no need to send remove-tunnel since this tunnel is removed once the ip is lost
+        // TODO: check this again.
         if (
           (ifcA.hasIpOnDevice === false && modifiedIfcA.addr !== '') ||
           (ifcB.hasIpOnDevice === false && modifiedIfcB.addr !== '')
         ) {
+          removedTunnels.push(tunnel._id);
+          continue;
+        }
+
+        // no need to remove pending tunnels since they are already removed
+        if (pendingTunnels.includes(tunnel._id.toString())) {
           removedTunnels.push(tunnel._id);
           continue;
         }
@@ -1216,6 +1226,17 @@ const apply = async (device, user, data) => {
     modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice);
   }
 
+  const pendingTunnels = [];
+  const origTunnels = keyBy(data.origTunnels, 'num');
+  const updatedTunnels = keyBy(data.updatedTunnels, 'num');
+  for (const tunnelNum in origTunnels) {
+    const origTunnel = origTunnels[tunnelNum];
+    const updatedTunnel = updatedTunnels[tunnelNum];
+    if (origTunnel.configStatus === 'incomplete' && updatedTunnel.configStatus === 'incomplete') {
+      pendingTunnels.push(origTunnel._id.toString());
+    }
+  }
+
   const modified =
       has(modifyParams, 'modify_routes') ||
       has(modifyParams, 'modify_router') ||
@@ -1261,7 +1282,8 @@ const apply = async (device, user, data) => {
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
     await setJobPendingInDB(device[0]._id, org, true);
     // Queue device modification job
-    const jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
+    const jobs = await queueModifyDeviceJob(device[0], data.newDevice,
+      modifyParams, user, org, pendingTunnels);
     return {
       ids: jobs.flat().map(job => job.id),
       status: 'completed',
