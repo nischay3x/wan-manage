@@ -464,6 +464,15 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
 
     for (const tunnel of tunnels) {
       let { deviceA, deviceB, pathlabel, num, _id, configStatus } = tunnel;
+
+      // Save the whole updated interfaces, not only the modify-interface job parameters.
+      const updatedIfcA = deviceA.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceA.toString();
+      });
+      const updatedIfcB = deviceB.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceB.toString();
+      });
+
       // IMPORTANT: Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
       if (deviceA._id.toString() === device._id.toString()) {
@@ -493,6 +502,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       const pathLabelRemoved = pathlabel && !pathlabels.includes(pathlabel.toString());
 
       if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
+        // TODO: what is the case here? Might it be related to event changes?
         await oneTunnelDel(_id, user.username, org);
       } else {
         const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
@@ -502,6 +512,13 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           machineB: deviceB.machineId,
           tunnelNum: tunnel.num
         };
+
+        // If the interface address is static and the address is not currently on the router,
+        // we do not delete the address from the database and still send this address in jobs.
+        // The variables below indicate what address exists in the router,
+        // not the one in the database.
+        const updatedAddrA = updatedIfcA.hasIpOnDevice ? modifiedIfcA ? modifiedIfcA.addr : '' : '';
+        const updatedAddrB = updatedIfcB.hasIpOnDevice ? modifiedIfcB ? modifiedIfcB.addr : '' : '';
 
         const isIncomplete = configStatus === 'incomplete';
         // for incomplete tunnel wed send only remove-tunnel message
@@ -550,15 +567,17 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         }
 
         // only rebuild tunnels when IP, Public IP or port is changed
-        const tunnelParametersModified = (origIfc, modifiedIfc) => isObject(modifiedIfc) && (
-          modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
-          modifiedIfc.mtu !== origIfc.mtu ||
-          modifiedIfc.PublicIP !== origIfc.PublicIP ||
-          modifiedIfc.PublicPort !== origIfc.PublicPort ||
-          modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
-        );
-        if (!tunnelParametersModified(ifcA, modifiedIfcA) &&
-          !tunnelParametersModified(ifcB, modifiedIfcB)) {
+        const tunnelParametersModified = (origIfc, modifiedIfc, updatedAddr) => {
+          return isObject(modifiedIfc) && (
+            updatedAddr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
+            modifiedIfc.mtu !== origIfc.mtu ||
+            modifiedIfc.PublicIP !== origIfc.PublicIP ||
+            modifiedIfc.PublicPort !== origIfc.PublicPort ||
+            modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
+          );
+        };
+        if (!tunnelParametersModified(ifcA, modifiedIfcA, updatedAddrA) &&
+          !tunnelParametersModified(ifcB, modifiedIfcB, updatedAddrB)) {
           continue;
         }
 
@@ -568,9 +587,9 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
             ifcA.PublicIP === ifcB.PublicIP;
         };
         const skipLocal =
-          (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
+          (isObject(modifiedIfcA) && updatedAddrA === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
           modifiedIfcA.mtu === ifcA.mtu && isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
-          (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
+          (isObject(modifiedIfcB) && updatedAddrB === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
           modifiedIfcB.mtu === ifcB.mtu && isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
 
         if (skipLocal) {

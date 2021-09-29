@@ -25,23 +25,10 @@ const cidr = require('cidr-tools');
 const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const mongoConns = require('../mongoConns.js')();
 
 class Events {
-  constructor () {
-    this.session = null;
-  }
-
-  async createSession () {
-    this.session = await mongoConns.getMainDB().startSession();
-    this.session.startTransaction();
-  }
-
-  async closeSession () {
-    if (this.session) {
-      this.session.endSession();
-      this.session = null;
-    }
+  constructor (session) {
+    this.session = session;
   }
 
   async staticRouteSetToPending (route, device, reason) {
@@ -144,10 +131,21 @@ class Events {
       ],
       isActive: true,
       configStatus: 'incomplete'
-    }).session(this.session).lean();
+    })
+      .populate('deviceA', 'interfaces')
+      .populate('deviceB', 'interfaces')
+      .session(this.session).lean();
 
     for (const tunnel of tunnels) {
-      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
+      // make sure both interfaces have IP addresses before removing pending status
+      const ifcA = tunnel.deviceA.interfaces.find(
+        i => i._id.toString() === tunnel.interfaceA.toString());
+      const ifcB = tunnel.deviceB.interfaces.find(
+        i => i._id.toString() === tunnel.interfaceB.toString());
+
+      if (ifcA.hasIpOnDevice && ifcB.hasIpOnDevice) {
+        await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
+      }
     };
 
     // unset related static routes as pending
@@ -278,12 +276,10 @@ class Events {
   };
 
   async check (origDevice, newInterfaces, routerIsRunning) {
+    let deviceChanged = false;
     try {
       const orig = keyBy(origDevice.interfaces, 'devId');
       const updated = keyBy(newInterfaces, 'devId');
-      let deviceChanged = false;
-
-      await this.createSession();
 
       for (const devId in orig) {
         const origIfc = orig[devId];
@@ -300,6 +296,7 @@ class Events {
           } else {
             await this.interfaceConnectivityLost(origDevice, origIfc);
           }
+          deviceChanged = true;
         }
 
         if (isIpLost(origIfc, updatedIfc, routerIsRunning)) {
@@ -312,15 +309,10 @@ class Events {
           deviceChanged = true;
         }
       }
-
-      await this.session.commitTransaction();
-
       return deviceChanged;
     } catch (err) {
-      await this.session.abortTransaction();
       logger.error('events check failed', { params: { err: err.message } });
-    } finally {
-      this.closeSession();
+      throw err;
     }
   }
 }
@@ -396,11 +388,4 @@ const isIpRestored = (origIfc, updatedIfc) => {
   return true;
 };
 
-let events = null;
-module.exports = function () {
-  if (events) return events;
-  else {
-    events = new Events();
-    return events;
-  }
-};
+module.exports = Events;

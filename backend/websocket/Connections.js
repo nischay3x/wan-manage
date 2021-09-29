@@ -19,7 +19,7 @@ const configs = require('../configs')();
 const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
-const deviceEvents = require('../deviceLogic/events')();
+const DeviceEvents = require('../deviceLogic/events');
 const createError = require('http-errors');
 const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
@@ -30,6 +30,7 @@ const notificationsMgr = require('../notifications/notifications')();
 const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 const { TypedError, ErrorTypes } = require('../utils/errors');
+const mongoConns = require('../mongoConns.js')();
 
 class Connections {
   constructor () {
@@ -469,21 +470,41 @@ class Connections {
         });
 
         try {
-          // Update interfaces in DB
-          let updDevice = await devices.findOneAndUpdate(
-            { machineId },
-            { $set: { interfaces } },
-            { new: true, runValidators: true }
-          ).populate('interfaces.pathlabels', '_id type');
+          let session = null;
+          let updDevice = null;
 
-          const message = deviceInfo.message;
-          // IMPORTANT! events check should be called after saving the new interfaces
-          const deviceChanged = await deviceEvents.check(
-            origDevice.toObject(), message.network.interfaces, message.stats.running);
+          try {
+            session = await mongoConns.getMainDB().startSession();
+            await session.startTransaction();
 
-          // if event happened and device is changed due to events triggers, fetch the device again
-          if (deviceChanged) {
-            updDevice = await devices.findOne({ machineId });
+            // Update interfaces in DB
+            updDevice = await devices.findOneAndUpdate(
+              { machineId },
+              { $set: { interfaces } },
+              { new: true, runValidators: true }
+            ).session(session).populate('interfaces.pathlabels', '_id type');
+
+            const message = deviceInfo.message;
+
+            // IMPORTANT! events check should be called after saving the new interfaces
+
+            // We create a new instance of events class
+            // to keep separate mongo sessions for each device.
+            const events = new DeviceEvents(session);
+            const deviceChanged = await events.check(
+              origDevice.toObject(), message.network.interfaces, message.stats.running);
+
+            // if event happened and device is changed due to events triggers,
+            // fetch the device again
+            if (deviceChanged) {
+              updDevice = await devices.findOne({ machineId }).session(session);
+            }
+            await session.commitTransaction();
+          } catch (err) {
+            if (session) await session.abortTransaction();
+            throw err;
+          } finally {
+            if (session) await session.endSession();
           }
 
           // Update the reconfig hash before applying to prevent infinite loop
