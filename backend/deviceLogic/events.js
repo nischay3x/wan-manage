@@ -25,6 +25,7 @@ const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { publicPortLimiter } = require('./eventsRateLimiter');
+const mongoConns = require('../mongoConns.js')();
 
 class Events {
   constructor (session) {
@@ -447,4 +448,16 @@ const isPublicPortChanged = (origIfc, updatedIfc) => {
   return true;
 };
 
-module.exports = Events;
+const removePendingStateFromTunnels = async device => {
+  const session = await mongoConns.getMainDB().startSession();
+  await session.startTransaction();
+  const events = new Events(session);
+  await events.removePendingStateFromTunnels(device);
+  await session.commitTransaction();
+  await session.endSession();
+};
+
+module.exports = Events; // default export
+exports = module.exports;
+
+exports.removePendingStateFromTunnels = removePendingStateFromTunnels; // named export

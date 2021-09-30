@@ -473,12 +473,11 @@ class Connections {
           let session = null;
           let updDevice = null;
 
-          // store the orig tunnels before events
+          // store the orig tunnels before events, we need it for jobs
           const origTunnels = await tunnelsModel.find({
             isActive: true,
             $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
           }).lean();
-          let updatedTunnels = origTunnels;
 
           try {
             session = await mongoConns.getMainDB().startSession();
@@ -505,12 +504,6 @@ class Connections {
             // fetch the device again
             if (deviceChanged) {
               updDevice = await devices.findOne({ machineId }).session(session);
-
-              // get updated tunnels
-              updatedTunnels = await tunnelsModel.find({
-                isActive: true,
-                $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
-              }).session(session).lean();
             }
             await session.commitTransaction();
           } catch (err) {
@@ -537,8 +530,7 @@ class Connections {
             {
               org: origDevice.org.toString(),
               newDevice: updDevice,
-              origTunnels: origTunnels,
-              updatedTunnels: updatedTunnels
+              origTunnels: origTunnels
             }
           );
         } catch (err) {

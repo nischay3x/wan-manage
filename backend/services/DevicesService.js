@@ -42,6 +42,7 @@ const {
 } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets, mapLteNames, mapWifiNames } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');
 const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
 const deviceQueues = require('../utils/deviceQueue')(
@@ -1125,6 +1126,19 @@ class DevicesService {
 
       // validate static routes
       if (Array.isArray(deviceRequest.staticroutes)) {
+        // if route is via a pending tunnel, set it as pending
+        deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
+          const incompleteTunnels = origTunnels.filter(t => t.configStatus === 'incomplete');
+          for (const t of incompleteTunnels) {
+            const { ip1 } = generateTunnelParams(t.num);
+            if (ip1 === s.gateway) {
+              s.configStatus = 'incomplete';
+              s.configStatusReason = `Tunnel ${t.num} is in pending state`;
+            }
+          }
+          return s;
+        });
+
         for (const route of deviceRequest.staticroutes) {
           const { valid, err } = validateStaticRoute(deviceToValidate, origTunnels, route);
           if (!valid) {
@@ -1218,8 +1232,7 @@ class DevicesService {
       const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
         org: orgList[0],
         newDevice: updDevice,
-        origTunnels: origTunnels,
-        updatedTunnels: origTunnels // tunnels are not changed here but in other places
+        origTunnels: origTunnels
       });
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;

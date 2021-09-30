@@ -37,8 +37,8 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'j
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
 const { publicPortLimiter } = require('./eventsRateLimiter');
-const DeviceEvents = require('../deviceLogic/events');
-const mongoConns = require('../mongoConns.js')();
+const removePendingStateFromTunnels = require('../deviceLogic/events')
+  .removePendingStateFromTunnels;
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -430,17 +430,10 @@ const apply = async (device, user, data) => {
     { sync: 1, new: true }
   ).lean();
 
-  // reset public port event rate limiter
-  const released = await publicPortLimiter.delete(_id.toString());
-  if (released) {
-    // TODO: make code nicer
-    const session = await mongoConns.getMainDB().startSession();
-    await session.startTransaction();
-    const events = new DeviceEvents(session);
-    await events.removePendingStateFromTunnels(updDevice);
-    await session.commitTransaction();
-    await session.endSession();
-  }
+  // reset public port event rate limiter and remove pending statuses from tunnels
+  // TODO: think about it more
+  await publicPortLimiter.delete(_id.toString());
+  await removePendingStateFromTunnels(updDevice);
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(
