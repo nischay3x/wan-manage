@@ -201,19 +201,9 @@ class TunnelsService {
         const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
         for (const filter of parsedFilters) {
-          const { key, op, val } = filter;
-          if (key) {
-            const filterExpr = getFilterExpression(op, val);
-            if (filterExpr !== undefined) {
-              if (key.includes('?')) {
-                const cond = op.includes('!') ? '$and' : '$or';
-                matchFilters.push({
-                  [cond]: ['A', 'B'].map(side => ({ [key.replace(/\?/g, side)]: filterExpr }))
-                });
-              } else {
-                matchFilters.push({ [key]: filterExpr });
-              }
-            }
+          const filterExpr = getFilterExpression(filter);
+          if (filterExpr !== undefined) {
+            matchFilters.push(filterExpr);
           }
         }
         if (matchFilters.length > 0) {
