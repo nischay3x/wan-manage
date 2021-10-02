@@ -95,7 +95,9 @@ class TunnelsService {
     const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      if ((filters && filters.includes('tunnelStatus')) || sortField === 'tunnelStatus') {
+      const updateStatusInDb = (filters && filters.includes('tunnelStatus')) ||
+        sortField === 'tunnelStatus';
+      if (updateStatusInDb) {
         // need to update changed statuses from memory to DB
         await statusesInDb.updateConnectionStatuses(orgList);
         await statusesInDb.updateTunnelsStatuses(orgList);
@@ -237,7 +239,11 @@ class TunnelsService {
       };
 
       const tunnelMap = paginated[0].records.map((d) => {
-        return TunnelsService.selectTunnelParams(d);
+        // get the actual status from memory if it was not updated in DB
+        // or if status is Connected we need to get tunnels statistics
+        if (!updateStatusInDb || d.tunnelStatus !== 'Connected') {
+          return TunnelsService.selectTunnelParams(d, updateStatusInDb);
+        }
       });
 
       return Service.successResponse(tunnelMap);

@@ -283,7 +283,9 @@ class DevicesService {
     const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      if ((filters && /state|isConnected/.test(filters)) || /state|isConnected/.test(sortField)) {
+      const updateStatusInDb = (filters && /state|isConnected/.test(filters)) ||
+        /state|isConnected/.test(sortField);
+      if (updateStatusInDb) {
         // need to update changed statuses from memory to DB
         await statusesInDb.updateConnectionStatuses(orgList);
         await statusesInDb.updateDevicesStatuses(orgList);
@@ -488,10 +490,12 @@ class DevicesService {
         devicesMap = paginated[0].records.map(d => {
           const { count } = pendingNotificationsArr.find(n => n._id === d._id) || { count: 0 };
           d.pendingNotifications = count;
-          // get the actual status from memory if it was not updated in DB
-          d.isConnected = connections.isConnected(d.machineId);
-          d.deviceStatus = d.isConnected
-            ? deviceStatus.getDeviceStatus(d.machineId) || {} : {};
+          if (!updateStatusInDb) {
+            // get the actual status from memory if it was not updated in DB
+            d.isConnected = connections.isConnected(d.machineId);
+            d.deviceStatus = d.isConnected
+              ? deviceStatus.getDeviceStatus(d.machineId) || {} : {};
+          }
           return d;
         });
       } else if (requestParams.response === 'ids') {
