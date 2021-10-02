@@ -62,17 +62,24 @@ class StatusesInDb {
 
   /**
   * Clears all statuses in DB after service is started
+  * @async
   * @return {void}
   */
-  clearStatuses () {
-    devices.updateMany(
-      { },
-      { $set: { isConnected: false, status: '' } }
-    );
-    tunnels.updateMany(
-      { },
-      { $set: { status: '' } }
-    );
+  async clearStatuses () {
+    try {
+      await devices.updateMany(
+        { },
+        { $set: { isConnected: false, status: '' } }
+      );
+      await tunnels.updateMany(
+        { },
+        { $set: { status: '' } }
+      );
+    } catch (err) {
+      logger.warn('Failed to clear statuses in database', {
+        params: { message: err.message }
+      });
+    }
   }
 
   /**
