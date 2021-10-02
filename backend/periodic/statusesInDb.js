@@ -22,6 +22,8 @@ const mongoose = require('mongoose');
 const tunnels = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
+const configs = require('../configs')();
+const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 
 /***
  * This class periodically updates devices/tunnels statuses from memory to db
@@ -55,6 +57,7 @@ class StatusesInDb {
     periodic.registerTask(name, func, period);
     periodic.startTask(name);
     this.clearStatuses();
+    ha.registerCallback('elected', 'statusesInDb', this.clearStatuses);
   }
 
   /**
