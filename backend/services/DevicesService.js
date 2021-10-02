@@ -66,8 +66,9 @@ class DevicesService {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
+      const firewallPolicyFields = '_id name' + deviceCommand === 'start' ? ' rules' : '';
       const opDevices = await devices.find({ org: { $in: orgList } })
-        .populate('policies.firewall.policy', '_id name rules')
+        .populate('policies.firewall.policy', firewallPolicyFields)
         .populate('interfaces.pathlabels', '_id name description color type');
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
@@ -92,11 +93,12 @@ class DevicesService {
   static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
+      const firewallPolicyFields = '_id name' + deviceCommand === 'start' ? ' rules' : '';
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
       })
-        .populate('policies.firewall.policy', '_id name rules')
+        .populate('policies.firewall.policy', firewallPolicyFields)
         .populate('interfaces.pathlabels', '_id name description color type'); ;
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
@@ -383,7 +385,8 @@ class DevicesService {
             interfaces: { isAssigned: 1, name: 1, type: 1, IPv4: 1, PublicIP: 1 },
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
-            'policies.firewall': { status: 1, policy: { name: 1, description: 1 } }
+            'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            'deviceStatus.state': 1
           }
         });
       } else if (requestParams.response === 'ids') {
@@ -412,7 +415,9 @@ class DevicesService {
           'firewall',
           'upgradeSchedule',
           'sync',
-          'ospf'
+          'ospf',
+          'isConnected',
+          'deviceStatus.state'
         ];
         // populate pathlabels for every interface
         pipeline.push({
