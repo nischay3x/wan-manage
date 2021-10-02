@@ -55,9 +55,9 @@ class StatusesInDb {
   start () {
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
-    periodic.startTask(name);
     this.clearStatuses();
     ha.registerCallback('elected', 'statusesInDb', this.clearStatuses);
+    periodic.startTask(name);
   }
 
   /**

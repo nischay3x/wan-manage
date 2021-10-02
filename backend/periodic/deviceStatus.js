@@ -622,7 +622,7 @@ class DeviceStatus {
    */
   setDevicesStatusByOrg (org, deviceID, status) {
     if (org && deviceID && status !== undefined) {
-      if (!this.devicesStatusByOrg[org]) {
+      if (!this.devicesStatusByOrg.hasOwnProperty(org)) {
         this.devicesStatusByOrg[org] = {};
       }
       this.devicesStatusByOrg[org][deviceID] = status;
@@ -641,6 +641,7 @@ class DeviceStatus {
    * Gets all devices with updated status of the org
    * @param  {string} org the org id
    * @return {Object} an object of devices ids of the org
+   * or undefined if no updated statuses
    */
   getDevicesStatusByOrg (org) {
     return this.devicesStatusByOrg[org];
@@ -652,7 +653,7 @@ class DeviceStatus {
    * @return {void}
    */
   clearDevicesStatusByOrg (org) {
-    if (org && this.devicesStatusByOrg[org]) {
+    if (org && this.devicesStatusByOrg.hasOwnProperty(org)) {
       delete this.devicesStatusByOrg[org];
     }
   }
@@ -666,7 +667,7 @@ class DeviceStatus {
    */
   setTunnelsStatusByOrg (org, tunnelNum, status) {
     if (org && tunnelNum && status !== undefined) {
-      if (!this.tunnelsStatusByOrg[org]) {
+      if (!this.tunnelsStatusByOrg.hasOwnProperty(org)) {
         this.tunnelsStatusByOrg[org] = {};
       }
       this.tunnelsStatusByOrg[org][tunnelNum] = status;
@@ -685,6 +686,7 @@ class DeviceStatus {
    * Gets all tunnels with updated status of the org
    * @param  {string} org the org id
    * @return {Object} an object of tunnels ids of the org
+   * or undefined if no updated statuses
    */
   getTunnelsStatusByOrg (org) {
     return this.tunnelsStatusByOrg[org];
@@ -696,7 +698,7 @@ class DeviceStatus {
    * @return {void}
    */
   clearTunnelsStatusByOrg (org) {
-    if (org && this.tunnelsStatusByOrg[org]) {
+    if (org && this.tunnelsStatusByOrg.hasOwnProperty(org)) {
       delete this.tunnelsStatusByOrg[org];
     }
   }

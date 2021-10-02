@@ -114,7 +114,7 @@ class Devices {
     if (this.devices[deviceID]) {
       const { org, deviceObj } = this.devices[deviceID];
       if (org && deviceObj && status !== undefined) {
-        if (!this.connectionStatusByOrg[org]) {
+        if (!this.connectionStatusByOrg.hasOwnProperty(org)) {
           this.connectionStatusByOrg[org] = {};
         }
         this.connectionStatusByOrg[org][deviceObj] = status;
@@ -133,6 +133,7 @@ class Devices {
   /**
    * Gets all devices with updated connection status
    * @return {Object} an object of devices ids of the org grouped by status
+   * or undefined if no updated statuses
    */
   getConnectionStatusByOrg (org) {
     return this.connectionStatusByOrg[org];
@@ -144,7 +145,7 @@ class Devices {
    * @return {void}
    */
   clearConnectionStatusByOrg (org) {
-    if (org && this.connectionStatusByOrg[org]) {
+    if (org && this.connectionStatusByOrg.hasOwnProperty(org)) {
       delete this.connectionStatusByOrg[org];
     }
   }

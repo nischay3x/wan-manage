@@ -769,6 +769,7 @@ class Connections {
    * Gets all devices with updated connection status
    * @param  {string} org the org id
    * @return {Object} an object of devices ids of the org grouped by status
+   * or undefined if no updated statuses
    */
   getConnectionStatusByOrg (org) {
     return this.devices.getConnectionStatusByOrg(org);
