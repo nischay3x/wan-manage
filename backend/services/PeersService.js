@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const Service = require('./Service');
 const Peers = require('../models/peers');
 const Tunnels = require('../models/tunnels');
@@ -23,6 +24,11 @@ const isEqual = require('lodash/isEqual');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { reconstructTunnels } = require('../deviceLogic/modifyDevice');
+const DevicesService = require('./DevicesService');
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 
 class PeersService {
   static selectPeerParams (item) {
@@ -97,7 +103,7 @@ class PeersService {
   /**
    * Update peer and reconstruct tunnels if needed
    **/
-  static async peersIdPUT ({ id, org, peer }, { user }) {
+  static async peersIdPUT ({ id, org, peer }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -138,7 +144,7 @@ class PeersService {
 
       let reconstructedTunnels = 0;
       if (isNeedToReconstructTunnels || isNeedToModifyTunnels) {
-        const tunnels = await Tunnels.find({ peer: id }, '_id').lean();
+        const tunnels = await Tunnels.find({ peer: id }).populate('deviceA').lean();
         if (tunnels.length) {
           const ids = tunnels.map(t => t._id);
 
@@ -146,10 +152,51 @@ class PeersService {
           if (isNeedToReconstructTunnels) {
             jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
           } else {
-            // TODO: Change the line below and send only modify-tunnel jobs
-            jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
+            for (const tunnel of tunnels) {
+              // TODO: Change the line below and send only modify-tunnel jobs
+              const tasks = [{
+                entity: 'agent',
+                message: 'modify-tunnel',
+                params: {
+                  'tunnel-id': tunnel.num,
+                  peer: {
+                    ips: peer.ips,
+                    urls: peer.urls
+                  }
+                }
+              }];
+
+              const job = await deviceQueues.addJob(tunnel.deviceA.machineId, 'system', orgList[0],
+                // Data
+                { title: `Modify peer tunnel on device ${tunnel.deviceA.hostname}`, tasks },
+                // Response data
+                {
+                  method: 'tunnels',
+                  data: {
+                    deviceId: tunnel.deviceA._id,
+                    org: orgList[0],
+                    username: user,
+                    tunnelId: tunnel.num,
+                    deviceA: tunnel.deviceA._id,
+                    deviceB: null,
+                    target: 'deviceAconf',
+                    peer
+                  }
+                },
+                // Metadata
+                { priority: 'normal', attempts: 1, removeOnComplete: false },
+                // Complete callback
+                null
+              );
+
+              jobs.push(job);
+              // jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
+            }
           }
           reconstructedTunnels = jobs.length;
+
+          const jobsIds = jobs.flat().map(job => job.id);
+          DevicesService.setLocationHeader(server, response, jobsIds, orgList[0]);
         }
       }
 

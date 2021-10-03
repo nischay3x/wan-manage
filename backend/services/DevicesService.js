@@ -2511,7 +2511,7 @@ class DevicesService {
    * ospfConfigs ospfConfigs
    * returns OSPF configuration
    **/
-  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user }, response) {
+  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -2535,7 +2535,7 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(ospfConfigs, 202);
     } catch (e) {
       return Service.rejectResponse(
