@@ -153,7 +153,6 @@ class PeersService {
             jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
           } else {
             for (const tunnel of tunnels) {
-              // TODO: Change the line below and send only modify-tunnel jobs
               const tasks = [{
                 entity: 'agent',
                 message: 'modify-tunnel',
@@ -202,10 +201,15 @@ class PeersService {
 
       return Service.successResponse({ updatedPeer, reconstructedTunnels });
     } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
+      let msg = e.message || 'Internal Server Error';
+      const status = e.status || 500;
+
+      // Change the duplicate error message to make it clearer
+      if (e.name === 'MongoError' && e.code === 11000) {
+        msg = `Peer name "${peer.name}" already exists for this organization`;
+      }
+
+      return Service.rejectResponse(msg, status);
     }
   }
 

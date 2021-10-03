@@ -69,30 +69,20 @@ const peerSchema = new Schema({
   urls: {
     type: [{
       type: String,
-      required: true,
       validate: {
         validator: validators.validateFQDN,
         message: 'URL should be a valid FQDN'
       }
-    }],
-    validate: {
-      validator: val => val.length > 0,
-      message: 'urls should be a list of URLs'
-    }
+    }]
   },
   ips: {
     type: [{
       type: String,
-      required: true,
       validate: {
         validator: validators.validateIPv4,
         message: 'IP should be a valid ip address'
       }
-    }],
-    validate: {
-      validator: val => val.length > 0,
-      message: 'ips should be a list of IP addresses'
-    }
+    }]
   }
 }, {
   timestamps: true
