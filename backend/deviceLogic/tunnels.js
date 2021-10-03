@@ -235,11 +235,11 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
 
   for (const device of opDevices) {
     // peer is supported for major version 5
-    const majorAgentVersion = getMajorVersion(device.versions.agent);
-    if (majorAgentVersion < 5) {
-      reasons.add('Peer tunnel is not supported on some of devices');
-      continue;
-    };
+    // const majorAgentVersion = getMajorVersion(device.versions.agent);
+    // if (majorAgentVersion < 5) {
+    //   reasons.add('Peer tunnel is not supported on some of devices');
+    //   continue;
+    // };
 
     // Create the list of interfaces for the device.
     // Add a set of the interface's path labels
@@ -320,8 +320,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
         for (const label of ifcLabels) {
           const shouldSkipPeer = !createForAllLabels && !specifiedLabels.has(label);
           if (shouldSkipPeer) {
-            // TBD: ?????
-            // reasons.add('Some devices have interfaces without specified Path Labels.');
+            reasons.add('Some devices have interfaces without the specified Path Labels.');
             continue;
           }
 
