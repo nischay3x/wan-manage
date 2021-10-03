@@ -231,7 +231,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
   const tasks = [];
 
   // get peers configurations
-  const peers = await peersModel.find({ _id: { $in: peersIds } }).lean();
+  const peers = await peersModel.find({ _id: { $in: peersIds }, org: org }).lean();
 
   for (const device of opDevices) {
     // Create the list of interfaces for the device.
@@ -411,7 +411,7 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   const desired = dbTasks.flat().map(job => job.id);
   const ids = fulfilled.flat().map(job => job.id);
-  let message = 'tunnels creation jobs added.';
+  let message = `${isPeer ? 'peer ' : ''}tunnels creation jobs added.`;
   if (desired.length === 0) {
     message = 'No ' + message;
   } else if (ids.length < desired.length) {
