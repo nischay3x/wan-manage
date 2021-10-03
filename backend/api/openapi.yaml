@@ -8534,7 +8534,7 @@ components:
         remoteFQDN: 100.100.100.100
         psk: 123456f5621c1a95997997c8cd123456
         remoteIP: 100.100.100.100
-        urls: [acreto.com]
+        urls: [monitoring.com]
         ips: [1.1.1.1, 8.8.8.8]
       properties:
         _id:

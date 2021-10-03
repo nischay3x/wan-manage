@@ -567,7 +567,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         let title = '';
         if (peer) {
           // eslint-disable-next-line max-len
-          title = `Delete peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and peer (${peer.name})`;
+          title = `Delete peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${peer.name})`;
         } else {
           // eslint-disable-next-line max-len
           title = `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
@@ -689,6 +689,10 @@ const reconstructTunnels = async (tunnelsIds, org, username, sendRemoveJobs = fa
         return ifc._id.toString() === tunnel.interfaceB.toString();
       });
 
+      // IMPORTANT: If the tunnels was removed via modify-device process,
+      // the order of jobs is: remove-tunnels, modify-router, add-tunnels.
+      // But if tunnels needs to be recreated without a modify device job,
+      // we can send remove and add tunnels jobs in one aggregated request.
       if (sendRemoveJobs) {
         await setTunnelsPendingInDB([tunnel._id], org, true);
         const [removeTasksA, removeTasksB] = prepareTunnelRemoveJob(tunnel, ifcA, ifcB, peer);
@@ -712,13 +716,13 @@ const reconstructTunnels = async (tunnelsIds, org, username, sendRemoveJobs = fa
       const actionType = sendRemoveJobs ? 'Reconstruct' : 'Add';
       if (peer) {
         // eslint-disable-next-line max-len
-        title = `${actionType} peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and peer (${peer.name})`;
+        title = `${actionType} peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${peer.name})`;
       } else {
         // eslint-disable-next-line max-len
         title = `${actionType} tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
       };
 
-      // if sendRemoveJobs is true, we probably need to set aggregated request with pair
+      // if sendRemoveJobs is true, we need to send aggregated request with pair
       // of remove-tunnel and add-tunnel
       [tasksDeviceA, tasksDeviceB] = [tasksDeviceA, tasksDeviceB].map(tasks => {
         if (tasks.length > 1) {

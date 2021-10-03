@@ -172,7 +172,7 @@ class PeersService {
       // Check if tunnels existing with this peer configurations
       const tunnels = await Tunnels.find({ peer: id }).lean();
       if (tunnels.length) {
-        const err = 'There are existing tunnels based on this configuration. Delete them first';
+        const err = 'All peer tunnels must be deleted before deleting the peer configuration';
         throw new Error(err);
       }
 
@@ -184,7 +184,7 @@ class PeersService {
         logger.error('Failed to remove peer', {
           params: { id, org, orgList, peer, resp: resp }
         });
-        throw new Error('The peer was not deleted. Please check the ID or org paramter');
+        return Service.rejectResponse('Peer not found', 404);
       }
     } catch (e) {
       return Service.rejectResponse(
