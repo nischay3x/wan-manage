@@ -104,7 +104,7 @@ const multiLinkRuleSchema = new Schema({
       }],
       order: {
         type: String,
-        enum: ['priority', 'load-balancing'],
+        enum: ['priority', 'load-balancing', 'link-quality'],
         default: 'priority',
         required: true
       }
