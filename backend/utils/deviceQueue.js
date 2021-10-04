@@ -25,6 +25,7 @@
 const kue = require('kue');
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const { passFilters } = require('../utils/filterUtils');
 const CHUNK_SIZE = 1000; // Chunk of jobs handled at once
 class JobError extends Error {
   constructor (...args) {
@@ -319,7 +320,7 @@ class DeviceQueues {
 
   /**
      * Iterates over jobs of specific state
-     * @param  {string}   state    queue state ('complete', 'failed',
+     * @param  {string}   state    queue state ('all', 'complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
      * @param  {string}   deviceId the deviceId (UUID) to filter by
@@ -349,8 +350,13 @@ class DeviceQueues {
             };
             resolve();
           };
-          if (deviceId) kue.Job.rangeByType(deviceId, state, batchFrom, batchTo, dir, handleFunc);
-          else kue.Job.rangeByState(state, batchFrom, batchTo, dir, handleFunc);
+          if (state === 'all') {
+            kue.Job.range(batchFrom, batchTo, dir, handleFunc);
+          } else if (deviceId) {
+            kue.Job.rangeByType(deviceId, state, batchFrom, batchTo, dir, handleFunc);
+          } else {
+            kue.Job.rangeByState(state, batchFrom, batchTo, dir, handleFunc);
+          }
         });
       };
 
@@ -394,22 +400,34 @@ class DeviceQueues {
      * @param  {string}   state    queue state ('complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
+     *                             the callback should return 'true' for processed job
      * @param  {string}   deviceId the deviceId (UUID) to filter by
      * @param  {integer}  from     index to start looking from (could be negative)
      * @param  {integer}  to       index to end looking from (could be negative)
      * @param  {string}   dir      order to return data 'asc' or 'desc'
      * @param  {integer}  skip     org jobs to skip before starting to iterate
      * @param  {integer}  limit    limit the number of processed jobs, -1 for no limit
-     *                             the callback should return 'true' for processed job
+     * @param  {array}    filters  an array of filters
      * @return {void}
      */
   iterateJobsByOrg (org, state, callback,
-    deviceId = null, from = 0, to = -1, dir = 'asc', skip = 0, limit = -1) {
+    deviceId = null, from = 0, to = -1, dir = 'asc', skip = 0, limit = -1, filters) {
     return new Promise((resolve, reject) => {
       let skipped = 0;
 
+      if (filters && state === 'all' && deviceId === null) {
+        // if there is only one state or device in filters array
+        // then special iterate functions will be called
+        const stateFilters = filters.filter(f => f.op === '==' && f.key === 'state');
+        const deviceFilters = filters.filter(f => f.op === '==' && f.key === 'type');
+        if (stateFilters.length === 1) state = stateFilters[0].val;
+        if (deviceFilters.length === 1) deviceId = deviceFilters[0].val;
+      }
+
       const orgCallback = (orgJob) => {
-        if (orgJob.data.metadata.org === org) {
+        // need to prepare the job the same way it is returned in the service
+        const jobObj = { ...orgJob, _id: orgJob.id, state: orgJob._state };
+        if (orgJob.data.metadata.org === org && (!filters || passFilters(jobObj, filters))) {
           if (skipped < skip) skipped += 1;
           else {
             if (callback(orgJob)) return true; // job done
@@ -532,20 +550,32 @@ class DeviceQueues {
 
   /**
      * Gets the number of jobs for current state
-     * @param  {string} state queue state ('complete', 'failed', 'inactive', 'delayed', 'active')
+     * @param  {string} state    queue state ('all', 'complete', 'failed',
+     *                           'inactive', 'delayed', 'active')
+     * @param  {string} deviceId device machine id (optional)
      * @return {number}       Number of jobs
      */
   async getCount (state, deviceId = null) {
-    return new Promise((resolve, reject) => {
+    const countByState = st => (resolve, reject) => {
       const handleFunc = (err, total) => {
         if (err) {
-          return reject(new Error('DeviceQueues: getCount error, state=' + state + ', err=' + err));
+          return reject(new Error('DeviceQueues: getCount error, state=' + st + ', err=' + err));
         } else return resolve(total);
       };
 
-      if (deviceId) this.queue[state + 'Count'](deviceId, handleFunc);
-      else this.queue[state + 'Count'](handleFunc);
-    });
+      if (state !== 'all' && deviceId) this.queue[st + 'Count'](deviceId, handleFunc);
+      else this.queue[st + 'Count'](handleFunc);
+    };
+    if (state === 'all') {
+      const counts = await Promise.all(
+        ['complete', 'failed', 'inactive', 'delayed', 'active'].map(
+          st => new Promise(countByState(st))
+        )
+      );
+      return counts.reduce((a, b) => a + b);
+    } else {
+      return new Promise(countByState(state));
+    }
   }
 
   /**

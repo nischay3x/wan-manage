@@ -88,6 +88,58 @@ const getFilterExpression = ({ key, op, val, type }) => {
   }
 };
 
+/**
+ * Check if object passes array of filters
+ * @param {Object} obj an object to test if it passes filters
+ * @param {Array}  filters an array of filters from API request
+ * @returns {boolean} returns true if passed
+*/
+const passFilters = (obj, filters) => {
+  // if no filters then returns true
+  if (!Array.isArray(filters) || filters.length === 0) return true;
+  // the object must pass every filter
+  return filters.every(({ key, op, val }) => {
+    if (!key || !op) return false;
+    const props = key.split('.');
+    let objVal = obj;
+    // the key can be complex, like 'data.message.title'
+    for (const prop of props) {
+      if (!objVal.hasOwnProperty(prop)) return false;
+      objVal = objVal[prop];
+    }
+    // must be the same type to compare
+    switch (typeof objVal) {
+      case 'number':
+        val = +val; break;
+      case 'boolean':
+        val = val === 'true'; break;
+      case 'object':
+        val = JSON.stringify(val); break;
+    }
+    switch (op) {
+      case '==':
+        return objVal === val;
+      case '!=':
+        return objVal !== val;
+      case '<=':
+        return objVal <= val;
+      case '>=':
+        return objVal >= val;
+      case '<':
+        return objVal < val;
+      case '>':
+        return objVal > val;
+      case 'contains':
+        return (new RegExp(val, 'g')).test(objVal);
+      case '!contains':
+        return (new RegExp('^((?!' + val + ').)*$', 'g')).test(objVal);
+      default:
+        return false;
+    }
+  });
+};
+
 module.exports = {
-  getFilterExpression
+  getFilterExpression,
+  passFilters
 };
