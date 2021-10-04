@@ -73,7 +73,8 @@ const peerSchema = new Schema({
         validator: validators.validateFQDN,
         message: 'URL should be a valid FQDN'
       }
-    }]
+    }],
+    default: []
   },
   ips: {
     type: [{
@@ -82,7 +83,8 @@ const peerSchema = new Schema({
         validator: validators.validateIPv4,
         message: 'IP should be a valid ip address'
       }
-    }]
+    }],
+    default: []
   }
 }, {
   timestamps: true

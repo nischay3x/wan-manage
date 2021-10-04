@@ -137,14 +137,14 @@ class PeersService {
       origPeer.remoteFQDN = peer.remoteFQDN;
       origPeer.remoteIP = peer.remoteIP;
       origPeer.psk = peer.psk;
-      origPeer.urls = peer.urls;
-      origPeer.ips = peer.ips;
+      origPeer.urls = peer.urls || [];
+      origPeer.ips = peer.ips || [];
 
       const updatedPeer = await origPeer.save();
 
       let reconstructedTunnels = 0;
       if (isNeedToReconstructTunnels || isNeedToModifyTunnels) {
-        const tunnels = await Tunnels.find({ peer: id }).populate('deviceA').lean();
+        const tunnels = await Tunnels.find({ peer: id, isActive: true }).populate('deviceA').lean();
         if (tunnels.length) {
           const ids = tunnels.map(t => t._id);
 
