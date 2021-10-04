@@ -66,7 +66,8 @@ class DevicesService {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const firewallPolicyFields = '_id name' + deviceCommand === 'start' ? ' rules' : '';
+      const { method } = deviceCommand;
+      const firewallPolicyFields = '_id name' + method === 'start' ? ' rules' : '';
       const opDevices = await devices.find({ org: { $in: orgList } })
         .populate('policies.firewall.policy', firewallPolicyFields)
         .populate('interfaces.pathlabels', '_id name description color type');
@@ -93,7 +94,8 @@ class DevicesService {
   static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const firewallPolicyFields = '_id name' + deviceCommand === 'start' ? ' rules' : '';
+      const { method } = deviceCommand;
+      const firewallPolicyFields = '_id name' + method === 'start' ? ' rules' : '';
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
