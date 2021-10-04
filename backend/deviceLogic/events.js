@@ -26,12 +26,25 @@ const { generateTunnelParams } = require('../utils/tunnelUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { publicPortLimiter } = require('./eventsRateLimiter');
 const mongoConns = require('../mongoConns.js')();
-
+const modifyDeviceApply = require('./modifyDevice').apply;
+const reconstructTunnels = require('./modifyDevice').reconstructTunnels;
 class Events {
   constructor (session) {
     this.session = session;
+    this.changedDevices = new Set();
   }
 
+  addChangedDevice (deviceId) {
+    this.changedDevices.add(deviceId.toString());
+  }
+
+  /**
+   * Send notification about pending static route
+   * @param  {object} route route object
+   * @param  {object} device device object
+   * @param  {string} reason  notification reason
+   * @return void
+  */
   async staticRouteSetToPending (route, device, reason) {
     await notificationsMgr.sendNotifications([{
       org: device.org,
@@ -62,6 +75,8 @@ class Events {
         arrayFilters: [{ 'elem._id': ifcId }]
       }
     ).session(this.session);
+
+    this.addChangedDevice(deviceId);
   };
 
   /**
@@ -87,6 +102,8 @@ class Events {
       { upsert: false, new: true }
     ).session(this.session).lean();
 
+    this.addChangedDevice(device._id);
+
     if (isIncomplete) {
       await this.tunnelSetToPending(tunnel, device, reason);
     } else {
@@ -94,6 +111,12 @@ class Events {
     }
   };
 
+  /**
+   * Send notification about interface connectivity lost
+   * @param  {object} device device object
+   * @param  {object} origIfc interface object
+   * @return void
+  */
   async interfaceConnectivityLost (device, origIfc) {
     logger.info('Interface connectivity changed to offline', { params: { origIfc } });
     await notificationsMgr.sendNotifications([{
@@ -106,6 +129,12 @@ class Events {
     }]);
   };
 
+  /**
+   * Send notification about interface connectivity restored
+   * @param  {object} device device object
+   * @param  {object} origIfc interface object
+   * @return void
+  */
   async interfaceConnectivityRestored (device, origIfc) {
     logger.info('Interface connectivity changed to online', { params: { origIfc } });
     await notificationsMgr.sendNotifications([{
@@ -118,6 +147,13 @@ class Events {
     }]);
   };
 
+  /**
+   * Handle interface ip restored event
+   * @param  {object} device device object
+   * @param  {object} origIfc original interface object
+   * @param  {object} ifc updated interface object
+   * @return void
+  */
   async interfaceIpRestored (device, origIfc, ifc) {
     logger.info('Interface IP restored', { params: { device, origIfc, ifc } });
 
@@ -143,6 +179,12 @@ class Events {
     }
   };
 
+  /**
+   * Remove pending status from tunnels
+   * @param  {object} device device object
+   * @param  {object} origIfc original interface object
+   * @return void
+  */
   async removePendingStateFromTunnels (device, origIfc = null) {
     const orQuery = [];
     if (origIfc) {
@@ -171,8 +213,18 @@ class Events {
 
       if (ifcA.hasIpOnDevice && ifcB.hasIpOnDevice) {
         await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
+      } else {
+        const ifcWithoutIp = ifcA.hasIpOnDevice ? ifcB : ifcA;
+        const deviceWithoutIp = ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
+
+        // if one event is removed but still no ip on the interface, change the reason
+        const reason =
+          `Interface ${ifcWithoutIp.name} in device ${deviceWithoutIp.name} has no IP address`;
+        await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
       }
     };
+
+    return tunnels;
   }
 
   async interfaceIpLost (device, origIfc, ifc) {
@@ -227,39 +279,58 @@ class Events {
       details: reason
     }]);
 
-    const { ip1, ip2 } = generateTunnelParams(tunnel.num);
-    // get static routes via this tunnel and set them as pending
-    const staticRoutes = await devices.aggregate([
-      { $match: { org: tunnel.org } }, // org match is very important here
-      { $project: { _id: 0, staticroutes: 1 } },
-      { $unwind: '$staticroutes' },
-      // filter our non object documents before 'replaceRoot` stage
-      { $match: { staticroutes: { $exists: true, $not: { $type: 'array' }, $type: 'object' } } },
-      { $replaceRoot: { newRoot: '$staticroutes' } },
-      { $match: { configStatus: { $ne: 'incomplete' }, $or: [{ gateway: ip1 }, { gateway: ip2 }] } }
-    ]).session(this.session).allowDiskUse(true);
+    const staticRoutesDevices = await this.getTunnelStaticRoutes(tunnel, false);
 
-    for (const route of staticRoutes) {
-      const reason = `Tunnel ${tunnel.num} is in pending state`;
-      await this.setIncompleteRouteStatus(route, true, reason, device);
+    for (const staticRouteDevice of staticRoutesDevices) {
+      for (const staticRoute of staticRouteDevice.staticroutes) {
+        const reason = `Tunnel ${tunnel.num} is in pending state`;
+        await this.setIncompleteRouteStatus(staticRoute, true, reason, staticRouteDevice);
+      }
     }
   };
 
-  async tunnelSetToActive (tunnel, device, reason) {
+  async getTunnelStaticRoutes (tunnel, pending = false) {
     const { ip1, ip2 } = generateTunnelParams(tunnel.num);
-    // get static routes via this tunnel and unset them as pending
-    const staticRoutes = await devices.aggregate([
+    const pendingStage = pending
+      ? { $eq: ['$$route.configStatus', 'incomplete'] }
+      : { $ne: ['$$route.configStatus', 'incomplete'] };
+
+    const devicesStaticRoutes = await devices.aggregate([
       { $match: { org: tunnel.org } }, // org match is very important here
-      { $project: { _id: 0, staticroutes: 1 } },
-      { $unwind: '$staticroutes' },
-      // filter our non object documents before 'replaceRoot` stage
-      { $match: { staticroutes: { $exists: true, $not: { $type: 'array' }, $type: 'object' } } },
-      { $replaceRoot: { newRoot: '$staticroutes' } },
-      { $match: { configStatus: 'incomplete', $or: [{ gateway: ip1 }, { gateway: ip2 }] } }
+      {
+        $addFields: {
+          staticroutes: {
+            $filter: {
+              input: '$staticroutes',
+              as: 'route',
+              cond: {
+                $and: [
+                  pendingStage,
+                  {
+                    $or: [
+                      { $eq: ['$$route.gateway', ip1] },
+                      { $eq: ['$$route.gateway', ip2] }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     ]).session(this.session).allowDiskUse(true);
 
-    for (const route of staticRoutes) {
-      await this.setIncompleteRouteStatus(route, false, '', device);
+    return devicesStaticRoutes;
+  }
+
+  async tunnelSetToActive (tunnel, device, reason) {
+    // get incomplete static routes
+    const staticRoutesDevices = await this.getTunnelStaticRoutes(tunnel, true);
+
+    for (const staticRouteDevice of staticRoutesDevices) {
+      for (const staticRoute of staticRouteDevice.staticroutes) {
+        await this.setIncompleteRouteStatus(staticRoute, false, '', staticRouteDevice);
+      }
     }
   };
 
@@ -285,13 +356,14 @@ class Events {
       }
     ).session(this.session);
 
+    this.addChangedDevice(device._id);
+
     if (isIncomplete) {
       await this.staticRouteSetToPending(route, device, reason);
     }
   };
 
   async check (origDevice, newInterfaces, routerIsRunning) {
-    let deviceChanged = false;
     try {
       const orig = keyBy(origDevice.interfaces, 'devId');
       const updated = keyBy(newInterfaces, 'devId');
@@ -311,25 +383,25 @@ class Events {
           } else {
             await this.interfaceConnectivityLost(origDevice, origIfc);
           }
-          deviceChanged = true;
+          this.changedDevices.add(origDevice._id);
         }
 
         if (isIpLost(origIfc, updatedIfc, routerIsRunning)) {
           await this.interfaceIpLost(origDevice, origIfc, updatedIfc);
-          deviceChanged = true;
+          this.changedDevices.add(origDevice._id);
         }
 
         if (isIpRestored(origIfc, updatedIfc)) {
           await this.interfaceIpRestored(origDevice, origIfc, updatedIfc);
-          deviceChanged = true;
+          this.changedDevices.add(origDevice._id);
         }
 
         if (isPublicPortChanged(origIfc, updatedIfc)) {
           try {
-            const res = await publicPortLimiter.consume(origDevice._id);
+            const res = await publicPortLimiter.consume(origDevice._id.toString());
             // release pending tunnels
             if (res.consumedPoints === 1) {
-              deviceChanged = true;
+              this.changedDevices.add(origDevice._id);
               await this.removePendingStateFromTunnels(origDevice, origIfc);
             }
           } catch (err) {
@@ -343,7 +415,7 @@ class Events {
             });
 
             if (err.consumedPoints === publicPortLimiter.points + 1) {
-              deviceChanged = true;
+              this.changedDevices.add(origDevice._id);
               // eslint-disable-next-line max-len
               const reason = `The public port for interface ${origIfc.name} in device ${origDevice.name} is changing at a high rate`;
               await this.setPendingStateToTunnels(origDevice, origIfc, reason);
@@ -351,7 +423,7 @@ class Events {
           }
         }
       }
-      return deviceChanged;
+      return this.changedDevices;
     } catch (err) {
       logger.error('events check failed', { params: { err: err.message } });
       throw err;
@@ -448,16 +520,82 @@ const isPublicPortChanged = (origIfc, updatedIfc) => {
   return true;
 };
 
-const removePendingStateFromTunnels = async device => {
-  const session = await mongoConns.getMainDB().startSession();
-  await session.startTransaction();
-  const events = new Events(session);
-  await events.removePendingStateFromTunnels(device);
-  await session.commitTransaction();
-  await session.endSession();
+const removePendingStateFromTunnels = async (device, sendJobs = false) => {
+  let session = null;
+  try {
+    session = await mongoConns.getMainDB().startSession();
+    await session.startTransaction();
+    const events = new Events(session);
+    const tunnels = await events.removePendingStateFromTunnels(device);
+
+    if (!sendJobs || events.changedDevices.size === 0) {
+      await session.commitTransaction();
+      await session.endSession();
+      return;
+    }
+
+    const devicesIdsArr = Array.from(events.changedDevices);
+    const modifyDevices = await prepareModifyDispatcherParameters(devicesIdsArr, session);
+
+    await session.commitTransaction();
+    await session.endSession();
+
+    await reconstructTunnels(tunnels.map(t => t._id), device.org, 'system');
+
+    for (const modified in modifyDevices) {
+      await modifyDeviceApply(
+        [modifyDevices[modified].orig],
+        { username: 'system' },
+        {
+          org: modifyDevices[modified].orig.org.toString(),
+          newDevice: modifyDevices[modified].updated,
+          origTunnels: modifyDevices[modified].origTunnels
+        }
+      );
+    }
+  } catch (err) {
+    if (session) await session.abortTransaction();
+    throw err;
+  } finally {
+    if (session) await session.endSession();
+  }
+};
+
+const prepareModifyDispatcherParameters = async (devicesIds, session) => {
+  const modifyDevices = { /* original, updated, origTunnels */ };
+
+  let origDevices = await devices.find({
+    _id: { $in: devicesIds }
+  }); // without session
+
+  let updatedDevices = await devices.find({
+    _id: { $in: devicesIds }
+  }).session(session); // with session
+
+  origDevices = keyBy(origDevices, 'machineId');
+  updatedDevices = keyBy(updatedDevices, 'machineId');
+
+  for (const machineId in origDevices) {
+    const origTunnels = await tunnelsModel.find({
+      isActive: true,
+      $or: [
+        { deviceA: origDevices[machineId]._id },
+        { deviceB: origDevices[machineId]._id }
+      ]
+    }).lean();
+
+    modifyDevices[machineId] = {
+      orig: origDevices[machineId],
+      updated: updatedDevices[machineId],
+      origTunnels: origTunnels
+    };
+  }
+
+  return modifyDevices;
 };
 
 module.exports = Events; // default export
 exports = module.exports;
 
 exports.removePendingStateFromTunnels = removePendingStateFromTunnels; // named export
+exports.prepareModifyDispatcherParameters = prepareModifyDispatcherParameters; // named export

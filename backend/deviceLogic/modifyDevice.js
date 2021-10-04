@@ -1474,5 +1474,6 @@ module.exports = {
   completeSync: completeSync,
   error: error,
   remove: remove,
-  sync: sync
+  sync: sync,
+  reconstructTunnels: reconstructTunnels
 };

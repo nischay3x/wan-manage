@@ -20,6 +20,8 @@ const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
 const DeviceEvents = require('../deviceLogic/events');
+// eslint-disable-next-line max-len
+const prepareModifyDispatcherParameters = require('../deviceLogic/events').prepareModifyDispatcherParameters;
 const createError = require('http-errors');
 const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
@@ -248,7 +250,8 @@ class Connections {
                 deviceObj: resp[0]._id,
                 machineId: resp[0].machineId,
                 version: resp[0].versions.agent,
-                ready: false
+                ready: false,
+                running: devInfo ? devInfo.running : null
               });
               return done(true);
             } else {
@@ -473,13 +476,11 @@ class Connections {
           let session = null;
           let updDevice = null;
 
-          // store the orig tunnels before events, we need it for jobs
-          const origTunnels = await tunnelsModel.find({
-            isActive: true,
-            $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
-          }).lean();
+          // list of devices for which a modify process should be run
+          let modifyDevices = { /* original, updated */ };
 
           try {
+            // use session for events
             session = await mongoConns.getMainDB().startSession();
             await session.startTransaction();
 
@@ -490,21 +491,48 @@ class Connections {
               { new: true, runValidators: true }
             ).session(session).populate('interfaces.pathlabels', '_id type');
 
-            const message = deviceInfo.message;
-
-            // IMPORTANT! events check should be called after saving the new interfaces
+            // from agent version 5,
+            // we send the last device stats entry with get-device-info response.
+            // but for old versions, we set it as false.
+            let routerIsRunning = false;
+            const majorVersion = getMajorVersion(deviceInfo.message.device);
+            if (majorVersion >= 5) {
+              routerIsRunning = deviceInfo.message.stats.running;
+            } else {
+              // try to get it from our in-memory storage
+              const devStatus = this.getDeviceInfo(origDevice.machineId);
+              routerIsRunning = devStatus && devStatus.running ? devStatus.running : false;
+            }
 
             // We create a new instance of events class
             // to keep separate mongo sessions for each device.
             const events = new DeviceEvents(session);
-            const deviceChanged = await events.check(
-              origDevice.toObject(), message.network.interfaces, message.stats.running);
+            const changedDevices = await events.check(
+              origDevice.toObject(),
+              deviceInfo.message.network.interfaces,
+              routerIsRunning
+            );
 
-            // if event happened and device is changed due to events triggers,
-            // fetch the device again
-            if (deviceChanged) {
+            const devicesIdsArr = Array.from(changedDevices);
+            modifyDevices = await prepareModifyDispatcherParameters(devicesIdsArr, session);
+
+            // if no event happened the device we still need to run modify process
+            if (changedDevices.size === 0) {
               updDevice = await devices.findOne({ machineId }).session(session);
-            }
+              const origTunnels = await tunnelsModel.find({
+                isActive: true,
+                $or: [
+                  { deviceA: origDevice._id },
+                  { deviceB: origDevice._id }
+                ]
+              }).lean();
+              modifyDevices[machineId] = {
+                orig: origDevice,
+                updated: updDevice,
+                origTunnels: origTunnels
+              };
+            };
+
             await session.commitTransaction();
           } catch (err) {
             if (session) await session.abortTransaction();
@@ -524,15 +552,18 @@ class Connections {
               machineId
             }
           });
-          await modifyDeviceDispatcher.apply(
-            [origDevice],
-            { username: 'system' },
-            {
-              org: origDevice.org.toString(),
-              newDevice: updDevice,
-              origTunnels: origTunnels
-            }
-          );
+
+          for (const modified in modifyDevices) {
+            await modifyDeviceDispatcher.apply(
+              [modifyDevices[modified].orig],
+              { username: 'system' },
+              {
+                org: modifyDevices[modified].orig.org.toString(),
+                newDevice: modifyDevices[modified].updated,
+                origTunnels: modifyDevices[modified].origTunnels
+              }
+            );
+          }
         } catch (err) {
           logger.error('Failed to apply new configuration from device', {
             params: { device: machineId, err: err.message }
@@ -783,6 +814,15 @@ class Connections {
    */
   getDeviceInfo (deviceID) {
     return this.devices.getDeviceInfo(deviceID);
+  }
+
+  /**
+   * Set device state by device ID
+   * @param  {string} deviceID device machine id
+   * @return void
+   */
+  setDeviceState (deviceID, state) {
+    this.devices.updateDeviceInfo(deviceID, 'running', state);
   }
 
   /**

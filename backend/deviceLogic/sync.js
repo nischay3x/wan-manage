@@ -430,10 +430,12 @@ const apply = async (device, user, data) => {
     { sync: 1, new: true }
   ).lean();
 
-  // reset public port event rate limiter and remove pending statuses from tunnels
-  // TODO: think about it more
-  await publicPortLimiter.delete(_id.toString());
-  await removePendingStateFromTunnels(updDevice);
+  // if a user click on sync on the *locked* device, we release the pending tunnels
+  // TODO: // think if only if released or not
+  const isReleased = await publicPortLimiter.delete(_id.toString());
+  if (isReleased) {
+    await removePendingStateFromTunnels(updDevice, true);
+  }
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(
