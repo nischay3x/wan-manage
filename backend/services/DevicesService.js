@@ -1231,8 +1231,7 @@ class DevicesService {
       // device itself, add a 'modify' job to the device's queue.
       const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
         org: orgList[0],
-        newDevice: updDevice,
-        origTunnels: origTunnels
+        newDevice: updDevice
       });
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;

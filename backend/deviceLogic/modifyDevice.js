@@ -413,11 +413,9 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
  * @param  {Object}  messageParams device changes that will be sent to the device
  * @param  {Object}  user          the user that created the request
  * @param  {string}  org           organization to which the user belongs
- * @param  {[tunnels]} origTunnels array of orig tunnels before the changes
  * @return {Job}                   The queued modify-device job
  */
-const queueModifyDeviceJob = async (device, newDevice,
-  messageParams, user, org, origTunnels) => {
+const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org) => {
   const removedTunnels = [];
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
@@ -459,13 +457,14 @@ const queueModifyDeviceJob = async (device, newDevice,
     const tunnels = await tunnelsModel
       .find({
         isActive: true,
+        configStatus: { $ne: 'incomplete' }, // no need to reconstruct pending tunnels
         $or: [{ interfaceA: ifc._id }, { interfaceB: ifc._id }]
       })
       .populate('deviceA')
       .populate('deviceB');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, pathlabel, num, _id, configStatus } = tunnel;
+      let { deviceA, deviceB, pathlabel, num, _id } = tunnel;
 
       // Save the whole updated interfaces, not only the modify-interface job parameters.
       const updatedIfcA = deviceA.interfaces.find(ifc => {
@@ -522,26 +521,14 @@ const queueModifyDeviceJob = async (device, newDevice,
         const updatedAddrA = updatedIfcA.hasIpOnDevice ? modifiedIfcA ? modifiedIfcA.addr : '' : '';
         const updatedAddrB = updatedIfcB.hasIpOnDevice ? modifiedIfcB ? modifiedIfcB.addr : '' : '';
 
-        const isIncomplete = configStatus === 'incomplete';
-        // for incomplete tunnel wed send only remove-tunnel message
-        /// so no need to check for missing IP.
-        if (!isIncomplete) {
-          // skip interfaces without IP or GW
-          const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
-            (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
+        // skip interfaces without IP or GW
+        const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
+          (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
 
-          if (missingNetParameters(modifiedIfcA) || missingNetParameters(modifiedIfcB)) {
-            logger.info('Missing network parameters, the tunnel will not be rebuilt', {
-              params: loggerParams
-            });
-            continue;
-          }
-        }
-
-        // no need to remove pending tunnels since they are already removed
-        const origTunnel = origTunnels.find(t => t._id.toString() === tunnel._id.toString());
-        if (origTunnel.configStatus === 'incomplete') {
-          removedTunnels.push(tunnel._id);
+        if (missingNetParameters(modifiedIfcA) || missingNetParameters(modifiedIfcB)) {
+          logger.info('Missing network parameters, the tunnel will not be rebuilt', {
+            params: loggerParams
+          });
           continue;
         }
 
@@ -591,7 +578,7 @@ const queueModifyDeviceJob = async (device, newDevice,
           (isObject(modifiedIfcB) && updatedAddrB === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
           modifiedIfcB.mtu === ifcB.mtu && isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
 
-        if (skipLocal && tunnel.configStatus !== 'incomplete') {
+        if (skipLocal) {
           continue;
         }
 
@@ -666,7 +653,7 @@ const queueModifyDeviceJob = async (device, newDevice,
 
   // Queue tunnel reconstruction jobs
   try {
-    const addTunnelJobs = await reconstructTunnels(removedTunnels, org, user.username);
+    const addTunnelJobs = await reconstructTunnels(removedTunnels, user.username);
     tunnelsJobs = tunnelsJobs.concat(addTunnelJobs);
   } catch (err) {
     logger.error('Tunnel reconstruction failed', {
@@ -686,12 +673,12 @@ const queueModifyDeviceJob = async (device, newDevice,
  * Reconstructs tunnels that were removed before
  * sending a modify-device message to a device.
  * @param  {Array}   removedTunnels an array of ids of the removed tunnels
- * @param  {string}  org            the organization to which the tunnels belong
  * @param  {string}  username       name of the user that requested the device change
  * @return {Array}                  array of add-tunnel jobs
  */
-const reconstructTunnels = async (removedTunnels, org, username) => {
+const reconstructTunnels = async (removedTunnels, username) => {
   let jobs = [];
+  let org = null;
   try {
     const tunnels = await tunnelsModel
       .find({ _id: { $in: removedTunnels }, isActive: true, configStatus: { $ne: 'incomplete' } })
@@ -699,6 +686,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
       .populate('deviceB');
 
     for (const tunnel of tunnels) {
+      org = tunnel.org;
       const { deviceA, deviceB, pathlabel } = tunnel;
       const ifcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
@@ -722,7 +710,7 @@ const reconstructTunnels = async (removedTunnels, org, username) => {
         tasksDeviceA,
         tasksDeviceB,
         username,
-        org,
+        tunnel.org,
         deviceA.machineId,
         deviceB.machineId,
         deviceA._id,
@@ -1261,7 +1249,7 @@ const apply = async (device, user, data) => {
     await setJobPendingInDB(device[0]._id, org, true);
     // Queue device modification job
     const jobs = await queueModifyDeviceJob(device[0], data.newDevice,
-      modifyParams, user, org, data.origTunnels);
+      modifyParams, user, org);
     return {
       ids: jobs.flat().map(job => job.id),
       status: 'completed',

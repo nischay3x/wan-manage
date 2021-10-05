@@ -1312,6 +1312,46 @@ const prepareTunnelParams = (
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };
 
+const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
+  let tunnelsJobs = [];
+
+  const tunnels = await tunnelsModel.find(
+    { _id: { $in: tunnelsIds }, isActive: true }
+  ).populate('deviceA').populate('deviceB');
+
+  for (const tunnel of tunnels) {
+    const ifcA = tunnel.deviceA.interfaces.find(ifc => {
+      return ifc._id.toString() === tunnel.interfaceA.toString();
+    });
+    const ifcB = tunnel.deviceB.interfaces.find(ifc => {
+      return ifc._id.toString() === tunnel.interfaceB.toString();
+    });
+
+    const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
+      tunnel, ifcA, tunnel.deviceA.versions, ifcB, tunnel.deviceB.versions);
+
+    const removeTunnelJobs = await queueTunnel(
+      false,
+      // eslint-disable-next-line max-len
+      `Delete tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.deviceB.hostname}, ${ifcB.name})`,
+      tasksDeviceA,
+      tasksDeviceB,
+      username,
+      tunnel.org,
+      tunnel.deviceA.machineId,
+      tunnel.deviceB.machineId,
+      tunnel.deviceA._id,
+      tunnel.deviceB._id,
+      tunnel.num,
+      tunnel.pathlabel
+    );
+
+    tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
+  }
+
+  return tunnelsJobs;
+};
+
 module.exports = {
   apply: {
     applyTunnelAdd: applyTunnelAdd,
@@ -1329,5 +1369,6 @@ module.exports = {
   prepareTunnelRemoveJob: prepareTunnelRemoveJob,
   prepareTunnelAddJob: prepareTunnelAddJob,
   queueTunnel: queueTunnel,
-  oneTunnelDel: oneTunnelDel
+  oneTunnelDel: oneTunnelDel,
+  sendRemoveTunnelsJobs: sendRemoveTunnelsJobs
 };

@@ -434,7 +434,7 @@ const apply = async (device, user, data) => {
   // TODO: // think if only if released or not
   const isReleased = await publicPortLimiter.delete(_id.toString());
   if (isReleased) {
-    await removePendingStateFromTunnels(updDevice, true);
+    await removePendingStateFromTunnels(updDevice);
   }
 
   // Get device current configuration hash

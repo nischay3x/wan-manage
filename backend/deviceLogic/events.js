@@ -23,17 +23,25 @@ const notificationsMgr = require('../notifications/notifications')();
 const cidr = require('cidr-tools');
 const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
+const { sendRemoveTunnelsJobs } = require('../deviceLogic/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { publicPortLimiter } = require('./eventsRateLimiter');
 const mongoConns = require('../mongoConns.js')();
 const modifyDeviceApply = require('./modifyDevice').apply;
 const reconstructTunnels = require('./modifyDevice').reconstructTunnels;
+
 class Events {
   constructor (session) {
     this.session = session;
     this.changedDevices = new Set();
+    this.pendingTunnels = new Set();
+    this.activeTunnels = new Set();
   }
 
+  /**
+   * Add device id to the changed devices list
+   * @param  {string} deviceId device id
+  */
   addChangedDevice (deviceId) {
     this.changedDevices.add(deviceId.toString());
   }
@@ -43,7 +51,6 @@ class Events {
    * @param  {object} route route object
    * @param  {object} device device object
    * @param  {string} reason  notification reason
-   * @return void
   */
   async staticRouteSetToPending (route, device, reason) {
     await notificationsMgr.sendNotifications([{
@@ -61,7 +68,6 @@ class Events {
    * @param  {number} deviceId device id
    * @param  {number} ifcId    interface id
    * @param  {boolean} hasIP  indicate if ip exists in the device side
-   * @return void
   */
   async setInterfaceHasIP (deviceId, ifcId, hasIP) {
     await devices.findOneAndUpdate(
@@ -86,7 +92,6 @@ class Events {
    * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
    * @param  {string} reason  incomplete reason
    * @param  {object} device  device of incomplete tunnel
-   * @return void
   */
   async setIncompleteTunnelStatus (num, org, isIncomplete, reason, device) {
     const tunnel = await tunnelsModel.findOneAndUpdate(
@@ -105,8 +110,10 @@ class Events {
     this.addChangedDevice(device._id);
 
     if (isIncomplete) {
+      this.pendingTunnels.add(tunnel._id.toString());
       await this.tunnelSetToPending(tunnel, device, reason);
     } else {
+      this.activeTunnels.add(tunnel._id.toString());
       await this.tunnelSetToActive(tunnel, device, reason);
     }
   };
@@ -115,7 +122,6 @@ class Events {
    * Send notification about interface connectivity lost
    * @param  {object} device device object
    * @param  {object} origIfc interface object
-   * @return void
   */
   async interfaceConnectivityLost (device, origIfc) {
     logger.info('Interface connectivity changed to offline', { params: { origIfc } });
@@ -133,7 +139,6 @@ class Events {
    * Send notification about interface connectivity restored
    * @param  {object} device device object
    * @param  {object} origIfc interface object
-   * @return void
   */
   async interfaceConnectivityRestored (device, origIfc) {
     logger.info('Interface connectivity changed to online', { params: { origIfc } });
@@ -152,7 +157,6 @@ class Events {
    * @param  {object} device device object
    * @param  {object} origIfc original interface object
    * @param  {object} ifc updated interface object
-   * @return void
   */
   async interfaceIpRestored (device, origIfc, ifc) {
     logger.info('Interface IP restored', { params: { device, origIfc, ifc } });
@@ -183,7 +187,6 @@ class Events {
    * Remove pending status from tunnels
    * @param  {object} device device object
    * @param  {object} origIfc original interface object
-   * @return void
   */
   async removePendingStateFromTunnels (device, origIfc = null) {
     const orQuery = [];
@@ -223,10 +226,14 @@ class Events {
         await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
       }
     };
-
-    return tunnels;
   }
 
+  /**
+   * Handle event: Interface lost IP
+   * @param  {object} device device object
+   * @param  {object} origIfc original interface before the event
+   * @param  {object} ifc updated ifc from the device
+  */
   async interfaceIpLost (device, origIfc, ifc) {
     logger.info('Interface IP lost', { params: { device, origIfc, ifc } });
 
@@ -254,6 +261,12 @@ class Events {
     }
   };
 
+  /**
+   * Set pending status to a tunnel
+   * @param  {object} device device object
+   * @param  {object} origIfc original interface before the event
+   * @param  {string} reason indicate why tunnel should be pending
+  */
   async setPendingStateToTunnels (device, origIfc, reason) {
     const tunnels = await tunnelsModel.find({
       $or: [
@@ -269,6 +282,12 @@ class Events {
     };
   }
 
+  /**
+   * Handle event: tunnel configured as a pending
+   * @param  {object} tunnel tunnel object
+   * @param  {object} device device that caused the event
+   * @param  {string} reason indicate why tunnel should be pending
+  */
   async tunnelSetToPending (tunnel, device, reason) {
     await notificationsMgr.sendNotifications([{
       org: tunnel.org,
@@ -289,6 +308,29 @@ class Events {
     }
   };
 
+  /**
+   * Handle event: tunnel configured as a active
+   * @param  {object} tunnel tunnel object
+   * @param  {object} device device that caused the event
+   * @param  {string} reason indicate why tunnel should be pending
+  */
+  async tunnelSetToActive (tunnel, device, reason) {
+    // get incomplete static routes
+    const staticRoutesDevices = await this.getTunnelStaticRoutes(tunnel, true);
+
+    for (const staticRouteDevice of staticRoutesDevices) {
+      for (const staticRoute of staticRouteDevice.staticroutes) {
+        await this.setIncompleteRouteStatus(staticRoute, false, '', staticRouteDevice);
+      }
+    }
+  };
+
+  /**
+   * Get all devices with static routes via the tunnel
+   * @param  {object} tunnel tunnel object
+   * @param  {boolean} pending indicate if need to fetch pending static routes or active
+   * @return {[{object}]} array of devices with static routes via the given tunnel
+  */
   async getTunnelStaticRoutes (tunnel, pending = false) {
     const { ip1, ip2 } = generateTunnelParams(tunnel.num);
     const pendingStage = pending
@@ -323,24 +365,12 @@ class Events {
     return devicesStaticRoutes;
   }
 
-  async tunnelSetToActive (tunnel, device, reason) {
-    // get incomplete static routes
-    const staticRoutesDevices = await this.getTunnelStaticRoutes(tunnel, true);
-
-    for (const staticRouteDevice of staticRoutesDevices) {
-      for (const staticRoute of staticRouteDevice.staticroutes) {
-        await this.setIncompleteRouteStatus(staticRoute, false, '', staticRouteDevice);
-      }
-    }
-  };
-
   /**
    * Set incomplete state for static route if needed
    * @param  {number} routeId  static route id
    * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
    * @param  {string} reason  incomplete reason
    * @param  {object} device  device of incomplete tunnel
-   * @return void
   */
   async setIncompleteRouteStatus (route, isIncomplete, reason, device) {
     await devices.findOneAndUpdate(
@@ -363,6 +393,32 @@ class Events {
     }
   };
 
+  /**
+   * Send needed tunnels jobs (remove or add)
+  */
+  async sendTunnelsRemoveJobs () {
+    const removeTunnelIds = Array.from(this.pendingTunnels);
+    if (removeTunnelIds.length > 0) {
+      await sendRemoveTunnelsJobs(removeTunnelIds);
+    }
+  }
+
+  /**
+   * Send needed tunnels jobs (remove or add)
+  */
+  async sendTunnelsCreateJobs () {
+    const reconstructTunnelIds = Array.from(this.activeTunnels);
+    if (reconstructTunnelIds.length > 0) {
+      await reconstructTunnels(reconstructTunnelIds, 'system');
+    }
+  }
+
+  /**
+   * Computes and checks if need to trigger event
+   * @param  {object} origDevice  original device from DB
+   * @param  {array} newInterfaces  incoming interfaces from the device
+   * @param  {boolean} routerIsRunning  indicate if router is running
+  */
   async check (origDevice, newInterfaces, routerIsRunning) {
     try {
       const orig = keyBy(origDevice.interfaces, 'devId');
@@ -377,31 +433,31 @@ class Events {
           continue;
         }
 
-        if (isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
+        if (this.isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
           if (updatedIfc.internetAccess) {
             await this.interfaceConnectivityRestored(origDevice, origIfc);
           } else {
             await this.interfaceConnectivityLost(origDevice, origIfc);
           }
-          this.changedDevices.add(origDevice._id);
+          this.addChangedDevice(origDevice._id);
         }
 
-        if (isIpLost(origIfc, updatedIfc, routerIsRunning)) {
+        if (this.isIpLost(origIfc, updatedIfc, routerIsRunning)) {
           await this.interfaceIpLost(origDevice, origIfc, updatedIfc);
-          this.changedDevices.add(origDevice._id);
+          this.addChangedDevice(origDevice._id);
         }
 
-        if (isIpRestored(origIfc, updatedIfc)) {
+        if (this.isIpRestored(origIfc, updatedIfc)) {
           await this.interfaceIpRestored(origDevice, origIfc, updatedIfc);
-          this.changedDevices.add(origDevice._id);
+          this.addChangedDevice(origDevice._id);
         }
 
-        if (isPublicPortChanged(origIfc, updatedIfc)) {
+        if (this.isPublicPortChanged(origIfc, updatedIfc)) {
           try {
             const res = await publicPortLimiter.consume(origDevice._id.toString());
             // release pending tunnels
             if (res.consumedPoints === 1) {
-              this.changedDevices.add(origDevice._id);
+              this.addChangedDevice(origDevice._id);
               await this.removePendingStateFromTunnels(origDevice, origIfc);
             }
           } catch (err) {
@@ -415,7 +471,7 @@ class Events {
             });
 
             if (err.consumedPoints === publicPortLimiter.points + 1) {
-              this.changedDevices.add(origDevice._id);
+              this.addChangedDevice(origDevice._id);
               // eslint-disable-next-line max-len
               const reason = `The public port for interface ${origIfc.name} in device ${origDevice.name} is changing at a high rate`;
               await this.setPendingStateToTunnels(origDevice, origIfc, reason);
@@ -423,124 +479,150 @@ class Events {
           }
         }
       }
-      return this.changedDevices;
     } catch (err) {
       logger.error('events check failed', { params: { err: err.message } });
       throw err;
     }
   }
+
+  /**
+   * Check if WAN interface lost connectivity
+   * @param  {object} origIfc  interface from flexiManage DB
+   * @param  {object} updatedIfc  incoming interface info from device
+   * @return {boolean} if need to trigger event of internet connectivity lost
+  */
+  isInterfaceConnectivityChanged (origIfc, updatedIfc) {
+    // from device internetAccess type is boolean, in management it is enum yes/no
+    const prevInternetAccess = origIfc.internetAccess === 'yes';
+
+    if (updatedIfc.internetAccess === undefined) {
+      return false;
+    }
+
+    if (!origIfc.monitorInternet) {
+      return false;
+    }
+
+    if (updatedIfc.internetAccess === prevInternetAccess) {
+      return false;
+    }
+
+    return true;
+  };
+
+  /**
+   * Check if IP is lost on an interface
+   * @param  {object} origIfc  interface from flexiManage DB
+   * @param  {object} updatedIfc  incoming interface info from device
+   * @param  {boolean} routerIsRunning  indicate if router is in running state
+   * @return {boolean} if need to trigger event of ip lost
+   */
+  isIpLost (origIfc, updatedIfc, routerIsRunning) {
+    // check if the real ip is different than flexiManage configuration
+    if (origIfc.IPv4 === updatedIfc.IPv4) {
+      return false;
+    }
+
+    // check if incoming interface is without ip address
+    if (updatedIfc.IPv4 !== '') {
+      return false;
+    }
+
+    // no need to trigger event for LAN interface if router is not running
+    if (origIfc.type === 'LAN' && !routerIsRunning) {
+      return false;
+    }
+
+    return true;
+  };
+
+  /**
+   * Prepares a dictionary of routers to send to modify-device job
+   * @return {{machineId: {orig: object, updated: object}}} dictionary with orig and updated device
+   */
+  async prepareModifyDispatcherParameters () {
+    const modifyDevices = { /* original, updated */ };
+
+    const devicesIds = Array.from(this.changedDevices);
+
+    let origDevices = await devices.find({
+      _id: { $in: devicesIds }
+    }); // without session
+
+    let updatedDevices = await devices.find({
+      _id: { $in: devicesIds }
+    }).session(this.session); // with session
+
+    origDevices = keyBy(origDevices, 'machineId');
+    updatedDevices = keyBy(updatedDevices, 'machineId');
+
+    for (const machineId in origDevices) {
+      modifyDevices[machineId] = {
+        orig: origDevices[machineId],
+        updated: updatedDevices[machineId]
+      };
+    }
+
+    return modifyDevices;
+  };
+
+  /**
+   * Check if public port is changed
+   * @param  {object} origIfc  interface from flexiManage DB
+   * @param  {object} updatedIfc  incoming interface info from device
+   * @return {boolean} if need to trigger event of ip restored
+  */
+  isPublicPortChanged (origIfc, updatedIfc) {
+    if (updatedIfc.public_port === '') {
+      return false;
+    }
+
+    if (origIfc.PublicPort === updatedIfc.public_port.toString()) {
+      return false;
+    }
+
+    return true;
+  };
+
+  /**
+   * Check if IP is restored on an interface
+   * @param  {object} origIfc  interface from flexiManage DB
+   * @param  {object} updatedIfc  incoming interface info from device
+   * @return {boolean} if need to trigger event of ip restored
+  */
+  isIpRestored (origIfc, updatedIfc) {
+    // check if the interface is marked without IP
+    if (origIfc.hasIpOnDevice !== false) {
+      return false;
+    }
+
+    // check if the incoming interface has ip address
+    if (updatedIfc.IPv4 === '') {
+      return false;
+    }
+
+    return true;
+  };
 }
 
 /**
- * Check if WAN interface lost connectivity
- * @param  {object} origIfc  interface from flexiManage DB
- * @param  {object} updatedIfc  incoming interface info from device
- * @return {boolean} if need to trigger event of internet connectivity lost
- */
-const isInterfaceConnectivityChanged = (origIfc, updatedIfc) => {
-  // from device internetAccess type is boolean, in management it is enum yes/no
-  const prevInternetAccess = origIfc.internetAccess === 'yes';
-
-  if (updatedIfc.internetAccess === undefined) {
-    return false;
-  }
-
-  if (!origIfc.monitorInternet) {
-    return false;
-  }
-
-  if (updatedIfc.internetAccess === prevInternetAccess) {
-    return false;
-  }
-
-  return true;
-};
-
-/**
- * Check if IP is lost on an interface
- * @param  {object} origIfc  interface from flexiManage DB
- * @param  {object} updatedIfc  incoming interface info from device
- * @param  {boolean} routerIsRunning  indicate if router is in running state
- * @return {boolean} if need to trigger event of ip lost
- */
-const isIpLost = (origIfc, updatedIfc, routerIsRunning) => {
-  // check if the real ip is different than flexiManage configuration
-  if (origIfc.IPv4 === updatedIfc.IPv4) {
-    return false;
-  }
-
-  // check if incoming interface is without ip address
-  if (updatedIfc.IPv4 !== '') {
-    return false;
-  }
-
-  // no need to trigger event for LAN interface if router is not running
-  if (origIfc.type === 'LAN' && !routerIsRunning) {
-    return false;
-  }
-
-  return true;
-};
-
-/**
- * Check if IP is restored on an interface
- * @param  {object} origIfc  interface from flexiManage DB
- * @param  {object} updatedIfc  incoming interface info from device
- * @return {boolean} if need to trigger event of ip restored
- */
-const isIpRestored = (origIfc, updatedIfc) => {
-  // check if the interface is marked without IP
-  if (origIfc.hasIpOnDevice !== false) {
-    return false;
-  }
-
-  // check if the incoming interface has ip address
-  if (updatedIfc.IPv4 === '') {
-    return false;
-  }
-
-  return true;
-};
-
-/**
- * Check if public port is changed
- * @param  {object} origIfc  interface from flexiManage DB
- * @param  {object} updatedIfc  incoming interface info from device
- * @return {boolean} if need to trigger event of ip restored
- */
-const isPublicPortChanged = (origIfc, updatedIfc) => {
-  if (updatedIfc.public_port === '') {
-    return false;
-  }
-
-  if (origIfc.PublicPort === updatedIfc.public_port.toString()) {
-    return false;
-  }
-
-  return true;
-};
-
-const removePendingStateFromTunnels = async (device, sendJobs = false) => {
+ * Remove all pending tunnels for a device
+ * @param  {object} device  device object
+*/
+const removePendingStateFromTunnels = async (device) => {
   let session = null;
   try {
     session = await mongoConns.getMainDB().startSession();
     await session.startTransaction();
     const events = new Events(session);
-    const tunnels = await events.removePendingStateFromTunnels(device);
+    await events.removePendingStateFromTunnels(device);
 
-    if (!sendJobs || events.changedDevices.size === 0) {
-      await session.commitTransaction();
-      await session.endSession();
-      return;
-    }
-
-    const devicesIdsArr = Array.from(events.changedDevices);
-    const modifyDevices = await prepareModifyDispatcherParameters(devicesIdsArr, session);
+    const modifyDevices = await events.prepareModifyDispatcherParameters();
 
     await session.commitTransaction();
     await session.endSession();
 
-    await reconstructTunnels(tunnels.map(t => t._id), device.org, 'system');
+    await events.sendTunnelsCreateJobs();
 
     for (const modified in modifyDevices) {
       await modifyDeviceApply(
@@ -548,8 +630,7 @@ const removePendingStateFromTunnels = async (device, sendJobs = false) => {
         { username: 'system' },
         {
           org: modifyDevices[modified].orig.org.toString(),
-          newDevice: modifyDevices[modified].updated,
-          origTunnels: modifyDevices[modified].origTunnels
+          newDevice: modifyDevices[modified].updated
         }
       );
     }
@@ -561,41 +642,7 @@ const removePendingStateFromTunnels = async (device, sendJobs = false) => {
   }
 };
 
-const prepareModifyDispatcherParameters = async (devicesIds, session) => {
-  const modifyDevices = { /* original, updated, origTunnels */ };
-
-  let origDevices = await devices.find({
-    _id: { $in: devicesIds }
-  }); // without session
-
-  let updatedDevices = await devices.find({
-    _id: { $in: devicesIds }
-  }).session(session); // with session
-
-  origDevices = keyBy(origDevices, 'machineId');
-  updatedDevices = keyBy(updatedDevices, 'machineId');
-
-  for (const machineId in origDevices) {
-    const origTunnels = await tunnelsModel.find({
-      isActive: true,
-      $or: [
-        { deviceA: origDevices[machineId]._id },
-        { deviceB: origDevices[machineId]._id }
-      ]
-    }).lean();
-
-    modifyDevices[machineId] = {
-      orig: origDevices[machineId],
-      updated: updatedDevices[machineId],
-      origTunnels: origTunnels
-    };
-  }
-
-  return modifyDevices;
-};
-
 module.exports = Events; // default export
 exports = module.exports;
 
 exports.removePendingStateFromTunnels = removePendingStateFromTunnels; // named export
-exports.prepareModifyDispatcherParameters = prepareModifyDispatcherParameters; // named export
