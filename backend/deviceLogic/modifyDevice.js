@@ -1228,8 +1228,7 @@ const apply = async (device, user, data) => {
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
     await setJobPendingInDB(device[0]._id, org, true);
     // Queue device modification job
-    const jobs = await queueModifyDeviceJob(device[0], data.newDevice,
-      modifyParams, user, org);
+    const jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
     return {
       ids: jobs.flat().map(job => job.id),
       status: 'completed',
