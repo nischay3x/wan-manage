@@ -465,7 +465,6 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
 
     for (const tunnel of tunnels) {
       let { deviceA, deviceB, pathlabel, num, _id } = tunnel;
-
       // IMPORTANT: Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
       if (deviceA._id.toString() === device._id.toString()) {
@@ -505,7 +504,6 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           machineB: deviceB.machineId,
           tunnelNum: tunnel.num
         };
-
         // skip interfaces without IP or GW
         const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
           (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
