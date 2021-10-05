@@ -535,15 +535,13 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         }
 
         // only rebuild tunnels when IP, Public IP or port is changed
-        const tunnelParametersModified = (origIfc, modifiedIfc) => {
-          return isObject(modifiedIfc) && (
-            modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
-            modifiedIfc.mtu !== origIfc.mtu ||
-            modifiedIfc.PublicIP !== origIfc.PublicIP ||
-            modifiedIfc.PublicPort !== origIfc.PublicPort ||
-            modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
-          );
-        };
+        const tunnelParametersModified = (origIfc, modifiedIfc) => isObject(modifiedIfc) && (
+          modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
+          modifiedIfc.mtu !== origIfc.mtu ||
+          modifiedIfc.PublicIP !== origIfc.PublicIP ||
+          modifiedIfc.PublicPort !== origIfc.PublicPort ||
+          modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
+        );
         if (!tunnelParametersModified(ifcA, modifiedIfcA) &&
           !tunnelParametersModified(ifcB, modifiedIfcB)) {
           continue;
