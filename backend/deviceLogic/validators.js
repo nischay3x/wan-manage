@@ -346,12 +346,23 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
   }
 
   // Checks if all assigned WAN interfaces metrics are different
-  const metricsArray = wanIfcs.map(i => Number(i.metric));
+  const { metricsArray, pathLabels } = wanIfcs.reduce((a, v) => {
+    a.metricsArray.push(Number(v.metric));
+    a.pathLabels = a.pathLabels.concat(v.pathlabels.map((p) => p._id));
+    return a;
+  }, { metricsArray: [], pathLabels: [] });
   const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
   if (hasDuplicates) {
     return {
       valid: false,
-      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
+      err: 'Duplicated metrics are not allowed on WAN interfaces'
+    };
+  }
+  const hasPathLabelsDuplicates = pathLabels.length !== new Set(pathLabels).size;
+  if (hasPathLabelsDuplicates) {
+    return {
+      valid: false,
+      err: 'Setting the same path label on multiple WAN interfaces is not allowed'
     };
   }
 
