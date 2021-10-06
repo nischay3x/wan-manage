@@ -71,7 +71,11 @@ Leader.prototype.elect = function elect () {
   // atomic redis set
   this.redis.set(this.key, this.id, 'PX', this.options.ttl, 'NX', function (err, res) {
     if (err) {
-      return this.emit('error', err);
+      this.emit('error', err);
+      clearTimeout(this.electId);
+      clearInterval(this.renewId);
+      this.electId = setTimeout(Leader.prototype.elect.bind(this), this.options.wait);
+      return;
     }
     if (res !== null) {
       this.emit('elected');
