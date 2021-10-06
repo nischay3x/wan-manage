@@ -298,7 +298,7 @@ describe('validateDevice', () => {
       type: 'WAN',
       pathlabels: []
     });
-    failureObject.err = 'Duplicated metrics are not allowed on VPP WAN interfaces';
+    failureObject.err = 'Duplicated metrics are not allowed on WAN interfaces';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
   });
