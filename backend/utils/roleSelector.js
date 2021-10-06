@@ -42,6 +42,7 @@ class RoleSelector {
     // Bind class functions
     this.initializeSelector = this.initializeSelector.bind(this);
     this.runIfActive = this.runIfActive.bind(this);
+    this.shutDown = this.shutDown.bind(this);
   }
 
   initializeSelector (key) {
@@ -58,7 +59,7 @@ class RoleSelector {
   }
 
   selectorSetActive (key) {
-    this.selector[key].elect();
+    this.selectors[key].elect();
   }
 
   runIfActive (key, func) {
@@ -73,6 +74,10 @@ class RoleSelector {
         }
       }
     });
+  }
+
+  shutDown () {
+    this.redis.quit();
   }
 }
 

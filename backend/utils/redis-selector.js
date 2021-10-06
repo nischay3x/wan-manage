@@ -39,14 +39,21 @@ util.inherits(Selector, EventEmitter);
   * Try to elect Selector
   */
 Selector.prototype.elect = function elect () {
-  // atomic redis set
-  this.redis.set(this.key, this.id, 'NX', 'GET', function (err, res) {
+  this.isActive(function (err, isActive) {
     if (err) {
       return this.emit('error', err);
     }
-    if (res === null) { // Elected now
-      this.emit('elected');
-    }
+    if (!isActive) {
+      // Activate
+      this.redis.set(this.key, this.id, function (err, res) {
+        if (err) {
+          return this.emit('error', err);
+        }
+        if (res !== null) { // Success
+          this.emit('elected');
+        }
+      }.bind(this));
+    };
   }.bind(this));
 };
 
