@@ -1176,7 +1176,6 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   const { num, deviceA, deviceB, pathLabel, peer } = tunnelResp;
 
   // Check is tunnel used by any static route
-  // TODO: check
   const { ip1, ip2 } = generateTunnelParams(num);
   const tunnelUsedByStaticRoute =
     (Array.isArray(deviceA.staticroutes) &&
