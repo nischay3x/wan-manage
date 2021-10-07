@@ -1549,13 +1549,20 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
       return ifc._id.toString() === tunnel.interfaceB.toString();
     });
 
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
-      tunnel, ifcA, tunnel.deviceA.versions, ifcB, tunnel.peer ? null : tunnel.deviceB.versions);
+    const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel, ifcA, ifcB, tunnel.peer);
+
+    let title = null;
+    if (tunnel.peer) {
+      // eslint-disable-next-line max-len
+      title = `Delete peer tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.peer.name})`;
+    } else {
+      // eslint-disable-next-line max-len
+      title = `Delete tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.deviceB.hostname}, ${ifcB.name})`;
+    }
 
     const removeTunnelJobs = await queueTunnel(
       false,
-      // eslint-disable-next-line max-len
-      `Delete tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.deviceB.hostname}, ${ifcB.name})`,
+      title,
       tasksDeviceA,
       tasksDeviceB,
       username,
