@@ -1130,13 +1130,25 @@ class DevicesService {
       // validate static routes
       if (Array.isArray(deviceRequest.staticroutes)) {
         // if route is via a pending tunnel, set it as pending
+        const incompleteTunnels = origTunnels.filter(t => t.configStatus === 'incomplete');
+        const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.hasIpOnDevice === false);
+
         deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
-          const incompleteTunnels = origTunnels.filter(t => t.configStatus === 'incomplete');
           for (const t of incompleteTunnels) {
             const { ip1, ip2 } = generateTunnelParams(t.num);
             if (ip1 === s.gateway || ip2 === s.gateway) {
               s.configStatus = 'incomplete';
               s.configStatusReason = `Tunnel ${t.num} is in pending state`;
+              return s;
+            }
+          }
+
+          for (const ifc of interfacesWithoutIp) {
+            if (ifc.IPv4 === s.gateway) {
+              s.configStatus = 'incomplete';
+              s.configStatusReason =
+                `Interface ${ifc.name} in device ${origDevice.name} has no IP address`;
+              return s;
             }
           }
           return s;
