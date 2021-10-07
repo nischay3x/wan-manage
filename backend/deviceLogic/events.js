@@ -203,9 +203,10 @@ class Events {
       isActive: true,
       configStatus: 'incomplete'
     })
+      .session(this.session)
       .populate('deviceA', 'interfaces')
       .populate('deviceB', 'interfaces')
-      .session(this.session).lean();
+      .lean();
 
     for (const tunnel of tunnels) {
       // make sure both interfaces have IP addresses before removing pending status
@@ -453,29 +454,45 @@ class Events {
         }
 
         if (this.isPublicPortChanged(origIfc, updatedIfc)) {
+          // add dedicated try and catch for event limit.
+          // if something that not related to event limiter functionality
+          // will fail in the catch block it will be thrown to the parent try/catch
+          let res = null;
           try {
-            const res = await publicPortLimiter.consume(origDevice._id.toString());
-            // release pending tunnels
-            if (res.consumedPoints === 1) {
-              this.addChangedDevice(origDevice._id);
-              await this.removePendingStateFromTunnels(origDevice, origIfc);
-            }
+            res = await publicPortLimiter.consume(origDevice._id.toString());
           } catch (err) {
-            // if rate limiting exceeded, we set tunnels as pending
-            logger.error('Public port rate limit exceeded. tunnels will set as pending', {
-              params: {
-                deviceId: origDevice._id,
-                origPort: origIfc.PublicPort,
-                newPort: updatedIfc.public_port.toString()
-              }
-            });
+            const errParams = {
+              deviceId: origDevice._id,
+              interfaceId: origIfc._id,
+              origPort: origIfc.PublicPort,
+              newPort: updatedIfc.public_port.toString()
+            };
 
+            // if it already blocked, print warning log
+            if (err.consumedPoints > publicPortLimiter.points + 1) {
+              logger.warn(
+                'Public port rate limit exceeded. The system will not rebuild the relevant tunnels',
+                { params: errParams }
+              );
+            }
+
+            // if rate limiting exceeded, we set tunnels as pending
             if (err.consumedPoints === publicPortLimiter.points + 1) {
+              logger.error('Public port rate limit exceeded. tunnels will set as pending',
+                { params: errParams }
+              );
+
               this.addChangedDevice(origDevice._id);
               // eslint-disable-next-line max-len
               const reason = `The public port for interface ${origIfc.name} in device ${origDevice.name} is changing at a high rate`;
               await this.setPendingStateToTunnels(origDevice, origIfc, reason);
             }
+          }
+
+          // release pending tunnels
+          if (res && res.consumedPoints === 1) {
+            this.addChangedDevice(origDevice._id);
+            await this.removePendingStateFromTunnels(origDevice, origIfc);
           }
         }
       }

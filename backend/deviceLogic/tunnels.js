@@ -822,6 +822,8 @@ const addTunnel = async (
       deviceB: deviceB._id,
       interfaceB: deviceBIntf._id,
       pathlabel: pathLabel,
+      configStatus: '', // if tunnel exists but isActive was false, reset the configStatus
+      configStatusReason: '',
       encryptionMethod,
       tunnelKeys
     },

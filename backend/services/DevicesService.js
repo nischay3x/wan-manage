@@ -888,6 +888,9 @@ class DevicesService {
             // Device type is assigned by system only
             updIntf.deviceType = origIntf.deviceType;
 
+            // This field is set by changed to true by events logic only
+            updIntf.hasIpOnDevice = origIntf.hasIpOnDevice;
+
             // Check tunnels connectivity
             if (origIntf.isAssigned) {
               // if interface unassigned make sure it's not used by any tunnel
@@ -1130,8 +1133,8 @@ class DevicesService {
         deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
           const incompleteTunnels = origTunnels.filter(t => t.configStatus === 'incomplete');
           for (const t of incompleteTunnels) {
-            const { ip1 } = generateTunnelParams(t.num);
-            if (ip1 === s.gateway) {
+            const { ip1, ip2 } = generateTunnelParams(t.num);
+            if (ip1 === s.gateway || ip2 === s.gateway) {
               s.configStatus = 'incomplete';
               s.configStatusReason = `Tunnel ${t.num} is in pending state`;
             }

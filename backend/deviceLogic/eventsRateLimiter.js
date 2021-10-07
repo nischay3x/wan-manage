@@ -18,10 +18,10 @@
 
 const { RateLimiterMemory } = require('rate-limiter-flexible');
 
-// 5 times in an hour - stop it for 1 hours
+// 10 times in an hour - stop it for 1 hour
 // TODO: consult about the right settings
 const publicPortLimiter = new RateLimiterMemory({
-  points: 5,
+  points: 10,
   duration: 60 * 60,
   blockDuration: 60 * 60
 });
