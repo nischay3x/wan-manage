@@ -86,6 +86,10 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdRoutesGET);
   }
 
+  async devicesIdTunnelsGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdTunnelsGET);
+  }
+
   async devicesIdStaticroutesGET (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdStaticroutesGET);
   }

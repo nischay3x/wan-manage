@@ -241,6 +241,7 @@ const complete = async (jobId, res) => {
         .aggregate([
           {
             $match: {
+              peer: null,
               isActive: true,
               encryptionMethod: 'ikev2',
               $or: [{ deviceA: localDevID }, { deviceB: localDevID }]

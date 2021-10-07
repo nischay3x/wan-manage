@@ -35,8 +35,9 @@ class TunnelsService {
       deviceStatus.getTunnelStatus(retTunnel.deviceA.machineId, tunnelId) || {};
 
     // Add tunnel status
-    retTunnel.tunnelStatusB =
-      deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+    retTunnel.tunnelStatusB = retTunnel.peer
+      ? null
+      : deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -120,7 +121,12 @@ class TunnelsService {
             as: 'deviceB'
           }
         },
-        { $unwind: '$deviceB' },
+        {
+          $unwind: {
+            path: '$deviceB',
+            preserveNullAndEmptyArrays: true // for peers we don't use deviceB
+          }
+        },
         {
           $lookup: {
             from: 'pathlabels',
@@ -158,13 +164,33 @@ class TunnelsService {
           }
         },
         { $unwind: '$interfaceADetails' },
-        { $unwind: '$interfaceBDetails' },
+        {
+          $unwind: {
+            path: '$interfaceBDetails',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'peers',
+            localField: 'peer',
+            foreignField: '_id',
+            as: 'peer'
+          }
+        },
+        {
+          $unwind: {
+            path: '$peer',
+            preserveNullAndEmptyArrays: true
+          }
+        },
         {
           $project: {
             num: 1,
             isActive: 1,
             'interfaceADetails.name': 1,
             'interfaceBDetails.name': 1,
+            peer: 1,
             'interfaceADetails.PublicPort': 1,
             'interfaceBDetails.PublicPort': 1,
             'interfaceADetails.PublicIP': 1,
@@ -183,21 +209,34 @@ class TunnelsService {
             configStatus: 1,
             configStatusReason: 1,
             tunnelStatus: {
-              $cond: [{
-                $and: [{
-                  $in: [
+              $cond: [
+                {
+                  $and: [
                     {
-                      $concat: [{ $toString: '$num' }, ':', '$deviceA.machineId']
-                    }, connectedTunnels
-                  ]
-                }, {
-                  $in: [
+                      $in: [
+                        {
+                          $concat: [{ $toString: '$num' }, ':', '$deviceA.machineId']
+                        }, connectedTunnels
+                      ]
+                    },
                     {
-                      $concat: [{ $toString: '$num' }, ':', '$deviceB.machineId']
-                    }, connectedTunnels
+                      $or: [
+                        // in case of peer, there is no deviceB to check connection for
+                        {
+                          $ne: ['$peer', null]
+                        },
+                        {
+                          $in: [
+                            {
+                              $concat: [{ $toString: '$num' }, ':', '$deviceB.machineId']
+                            }, connectedTunnels
+                          ]
+                        }
+                      ]
+                    }
                   ]
-                }]
-              }, 'Connected', 'Not Connected']
+                }, 'Connected', 'Not Connected'
+              ]
             }
           }
         }

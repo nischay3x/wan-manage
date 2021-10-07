@@ -34,7 +34,7 @@ const interfacesSchema = new Schema({
     maxlength: [50, 'Name length must be at most 50'],
     validate: {
       validator: validators.validateIfcName,
-      message: 'name should be a vaild interface name'
+      message: 'name should be a valid interface name'
     },
     required: [true, 'Interface name must be set']
   },
@@ -44,7 +44,7 @@ const interfacesSchema = new Schema({
     maxlength: [50, 'devId length must be at most 50'],
     validate: {
       validator: validators.validateDevId,
-      message: 'devId should be a vaild devId address'
+      message: 'devId should be a valid devId address'
     },
     default: ''
   },
@@ -95,7 +95,7 @@ const interfacesSchema = new Schema({
     maxlength: [20, 'IPv4 length must be at most 20'],
     validate: {
       validator: validators.validateIPv4,
-      message: 'IPv4 should be a vaild ip address'
+      message: 'IPv4 should be a valid ip address'
     },
     default: ''
   },
@@ -105,7 +105,7 @@ const interfacesSchema = new Schema({
     maxlength: [5, 'IPv4 mask length must be at most 5'],
     validate: {
       validator: validators.validateIPv4Mask,
-      message: 'IPv4Mask should be a vaild mask'
+      message: 'IPv4Mask should be a valid mask'
     }
   },
   // ipv6 address
@@ -114,7 +114,7 @@ const interfacesSchema = new Schema({
     maxlength: [50, 'IPv6 length must be at most 50'],
     validate: {
       validator: validators.validateIPv6,
-      message: 'IPv6 should be a vaild ip address'
+      message: 'IPv6 should be a valid ip address'
     },
     default: ''
   },
@@ -124,7 +124,7 @@ const interfacesSchema = new Schema({
     maxlength: [5, 'IPv6 mask length must be at most 5'],
     validate: {
       validator: validators.validateIPv6Mask,
-      message: 'IPv6Mask should be a vaild mask'
+      message: 'IPv6Mask should be a valid mask'
     }
   },
   // external ip address
@@ -255,7 +255,7 @@ const interfacesSchema = new Schema({
       required: true,
       validate: {
         validator: validators.validateOSPFArea,
-        message: 'area should be a vaild number'
+        message: 'area should be a valid number'
       }
     },
     keyId: {
@@ -329,7 +329,7 @@ const staticroutesSchema = new Schema({
     type: String,
     validate: {
       validator: validators.validateDevId,
-      message: 'ifname should be a vaild interface devId'
+      message: 'ifname should be a valid interface devId'
     }
   },
   // metric
@@ -377,7 +377,7 @@ const MACAssignmentSchema = new Schema({
     required: [true, 'IPv4 must be set'],
     validate: {
       validator: validators.validateIPv4,
-      message: 'IPv4 should be a vaild ip address'
+      message: 'IPv4 should be a valid ip address'
     },
     default: ''
   }
@@ -391,7 +391,7 @@ const DHCPSchema = new Schema({
     required: [true, 'Interface must be set'],
     validate: {
       validator: validators.validateDevId,
-      message: 'Interface should be a vaild interface devId'
+      message: 'Interface should be a valid interface devId'
     }
   },
   rangeStart: {
@@ -694,7 +694,7 @@ const deviceSchema = new Schema({
     maxlength: [50, 'defaultRoute length must be at most 50'],
     validate: {
       validator: validators.validateIPv4,
-      message: 'defaultRoute should be a vaild ip address'
+      message: 'defaultRoute should be a valid ip address'
     },
     default: ''
   },
@@ -806,7 +806,7 @@ const deviceSchema = new Schema({
       required: false,
       validate: {
         validator: validators.validateIPv4,
-        message: props => `${props.value} should be a vaild ip address`
+        message: props => `${props.value} should be a valid ip address`
       }
     },
     helloInterval: {
@@ -814,7 +814,7 @@ const deviceSchema = new Schema({
       default: 10,
       validate: {
         validator: validators.validateOSPFInterval,
-        message: props => `${props.value} should be a vaild integer`
+        message: props => `${props.value} should be a valid integer`
       }
     },
     deadInterval: {
@@ -822,7 +822,7 @@ const deviceSchema = new Schema({
       default: 40,
       validate: {
         validator: validators.validateOSPFInterval,
-        message: props => `${props.value} should be a vaild integer`
+        message: props => `${props.value} should be a valid integer`
       }
     }
   }
