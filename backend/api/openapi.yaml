@@ -9215,6 +9215,7 @@ components:
           enum:
           - priority
           - load-balancing
+          - link-quality
           type: string
       type: object
       required:
@@ -9230,6 +9231,7 @@ components:
           enum:
           - priority
           - load-balancing
+          - link-quality
           type: string
       type: object
       required:
