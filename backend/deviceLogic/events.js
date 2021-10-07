@@ -212,14 +212,15 @@ class Events {
       // make sure both interfaces have IP addresses before removing pending status
       const ifcA = tunnel.deviceA.interfaces.find(
         i => i._id.toString() === tunnel.interfaceA.toString());
-      const ifcB = tunnel.deviceB.interfaces.find(
+      const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(
         i => i._id.toString() === tunnel.interfaceB.toString());
 
-      if (ifcA.hasIpOnDevice && ifcB.hasIpOnDevice) {
+      if (ifcA.hasIpOnDevice && (ifcB && ifcB.hasIpOnDevice)) {
         await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
       } else {
-        const ifcWithoutIp = ifcA.hasIpOnDevice ? ifcB : ifcA;
-        const deviceWithoutIp = ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
+        const ifcWithoutIp = tunnel.peer ? ifcA : ifcA.hasIpOnDevice ? ifcB : ifcA;
+        const deviceWithoutIp = tunnel.peer
+          ? tunnel.deviceA : ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
 
         // if one event is removed but still no ip on the interface, change the reason
         const reason =

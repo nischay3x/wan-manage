@@ -1545,12 +1545,12 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
     const ifcA = tunnel.deviceA.interfaces.find(ifc => {
       return ifc._id.toString() === tunnel.interfaceA.toString();
     });
-    const ifcB = tunnel.deviceB.interfaces.find(ifc => {
+    const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(ifc => {
       return ifc._id.toString() === tunnel.interfaceB.toString();
     });
 
     const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
-      tunnel, ifcA, tunnel.deviceA.versions, ifcB, tunnel.deviceB.versions);
+      tunnel, ifcA, tunnel.deviceA.versions, ifcB, tunnel.peer ? null : tunnel.deviceB.versions);
 
     const removeTunnelJobs = await queueTunnel(
       false,
