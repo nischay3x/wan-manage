@@ -460,10 +460,11 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         $or: [{ interfaceA: ifc._id }, { interfaceB: ifc._id }]
       })
       .populate('deviceA')
-      .populate('deviceB');
+      .populate('deviceB')
+      .populate('peer');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, pathlabel, num, _id } = tunnel;
+      let { deviceA, deviceB, pathlabel, num, _id, peer } = tunnel;
       // Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
       if (deviceA._id.toString() === device._id.toString()) deviceA = device;
@@ -472,7 +473,8 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       const ifcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
       });
-      const ifcB = deviceB.interfaces.find(ifc => {
+
+      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceB.toString();
       });
 
@@ -483,7 +485,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
-        tunnel, ifcA, deviceA.versions, ifcB, deviceB.versions);
+        tunnel, ifcA, ifcB, peer);
       const pathlabels = modifiedIfcsMap[ifc._id] && modifiedIfcsMap[ifc._id].pathlabels
         ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
         : [];
@@ -493,17 +495,17 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         await oneTunnelDel(_id, user.username, org);
       } else {
         const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
-        const modifiedIfcB = modifiedIfcsMap[tunnel.interfaceB.toString()];
+        const modifiedIfcB = peer ? null : modifiedIfcsMap[tunnel.interfaceB.toString()];
         const loggerParams = {
           machineA: deviceA.machineId,
-          machineB: deviceB.machineId,
+          machineB: peer ? null : deviceB.machineId,
           tunnelNum: tunnel.num
         };
         // skip interfaces without IP or GW
         const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
           (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
 
-        if (missingNetParameters(modifiedIfcA) || missingNetParameters(modifiedIfcB)) {
+        if (missingNetParameters(modifiedIfcA) || (!peer && missingNetParameters(modifiedIfcB))) {
           logger.info('Missing network parameters, the tunnel will not be rebuilt', {
             params: loggerParams
           });
@@ -511,10 +513,13 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         }
         // if dhcp was changed from 'no' to 'yes'
         // then we need to wait for a new config from the agent
-        const waitingDhcpInfo =
-          (isObject(modifiedIfcA) && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes') ||
-          (isObject(modifiedIfcB) && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
-        if (waitingDhcpInfo) {
+        const waitingDhcpInfoA =
+          (isObject(modifiedIfcA) && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes');
+        const waitingDhcpInfoB = peer
+          ? false
+          : (isObject(modifiedIfcB) && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
+
+        if (waitingDhcpInfoA || waitingDhcpInfoB) {
           logger.info('Waiting a new config from DHCP, the tunnel will not be rebuilt', {
             params: loggerParams
           });
@@ -538,7 +543,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
         );
         if (!tunnelParametersModified(ifcA, modifiedIfcA) &&
-          !tunnelParametersModified(ifcB, modifiedIfcB)) {
+          (peer === null && !tunnelParametersModified(ifcB, modifiedIfcB))) {
           continue;
         }
 
@@ -547,31 +552,40 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           return !ifcA.PublicIP || !ifcB.PublicIP ||
             ifcA.PublicIP === ifcB.PublicIP;
         };
-        const skipLocal =
-          (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
-          modifiedIfcA.mtu === ifcA.mtu && isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
-          (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
-          modifiedIfcB.mtu === ifcB.mtu && isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
+        const skipLocal = peer
+          ? false
+          : (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
+            modifiedIfcA.mtu === ifcA.mtu && isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
+            (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
+            modifiedIfcB.mtu === ifcB.mtu && isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
 
         if (skipLocal) {
           continue;
         }
 
         await setTunnelsPendingInDB([tunnel._id], org, true);
+        let title = '';
+        if (peer) {
+          // eslint-disable-next-line max-len
+          title = `Delete peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${peer.name})`;
+        } else {
+          // eslint-disable-next-line max-len
+          title = `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
+        }
         const removeTunnelJobs = await queueTunnel(
           false,
-          // eslint-disable-next-line max-len
-          `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
+          title,
           tasksDeviceA,
           tasksDeviceB,
           user.username,
           org,
           deviceA.machineId,
-          deviceB.machineId,
+          peer ? null : deviceB.machineId,
           deviceA._id,
-          deviceB._id,
+          peer ? null : deviceB._id,
           num,
-          pathlabel
+          pathlabel,
+          peer
         );
         tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
         removedTunnels.push(tunnel._id);
@@ -650,60 +664,105 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
  * @param  {Array}   removedTunnels an array of ids of the removed tunnels
  * @param  {string}  org            the organization to which the tunnels belong
  * @param  {string}  username       name of the user that requested the device change
+ * @param  {boolean} sendRemoveJobs indicate if need to send remove tunnels first
  * @return {Array}                  array of add-tunnel jobs
  */
-const reconstructTunnels = async (removedTunnels, org, username) => {
+const reconstructTunnels = async (tunnelsIds, org, username, sendRemoveJobs = false) => {
   let jobs = [];
   try {
     const tunnels = await tunnelsModel
-      .find({ _id: { $in: removedTunnels }, isActive: true })
+      .find({ _id: { $in: tunnelsIds }, isActive: true })
       .populate('deviceA')
-      .populate('deviceB');
+      .populate('deviceB')
+      .populate('peer');
 
     for (const tunnel of tunnels) {
-      const { deviceA, deviceB, pathlabel } = tunnel;
+      let tasksDeviceA = [];
+      let tasksDeviceB = [];
+
+      const { deviceA, deviceB, pathlabel, peer } = tunnel;
       const ifcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
       });
-      const ifcB = deviceB.interfaces.find(ifc => {
+
+      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceB.toString();
       });
 
-      const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
+      // IMPORTANT: If the tunnels was removed via modify-device process,
+      // the order of jobs is: remove-tunnels, modify-router, add-tunnels.
+      // But if tunnels needs to be recreated without a modify device job,
+      // we can send remove and add tunnels jobs in one aggregated request.
+      if (sendRemoveJobs) {
+        await setTunnelsPendingInDB([tunnel._id], org, true);
+        const [removeTasksA, removeTasksB] = prepareTunnelRemoveJob(tunnel, ifcA, ifcB, peer);
+        tasksDeviceA = tasksDeviceA.concat(removeTasksA);
+        tasksDeviceB = tasksDeviceB.concat(removeTasksB);
+      }
+
+      const [addTasksA, addTasksB] = await prepareTunnelAddJob(
         tunnel,
         ifcA,
         ifcB,
         pathlabel,
         deviceA,
-        deviceB
+        deviceB,
+        peer
       );
-      const addTunnelsJobs = await queueTunnel(
+      tasksDeviceA = tasksDeviceA.concat(addTasksA);
+      tasksDeviceB = tasksDeviceB.concat(addTasksB);
+
+      let title = '';
+      const actionType = sendRemoveJobs ? 'Reconstruct' : 'Add';
+      if (peer) {
+        // eslint-disable-next-line max-len
+        title = `${actionType} peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${peer.name})`;
+      } else {
+        // eslint-disable-next-line max-len
+        title = `${actionType} tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
+      };
+
+      // if sendRemoveJobs is true, we need to send aggregated request with pair
+      // of remove-tunnel and add-tunnel
+      [tasksDeviceA, tasksDeviceB] = [tasksDeviceA, tasksDeviceB].map(tasks => {
+        if (tasks.length > 1) {
+          return [{
+            entity: 'agent',
+            message: 'aggregated',
+            params: { requests: tasks }
+          }];
+        }
+        return tasks;
+      });
+
+      const tunnelJobs = await queueTunnel(
         true,
         // eslint-disable-next-line max-len
-        `Add tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`,
+        title,
         tasksDeviceA,
         tasksDeviceB,
         username,
         org,
         deviceA.machineId,
-        deviceB.machineId,
+        peer ? null : deviceB.machineId,
         deviceA._id,
-        deviceB._id,
+        peer ? null : deviceB._id,
         tunnel.num,
-        pathlabel
+        pathlabel,
+        peer
       );
-      jobs = jobs.concat(addTunnelsJobs);
+      jobs = jobs.concat(tunnelJobs);
     }
   } catch (err) {
     logger.error('Failed to queue Add tunnel jobs', {
-      params: { err: err.message, removedTunnels }
+      params: { err: err.message, tunnelsIds }
     });
   };
   try {
-    await setTunnelsPendingInDB(removedTunnels, org, false);
+    await setTunnelsPendingInDB(tunnelsIds, org, false);
   } catch (err) {
     logger.error('Failed to set tunnel pending flag in db', {
-      params: { err: err.message, removedTunnels }
+      params: { err: err.message, tunnelsIds }
     });
   }
   return jobs;
@@ -1428,7 +1487,8 @@ module.exports = {
   apply: apply,
   complete: complete,
   completeSync: completeSync,
+  sync: sync,
+  reconstructTunnels,
   error: error,
-  remove: remove,
-  sync: sync
+  remove: remove
 };

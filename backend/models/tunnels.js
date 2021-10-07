@@ -110,6 +110,12 @@ const tunnelSchema = new Schema({
   pendingTunnelModification: {
     type: Boolean,
     default: false
+  },
+  // The peer configuration for the tunnel
+  peer: {
+    type: Schema.Types.ObjectId,
+    ref: 'peers',
+    default: null
   }
 }, {
   timestamps: true

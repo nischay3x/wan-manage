@@ -50,6 +50,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
+const TunnelsService = require('./TunnelsService');
 
 class DevicesService {
   /**
@@ -1699,6 +1700,39 @@ class DevicesService {
   }
 
   /**
+   * Retrieve device tunnels
+   *
+   * id Object Numeric ID of the Device to fetch information about
+   * returns List
+   **/
+  static async devicesIdTunnelsGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const tunnels = await tunnelsModel.find({
+        isActive: true,
+        org: { $in: orgList },
+        $or: [{ deviceA: id }, { deviceB: id }]
+      }).populate('deviceA', 'name interfaces machineId')
+        .populate('deviceB', 'name interfaces machineId')
+        .populate('pathlabel')
+        .populate('peer')
+        .lean();
+
+      const tunnelMap = tunnels.map((d) => {
+        return TunnelsService.selectTunnelParams(d);
+      });
+
+      return Service.successResponse(tunnelMap);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Retrieve device tunnel statistics information
    *
    * id Object Numeric ID of the Device to fetch information about
@@ -2477,7 +2511,7 @@ class DevicesService {
    * ospfConfigs ospfConfigs
    * returns OSPF configuration
    **/
-  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user }, response) {
+  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -2501,7 +2535,7 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(ospfConfigs, 202);
     } catch (e) {
       return Service.rejectResponse(

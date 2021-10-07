@@ -53,7 +53,7 @@ describe('isAgentVersionCompatible', () => {
     'Should return 0 if MGMT major version is greater by 1 ' +
         'than agent major version (agent version=%s)',
     (version) => {
-      expect(isAgentVersionCompatible(version)).toEqual(0);
+      expect(isAgentVersionCompatible(version)).toEqual(-1);
     }
   );
 
@@ -79,6 +79,20 @@ describe('isAgentVersionCompatible', () => {
     '5.1.0',
     '5.0.1',
     '5.1.1'
+  ])(
+    'Should return 1 if MGMT major version is older than agent major version (agent version=%s)',
+    (version) => {
+      expect(isAgentVersionCompatible(version)).toEqual(0);
+    }
+  );
+
+  // Different variations of incompatible versions.
+  // MGMT is older than agent version
+  it.each([
+    '6.0.0',
+    '6.1.0',
+    '6.0.1',
+    '6.1.1'
   ])(
     'Should return 1 if MGMT major version is older than agent major version (agent version=%s)',
     (version) => {
@@ -189,17 +203,17 @@ describe('verifyAgentVersion', () => {
     expect(result).toMatchObject({
       valid: false,
       statusCode: 403,
-      err: 'Incompatible version: agent version: 1.1.0 too low, management version: 4.0.0'
+      err: 'Incompatible version: agent version: 1.1.0 too low, management version: 5.0.0'
     });
   });
 });
 
 it('Should return failure object if agent version is higher', () => {
-  const result = verifyAgentVersion('5.1.0');
+  const result = verifyAgentVersion('6.1.0');
   expect(result).toMatchObject({
     valid: false,
     statusCode: 400,
-    err: 'Incompatible version: agent version: 5.1.0 too high, management version: 4.0.0'
+    err: 'Incompatible version: agent version: 6.1.0 too high, management version: 5.0.0'
   });
 });
 
