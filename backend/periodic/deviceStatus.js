@@ -55,6 +55,7 @@ class DeviceStatus {
     this.generateDevStatsNotifications = this.generateDevStatsNotifications.bind(this);
     this.getDeviceStatus = this.getDeviceStatus.bind(this);
     this.setDeviceStatus = this.setDeviceStatus.bind(this);
+    this.setDeviceState = this.setDeviceState.bind(this);
     this.registerSyncUpdateFunc = this.registerSyncUpdateFunc.bind(this);
     this.removeDeviceStatus = this.removeDeviceStatus.bind(this);
     this.deviceConnectionClosed = this.deviceConnectionClosed.bind(this);
@@ -225,7 +226,7 @@ class DeviceStatus {
               connections.sendDeviceInfoMsg(deviceID, deviceInfo.deviceObj);
             }
           } else {
-            this.setDeviceStatsField(deviceID, 'state', 'stopped');
+            this.setDeviceState(deviceID, 'pending');
           }
         } else {
           logger.warn('Failed to get device status', {
@@ -344,12 +345,41 @@ class DeviceStatus {
   }
 
   /**
-     * @param  {string} deviceID   device host id
+   * @param  {string} machineId   device machine Id
+   * @param  {string} state       device state
+   * @return {void}
+   */
+  setDeviceState (machineId, newState) {
+    // Generate an event if there was a transition in the device's status
+    const deviceInfo = connections.getDeviceInfo(machineId);
+    if (!deviceInfo) {
+      logger.warn('Failed to get device info', {
+        params: { machineId }
+      });
+      return;
+    }
+    const { org, deviceObj } = deviceInfo;
+    if (!this.status[machineId] || newState !== this.status[machineId].state) {
+      this.events.push({
+        org: org,
+        title: 'Router state change',
+        time: new Date(),
+        device: deviceObj,
+        machineId: machineId,
+        details: `Router state changed to "${newState === 'running' ? 'Running' : 'Not running'}"`
+      });
+      this.setDevicesStatusByOrg(org, deviceObj, newState);
+    }
+    this.setDeviceStatsField(machineId, 'state', newState);
+  }
+
+  /**
+     * @param  {string} machineId  device machine id
      * @param  {Object} deviceInfo device info entry
      * @param  {Object} rawStats   device stats supplied by the device
      * @return {void}
      */
-  setDeviceStatus (deviceID, deviceInfo, rawStats) {
+  setDeviceStatus (machineId, deviceInfo, rawStats) {
     let devStatus = 'failed';
     if (rawStats.hasOwnProperty('state')) { // Agent v1.X.X
       devStatus = rawStats.state;
@@ -358,21 +388,8 @@ class DeviceStatus {
       devStatus = rawStats.running === true ? 'running' : 'stopped';
     }
 
-    // Generate an event if there was a transition in the device's status
-    const { org, deviceObj, machineId } = deviceInfo;
-    if (!this.status[deviceID] || devStatus !== this.status[deviceID].state) {
-      this.events.push({
-        org: org,
-        title: 'Router state change',
-        time: new Date(),
-        device: deviceObj,
-        machineId: machineId,
-        details: `Router state changed to "${devStatus === 'running' ? 'Running' : 'Not running'}"`
-      });
-      this.setDevicesStatusByOrg(org, deviceObj, devStatus);
-    }
-
-    this.setDeviceStatsField(deviceID, 'state', devStatus);
+    this.setDeviceState(machineId, devStatus);
+    const { org, deviceObj } = deviceInfo;
 
     // Interface statistics
     const timeDelta = rawStats.period;
@@ -382,25 +399,25 @@ class DeviceStatus {
     // Set tunnel status in memory for now
     const tunnelStatus = rawStats.tunnel_stats;
     if (rawStats.hasOwnProperty('tunnel_stats') && Object.entries(tunnelStatus).length !== 0) {
-      if (!this.status[deviceID].tunnelStatus) {
-        this.status[deviceID].tunnelStatus = {};
+      if (!this.status[machineId].tunnelStatus) {
+        this.status[machineId].tunnelStatus = {};
       }
 
       // Generate tunnel notifications
       Object.entries(tunnelStatus).forEach(ent => {
         const [tunnelID, tunnelState] = ent;
-        const firstTunnelUpdate = !this.status[deviceID].tunnelStatus[tunnelID];
+        const firstTunnelUpdate = !this.status[machineId].tunnelStatus[tunnelID];
 
         // Update changed tunnel status in memory by org
         if ((firstTunnelUpdate ||
-          tunnelState.status !== this.status[deviceID].tunnelStatus[tunnelID].status)) {
+          tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)) {
           this.setTunnelsStatusByOrg(org, tunnelID, tunnelState.status);
         }
 
         // Generate a notification if tunnel status has changed since
         // the last update, and only if the new status is 'down'
         if ((firstTunnelUpdate ||
-            tunnelState.status !== this.status[deviceID].tunnelStatus[tunnelID].status) &&
+            tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status) &&
             tunnelState.status === 'down') {
           this.events.push({
             org: org,
@@ -414,7 +431,7 @@ class DeviceStatus {
         // Generate a notification only if drop rate has
         // changed, and the new drop rate is higher than 50%
         if ((firstTunnelUpdate ||
-            tunnelState.drop_rate !== this.status[deviceID].tunnelStatus[tunnelID].drop_rate) &&
+            tunnelState.drop_rate !== this.status[machineId].tunnelStatus[tunnelID].drop_rate) &&
             tunnelState.drop_rate > 50) {
           this.events.push({
             org: org,
@@ -428,7 +445,7 @@ class DeviceStatus {
         // Generate a notification only if RTT has changed,
         // and the new RTT is higher than 300 milliseconds
         if ((firstTunnelUpdate ||
-                    tunnelState.rtt !== this.status[deviceID].tunnelStatus[tunnelID].rtt) &&
+                    tunnelState.rtt !== this.status[machineId].tunnelStatus[tunnelID].rtt) &&
                     tunnelState.rtt > 300) {
           this.events.push({
             org: org,
@@ -440,7 +457,7 @@ class DeviceStatus {
           });
         }
       });
-      Object.assign(this.status[deviceID].tunnelStatus, rawStats.tunnel_stats);
+      Object.assign(this.status[machineId].tunnelStatus, rawStats.tunnel_stats);
     }
 
     // Set interface rx/tx rates in memory
@@ -454,7 +471,7 @@ class DeviceStatus {
     });
 
     if (Object.entries(devStats).length !== 0) {
-      this.setDeviceStatsField(deviceID, 'ifStats', devStats);
+      this.setDeviceStatsField(machineId, 'ifStats', devStats);
     }
   }
 

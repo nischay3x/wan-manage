@@ -338,7 +338,7 @@ class DeviceQueues {
       // Define single batch Iteration
       const singleBatchIteration = (batchFrom, batchTo) => {
         return new Promise((resolve, reject) => {
-          const handleFunc = async (err, jobs) => {
+          const handleFunc = (err, jobs) => {
             if (err) {
               return reject(
                 new Error('DeviceQueues: Iteration error, state=' + state + ', err=' + err)
@@ -397,25 +397,37 @@ class DeviceQueues {
      * The current implementation get all jobs and filter the org specific ones
      * This implementation doesn't scale for a large system
      * @param  {string}   org      organization to iterate jobs for
-     * @param  {string}   state    queue state ('complete', 'failed',
+     * @param  {string}   state    queue state ('all', 'complete', 'failed',
      *                             'inactive', 'delayed', 'active')
      * @param  {Callback} callback callback to be called per job
      *                             the callback should return 'true' for processed job
-     * @param  {string}   deviceId the deviceId (UUID) to filter by
      * @param  {integer}  from     index to start looking from (could be negative)
      * @param  {integer}  to       index to end looking from (could be negative)
      * @param  {string}   dir      order to return data 'asc' or 'desc'
      * @param  {integer}  skip     org jobs to skip before starting to iterate
      * @param  {integer}  limit    limit the number of processed jobs, -1 for no limit
-     * @param  {array}    filters  an array of filters
+     * @param  {array}    filters  an array of filters objects [{ key, op, val}]
+     *                             example [{key:'state',op:'!=',val:'failed'}, ...]
      * @return {void}
      */
-  iterateJobsByOrg (org, state, callback,
-    deviceId = null, from = 0, to = -1, dir = 'asc', skip = 0, limit = -1, filters) {
+  iterateJobsByOrg (org, state, callback, from = 0, to = -1, dir = 'asc',
+    skip = 0, limit = -1, filters) {
     return new Promise((resolve, reject) => {
       let skipped = 0;
-
-      if (filters && state === 'all' && deviceId === null) {
+      let deviceId = null;
+      if (Array.isArray(filters)) {
+        // 'and' condition is applied to all filters
+        // if there are more than 1 eq filters with the same key/value
+        // then no need to iterate jobs, the result will be empty
+        const eqFilters = filters.filter(f => f.op === '==').reduce((r, f) => {
+          if (!r[f.key]) r[f.key] = {};
+          r[f.key][f.val.toString()] = true;
+          return r;
+        }, {});
+        if (Object.values(eqFilters).some(f => Object.keys(f).length > 1)) {
+          resolve();
+          return;
+        }
         // if there is only one state or device in filters array
         // then special iterate functions will be called
         const stateFilters = filters.filter(f => f.op === '==' && f.key === 'state');
@@ -556,26 +568,20 @@ class DeviceQueues {
      * @return {number}       Number of jobs
      */
   async getCount (state, deviceId = null) {
-    const countByState = st => (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const handleFunc = (err, total) => {
         if (err) {
-          return reject(new Error('DeviceQueues: getCount error, state=' + st + ', err=' + err));
+          return reject(new Error('DeviceQueues: getCount error, state=' + state + ', err=' + err));
         } else return resolve(total);
       };
-
-      if (state !== 'all' && deviceId) this.queue[st + 'Count'](deviceId, handleFunc);
-      else this.queue[st + 'Count'](handleFunc);
-    };
-    if (state === 'all') {
-      const counts = await Promise.all(
-        ['complete', 'failed', 'inactive', 'delayed', 'active'].map(
-          st => new Promise(countByState(st))
-        )
-      );
-      return counts.reduce((a, b) => a + b);
-    } else {
-      return new Promise(countByState(state));
-    }
+      if (state === 'all') {
+        this.queue.client.zcard(this.queue.client.getKey('jobs'), handleFunc);
+      } else if (!deviceId) {
+        this.queue[state + 'Count'](handleFunc);
+      } else {
+        this.queue[state + 'Count'](deviceId, handleFunc);
+      }
+    });
   }
 
   /**

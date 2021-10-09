@@ -97,13 +97,12 @@ class JobsService {
         return Service.successResponse(result);
       }
       const parsedFilters = filters ? JSON.parse(filters) : [];
-      const machineID = null;
       await deviceQueues.iterateJobsByOrg(orgList[0].toString(),
         status, (job) => {
           const parsedJob = JobsService.selectJobsParams(job);
           result.push(parsedJob);
           return true; // Mark job as done
-        }, machineID, 0, -1, 'desc', offset, limit, parsedFilters
+        }, 0, -1, 'desc', offset, limit, parsedFilters
       );
       return Service.successResponse(result);
     } catch (e) {
