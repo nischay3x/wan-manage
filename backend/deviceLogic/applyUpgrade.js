@@ -41,7 +41,7 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
   }];
   const jobs = [];
   devices.forEach(dev => {
-    deviceStatus.setDeviceStatsField(dev.machineId, 'state', 'pending');
+    deviceStatus.setDeviceState(dev.machineId, 'pending');
     jobs.push(
       deviceQueues.addJob(dev.machineId, user, org,
         // Data
