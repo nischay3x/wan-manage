@@ -36,14 +36,14 @@ class TunnelsService {
       deviceStatus.getTunnelStatus(retTunnel.deviceA.machineId, tunnelId) || {};
 
     // Add tunnel status
-    retTunnel.tunnelStatusB =
-      deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+    retTunnel.tunnelStatusB = retTunnel.peer
+      ? {}
+      : deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
 
     // if no filter or ordering by status then db can be not updated,
     // we get the status directly from memory
-    retTunnel.tunnelStatus =
-      retTunnel.tunnelStatusA.status === 'up' && retTunnel.tunnelStatusB.status === 'up'
-        ? 'Connected' : 'Not Connected';
+    retTunnel.tunnelStatus = (retTunnel.peer || retTunnel.tunnelStatusB.status === 'up') &&
+      retTunnel.tunnelStatusA.status === 'up' ? 'Connected' : 'Not Connected';
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -126,7 +126,12 @@ class TunnelsService {
             as: 'deviceB'
           }
         },
-        { $unwind: '$deviceB' },
+        {
+          $unwind: {
+            path: '$deviceB',
+            preserveNullAndEmptyArrays: true // for peers we don't use deviceB
+          }
+        },
         {
           $lookup: {
             from: 'pathlabels',
@@ -164,13 +169,33 @@ class TunnelsService {
           }
         },
         { $unwind: '$interfaceADetails' },
-        { $unwind: '$interfaceBDetails' },
+        {
+          $unwind: {
+            path: '$interfaceBDetails',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'peers',
+            localField: 'peer',
+            foreignField: '_id',
+            as: 'peer'
+          }
+        },
+        {
+          $unwind: {
+            path: '$peer',
+            preserveNullAndEmptyArrays: true
+          }
+        },
         {
           $project: {
             num: 1,
             isActive: 1,
             'interfaceADetails.name': 1,
             'interfaceBDetails.name': 1,
+            peer: 1,
             'interfaceADetails.PublicPort': 1,
             'interfaceBDetails.PublicPort': 1,
             'interfaceADetails.PublicIP': 1,
@@ -191,9 +216,16 @@ class TunnelsService {
             tunnelStatus: {
               $cond: [{
                 $and: [
+                  { $eq: ['$status', 'up'] },
                   { $eq: ['$deviceA.isConnected', true] },
-                  { $eq: ['$deviceB.isConnected', true] },
-                  { $eq: ['$status', 'up'] }]
+                  {
+                    $or: [
+                      // in case of peer, there is no deviceB to check connection for
+                      { $ne: ['$peer', null] },
+                      { $eq: ['$deviceB.isConnected', true] }
+                    ]
+                  }
+                ]
               }, 'Connected', 'Not Connected']
             }
           }
@@ -238,15 +270,16 @@ class TunnelsService {
         response.setHeader('records-total', paginated[0].meta[0].total);
       };
 
-      const tunnelMap = paginated[0].records.map((d) => {
-        // get the actual status from memory if it was not updated in DB
-        // or if status is Connected we need to get tunnels statistics
-        if (!updateStatusInDb || d.tunnelStatus !== 'Connected') {
-          return TunnelsService.selectTunnelParams(d, updateStatusInDb);
+      const tunnelsMap = paginated[0].records.map((d) => {
+        const retTunnel = TunnelsService.selectTunnelParams(d);
+        // get the status from db if it was updated
+        if (updateStatusInDb) {
+          retTunnel.tunnelStatus = d.tunnelStatus;
         }
+        return retTunnel;
       });
 
-      return Service.successResponse(tunnelMap);
+      return Service.successResponse(tunnelsMap);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

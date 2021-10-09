@@ -1401,7 +1401,276 @@ paths:
 #      x-swagger-router-controller: Devices
 #      x-openapi-router-controller: DevicesController
 #      x-openapi-router-service: DevicesService
-
+  /peers:
+    get:
+      operationId: peersGET
+      parameters:
+      - description: The number of items to skip before starting to collect the result
+          set
+        explode: true
+        in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: The numbers of items to return
+        explode: true
+        in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+        style: form
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Peer'
+                type: array
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve peers configuration
+      tags:
+      - Peers
+      x-swagger-router-controller: Peers
+      x-openapi-router-controller: PeersController
+      x-openapi-router-service: PeersService
+    post:
+      operationId: peersPOST
+      parameters:
+      - description: Organization to create peer for
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Peer'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Peer'
+          description: Peer has been added
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Create new peer
+      tags:
+      - Peers
+      x-swagger-router-controller: Peers
+      x-openapi-router-controller: PeersController
+      x-openapi-router-service: PeersService
+  /peers/{id}:
+    put:
+      operationId: peersIdPUT
+      parameters:
+      - description: Peer ID
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: Organization to delete peer for
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Peer'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeersIdPUTResponse'
+          description: Undated peer
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Update peer
+      tags:
+      - Peers
+      x-swagger-router-controller: Peers
+      x-openapi-router-controller: PeersController
+      x-openapi-router-service: PeersService
+    delete:
+      operationId: peersIdDelete
+      parameters:
+      - description: Peer ID
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - description: Organization to delete the peer for
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Peer'
+      responses:
+        "204":
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Delete peer
+      tags:
+      - Peers
+      x-swagger-router-controller: Peers
+      x-openapi-router-controller: PeersController
+      x-openapi-router-service: PeersService
   /tunnels:
     get:
       operationId: tunnelsGET
@@ -2736,6 +3005,73 @@ paths:
       summary: Retrieve device statistics information
       tags:
       - Statistics
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
+  /devices/{id}/tunnels:
+    get:
+      operationId: devicesIdTunnelsGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Tunnel'
+                type: array
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve device tunnels
+      tags:
+      - Tunnels
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
@@ -8243,7 +8579,51 @@ components:
           - installed
           - uninstalling
           type: string
-
+    Peer:
+      example:
+        _id: _id
+        name: Cloud Provider Name
+        localFQDN: a4bbd424b1
+        remoteFQDN: 100.100.100.100
+        psk: 123456f5621c1a95997997c8cd123456
+        remoteIP: 100.100.100.100
+        urls: [monitoring.com]
+        ips: [1.1.1.1, 8.8.8.8]
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        localFQDN:
+          type: string
+        remoteFQDN:
+          type: string
+        psk:
+          type: string
+        remoteIP:
+          type: string
+          format: ipv4
+        ips:
+          type: array
+          items:
+            type: string
+            format: ipv4
+        urls:
+          type: array
+          items:
+            type: string
+    PeersIdPUTResponse:
+      required:
+        - updatedPeer
+        - reconstructedTunnels
+      properties:
+        updatedPeer:
+          type: object
+          $ref: '#/components/schemas/Peer'
+        reconstructedTunnels:
+          type: integer
     Tunnel:
       example:
         tunnelStatusA: '{}'
@@ -8280,18 +8660,22 @@ components:
           type: object
         deviceB:
           type: object
+          nullable: true
         interfaceA:
           type: object
         interfaceB:
           type: object
+          nullable: true
         interfaceADetails:
           type: object
         interfaceBDetails:
           type: object
+          nullable: true
         tunnelStatusA:
           type: object
         tunnelStatusB:
           type: object
+          nullable: true
         tunnelStatus:
           enum:
             - Connected
@@ -8884,6 +9268,7 @@ components:
           enum:
           - priority
           - load-balancing
+          - link-quality
           type: string
       type: object
       required:
@@ -8899,6 +9284,7 @@ components:
           enum:
           - priority
           - load-balancing
+          - link-quality
           type: string
       type: object
       required:

@@ -116,6 +116,12 @@ const tunnelSchema = new Schema({
     type: String,
     enum: ['', 'up', 'down'],
     default: ''
+  },
+  // The peer configuration for the tunnel
+  peer: {
+    type: Schema.Types.ObjectId,
+    ref: 'peers',
+    default: null
   }
 }, {
   timestamps: true
