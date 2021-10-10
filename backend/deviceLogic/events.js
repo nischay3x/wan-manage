@@ -119,36 +119,21 @@ class Events {
   };
 
   /**
-   * Send notification about interface connectivity lost
+   * Send notification about interface connectivity state
    * @param  {object} device device object
    * @param  {object} origIfc interface object
+   * @param  {boolean} state if true, the connectivity is online
   */
-  async interfaceConnectivityLost (device, origIfc) {
-    logger.info('Interface connectivity changed to offline', { params: { origIfc } });
+  async interfaceConnectivityChanged (device, origIfc, state) {
+    const stateTxt = state ? 'online' : 'offline';
+    logger.info(`Interface connectivity changed to ${stateTxt}`, { params: { origIfc } });
     await notificationsMgr.sendNotifications([{
       org: device.org,
-      title: 'Interface connection change',
+      title: 'Interface connection changed',
       time: new Date(),
       device: device._id,
       machineId: device.machineId,
-      details: `Interface ${origIfc.name} state changed to "offline"`
-    }]);
-  };
-
-  /**
-   * Send notification about interface connectivity restored
-   * @param  {object} device device object
-   * @param  {object} origIfc interface object
-  */
-  async interfaceConnectivityRestored (device, origIfc) {
-    logger.info('Interface connectivity changed to online', { params: { origIfc } });
-    await notificationsMgr.sendNotifications([{
-      org: device.org,
-      title: 'Interface connection change',
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: `Interface ${origIfc.name} state changed to "online"`
+      details: `Interface ${origIfc.name} state changed to "${stateTxt}"`
     }]);
   };
 
@@ -436,11 +421,7 @@ class Events {
         }
 
         if (this.isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
-          if (updatedIfc.internetAccess) {
-            await this.interfaceConnectivityRestored(origDevice, origIfc);
-          } else {
-            await this.interfaceConnectivityLost(origDevice, origIfc);
-          }
+          await this.interfaceConnectivityChanged(origDevice, origIfc, updatedIfc.internetAccess);
           this.addChangedDevice(origDevice._id);
         }
 
