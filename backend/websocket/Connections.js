@@ -558,6 +558,7 @@ class Connections {
               .keys({ version: Joi.string().required() })
               .optional()
           }),
+          stats: joi.object().optional(),
           network: joi.object().optional(),
           tunnels: joi.array().optional(),
           reconfig: joi.string().allow('').optional(),
