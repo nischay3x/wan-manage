@@ -406,7 +406,7 @@ class Events {
    * @param  {array} newInterfaces  incoming interfaces from the device
    * @param  {boolean} routerIsRunning  indicate if router is running
   */
-  async check (origDevice, newInterfaces, routerIsRunning) {
+  async checkIfToTriggerEvent (origDevice, newInterfaces, routerIsRunning) {
     try {
       const orig = keyBy(origDevice.interfaces, 'devId');
       const updated = keyBy(newInterfaces, 'devId');
