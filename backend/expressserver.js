@@ -45,6 +45,7 @@ const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
 const notifyUsers = require('./periodic/notifyUsers')();
 const appRules = require('./periodic/appRules')();
+const statusesInDb = require('./periodic/statusesInDb')();
 
 // rate limiter
 const rateLimit = require('express-rate-limit');
@@ -57,6 +58,7 @@ const adminRouter = require('./routes/admin');
 const WebSocket = require('ws');
 const connections = require('./websocket/Connections')();
 const broker = require('./broker/broker.js');
+const roleSelector = require('./utils/roleSelector')(configs.get('redisUrl'));
 
 class ExpressServer {
   constructor (port, securePort, openApiYaml) {
@@ -117,6 +119,10 @@ class ExpressServer {
     // Use morgan request logger in development mode
     if (configs.get('environment') === 'development') this.app.use(morgan('dev'));
 
+    // Initialize websocket traffic handler role selector
+    // On every new websocket connection it will try to set itself as active
+    roleSelector.initializeSelector('websocketHandler');
+
     // Start periodic device tasks
     deviceStatus.start();
     deviceQueues.start();
@@ -124,6 +130,7 @@ class ExpressServer {
     deviceSwUpgrade.start();
     notifyUsers.start();
     appRules.start();
+    statusesInDb.start();
 
     // Secure traffic only
     this.app.all('*', (req, res, next) => {
@@ -299,9 +306,11 @@ class ExpressServer {
         case 'EACCES':
           console.error(bind + ' requires elevated privileges');
           process.exit(1);
+          break;
         case 'EADDRINUSE':
           console.error(bind + ' is already in use');
           process.exit(1);
+          break;
         default:
           throw error;
       }

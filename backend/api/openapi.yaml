@@ -613,6 +613,17 @@ paths:
         schema:
           type: integer
         style: form
+      - description: Type of returned data
+        explode: true
+        in: query
+        name: response
+        required: false
+        schema:
+          enum:
+          - detailed
+          - summary
+          - ids
+          type: string
       - description: The numbers of items to return
         explode: true
         in: query
@@ -620,6 +631,30 @@ paths:
         required: false
         schema:
           type: integer
+        style: form
+      - description: The field by which the data will be ordered
+        explode: true
+        in: query
+        name: sortField
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Sorting order
+        explode: true
+        in: query
+        name: sortOrder
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Stringified array of filter objects
+        explode: true
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: string
         style: form
       - description: Organization to be filtered by
         explode: true
@@ -3717,18 +3752,10 @@ paths:
         schema:
           type: integer
         style: form
-      - description: The field by which the data will be ordered
+      - description: Stringified array of filter objects
         explode: true
         in: query
-        name: sortField
-        required: false
-        schema:
-          type: string
-        style: form
-      - description: Sorting order
-        explode: true
-        in: query
-        name: sortOrder
+        name: filters
         required: false
         schema:
           type: string
@@ -4000,6 +4027,30 @@ paths:
         required: false
         schema:
           type: integer
+        style: form
+      - description: The field by which the data will be ordered
+        explode: true
+        in: query
+        name: sortField
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Sorting order
+        explode: true
+        in: query
+        name: sortOrder
+        required: false
+        schema:
+          type: string
+        style: form
+      - description: Stringified array of filter objects
+        explode: true
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: string
         style: form
       - description: Organization to be filtered by
         explode: true
@@ -7960,6 +8011,8 @@ components:
           $ref: '#/components/schemas/DeviceVersion'
         sync:
           $ref: '#/components/schemas/DeviceSyncStatus'
+        pendingNotifications:
+          type: integer
       type: object
     UpgradeSchedule:
       example:

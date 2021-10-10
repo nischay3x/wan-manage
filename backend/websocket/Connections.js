@@ -29,6 +29,7 @@ const notificationsMgr = require('../notifications/notifications')();
 const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 const { TypedError, ErrorTypes } = require('../utils/errors');
+const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
 
 class Connections {
   constructor () {
@@ -561,6 +562,7 @@ class Connections {
           stats: joi.object().optional(),
           network: joi.object().optional(),
           tunnels: joi.array().optional(),
+          stats: joi.object().optional(),
           reconfig: joi.string().allow('').optional(),
           ikev2: Joi.object({
             certificateExpiration: Joi.string().allow('').optional(),
@@ -697,6 +699,9 @@ class Connections {
 
       this.devices.updateDeviceInfo(machineId, 'ready', true);
       this.callRegisteredCallbacks(this.connectCallbacks, machineId);
+
+      // Set websocket traffic handler role for this instance
+      roleSelector.selectorSetActive('websocketHandler');
     } catch (err) {
       logger.error('Failed to receive info from device', {
         params: { device: machineId, err: err.message }
@@ -756,6 +761,33 @@ class Connections {
    */
   getAllDevices () {
     return this.devices.getAllDevices();
+  }
+
+  /**
+   * Gets all organizations ids with updated connection status
+   * @return {Array} array of org ids
+   */
+  getConnectionStatusOrgs () {
+    return this.devices.getConnectionStatusOrgs();
+  }
+
+  /**
+   * Gets all devices with updated connection status
+   * @param  {string} org the org id
+   * @return {Object} an object of devices ids of the org grouped by status
+   * or undefined if no updated statuses
+   */
+  getConnectionStatusByOrg (org) {
+    return this.devices.getConnectionStatusByOrg(org);
+  }
+
+  /**
+   * Deletes devices connection status for the org.
+   * @param  {string} org the org id
+   * @return {void}
+   */
+  clearConnectionStatusByOrg (org) {
+    return this.devices.clearConnectionStatusByOrg(org);
   }
 
   /**

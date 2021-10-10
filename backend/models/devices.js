@@ -274,6 +274,17 @@ const interfacesSchema = new Schema({
         validator: validators.validateOSPFCost
       }
     }
+  },
+  // Device running status
+  status: {
+    type: String,
+    enum: ['', 'running', 'stopped', 'failed'],
+    default: ''
+  },
+  // Device connection status
+  isConnected: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,

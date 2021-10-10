@@ -97,7 +97,7 @@ describe('Initialization', () => {
     done();
   });
 
-  test('Chcek completed by org', async (done) => {
+  test('Check completed by org', async (done) => {
     await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
       expect(rjob.data.message.testdata).toBe('BBB1');
     });
@@ -180,36 +180,35 @@ describe('Initialization', () => {
     done();
   });
 
-  test('Chcek completed by org, skip, limit', async (done) => {
+  test('Check completed by org, skip, limit', async (done) => {
     const testDataList = ['BBB1', 'DDD1', 'DDD2'];
     let testDataResult = [];
     await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
       testDataResult.push(rjob.data.message.testdata);
       return true;
-    }, null, 0, -1, 'desc', 1, 2);
+    }, 0, -1, 'desc', 1, 2);
     expect(testDataResult).toStrictEqual(testDataList.slice(0, 2).reverse());
     testDataResult = [];
     await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
       testDataResult.push(rjob.data.message.testdata);
       return true;
-    }, null, 0, -1, 'desc', 0, 2);
+    }, 0, -1, 'desc', 0, 2);
     expect(testDataResult).toStrictEqual(testDataList.slice(-2).reverse());
     done();
   });
-
-  test('Chcek completed by org, device filter', async (done) => {
+  test('Check completed by org, device filter', async (done) => {
     const testDataList = ['BBB1', 'DDD1', 'DDD2'];
     let testDataResult = [];
     await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
       testDataResult.push(rjob.data.message.testdata);
       return true;
-    }, 'BBB', 0, -1, 'desc');
+    }, 0, -1, 'desc', 0, -1, [{ key: 'type', op: '==', val: 'BBB' }]);
     expect(testDataResult).toStrictEqual(testDataList.slice(0, 1).reverse());
     testDataResult = [];
     await deviceQueues.iterateJobsByOrg('4edd40c86762e0fb12000001', 'complete', (rjob) => {
       testDataResult.push(rjob.data.message.testdata);
       return true;
-    }, 'DDD', 0, -1, 'desc');
+    }, 0, -1, 'desc', 0, -1, [{ key: 'type', op: '==', val: 'DDD' }]);
     expect(testDataResult).toStrictEqual(testDataList.slice(-2).reverse());
     done();
   });
@@ -222,7 +221,6 @@ describe('Initialization', () => {
     expect(lastJob.data.message.testdata).toBe('DDD2');
     done();
   });
-
   test('Removing completed jobs', async () => {
     await deviceQueues.removeJobs('complete', 0);
     const c = await deviceQueues.getCount('complete');
