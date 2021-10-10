@@ -54,7 +54,6 @@ class StatusesInDb {
   start () {
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
-    this.clearStatuses();
     periodic.startTask(name);
   }
 
@@ -133,7 +132,7 @@ class StatusesInDb {
             updateDiffs.push({
               updateMany: {
                 filter: { _id: { $in: devicesByState[state] } },
-                update: { $set: { status: state } }
+                update: { $set: { status: state === 'pending' ? '' : state } }
               }
             });
           }
@@ -172,13 +171,23 @@ class StatusesInDb {
       updateFull.push({
         updateMany: {
           filter: { $and: [{ _id: { $in: connectedDevices } }, { isConnected: false }] },
-          update: { $set: { isConnected: true } }
+          update: { $set: { isConnected: true, status: '' } }
         }
       });
       updateFull.push({
         updateMany: {
-          filter: { $and: [{ _id: { $not: { $in: connectedDevices } } }, { isConnected: true }] },
-          update: { $set: { isConnected: false } }
+          filter: {
+            $and: [
+              {
+                $or: [
+                  { isConnected: true },
+                  { $ne: { status: '' } }
+                ]
+              },
+              { _id: { $not: { $in: connectedDevices } } }
+            ]
+          },
+          update: { $set: { isConnected: false, status: '' } }
         }
       });
       // Full sync of connection statuses in db

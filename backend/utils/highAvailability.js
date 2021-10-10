@@ -41,24 +41,14 @@ class HighAvailability {
     this.leader = new Leader(this.redis, options);
     logger.info('HighAvailability init', { params: { redisUrl: redisUrl, options: options } });
 
-    // Callback functions
-    this.callbacks = {
-      elected: {},
-      revoked: {},
-      error: {}
-    };
-
     this.leader.on('error', (err) => {
       logger.error('HighAvailability error', { params: { redisUrl: redisUrl, err: err.message } });
-      this.callRegisteredCallbacks('error');
     });
     this.leader.on('elected', () => {
       logger.info('HighAvailability elected', { params: { redisUrl: redisUrl } });
-      this.callRegisteredCallbacks('elected');
     });
     this.leader.on('revoked', () => {
       logger.info('HighAvailability revoked', { params: { redisUrl: redisUrl } });
-      this.callRegisteredCallbacks('revoked');
     });
 
     // Try to elect this as active
@@ -66,9 +56,6 @@ class HighAvailability {
 
     // Bind class functions
     this.runIfActive = this.runIfActive.bind(this);
-    this.registerCallback = this.registerCallback.bind(this);
-    this.unregisterCallback = this.registerCallback.bind(this);
-    this.callRegisteredCallbacks = this.callRegisteredCallbacks.bind(this);
   }
 
   runIfActive (func) {
@@ -83,47 +70,6 @@ class HighAvailability {
         }
       }
     });
-  }
-
-  /**
-   * Registers a callback function for a module that
-   * @param  {string}   event    the name of the event to run the callback
-   * @param  {string}   name     the name of the module that registers the callback
-   * @param  {Callback} callback the callback to be registered
-   * @return {void}
-   */
-  registerCallback (event, name, callback) {
-    if (this.callbacks[event] && name && typeof callback === 'function') {
-      this.callbacks[event][name] = callback;
-    }
-  }
-
-  /**
-   * Removes a previously registered callback functions.
-   * @param  {string} event    the name of the event to run the callback
-   * @param  {string} name the name of the module that registers the callback
-   * @return {void}
-   */
-  unregisterCallback (event, name) {
-    if (this.callbacks[event] && this.callbacks[event].hasOwnProperty(name)) {
-      delete this.callbacks[event][name];
-    }
-  }
-
-  /**
-   * Calls all registered callback for the provided event
-   * @param  {string} event the name of the event to run the callbacks
-   * @return {void}
-   */
-  callRegisteredCallbacks (event) {
-    if (this.callbacks[event]) {
-      for (const moduleName in this.callbacks[event]) {
-        const callback = this.callbacks[event][moduleName];
-        if (typeof callback === 'function') {
-          callback();
-        }
-      }
-    }
   }
 }
 

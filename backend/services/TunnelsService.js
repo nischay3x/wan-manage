@@ -204,10 +204,12 @@ class TunnelsService {
             'deviceA.machineId': 1,
             'deviceA._id': 1,
             'deviceA.isConnected': 1,
+            'deviceA.status': 1,
             'deviceB.name': 1,
             'deviceB.machineId': 1,
             'deviceB._id': 1,
             'deviceB.isConnected': 1,
+            'deviceB.status': 1,
             deviceAconf: 1,
             deviceBconf: 1,
             encryptionMethod: 1,
@@ -217,12 +219,18 @@ class TunnelsService {
               $cond: [{
                 $and: [
                   { $eq: ['$status', 'up'] },
+                  { $eq: ['$deviceA.status', 'running'] },
                   { $eq: ['$deviceA.isConnected', true] },
                   {
                     $or: [
                       // in case of peer, there is no deviceB to check connection for
                       { $ne: ['$peer', null] },
-                      { $eq: ['$deviceB.isConnected', true] }
+                      {
+                        $and: [
+                          { $eq: ['$deviceB.status', 'running'] },
+                          { $eq: ['$deviceB.isConnected', true] }
+                        ]
+                      }
                     ]
                   }
                 ]
