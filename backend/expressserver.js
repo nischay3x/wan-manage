@@ -58,6 +58,7 @@ const adminRouter = require('./routes/admin');
 const WebSocket = require('ws');
 const connections = require('./websocket/Connections')();
 const broker = require('./broker/broker.js');
+const roleSelector = require('./utils/roleSelector')(configs.get('redisUrl'));
 
 class ExpressServer {
   constructor (port, securePort, openApiYaml) {
@@ -117,6 +118,11 @@ class ExpressServer {
 
     // Use morgan request logger in development mode
     if (configs.get('environment') === 'development') this.app.use(morgan('dev'));
+
+    // Initialize role selector and set this instance as a websocket traffic handler
+    // On every new websocket connection it will try to set itself as active
+    roleSelector.initializeSelector('websocketHandler');
+    roleSelector.selectorSetActive('websocketHandler');
 
     // Start periodic device tasks
     deviceStatus.start();

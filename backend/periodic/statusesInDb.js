@@ -23,7 +23,7 @@ const tunnels = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
-const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
+const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
 
 /***
  * This class periodically updates devices/tunnels statuses from memory to db
@@ -35,7 +35,6 @@ class StatusesInDb {
   constructor () {
     this.start = this.start.bind(this);
     this.runTask = this.runTask.bind(this);
-    this.updateConnectionStatuses = this.updateConnectionStatuses.bind(this);
     this.updateTunnelsStatuses = this.updateTunnelsStatuses.bind(this);
     this.updateDevicesStatuses = this.updateDevicesStatuses.bind(this);
 
@@ -56,7 +55,6 @@ class StatusesInDb {
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
     this.clearStatuses();
-    ha.registerCallback('elected', 'statusesInDb', this.clearStatuses);
     periodic.startTask(name);
   }
 
@@ -87,89 +85,109 @@ class StatusesInDb {
   * @return {void}
   */
   runTask () {
-    this.updateConnectionStatuses(connections.getConnectionStatusOrgs());
-    this.updateDevicesStatuses(deviceStatus.getDevicesStatusOrgs());
-    this.updateTunnelsStatuses(deviceStatus.getTunnelsStatusOrgs());
+    roleSelector.runIfActive('websocketHandler', () => {
+      this.updateDevicesStatuses();
+      this.updateTunnelsStatuses();
+    });
   }
 
   /**
-  * Stores modified connection statuses from memory to DB
+  * Stores modified statuses from memory to DB
+  * Runs full sync of statuses if need
   * @async
-  * @param  {array} orgs organizations ids array
+  * @param  {array|null} orgs organizations ids array
   * @return {void}
   */
-  async updateConnectionStatuses (orgs) {
-    for (const org of orgs) {
+  async updateDevicesStatuses (orgs = null) {
+    const updateDiffs = [];
+    const connectionStatusOrgs = orgs || connections.getConnectionStatusOrgs();
+    for (const org of connectionStatusOrgs) {
       const connectionStatuses = connections.getConnectionStatusByOrg(org);
       if (connectionStatuses && Object.keys(connectionStatuses).length > 0) {
         const devicesByStatus = {};
         for (const deviceId in connectionStatuses) {
-          const status = connectionStatuses[deviceId];
+          const status = connectionStatuses[deviceId].toString();
           if (!devicesByStatus[status]) devicesByStatus[status] = [];
           devicesByStatus[status].push(mongoose.Types.ObjectId(deviceId));
         }
-        const updateOps = [];
         for (const status in devicesByStatus) {
-          updateOps.push({
+          updateDiffs.push({
             updateMany: {
               filter: { _id: { $in: devicesByStatus[status] } },
               update: { $set: { isConnected: (status === 'true') } }
             }
           });
         }
-        // Update in db
-        if (updateOps.length > 0) {
-          try {
-            // Clear in memory before updating the db
-            connections.clearConnectionStatusByOrg(org);
-            await devices.collection.bulkWrite(updateOps);
-          } catch (err) {
-            logger.warn('Failed to update connection status in database', {
-              params: { message: err.message }
+      }
+    }
+    const devicesStatusOrgs = orgs || deviceStatus.getDevicesStatusOrgs();
+    for (const org of devicesStatusOrgs) {
+      const devicesStatuses = deviceStatus.getDevicesStatusByOrg(org);
+      if (devicesStatuses && Object.keys(devicesStatuses).length > 0) {
+        const devicesByState = {};
+        for (const deviceId in devicesStatuses) {
+          const status = devicesStatuses[deviceId];
+          if (!devicesByState[status]) devicesByState[status] = [];
+          devicesByState[status].push(mongoose.Types.ObjectId(deviceId));
+          for (const state in devicesByState) {
+            updateDiffs.push({
+              updateMany: {
+                filter: { _id: { $in: devicesByState[state] } },
+                update: { $set: { status: state } }
+              }
             });
           }
         }
       }
     }
-  }
+    if (updateDiffs.length > 0) {
+      // Clear diff in memory before the db update
+      connectionStatusOrgs.map(org => connections.clearConnectionStatusByOrg(org));
+      devicesStatusOrgs.map(org => deviceStatus.clearDevicesStatusByOrg(org));
+      // Update states and connection statuses diffs in the db
+      try {
+        await devices.collection.bulkWrite(updateDiffs);
+      } catch (err) {
+        logger.warn('Failed to update statuses in database', {
+          params: { message: err.message }
+        });
+      }
+    }
 
-  /**
-  * Stores modified devices statuses from memory to DB
-  * @async
-  * @param  {array} orgs organizations ids array
-  * @return {void}
-  */
-  async updateDevicesStatuses (orgs) {
-    for (const org of orgs) {
-      const devicesStatuses = deviceStatus.getDevicesStatusByOrg(org);
-      if (devicesStatuses && Object.keys(devicesStatuses).length > 0) {
-        const devicesByStatus = {};
-        for (const deviceId in devicesStatuses) {
-          const status = devicesStatuses[deviceId];
-          if (!devicesByStatus[status]) devicesByStatus[status] = [];
-          devicesByStatus[status].push(mongoose.Types.ObjectId(deviceId));
+    // Check if need db/memory sync
+    const connectedDevices = connections.getAllDevices().reduce((res, machineId) => {
+      const { ready, deviceObj } = connections.getDeviceInfo(machineId) || {};
+      if (ready) res.push(mongoose.Types.ObjectId(deviceObj));
+      return res;
+    }, []);
+    // Check if need db/memory sync
+    const connectedInDbCount = await devices.countDocuments({
+      isConnected: true
+    });
+    if (connectedDevices.length !== connectedInDbCount) {
+      logger.info('Different counts of connected devices in memory and DB, syncing statuses', {
+        params: { dbCount: connectedInDbCount, memCount: connectedDevices.count }
+      });
+      const updateFull = [];
+      updateFull.push({
+        updateMany: {
+          filter: { $and: [{ _id: { $in: connectedDevices } }, { isConnected: false }] },
+          update: { $set: { isConnected: true } }
         }
-        const updateOps = [];
-        for (const status in devicesByStatus) {
-          updateOps.push({
-            updateMany: {
-              filter: { _id: { $in: devicesByStatus[status] } },
-              update: { $set: { status: status } }
-            }
-          });
+      });
+      updateFull.push({
+        updateMany: {
+          filter: { $and: [{ _id: { $not: { $in: connectedDevices } } }, { isConnected: true }] },
+          update: { $set: { isConnected: false } }
         }
-        // Update in db
-        if (updateOps.length) {
-          try {
-            // Clear in memory before updating the db
-            deviceStatus.clearDevicesStatusByOrg(org);
-            await devices.collection.bulkWrite(updateOps);
-          } catch (err) {
-            logger.warn('Failed to update devices status in database', {
-              params: { message: err.message }
-            });
-          }
-        }
+      });
+      // Full sync of connection statuses in db
+      try {
+        await devices.collection.bulkWrite(updateFull);
+      } catch (err) {
+        logger.warn('Failed to update statuses in database', {
+          params: { message: err.message }
+        });
       }
     }
   }
@@ -177,11 +195,11 @@ class StatusesInDb {
   /**
   * Stores modified tunnels statuses from memory to DB
   * @async
-  * @param  {array} orgs organizations ids array
+  * @param  {array|null} orgs organizations ids array
   * @return {void}
   */
-  async updateTunnelsStatuses (orgs) {
-    for (const org of orgs) {
+  async updateTunnelsStatuses (orgs = null) {
+    for (const org of orgs || deviceStatus.getTunnelsStatusOrgs()) {
       const tunnelsStatuses = deviceStatus.getTunnelsStatusByOrg(org);
       if (tunnelsStatuses && Object.keys(tunnelsStatuses).length > 0) {
         const tunnelsByStatus = {};

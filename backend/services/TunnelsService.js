@@ -99,7 +99,7 @@ class TunnelsService {
         sortField === 'tunnelStatus';
       if (updateStatusInDb) {
         // need to update changed statuses from memory to DB
-        await statusesInDb.updateConnectionStatuses(orgList);
+        await statusesInDb.updateDevicesStatuses(orgList);
         await statusesInDb.updateTunnelsStatuses(orgList);
       }
       const pipeline = [

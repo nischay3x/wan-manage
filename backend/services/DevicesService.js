@@ -292,7 +292,6 @@ class DevicesService {
         /state|isConnected/.test(sortField);
       if (updateStatusInDb) {
         // need to update changed statuses from memory to DB
-        await statusesInDb.updateConnectionStatuses(orgList);
         await statusesInDb.updateDevicesStatuses(orgList);
       }
       const pipeline = [
