@@ -271,10 +271,11 @@ class TunnelsService {
       };
 
       const tunnelsMap = paginated[0].records.map((d) => {
+        const tunnelStatusInDb = d.tunnelStatus;
         const retTunnel = TunnelsService.selectTunnelParams(d);
         // get the status from db if it was updated
         if (updateStatusInDb) {
-          retTunnel.tunnelStatus = d.tunnelStatus;
+          retTunnel.tunnelStatus = tunnelStatusInDb;
         }
         return retTunnel;
       });
