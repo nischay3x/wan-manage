@@ -119,10 +119,9 @@ class ExpressServer {
     // Use morgan request logger in development mode
     if (configs.get('environment') === 'development') this.app.use(morgan('dev'));
 
-    // Initialize role selector and set this instance as a websocket traffic handler
+    // Initialize websocket traffic handler role selector
     // On every new websocket connection it will try to set itself as active
     roleSelector.initializeSelector('websocketHandler');
-    roleSelector.selectorSetActive('websocketHandler');
 
     // Start periodic device tasks
     deviceStatus.start();
