@@ -52,7 +52,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const TunnelsService = require('./TunnelsService');
-
+const configStates = require('../deviceLogic/configStates');
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -1131,14 +1131,15 @@ class DevicesService {
       // validate static routes
       if (Array.isArray(deviceRequest.staticroutes)) {
         // if route is via a pending tunnel, set it as pending
-        const incompleteTunnels = origTunnels.filter(t => t.configStatus === 'incomplete');
+        const incompleteTunnels =
+          origTunnels.filter(t => t.configStatus === configStates.INCOMPLETE);
         const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.hasIpOnDevice === false);
 
         deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
           for (const t of incompleteTunnels) {
             const { ip1, ip2 } = generateTunnelParams(t.num);
             if (ip1 === s.gateway || ip2 === s.gateway) {
-              s.configStatus = 'incomplete';
+              s.configStatus = configStates.INCOMPLETE;
               s.configStatusReason = `Tunnel ${t.num} is in pending state`;
               return s;
             }
@@ -1146,7 +1147,7 @@ class DevicesService {
 
           for (const ifc of interfacesWithoutIp) {
             if (ifc.IPv4 === s.gateway) {
-              s.configStatus = 'incomplete';
+              s.configStatus = configStates.INCOMPLETE;
               s.configStatusReason =
                 `Interface ${ifc.name} in device ${origDevice.name} has no IP address`;
               return s;

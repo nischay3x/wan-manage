@@ -24,6 +24,7 @@ const devicesModel = require('../models/devices').devices;
 const mongoose = require('mongoose');
 const { generateTunnelParams, generateRandomKeys } = require('../utils/tunnelUtils');
 const { validateIKEv2 } = require('./IKEv2');
+const configStates = require('./configStates');
 
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -1343,7 +1344,7 @@ const sync = async (deviceId, org) => {
         { org },
         { $or: [{ deviceA: deviceId }, { deviceB: deviceId }] },
         { isActive: true },
-        { configStatus: { $ne: 'incomplete' } } // skip pending tunnels on sync
+        { configStatus: { $ne: configStates.INCOMPLETE } } // skip pending tunnels on sync
       ]
     },
     {

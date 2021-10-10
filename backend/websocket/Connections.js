@@ -30,7 +30,6 @@ const notificationsMgr = require('../notifications/notifications')();
 const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 const { TypedError, ErrorTypes } = require('../utils/errors');
-const mongoConns = require('../mongoConns.js')();
 
 class Connections {
   constructor () {
@@ -470,18 +469,13 @@ class Connections {
           return updInterface;
         });
 
-        let session = null;
         try {
-          // use session for events
-          session = await mongoConns.getMainDB().startSession();
-          await session.startTransaction();
-
           // Update interfaces in DB
           await devices.findOneAndUpdate(
             { machineId },
             { $set: { interfaces } },
             { new: true, runValidators: true }
-          ).session(session).populate('interfaces.pathlabels', '_id type');
+          ).populate('interfaces.pathlabels', '_id type');
 
           // from agent version 5,
           // we send the last device stats entry with get-device-info response.
@@ -497,20 +491,15 @@ class Connections {
           }
 
           // We create a new instance of events class
-          // to keep separate mongo sessions for each device.
-          const events = new DeviceEvents(session);
+          // to know changedDevice and changedTunnels
+          const events = new DeviceEvents();
 
           // add current device to changed devices in order to run modify process for it
           events.addChangedDevice(origDevice._id);
 
           const plainJsDevice = origDevice.toObject();
-          await events.check(plainJsDevice, deviceInfo.message.network.interfaces, routerIsRunning);
-
-          const modifyDevices = await events.prepareModifyDispatcherParameters();
-
-          // commit and end session asap
-          await session.commitTransaction();
-          await session.endSession();
+          const newInterfaces = deviceInfo.message.network.interfaces;
+          await events.checkIfToTriggerEvent(plainJsDevice, newInterfaces, routerIsRunning);
 
           // Update the reconfig hash before applying to prevent infinite loop
           this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
@@ -528,6 +517,7 @@ class Connections {
           await events.sendTunnelsCreateJobs();
 
           // modify jobs
+          const modifyDevices = await events.prepareModifyDispatcherParameters();
           for (const modified in modifyDevices) {
             await modifyDeviceDispatcher.apply(
               [modifyDevices[modified].orig],
@@ -543,11 +533,6 @@ class Connections {
           // remove tunnels jobs after modify
           await events.sendTunnelsRemoveJobs();
         } catch (err) {
-          if (session) {
-            await session.abortTransaction();
-            await session.endSession();
-          }
-
           logger.error('Failed to apply new configuration from device', {
             params: { device: machineId, err: err.message }
           });

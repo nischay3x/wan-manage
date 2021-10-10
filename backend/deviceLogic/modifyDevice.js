@@ -46,6 +46,8 @@ const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
+const configStates = require('./configStates');
+
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
@@ -457,7 +459,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     const tunnels = await tunnelsModel
       .find({
         isActive: true,
-        configStatus: { $ne: 'incomplete' }, // no need to reconstruct pending tunnels
+        configStatus: { $ne: configStates.INCOMPLETE }, // no need to reconstruct pending tunnels
         $or: [{ interfaceA: ifc._id }, { interfaceB: ifc._id }]
       })
       .populate('deviceA')
@@ -676,7 +678,11 @@ const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) 
   let org = null;
   try {
     const tunnels = await tunnelsModel
-      .find({ _id: { $in: tunnelsIds }, isActive: true, configStatus: { $ne: 'incomplete' } })
+      .find({
+        _id: { $in: tunnelsIds },
+        isActive: true,
+        configStatus: { $ne: configStates.INCOMPLETE }
+      })
       .populate('deviceA')
       .populate('deviceB')
       .populate('peer');
@@ -823,7 +829,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
 
-    newDevice.staticroutes.filter(r => r.configStatus !== 'incomplete').map(route => {
+    newDevice.staticroutes.filter(r => r.configStatus !== configStates.INCOMPLETE).map(route => {
       return ({
         destination: route.destination,
         gateway: route.gateway,
@@ -833,7 +839,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       });
     }),
 
-    origDevice.staticroutes.filter(r => r.configStatus !== 'incomplete').map(route => {
+    origDevice.staticroutes.filter(r => r.configStatus !== configStates.INCOMPLETE).map(route => {
       return ({
         destination: route.destination,
         gateway: route.gateway,
@@ -1412,7 +1418,7 @@ const sync = async (deviceId, org) => {
     const { ifname, gateway, destination, metric } = route;
 
     // skip pending routes
-    if (route.configStatus === 'incomplete') {
+    if (route.configStatus === configStates.INCOMPLETE) {
       return;
     }
 
