@@ -380,6 +380,7 @@ class DevicesService {
       if (requestParams.response === 'summary') {
         pipeline.push({
           $project: {
+            org: { $toString: '$org' },
             isApproved: 1,
             isConnected: 1,
             name: 1,
@@ -391,7 +392,7 @@ class DevicesService {
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
-            'deviceStatus.state': 1
+            deviceState: '$deviceStatus.state'
           }
         });
       } else if (requestParams.response === 'ids') {
@@ -422,7 +423,7 @@ class DevicesService {
           'sync',
           'ospf',
           'isConnected',
-          'deviceStatus'
+          'deviceState'
         ];
         // populate pathlabels for every interface
         pipeline.push({
@@ -473,7 +474,6 @@ class DevicesService {
       if (paginated[0].meta.length > 0) {
         response.setHeader('records-total', paginated[0].meta[0].total);
       };
-
       let devicesMap;
       if (requestParams.response === 'summary') {
         // add pending notifications count for the summary request
@@ -504,7 +504,9 @@ class DevicesService {
             // get the actual status from memory if it was not updated in DB
             d.isConnected = connections.isConnected(d.machineId);
             d.deviceStatus = d.isConnected
-              ? deviceStatus.getDeviceStatus(d.machineId) || {} : {};
+              ? deviceStatus.getDeviceStatus(d.machineId) || { state: d.deviceState } : {};
+          } else {
+            d.deviceStatus = { state: d.deviceState };
           }
           return d;
         });
