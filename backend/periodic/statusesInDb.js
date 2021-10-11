@@ -181,7 +181,7 @@ class StatusesInDb {
               {
                 $or: [
                   { isConnected: true },
-                  { $ne: { status: '' } }
+                  { status: { $ne: '' } }
                 ]
               },
               { _id: { $not: { $in: connectedDevices } } }
