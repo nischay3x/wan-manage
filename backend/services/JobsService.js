@@ -22,7 +22,6 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-const { paginated } = require('../utils/pagination');
 const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
@@ -70,8 +69,8 @@ class JobsService {
    * @param {String} ids Filter on job ids (comma separated) (optional)
    * returns List
    **/
-  static async jobsGET (requestParams, { user }, response) {
-    const { org, offset, limit, sortField, sortOrder, status, ids } = requestParams;
+  static async jobsGET (requestParams, { user }) {
+    const { org, offset, limit, status, ids, filters } = requestParams;
     try {
       const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
       // Check state provided is allowed
@@ -95,35 +94,17 @@ class JobsService {
             result.push(parsedJob);
           }
         );
-        response.setHeader('records-total', result.length);
-        return Service.successResponse(
-          paginated(result, offset, limit, sortField, sortOrder)
-        );
+        return Service.successResponse(result);
       }
-      if (status === 'all') {
-        await Promise.all(
-          stateOpts.map(async (s) => {
-            await deviceQueues.iterateJobsByOrg(orgList[0].toString(), s, (job) => {
-              const parsedJob = JobsService.selectJobsParams(job);
-              result.push(parsedJob);
-              return true; // Mark job as done
-            });
-          })
-        );
-      } else {
-        await deviceQueues.iterateJobsByOrg(orgList[0].toString(),
-          status, (job) => {
-            const parsedJob = JobsService.selectJobsParams(job);
-            result.push(parsedJob);
-            return true; // Mark job as done
-          }
-        );
-      }
-
-      response.setHeader('records-total', result.length);
-      return Service.successResponse(
-        paginated(result, offset, limit, sortField, sortOrder)
+      const parsedFilters = filters ? JSON.parse(filters) : [];
+      await deviceQueues.iterateJobsByOrg(orgList[0].toString(),
+        status, (job) => {
+          const parsedJob = JobsService.selectJobsParams(job);
+          result.push(parsedJob);
+          return true; // Mark job as done
+        }, 0, -1, 'desc', offset, limit, parsedFilters
       );
+      return Service.successResponse(result);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

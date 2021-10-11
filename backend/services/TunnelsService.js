@@ -20,6 +20,7 @@ const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
+const statusesInDb = require('../periodic/statusesInDb')();
 const { getFilterExpression } = require('../utils/filterUtils');
 
 class TunnelsService {
@@ -36,8 +37,13 @@ class TunnelsService {
 
     // Add tunnel status
     retTunnel.tunnelStatusB = retTunnel.peer
-      ? null
+      ? {}
       : deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+
+    // if no filter or ordering by status then db can be not updated,
+    // we get the status directly from memory
+    retTunnel.tunnelStatus = (retTunnel.peer || retTunnel.tunnelStatusB.status === 'up') &&
+      retTunnel.tunnelStatusA.status === 'up' ? 'Connected' : 'Not Connected';
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -89,18 +95,17 @@ class TunnelsService {
     const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const connectedTunnels = [];
-      for (const machineId in deviceStatus.status) {
-        if (deviceStatus.status[machineId].tunnelStatus) {
-          for (const tunnelId in deviceStatus.status[machineId].tunnelStatus) {
-            connectedTunnels.push(`${tunnelId}:${machineId}`);
-          }
-        }
+      const updateStatusInDb = (filters && filters.includes('tunnelStatus')) ||
+        sortField === 'tunnelStatus';
+      if (updateStatusInDb) {
+        // need to update changed statuses from memory to DB
+        await statusesInDb.updateDevicesStatuses(orgList);
+        await statusesInDb.updateTunnelsStatuses(orgList);
       }
       const pipeline = [
         {
           $match: {
-            org: mongoose.Types.ObjectId(orgList[0]),
+            org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) },
             isActive: true
           }
         },
@@ -198,9 +203,13 @@ class TunnelsService {
             'deviceA.name': 1,
             'deviceA.machineId': 1,
             'deviceA._id': 1,
+            'deviceA.isConnected': 1,
+            'deviceA.status': 1,
             'deviceB.name': 1,
             'deviceB.machineId': 1,
             'deviceB._id': 1,
+            'deviceB.isConnected': 1,
+            'deviceB.status': 1,
             deviceAconf: 1,
             deviceBconf: 1,
             encryptionMethod: 1,
@@ -209,34 +218,25 @@ class TunnelsService {
             configStatus: 1,
             configStatusReason: 1,
             tunnelStatus: {
-              $cond: [
-                {
-                  $and: [
-                    {
-                      $in: [
-                        {
-                          $concat: [{ $toString: '$num' }, ':', '$deviceA.machineId']
-                        }, connectedTunnels
-                      ]
-                    },
-                    {
-                      $or: [
-                        // in case of peer, there is no deviceB to check connection for
-                        {
-                          $ne: ['$peer', null]
-                        },
-                        {
-                          $in: [
-                            {
-                              $concat: [{ $toString: '$num' }, ':', '$deviceB.machineId']
-                            }, connectedTunnels
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }, 'Connected', 'Not Connected'
-              ]
+              $cond: [{
+                $and: [
+                  { $eq: ['$status', 'up'] },
+                  { $eq: ['$deviceA.status', 'running'] },
+                  { $eq: ['$deviceA.isConnected', true] },
+                  {
+                    $or: [
+                      // in case of peer, there is no deviceB to check connection for
+                      { $ne: ['$peer', null] },
+                      {
+                        $and: [
+                          { $eq: ['$deviceB.status', 'running'] },
+                          { $eq: ['$deviceB.isConnected', true] }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }, 'Connected', 'Not Connected']
             }
           }
         }
@@ -245,19 +245,9 @@ class TunnelsService {
         const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
         for (const filter of parsedFilters) {
-          const { key, op, val } = filter;
-          if (key) {
-            const filterExpr = getFilterExpression(op, val);
-            if (filterExpr !== undefined) {
-              if (key.includes('?')) {
-                const cond = op.includes('!') ? '$and' : '$or';
-                matchFilters.push({
-                  [cond]: ['A', 'B'].map(side => ({ [key.replace(/\?/g, side)]: filterExpr }))
-                });
-              } else {
-                matchFilters.push({ [key]: filterExpr });
-              }
-            }
+          const filterExpr = getFilterExpression(filter);
+          if (filterExpr !== undefined) {
+            matchFilters.push(filterExpr);
           }
         }
         if (matchFilters.length > 0) {
@@ -290,11 +280,17 @@ class TunnelsService {
         response.setHeader('records-total', paginated[0].meta[0].total);
       };
 
-      const tunnelMap = paginated[0].records.map((d) => {
-        return TunnelsService.selectTunnelParams(d);
+      const tunnelsMap = paginated[0].records.map((d) => {
+        const tunnelStatusInDb = d.tunnelStatus;
+        const retTunnel = TunnelsService.selectTunnelParams(d);
+        // get the status from db if it was updated
+        if (updateStatusInDb) {
+          retTunnel.tunnelStatus = tunnelStatusInDb;
+        }
+        return retTunnel;
       });
 
-      return Service.successResponse(tunnelMap);
+      return Service.successResponse(tunnelsMap);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

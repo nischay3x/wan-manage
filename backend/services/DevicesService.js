@@ -20,8 +20,10 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
+const notificationsModel = require('../models/notifications');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
+const statusesInDb = require('../periodic/statusesInDb')();
 const { deviceStats } = require('../models/analytics/deviceStats');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
@@ -51,6 +53,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
+const { getFilterExpression } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const configStates = require('../deviceLogic/configStates');
 class DevicesService {
@@ -65,8 +68,15 @@ class DevicesService {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const opDevices = await devices.find({ org: { $in: orgList } })
-        .populate('interfaces.pathlabels', '_id name description color type');
+      const { devices: requestIds } = deviceCommand;
+      const filter = { org: { $in: orgList } };
+      if (requestIds) {
+        filter._id = { $in: Object.keys(requestIds) };
+      }
+      const opDevices = await devices.find(filter);
+      if (opDevices.length === 0) {
+        return Service.rejectResponse('Devices not found', 404);
+      }
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
@@ -93,8 +103,7 @@ class DevicesService {
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      })
-        .populate('interfaces.pathlabels', '_id name description color type'); ;
+      });
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
 
@@ -278,20 +287,234 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async devicesGET ({ org, offset, limit }, { user }) {
+  static async devicesGET (requestParams, { user }, response) {
+    const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await devices.find({ org: { $in: orgList } })
-        .skip(offset)
-        .limit(limit)
-        .populate('interfaces.pathlabels', '_id name description color type')
-        .populate('policies.firewall.policy', '_id name description')
-        .populate('policies.multilink.policy', '_id name description');
+      const updateStatusInDb = (filters && /state|isConnected/.test(filters)) ||
+        /state|isConnected/.test(sortField);
+      if (updateStatusInDb) {
+        // need to update changed statuses from memory to DB
+        await statusesInDb.updateDevicesStatuses(orgList);
+      }
+      const pipeline = [
+        {
+          $match: {
+            org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
+          }
+        },
+        {
+          $lookup: {
+            from: 'multilinkpolicies',
+            localField: 'policies.multilink.policy',
+            foreignField: '_id',
+            as: 'policies.multilink.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.firewall.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'firewallpolicies',
+            localField: 'policies.firewall.policy',
+            foreignField: '_id',
+            as: 'policies.firewall.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.firewall.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'pathlabels',
+            localField: 'interfaces.pathlabels',
+            foreignField: '_id',
+            as: 'pathlabels'
+          }
+        },
+        {
+          $addFields: {
+            _id: { $toString: '$_id' },
+            'deviceStatus.state': {
+              $cond: [{ $eq: ['$isConnected', true] }, '$status', 'pending']
+            }
+          }
+        }
+      ];
 
-      const devicesMap = result.map(item => {
-        return DevicesService.selectDeviceParams(item);
+      if (filters) {
+        const matchFilters = [];
+        const parsedFilters = JSON.parse(filters);
+        for (const filter of parsedFilters) {
+          const filterExpr = getFilterExpression(filter);
+          if (filterExpr !== undefined) {
+            matchFilters.push(filterExpr);
+          }
+        }
+        if (matchFilters.length > 0) {
+          pipeline.push({
+            $match: { $and: matchFilters }
+          });
+        }
+      }
+      if (sortField) {
+        const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
+        pipeline.push({
+          $sort: { [sortField]: order }
+        });
+      };
+      const paginationParams = [{
+        $skip: offset > 0 ? +offset : 0
+      }];
+      if (limit !== undefined) {
+        paginationParams.push({ $limit: +limit });
+      };
+
+      if (requestParams.response === 'summary') {
+        pipeline.push({
+          $project: {
+            isApproved: 1,
+            isConnected: 1,
+            name: 1,
+            hostname: 1,
+            machineId: 1,
+            sync: 1,
+            versions: 1,
+            interfaces: { isAssigned: 1, name: 1, type: 1, IPv4: 1, PublicIP: 1 },
+            pathlabels: { name: 1, description: 1, color: 1, type: 1 },
+            'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
+            'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            'deviceStatus.state': 1
+          }
+        });
+      } else if (requestParams.response === 'ids') {
+        pipeline.push({ $project: { _id: 1 } });
+      } else {
+        // fields to return in detailed response
+        const respFields = [
+          'org',
+          'description',
+          'deviceToken',
+          'machineId',
+          'site',
+          'hostname',
+          'serial',
+          'name',
+          'isApproved',
+          'fromToken',
+          'account',
+          'ipList',
+          'policies',
+          'pathlabels',
+          'versions',
+          'staticroutes',
+          'dhcp',
+          'deviceSpecificRulesEnabled',
+          'firewall',
+          'upgradeSchedule',
+          'sync',
+          'ospf',
+          'isConnected',
+          'deviceStatus.state'
+        ];
+        // populate pathlabels for every interface
+        pipeline.push({
+          $unwind: {
+            path: '$interfaces',
+            preserveNullAndEmptyArrays: true
+          }
+        }, {
+          $lookup: {
+            from: 'pathlabels',
+            localField: 'interfaces.pathlabels',
+            foreignField: '_id',
+            as: 'interfaces.pathlabels'
+          }
+        }, {
+          $addFields: {
+            'interfaces.pathlabels': {
+              $map: {
+                input: '$interfaces.pathlabels',
+                as: 'pl',
+                in: {
+                  _id: { $toString: '$$pl._id' },
+                  name: '$$pl.name',
+                  description: '$$pl.description',
+                  color: '$$pl.color',
+                  type: '$$pl.type'
+                }
+              }
+            }
+          }
+        }, {
+          $group: {
+            _id: '$_id',
+            // name: { $first: '$name' },
+            ...respFields.reduce((r, f) => ({ ...r, [f]: { $first: '$' + f } }), { }),
+            interfaces: { $push: '$interfaces' }
+          }
+        });
+      }
+      pipeline.push({
+        $facet: {
+          records: paginationParams,
+          meta: [{ $count: 'total' }]
+        }
       });
 
+      const paginated = await devices.aggregate(pipeline).allowDiskUse(true);
+      if (paginated[0].meta.length > 0) {
+        response.setHeader('records-total', paginated[0].meta[0].total);
+      };
+
+      let devicesMap;
+      if (requestParams.response === 'summary') {
+        // add pending notifications count for the summary request
+        const pendingNotificationsArr = await notificationsModel.aggregate([
+          {
+            $match: {
+              status: 'unread',
+              device: { $in: paginated[0].records.map(d => d._id) }
+            }
+          },
+          {
+            $group: {
+              _id: '$device',
+              count: { $sum: 1 }
+            }
+          },
+          {
+            $project: {
+              _id: { $toString: '$_id' },
+              count: 1
+            }
+          }
+        ]);
+        devicesMap = paginated[0].records.map(d => {
+          const { count } = pendingNotificationsArr.find(n => n._id === d._id) || { count: 0 };
+          d.pendingNotifications = count;
+          if (!updateStatusInDb) {
+            // get the actual status from memory if it was not updated in DB
+            d.isConnected = connections.isConnected(d.machineId);
+            d.deviceStatus = d.isConnected
+              ? deviceStatus.getDeviceStatus(d.machineId) || {} : {};
+          }
+          return d;
+        });
+      } else if (requestParams.response === 'ids') {
+        devicesMap = paginated[0].records;
+      } else {
+        devicesMap = paginated[0].records.map(d => {
+          return DevicesService.selectDeviceParams(d);
+        });
+      }
       return Service.successResponse(devicesMap);
     } catch (e) {
       return Service.rejectResponse(
@@ -2582,7 +2805,7 @@ class DevicesService {
    * Sets Location header of the response, used in some integrations
    * @param {Object} response - response to http request
    * @param {Array} jobsIds - array of jobs ids
-   * @param {string} orgId - ID of the organzation
+   * @param {string} orgId - ID of the organization
    */
   static setLocationHeader (server, response, jobsIds, orgId) {
     if (jobsIds.length) {

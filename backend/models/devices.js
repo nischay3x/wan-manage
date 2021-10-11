@@ -280,6 +280,17 @@ const interfacesSchema = new Schema({
   hasIpOnDevice: {
     type: Boolean,
     default: true
+  },
+  // Device running status
+  status: {
+    type: String,
+    enum: ['', 'running', 'stopped', 'failed'],
+    default: ''
+  },
+  // Device connection status
+  isConnected: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true,

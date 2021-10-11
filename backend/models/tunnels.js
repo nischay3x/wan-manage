@@ -112,6 +112,12 @@ const tunnelSchema = new Schema({
     type: Boolean,
     default: false
   },
+  // Tunnel status
+  status: {
+    type: String,
+    enum: ['', 'up', 'down'],
+    default: ''
+  },
   // The peer configuration for the tunnel
   peer: {
     type: Schema.Types.ObjectId,
