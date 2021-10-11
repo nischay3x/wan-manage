@@ -562,7 +562,6 @@ class Connections {
           stats: joi.object().optional(),
           network: joi.object().optional(),
           tunnels: joi.array().optional(),
-          stats: joi.object().optional(),
           reconfig: joi.string().allow('').optional(),
           ikev2: Joi.object({
             certificateExpiration: Joi.string().allow('').optional(),
