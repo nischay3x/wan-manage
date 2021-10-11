@@ -977,6 +977,24 @@ const addTunnel = async (
   // Generate IPsec Keys and store them in the database
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
+  let isPending = false;
+
+  let configStatus = ''; // if tunnel exists but isActive was false, reset the configStatus
+  let configStatusReason = '';
+  if (deviceAIntf.hasIpOnDevice === false) {
+    isPending = true;
+    configStatus = configStates.INCOMPLETE;
+    configStatusReason =
+      `Interface ${deviceAIntf.name} in device ${deviceA.name} has no IP address`;
+  }
+
+  if (!peer && deviceBIntf.hasIpOnDevice === false) {
+    isPending = true;
+    configStatus = configStates.INCOMPLETE;
+    configStatusReason =
+      `Interface ${deviceBIntf.name} in device ${deviceB.name} has no IP address`;
+  }
+
   const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
     {
@@ -993,8 +1011,8 @@ const addTunnel = async (
       deviceB: peer ? null : deviceB._id,
       interfaceB: peer ? null : deviceBIntf._id,
       pathlabel: pathLabel,
-      configStatus: '', // if tunnel exists but isActive was false, reset the configStatus
-      configStatusReason: '',
+      configStatus: configStatus,
+      configStatusReason: configStatusReason,
       encryptionMethod,
       tunnelKeys,
       peer: peer ? peer._id : null
@@ -1002,6 +1020,11 @@ const addTunnel = async (
     // Options
     { upsert: true, new: true }
   );
+
+  // don't send jobs for pending tunnels
+  if (isPending) {
+    return [];
+  }
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
     tunnel,
@@ -1588,7 +1611,7 @@ const getInterfacesWithPathLabels = device => {
     if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
       const labelsSet = new Set(intf.pathlabels.map(label => {
         // DIA interfaces cannot be used in tunnels
-        return label.type !== 'DIA' ? label._id : null;
+        return label.type !== 'DIA' ? label._id.toString() : null;
       }));
       deviceIntfs.push({
         labelsSet: labelsSet,

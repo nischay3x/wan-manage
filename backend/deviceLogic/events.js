@@ -32,7 +32,7 @@ const configStates = require('./configStates');
 
 class Events {
   constructor () {
-    this.changedDevices = new Set();
+    this.changedDevices = [];
     this.pendingTunnels = new Set();
     this.activeTunnels = new Set();
   }
@@ -41,8 +41,19 @@ class Events {
    * Add device id to the changed devices list
    * @param  {string} deviceId device id
   */
-  addChangedDevice (deviceId) {
-    this.changedDevices.add(deviceId.toString());
+  async addChangedDevice (deviceId, origDevice = null) {
+    const id = deviceId.toString();
+    if (!this.changedDevices[id]) {
+      // save the orig device for job processing
+      if (!origDevice) {
+        origDevice = await devices.findOne({ _id: id }).lean();
+      }
+
+      this.changedDevices[id] = {
+        orig: origDevice
+      };
+    }
+    // this.changedDevices.add(deviceId.toString());
   }
 
   /**
@@ -69,6 +80,8 @@ class Events {
    * @param  {boolean} hasIP  indicate if ip exists in the device side
   */
   async setInterfaceHasIP (deviceId, ifcId, hasIP) {
+    await this.addChangedDevice(deviceId);
+
     await devices.findOneAndUpdate(
       { _id: deviceId },
       {
@@ -80,8 +93,6 @@ class Events {
         arrayFilters: [{ 'elem._id': ifcId }]
       }
     );
-
-    this.addChangedDevice(deviceId);
   };
 
   /**
@@ -93,6 +104,8 @@ class Events {
    * @param  {object} device  device of incomplete tunnel
   */
   async setIncompleteTunnelStatus (num, org, isIncomplete, reason, device) {
+    await this.addChangedDevice(device._id);
+
     const tunnel = await tunnelsModel.findOneAndUpdate(
       // Query, use the org and tunnel number
       { org, num },
@@ -105,8 +118,6 @@ class Events {
       // Options
       { upsert: false, new: true }
     ).lean();
-
-    this.addChangedDevice(device._id);
 
     if (isIncomplete) {
       this.pendingTunnels.add(tunnel._id.toString());
@@ -381,6 +392,8 @@ class Events {
    * @param  {object} device  device of incomplete tunnel
   */
   async setIncompleteRouteStatus (route, isIncomplete, reason, device) {
+    await this.addChangedDevice(device._id);
+
     await devices.findOneAndUpdate(
       { _id: mongoose.Types.ObjectId(device._id) },
       {
@@ -393,8 +406,6 @@ class Events {
         arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(route._id) }]
       }
     );
-
-    this.addChangedDevice(device._id);
 
     if (isIncomplete) {
       await this.staticRouteSetToPending(route, device, reason);
@@ -443,17 +454,14 @@ class Events {
 
         if (this.isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
           await this.interfaceConnectivityChanged(origDevice, origIfc, updatedIfc.internetAccess);
-          this.addChangedDevice(origDevice._id);
         }
 
         if (this.isIpMissing(origIfc, updatedIfc, routerIsRunning)) {
           await this.interfaceIpMissing(origDevice, origIfc, updatedIfc);
-          this.addChangedDevice(origDevice._id);
         }
 
         if (this.isIpExists(updatedIfc)) {
           await this.interfaceIpExists(origDevice, origIfc, updatedIfc);
-          this.addChangedDevice(origDevice._id);
         }
 
         if (this.isPublicPortChanged(origIfc, updatedIfc)) {
@@ -485,7 +493,6 @@ class Events {
                 { params: errParams }
               );
 
-              this.addChangedDevice(origDevice._id);
               // eslint-disable-next-line max-len
               const reason = `The public port for interface ${origIfc.name} in device ${origDevice.name} is changing at a high rate`;
               await this.setPendingStateToTunnels(origDevice, origIfc, reason);
@@ -494,7 +501,6 @@ class Events {
 
           // release pending tunnels
           if (res && res.consumedPoints === 1) {
-            this.addChangedDevice(origDevice._id);
             await this.removePendingStateFromTunnels(origDevice, origIfc);
           }
         }
@@ -537,23 +543,20 @@ class Events {
   async prepareModifyDispatcherParameters () {
     const modifyDevices = { /* original, updated */ };
 
-    const devicesIds = Array.from(this.changedDevices);
-
-    let origDevices = await devices.find({
-      _id: { $in: devicesIds }
-    });
+    const devicesIds = Object.keys(this.changedDevices);
 
     let updatedDevices = await devices.find({
       _id: { $in: devicesIds }
-    });
+    }).lean();
 
-    origDevices = keyBy(origDevices, 'machineId');
-    updatedDevices = keyBy(updatedDevices, 'machineId');
+    updatedDevices = keyBy(updatedDevices, '_id');
 
-    for (const machineId in origDevices) {
+    for (const deviceId in this.changedDevices) {
+      const orig = this.changedDevices[deviceId].orig;
+      const machineId = orig.machineId;
       modifyDevices[machineId] = {
-        orig: origDevices[machineId],
-        updated: updatedDevices[machineId]
+        orig: orig,
+        updated: updatedDevices[deviceId]
       };
     }
 

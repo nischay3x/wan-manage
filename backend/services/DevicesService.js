@@ -313,7 +313,7 @@ class DevicesService {
         },
         {
           $unwind: {
-            path: '$policies.firewall.policy',
+            path: '$policies.multilink.policy',
             preserveNullAndEmptyArrays: true
           }
         },
@@ -422,7 +422,7 @@ class DevicesService {
           'sync',
           'ospf',
           'isConnected',
-          'deviceStatus.state'
+          'deviceStatus'
         ];
         // populate pathlabels for every interface
         pipeline.push({
@@ -1469,9 +1469,9 @@ class DevicesService {
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
+      const modifyDevResult = await dispatcher.apply([origDevice.toObject()], 'modify', user, {
         org: orgList[0],
-        newDevice: updDevice
+        newDevice: updDevice.toObject()
       });
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;

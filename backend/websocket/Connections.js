@@ -475,7 +475,7 @@ class Connections {
           await devices.findOneAndUpdate(
             { machineId },
             { $set: { interfaces } },
-            { new: true, runValidators: true }
+            { runValidators: true }
           ).populate('interfaces.pathlabels', '_id type');
 
           // from agent version 5,
@@ -495,10 +495,11 @@ class Connections {
           // to know changedDevice and changedTunnels
           const events = new DeviceEvents();
 
-          // add current device to changed devices in order to run modify process for it
-          events.addChangedDevice(origDevice._id);
-
           const plainJsDevice = origDevice.toObject();
+
+          // add current device to changed devices in order to run modify process for it
+          await events.addChangedDevice(origDevice._id, plainJsDevice);
+
           const newInterfaces = deviceInfo.message.network.interfaces;
           await events.checkIfToTriggerEvent(plainJsDevice, newInterfaces, routerIsRunning);
 
@@ -579,7 +580,6 @@ class Connections {
           stats: joi.object().optional(),
           network: joi.object().optional(),
           tunnels: joi.array().optional(),
-          stats: joi.object().optional(),
           reconfig: joi.string().allow('').optional(),
           ikev2: Joi.object({
             certificateExpiration: Joi.string().allow('').optional(),

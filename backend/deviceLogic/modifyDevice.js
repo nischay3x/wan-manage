@@ -147,7 +147,7 @@ const transformInterfaces = (interfaces, globalOSPF) => {
     // add ospf data if relevant
     if (ifcObg.routing === 'OSPF') {
       ifcObg.ospf = {
-        ...ifc.ospf.toObject(),
+        ...ifc.ospf,
         helloInterval: globalOSPF.helloInterval,
         deadInterval: globalOSPF.deadInterval
       };
@@ -189,7 +189,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     }
 
     const oldLteInterfaces = prepareIfcParams(
-      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device, newDevice);
+      device.interfaces.filter(i => i.deviceType === 'lte'), device, newDevice);
 
     const newLteInterfaces = prepareIfcParams(
       messageParams.modify_interfaces.lte_enable_disable, device, newDevice
@@ -1226,8 +1226,8 @@ const apply = async (device, user, data) => {
 
   const origDevice = device[0];
   const updDevice = data.newDevice;
-  const updRules = updDevice.firewall.rules.toObject();
-  const origRules = origDevice.firewall.rules.toObject();
+  const updRules = updDevice.firewall.rules;
+  const origRules = origDevice.firewall.rules;
   const rulesModified =
     origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
     !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
