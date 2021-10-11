@@ -377,7 +377,7 @@ class DevicesService {
       if (requestParams.response === 'summary') {
         pipeline.push({
           $project: {
-            org: 1,
+            org: { $toString: '$org' },
             isApproved: 1,
             isConnected: 1,
             name: 1,
