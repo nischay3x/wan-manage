@@ -310,7 +310,7 @@ class DevicesService {
         },
         {
           $unwind: {
-            path: '$policies.firewall.policy',
+            path: '$policies.multilink.policy',
             preserveNullAndEmptyArrays: true
           }
         },
