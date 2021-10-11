@@ -527,7 +527,6 @@ class Connections {
               {
                 org: modifyDevices[modified].orig.org.toString(),
                 newDevice: modifyDevices[modified].updated
-                // origTunnels: modifyDevices[modified].origTunnels
               }
             );
           }
