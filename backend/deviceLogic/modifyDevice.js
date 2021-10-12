@@ -1040,6 +1040,10 @@ const apply = async (device, user, data) => {
   const org = data.org;
   const modifyParams = {};
 
+  device[0] = await device[0]
+    .populate('interfaces.pathlabels', '_id name type')
+    .execPopulate();
+
   // Create the default/static routes modification parameters
   const modifyRoutes = prepareModifyRoutes(device[0], data.newDevice);
   if (modifyRoutes.routes.length > 0) modifyParams.modify_routes = modifyRoutes;
