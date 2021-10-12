@@ -203,8 +203,8 @@ class Events {
       $or: orQuery,
       isActive: true
     })
-      .populate('deviceA', 'interfaces')
-      .populate('deviceB', 'interfaces')
+      .populate('deviceA', 'name interfaces')
+      .populate('deviceB', 'name interfaces')
       .lean();
 
     for (const tunnel of tunnels) {
