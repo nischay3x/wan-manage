@@ -478,7 +478,7 @@ class DevicesService {
           {
             $match: {
               status: 'unread',
-              device: { $in: paginated[0].records.map(d => d._id) }
+              device: { $in: paginated[0].records.map(d => mongoose.Types.ObjectId(d._id)) }
             }
           },
           {
