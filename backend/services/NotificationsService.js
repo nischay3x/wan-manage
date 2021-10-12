@@ -125,6 +125,7 @@ class NotificationsService {
           return {
             ...element,
             _id: element._id.toString(),
+            deviceId: element.device || null,
             device: element.device ? devicesNames[element.device] : null || null,
             time: element.time.toISOString()
           };
