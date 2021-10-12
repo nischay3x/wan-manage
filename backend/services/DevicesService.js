@@ -56,6 +56,7 @@ const { TypedError, ErrorTypes } = require('../utils/errors');
 const { getFilterExpression } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const configStates = require('../deviceLogic/configStates');
+const eventsReasons = require('../deviceLogic/events/eventReasons');
 class DevicesService {
   /**
    * Execute an action on the device side
@@ -1373,8 +1374,7 @@ class DevicesService {
           for (const ifc of interfacesWithoutIp) {
             if (ifc.IPv4 === s.gateway) {
               s.configStatus = configStates.INCOMPLETE;
-              s.configStatusReason =
-                `Interface ${ifc.name} in device ${origDevice.name} has no IP address`;
+              s.configStatusReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
               return s;
             }
           }

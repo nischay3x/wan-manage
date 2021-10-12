@@ -25,6 +25,7 @@ const mongoose = require('mongoose');
 const { generateTunnelParams, generateRandomKeys } = require('../utils/tunnelUtils');
 const { validateIKEv2 } = require('./IKEv2');
 const configStates = require('./configStates');
+const eventsReasons = require('./events/eventReasons');
 
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -984,15 +985,13 @@ const addTunnel = async (
   if (deviceAIntf.hasIpOnDevice === false) {
     isPending = true;
     configStatus = configStates.INCOMPLETE;
-    configStatusReason =
-      `Interface ${deviceAIntf.name} in device ${deviceA.name} has no IP address`;
+    configStatusReason = eventsReasons.interfaceHasNoIp(deviceAIntf.name, deviceA.name);
   }
 
   if (!peer && deviceBIntf.hasIpOnDevice === false) {
     isPending = true;
     configStatus = configStates.INCOMPLETE;
-    configStatusReason =
-      `Interface ${deviceBIntf.name} in device ${deviceB.name} has no IP address`;
+    configStatusReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
   }
 
   const tunnel = await tunnelsModel.findOneAndUpdate(

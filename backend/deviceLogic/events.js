@@ -29,6 +29,7 @@ const { publicPortLimiter } = require('./eventsRateLimiter');
 const modifyDeviceApply = require('./modifyDevice').apply;
 const reconstructTunnels = require('./modifyDevice').reconstructTunnels;
 const configStates = require('./configStates');
+const eventsReasons = require('./events/eventReasons');
 
 class Events {
   constructor () {
@@ -226,8 +227,7 @@ class Events {
             ? tunnel.deviceA : ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
 
           // if one event is removed but still no ip on the interface, change the reason
-          const reason =
-            `Interface ${ifcWithoutIp.name} in device ${deviceWithoutIp.name} has no IP address`;
+          const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
           await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
         }
       }
@@ -247,7 +247,7 @@ class Events {
     await this.setInterfaceHasIP(device._id, origIfc._id, false);
 
     // set related tunnels as pending
-    const reason = `Interface ${origIfc.name} in device ${device.name} has no IP address`;
+    const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
     await this.setPendingStateToTunnels(device, origIfc, reason);
 
     // set related static routes as pending
@@ -262,7 +262,7 @@ class Events {
     });
 
     for (const route of staticRoutes) {
-      const reason = `Interface ${origIfc.name} in device ${device.name} has no IP address`;
+      const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
       await this.setIncompleteRouteStatus(route, true, reason, device);
     }
   };
