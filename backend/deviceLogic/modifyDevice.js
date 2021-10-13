@@ -1160,6 +1160,11 @@ const apply = async (device, user, data) => {
     if (toUnAssign.length) modifyParams.modify_router.unassign = toUnAssign;
   }
 
+  // if it's empty, delete it in order to prevent unnecessary modify-device job
+  if (Object.keys(modifyParams.modify_router).length === 0) {
+    delete modifyParams.modify_router;
+  }
+
   // Handle changes in interface fields other than 'isAssigned'
   const interfacesDiff = differenceWith(
     newInterfaces,
