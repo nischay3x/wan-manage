@@ -37,7 +37,7 @@ const sleep = seconds => {
 
 describe('Limiter functionally', () => {
   let testLimiter = null;
-  beforeEach(async () => {
+  beforeEach(() => {
     testLimiter = new Limiter(5, 10, 10, releaseCallback, blockCallback);
   });
 

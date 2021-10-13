@@ -462,14 +462,6 @@ class Events {
           await this.interfaceConnectivityChanged(origDevice, origIfc, updatedIfc.internetAccess);
         }
 
-        if (this.isIpMissing(origIfc, updatedIfc, routerIsRunning)) {
-          await this.interfaceIpMissing(origDevice, origIfc, updatedIfc);
-        }
-
-        if (this.isIpExists(updatedIfc)) {
-          await this.interfaceIpExists(origDevice, origIfc, updatedIfc);
-        }
-
         const isPublicPortChanged = this.isPublicPortChanged(origIfc, updatedIfc);
         const isPublicIpChanged = this.isPublicIpChanged(origIfc, updatedIfc);
         if (isPublicPortChanged || isPublicIpChanged) {
@@ -477,49 +469,14 @@ class Events {
           const callbackParameters = [this, origDevice, origIfc];
           await publicAddrInfoLimiter.use(deviceId, ...callbackParameters);
         }
-        //   const deviceId = origDevice._id.toString();
-        //   await publicPortLimiter.use(deviceId, this, origDevice, origIfc);
-        //   // add dedicated try and catch for event limit.
-        //   // if something that not related to event limiter functionality
-        //   // will fail in the catch block it will be thrown to the parent try/catch
-        //   // let res = null;
-        //   // try {
-        //   //   res = await publicPortLimiter.consume(origDevice._id.toString());
-        //   // } catch (err) {
-        //   //   // const errParams = {
-        //   //   //   deviceId: origDevice._id,
-        //   //   //   interfaceId: origIfc._id,
-        //   //   //   origPort: origIfc.PublicPort,
-        //   //   //   newPort: updatedIfc.public_port.toString()
-        //   //   // };
 
-        //   //   // // if it already blocked, print warning log
-        //   //   // if (err.consumedPoints > publicPortLimiter.points + 1) {
-        //   //   //   logger.warn(
-        // eslint-disable-next-line max-len
-        //   //   //     'Public port rate limit exceeded. The system will not rebuild the relevant tunnels',
-        //   //   //     { params: errParams }
-        //   //   //   );
-        //   //   // }
+        if (this.isIpMissing(origIfc, updatedIfc, routerIsRunning)) {
+          await this.interfaceIpMissing(origDevice, origIfc, updatedIfc);
+        }
 
-        //   //   // if rate limiting exceeded, we set tunnels as pending
-        //   //   // if (err.consumedPoints === publicPortLimiter.points + 1) {
-        //   //   //   logger.error('Public port rate limit exceeded. tunnels will set as pending',
-        //   //   //     { params: errParams }
-        //   //   //   );
-
-        //   //   //   // eslint-disable-next-line max-len
-        // eslint-disable-next-line max-len
-        //   //   //   // const reason = `The public port for interface ${origIfc.name} in device ${origDevice.name} is changing at a high rate. Click on the "Sync" button to re-enable self-healing`;
-        //   //   //   // await this.setPendingStateToTunnels(origDevice, origIfc, reason);
-        //   //   // }
-        //   // }
-
-        //   // // release pending tunnels
-        //   // if (res && res.consumedPoints === 1) {
-        //   //   await this.removePendingStateFromTunnels(origDevice, origIfc);
-        //   // }
-        // }
+        if (this.isIpExists(updatedIfc)) {
+          await this.interfaceIpExists(origDevice, origIfc, updatedIfc);
+        }
       }
     } catch (err) {
       logger.error('events check failed', { params: { err: err.message } });
