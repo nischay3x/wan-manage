@@ -36,9 +36,10 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
-// const removePendingStateFromTunnels = require('../deviceLogic/events')
-//   .removePendingStateFromTunnels;
+const removePendingStateFromTunnels = require('../deviceLogic/events')
+  .removePendingStateFromTunnels;
 
+const { publicAddrInfoLimiter } = require('../limiters/publicAddrInfo');
 const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
 // const { publicPortLimiter } = require('../limiters/publicPort');
 
@@ -422,18 +423,22 @@ const apply = async (device, user, data) => {
   const { _id, machineId, hostname, org, versions } = device[0];
 
   // Reset auto sync in database
-  await devices.findOneAndUpdate(
+  const updDevice = await devices.findOneAndUpdate(
     { org, _id },
     {
       'sync.state': 'syncing',
       'sync.autoSync': 'on',
       'sync.trials': 0
     },
-    { sync: 1 }
+    { sync: 1, new: true }
   ).lean();
 
   // release existing limiters if the device is blocked
   await reconfigErrorSLimiter.release(_id.toString());
+  const cb = async () => {
+    await removePendingStateFromTunnels(updDevice);
+  };
+  await publicAddrInfoLimiter.release(_id.toString(), cb);
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(

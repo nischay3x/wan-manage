@@ -25,7 +25,7 @@ const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const { sendRemoveTunnelsJobs } = require('../deviceLogic/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-// const { publicPortLimiter } = require('../limiters/publicPort');
+const { publicAddrInfoLimiter } = require('../limiters/publicAddrInfo');
 const modifyDeviceApply = require('./modifyDevice').apply;
 const reconstructTunnels = require('./modifyDevice').reconstructTunnels;
 const configStates = require('./configStates');
@@ -191,6 +191,12 @@ class Events {
    * @param  {object} origIfc original interface object
   */
   async removePendingStateFromTunnels (device, origIfc = null) {
+    // check if tunnels are pending due to rate limit
+    const isBlocked = await publicAddrInfoLimiter.isBlocked(device._id.toString());
+    if (isBlocked) {
+      return;
+    }
+
     const orQuery = [];
     if (origIfc) {
       orQuery.push({ deviceA: device._id, interfaceA: origIfc._id });
@@ -464,7 +470,13 @@ class Events {
           await this.interfaceIpExists(origDevice, origIfc, updatedIfc);
         }
 
-        // if (this.isPublicPortChanged(origIfc, updatedIfc)) {
+        const isPublicPortChanged = this.isPublicPortChanged(origIfc, updatedIfc);
+        const isPublicIpChanged = this.isPublicIpChanged(origIfc, updatedIfc);
+        if (isPublicPortChanged || isPublicIpChanged) {
+          const deviceId = origDevice._id.toString();
+          const callbackParameters = [this, origDevice, origIfc];
+          await publicAddrInfoLimiter.use(deviceId, ...callbackParameters);
+        }
         //   const deviceId = origDevice._id.toString();
         //   await publicPortLimiter.use(deviceId, this, origDevice, origIfc);
         //   // add dedicated try and catch for event limit.
@@ -579,6 +591,24 @@ class Events {
     }
 
     if (origIfc.PublicPort === updatedIfc.public_port.toString()) {
+      return false;
+    }
+
+    return true;
+  };
+
+  /**
+   * Check if public ip is changed
+   * @param  {object} origIfc  interface from flexiManage DB
+   * @param  {object} updatedIfc  incoming interface info from device
+   * @return {boolean} if need to trigger event of ip restored
+  */
+  isPublicIpChanged (origIfc, updatedIfc) {
+    if (updatedIfc.public_ip === '') {
+      return false;
+    }
+
+    if (origIfc.PublicIP === updatedIfc.public_ip) {
       return false;
     }
 

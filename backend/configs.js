@@ -171,7 +171,9 @@ const configEnv = {
     // IKEv2 lifetime parameter in seconds.
     ikev2Lifetime: 3600,
     // Reconfig block time in seconds.
-    reconfigErrorBlockTime: 60 * 60 // one hour
+    reconfigErrorBlockTime: 60 * 60, // one hour
+    // Public IP/Port block time in seconds.
+    publicAddrBlockTime: 60 * 60 // one hour
   },
   // Override for development environment, default environment if not specified
   development: {
