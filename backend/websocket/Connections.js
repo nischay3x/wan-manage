@@ -31,6 +31,7 @@ const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require(
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
+const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
 
 class Connections {
   constructor () {
@@ -470,6 +471,8 @@ class Connections {
           return updInterface;
         });
 
+        const deviceId = origDevice._id.toString();
+
         try {
           // Update interfaces in DB
           await devices.findOneAndUpdate(
@@ -495,7 +498,7 @@ class Connections {
           // to know changedDevice and changedTunnels
           const events = new DeviceEvents();
 
-          const plainJsDevice = origDevice.toObject();
+          const plainJsDevice = origDevice.toObject({ minimize: false });
 
           // add current device to changed devices in order to run modify process for it
           await events.addChangedDevice(origDevice._id, plainJsDevice);
@@ -534,6 +537,10 @@ class Connections {
           // remove tunnels jobs after modify
           await events.sendTunnelsRemoveJobs();
         } catch (err) {
+          // if there are many errors in a row, we block the get-device-info loop
+          const callbackParams = [deviceId, machineId, origDevice.org];
+          await reconfigErrorSLimiter.use(deviceId, ...callbackParams);
+
           logger.error('Failed to apply new configuration from device', {
             params: { device: machineId, err: err.message }
           });

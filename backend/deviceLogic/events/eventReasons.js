@@ -18,6 +18,10 @@
 const reasons = {
   interfaceHasNoIp: (ifcName, deviceName) => {
     return `Interface ${ifcName} in device ${deviceName} has no IP address`;
+  },
+  publicPortHighRate: (ifcName, deviceName) => {
+    // eslint-disable-next-line max-len
+    return `The public port for interface ${ifcName} in device ${deviceName} is changing at a high rate`;
   }
 };
 

@@ -57,6 +57,7 @@ const { getFilterExpression } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const configStates = require('../deviceLogic/configStates');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
+
 class DevicesService {
   /**
    * Execute an action on the device side

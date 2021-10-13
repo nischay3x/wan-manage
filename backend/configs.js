@@ -169,7 +169,9 @@ const configEnv = {
     // Number of days before expiration to renew IKEv2 keys. Default = 30 days
     ikev2RenewBeforeExpireDays: 30,
     // IKEv2 lifetime parameter in seconds.
-    ikev2Lifetime: 3600
+    ikev2Lifetime: 3600,
+    // Reconfig block time in seconds.
+    reconfigErrorBlockTime: 60 * 60 // one hour
   },
   // Override for development environment, default environment if not specified
   development: {

@@ -25,7 +25,7 @@ const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const { sendRemoveTunnelsJobs } = require('../deviceLogic/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const { publicPortLimiter } = require('./eventsRateLimiter');
+// const { publicPortLimiter } = require('../limiters/publicPort');
 const modifyDeviceApply = require('./modifyDevice').apply;
 const reconstructTunnels = require('./modifyDevice').reconstructTunnels;
 const configStates = require('./configStates');
@@ -219,7 +219,7 @@ class Events {
         const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(
           i => i._id.toString() === tunnel.interfaceB.toString());
 
-        if (ifcA.hasIpOnDevice && (ifcB && ifcB.hasIpOnDevice)) {
+        if (ifcA.hasIpOnDevice && (tunnel.peer || ifcB.hasIpOnDevice)) {
           await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
         } else {
           const ifcWithoutIp = tunnel.peer ? ifcA : ifcA.hasIpOnDevice ? ifcB : ifcA;
@@ -464,46 +464,50 @@ class Events {
           await this.interfaceIpExists(origDevice, origIfc, updatedIfc);
         }
 
-        if (this.isPublicPortChanged(origIfc, updatedIfc)) {
-          // add dedicated try and catch for event limit.
-          // if something that not related to event limiter functionality
-          // will fail in the catch block it will be thrown to the parent try/catch
-          let res = null;
-          try {
-            res = await publicPortLimiter.consume(origDevice._id.toString());
-          } catch (err) {
-            const errParams = {
-              deviceId: origDevice._id,
-              interfaceId: origIfc._id,
-              origPort: origIfc.PublicPort,
-              newPort: updatedIfc.public_port.toString()
-            };
+        // if (this.isPublicPortChanged(origIfc, updatedIfc)) {
+        //   const deviceId = origDevice._id.toString();
+        //   await publicPortLimiter.use(deviceId, this, origDevice, origIfc);
+        //   // add dedicated try and catch for event limit.
+        //   // if something that not related to event limiter functionality
+        //   // will fail in the catch block it will be thrown to the parent try/catch
+        //   // let res = null;
+        //   // try {
+        //   //   res = await publicPortLimiter.consume(origDevice._id.toString());
+        //   // } catch (err) {
+        //   //   // const errParams = {
+        //   //   //   deviceId: origDevice._id,
+        //   //   //   interfaceId: origIfc._id,
+        //   //   //   origPort: origIfc.PublicPort,
+        //   //   //   newPort: updatedIfc.public_port.toString()
+        //   //   // };
 
-            // if it already blocked, print warning log
-            if (err.consumedPoints > publicPortLimiter.points + 1) {
-              logger.warn(
-                'Public port rate limit exceeded. The system will not rebuild the relevant tunnels',
-                { params: errParams }
-              );
-            }
+        //   //   // // if it already blocked, print warning log
+        //   //   // if (err.consumedPoints > publicPortLimiter.points + 1) {
+        //   //   //   logger.warn(
+        // eslint-disable-next-line max-len
+        //   //   //     'Public port rate limit exceeded. The system will not rebuild the relevant tunnels',
+        //   //   //     { params: errParams }
+        //   //   //   );
+        //   //   // }
 
-            // if rate limiting exceeded, we set tunnels as pending
-            if (err.consumedPoints === publicPortLimiter.points + 1) {
-              logger.error('Public port rate limit exceeded. tunnels will set as pending',
-                { params: errParams }
-              );
+        //   //   // if rate limiting exceeded, we set tunnels as pending
+        //   //   // if (err.consumedPoints === publicPortLimiter.points + 1) {
+        //   //   //   logger.error('Public port rate limit exceeded. tunnels will set as pending',
+        //   //   //     { params: errParams }
+        //   //   //   );
 
-              // eslint-disable-next-line max-len
-              const reason = `The public port for interface ${origIfc.name} in device ${origDevice.name} is changing at a high rate`;
-              await this.setPendingStateToTunnels(origDevice, origIfc, reason);
-            }
-          }
+        //   //   //   // eslint-disable-next-line max-len
+        // eslint-disable-next-line max-len
+        //   //   //   // const reason = `The public port for interface ${origIfc.name} in device ${origDevice.name} is changing at a high rate. Click on the "Sync" button to re-enable self-healing`;
+        //   //   //   // await this.setPendingStateToTunnels(origDevice, origIfc, reason);
+        //   //   // }
+        //   // }
 
-          // release pending tunnels
-          if (res && res.consumedPoints === 1) {
-            await this.removePendingStateFromTunnels(origDevice, origIfc);
-          }
-        }
+        //   // // release pending tunnels
+        //   // if (res && res.consumedPoints === 1) {
+        //   //   await this.removePendingStateFromTunnels(origDevice, origIfc);
+        //   // }
+        // }
       }
     } catch (err) {
       logger.error('events check failed', { params: { err: err.message } });

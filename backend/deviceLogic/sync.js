@@ -36,9 +36,11 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
-const { publicPortLimiter } = require('./eventsRateLimiter');
-const removePendingStateFromTunnels = require('../deviceLogic/events')
-  .removePendingStateFromTunnels;
+// const removePendingStateFromTunnels = require('../deviceLogic/events')
+//   .removePendingStateFromTunnels;
+
+const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
+// const { publicPortLimiter } = require('../limiters/publicPort');
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -420,22 +422,18 @@ const apply = async (device, user, data) => {
   const { _id, machineId, hostname, org, versions } = device[0];
 
   // Reset auto sync in database
-  const updDevice = await devices.findOneAndUpdate(
+  await devices.findOneAndUpdate(
     { org, _id },
     {
       'sync.state': 'syncing',
       'sync.autoSync': 'on',
       'sync.trials': 0
     },
-    { sync: 1, new: true }
+    { sync: 1 }
   ).lean();
 
-  // if a user click on sync on the *locked* device, we release the pending tunnels
-  // TODO: // think if only if released or not
-  const isReleased = await publicPortLimiter.delete(_id.toString());
-  if (isReleased) {
-    await removePendingStateFromTunnels(updDevice);
-  }
+  // release existing limiters if the device is blocked
+  await reconfigErrorSLimiter.release(_id.toString());
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(
