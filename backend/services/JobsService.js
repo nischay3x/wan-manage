@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const createError = require('http-errors');
 const Service = require('./Service');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
@@ -114,14 +115,22 @@ class JobsService {
   }
 
   /**
-   * Delete jobs
+   * Delete all jobs matching the filters
    *
    * no response value expected for this operation
    **/
   static async jobsDELETE ({ org, jobsDeleteRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), jobsDeleteRequest.ids);
+      const { ids, filters } = jobsDeleteRequest;
+      if (ids && filters) {
+        throw createError(400, 'Only ids or filters can be specified as a parameter');
+      }
+      if (ids) {
+        await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), ids);
+      } else {
+        await deviceQueues.removeJobsByOrgAndFilters(orgList[0].toString(), filters);
+      }
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
