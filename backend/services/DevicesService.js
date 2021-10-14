@@ -1472,9 +1472,9 @@ class DevicesService {
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      const modifyDevResult = await dispatcher.apply([origDevice.toObject()], 'modify', user, {
+      const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
         org: orgList[0],
-        newDevice: updDevice.toObject()
+        newDevice: updDevice
       });
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;

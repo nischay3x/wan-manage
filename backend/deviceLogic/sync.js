@@ -39,7 +39,7 @@ const SHA1 = require('crypto-js/sha1');
 const removePendingStateFromTunnels = require('../deviceLogic/events')
   .removePendingStateFromTunnels;
 
-const { publicAddrInfoLimiter } = require('../limiters/publicAddrInfo');
+const { publicAddrInfoLimiter } = require('./events');
 const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
 // const { publicPortLimiter } = require('../limiters/publicPort');
 

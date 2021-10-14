@@ -25,11 +25,17 @@ const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const { sendRemoveTunnelsJobs } = require('../deviceLogic/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const { publicAddrInfoLimiter } = require('../limiters/publicAddrInfo');
 const modifyDeviceApply = require('./modifyDevice').apply;
 const reconstructTunnels = require('./modifyDevice').reconstructTunnels;
 const configStates = require('./configStates');
 const eventsReasons = require('./events/eventReasons');
+const configs = require('../configs')();
+const Limiter = require('../limiters/limiter');
+const publicAddrBlockTime = configs.get('publicAddrBlockTime', 'number');
+
+// const publicAddrInfoLimiter = new Limiter(5, 60 * 60, publicAddrBlockTime);
+// Change it
+const publicAddrInfoLimiter = new Limiter(5, 60, publicAddrBlockTime);
 
 class Events {
   constructor () {
@@ -47,14 +53,13 @@ class Events {
     if (!this.changedDevices[id]) {
       // save the orig device for job processing
       if (!origDevice) {
-        origDevice = await devices.findOne({ _id: id }).lean();
+        origDevice = await devices.findOne({ _id: id });
       }
 
       this.changedDevices[id] = {
         orig: origDevice
       };
     }
-    // this.changedDevices.add(deviceId.toString());
   }
 
   /**
@@ -72,6 +77,31 @@ class Events {
       machineId: device.machineId,
       details: reason
     }]);
+  }
+
+  /**
+   * Handle public port/ip rate limited
+   * @param  {object} origDevice device object
+   * @param  {object} origIfc interface object
+  */
+  async publicInfoIsRateLimited (origDevice, origIfc) {
+    logger.error('Public address rate limit exceeded. tunnels will set as pending',
+      { params: { deviceId: origDevice._id, interfaceId: origIfc._id } }
+    );
+
+    const reason = `The public address of interface ${origIfc.name}
+    in device ${origDevice.name} is changing at a high rate.
+    Click on the "Sync" button to re-enable self-healing`;
+    await this.setPendingStateToTunnels(origDevice, origIfc, reason);
+  }
+
+  /**
+   * Handle public port/ip rate limit released
+   * @param  {object} origDevice device object
+   * @param  {object} origIfc interface object
+  */
+  async publicInfoRateLimitIsReleased (origDevice, origIfc) {
+    await this.removePendingStateFromTunnels(origDevice, origIfc);
   }
 
   /**
@@ -471,16 +501,9 @@ class Events {
           const deviceId = origDevice._id.toString();
           const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(deviceId);
           if (releasedNow) {
-            await this.removePendingStateFromTunnels(origDevice, origIfc);
+            await this.publicInfoRateLimitIsReleased(origDevice, origIfc);
           } else if (!allowed && blockedNow) {
-            logger.error('Public address rate limit exceeded. tunnels will set as pending',
-              { params: { deviceId: origDevice._id, interfaceId: origIfc._id } }
-            );
-
-            const reason = `The public address of interface ${origIfc.name}
-            in device ${origDevice.name} is changing at a high rate.
-            Click on the "Sync" button to re-enable self-healing`;
-            await this.setPendingStateToTunnels(origDevice, origIfc, reason);
+            await this.publicInfoIsRateLimited(origDevice, origIfc);
           }
         }
 
@@ -534,7 +557,7 @@ class Events {
 
     let updatedDevices = await devices.find({
       _id: { $in: devicesIds }
-    }).lean();
+    });
 
     updatedDevices = keyBy(updatedDevices, '_id');
 
@@ -651,3 +674,4 @@ module.exports = Events; // default export
 exports = module.exports;
 
 exports.removePendingStateFromTunnels = removePendingStateFromTunnels; // named export
+exports.publicAddrInfoLimiter = publicAddrInfoLimiter; // named export

@@ -147,7 +147,7 @@ const transformInterfaces = (interfaces, globalOSPF) => {
     // add ospf data if relevant
     if (ifcObg.routing === 'OSPF') {
       ifcObg.ospf = {
-        ...ifc.ospf,
+        ...ifc.ospf.toObject(),
         helloInterval: globalOSPF.helloInterval,
         deadInterval: globalOSPF.deadInterval
       };
@@ -189,7 +189,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     }
 
     const oldLteInterfaces = prepareIfcParams(
-      device.interfaces.filter(i => i.deviceType === 'lte'), device, newDevice);
+      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device, newDevice);
 
     const newLteInterfaces = prepareIfcParams(
       messageParams.modify_interfaces.lte_enable_disable, device, newDevice

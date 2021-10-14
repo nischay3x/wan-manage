@@ -501,7 +501,7 @@ class Connections {
           const plainJsDevice = origDevice.toObject({ minimize: false });
 
           // add current device to changed devices in order to run modify process for it
-          await events.addChangedDevice(origDevice._id, plainJsDevice);
+          await events.addChangedDevice(origDevice._id, origDevice);
 
           const newInterfaces = deviceInfo.message.network.interfaces;
           await events.checkIfToTriggerEvent(plainJsDevice, newInterfaces, routerIsRunning);
