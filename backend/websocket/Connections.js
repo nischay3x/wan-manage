@@ -540,7 +540,7 @@ class Connections {
           // if there are many errors in a row, we block the get-device-info loop
           const { allowed, blockedNow } = await reconfigErrorSLimiter.use(deviceId);
           if (!allowed && blockedNow) {
-            logger.error('Reconfig rate limit exceeded', { params: { deviceId } });
+            logger.error('Reconfig errors rate-limit exceeded', { params: { deviceId } });
 
             await notificationsMgr.sendNotifications([{
               org: origDevice.org,

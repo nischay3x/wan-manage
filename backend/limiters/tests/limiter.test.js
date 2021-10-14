@@ -21,14 +21,6 @@ const Limiter = require('../limiter');
 
 const key = 'a';
 
-const releaseCallback = async () => {
-  return console.log('release callback');
-};
-
-const blockCallback = async () => {
-  return console.log('block callback');
-};
-
 const sleep = seconds => {
   return new Promise((resolve, reject) => {
     setTimeout(() => resolve(), seconds * 1000);
@@ -38,7 +30,7 @@ const sleep = seconds => {
 describe('Limiter functionally', () => {
   let testLimiter = null;
   beforeEach(() => {
-    testLimiter = new Limiter(5, 10, 10, releaseCallback, blockCallback);
+    testLimiter = new Limiter(5, 10, 10);
   });
 
   it('should be blocked before 5 times', async () => {
@@ -142,29 +134,5 @@ describe('Limiter functionally', () => {
     expect(res).toBe(null);
     res = await testLimiter.secondaryLimiter.get(key);
     expect(res).toBe(null);
-  });
-
-  // block callback
-  it('block callback should be called', async () => {
-    console.log = jest.fn();
-    // block  quickly
-    for (let i = 0; i < 6; i++) {
-      await testLimiter.use(key);
-    }
-
-    expect(console.log).toHaveBeenCalledWith('block callback');
-  });
-
-  // release callbacks
-  it('release callback should be called', async () => {
-    console.log = jest.fn();
-    // block  quickly
-    for (let i = 0; i < 6; i++) {
-      await testLimiter.use(key);
-    }
-
-    await sleep(11);
-
-    expect(console.log).toHaveBeenCalledWith('release callback');
   });
 });
