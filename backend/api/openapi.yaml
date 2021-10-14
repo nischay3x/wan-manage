@@ -10030,6 +10030,10 @@ components:
               $ref: '#/components/schemas/WifiBand5GHz'
     DevicesDeleteRequest:
       properties:
+        ids:
+          items:
+            type: string
+          type: array
         filters:
           items:
             $ref: '#/components/schemas/Filter'
