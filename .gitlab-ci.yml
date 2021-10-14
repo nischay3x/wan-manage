@@ -40,7 +40,7 @@ test_backend:
   script:
    - cd backend
    - npm test
-  timeout: 5m
+  timeout: 30m
 
 #### Package security auditing ####
 backend_npm_audit:
