@@ -17,28 +17,12 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Limiter = require('./limiter');
-const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
-const configs = require('../configs')();
 
-const publicAddrBlockTime = configs.get('publicAddrBlockTime', 'number');
+// const publicAddrInfoLimiter = new Limiter(
+//   5, 60 * 60, publicAddrBlockTime, releaseCallback, blockCallback);
 
-const blockCallback = async (instance, origDevice, origIfc) => {
-  logger.error('Public address rate limit exceeded. tunnels will set as pending',
-    { params: { deviceId: origDevice._id, interfaceId: origIfc._id } }
-  );
-
-  const reason = `The public address of interface ${origIfc.name} in device ${origDevice.name}
-  is changing at a high rate.
-  Click on the "Sync" button to re-enable self-healing`;
-  await instance.setPendingStateToTunnels(origDevice, origIfc, reason);
-};
-
-const releaseCallback = async (instance, origDevice, origIfc) => {
-  await instance.removePendingStateFromTunnels(origDevice, origIfc);
-};
-
-const publicAddrInfoLimiter = new Limiter(
-  5, 60 * 60, publicAddrBlockTime, releaseCallback, blockCallback);
+// REMOVE IT
+const publicAddrInfoLimiter = new Limiter(5, 60, 60 * 2);
 
 module.exports = {
   publicAddrInfoLimiter

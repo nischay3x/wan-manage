@@ -1367,7 +1367,7 @@ class DevicesService {
             const { ip1, ip2 } = generateTunnelParams(t.num);
             if (ip1 === s.gateway || ip2 === s.gateway) {
               s.configStatus = configStates.INCOMPLETE;
-              s.configStatusReason = `Tunnel ${t.num} is in pending state`;
+              s.configStatusReason = eventsReasons.tunnelIsPending(t.num);
               return s;
             }
           }

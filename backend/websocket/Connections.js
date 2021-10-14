@@ -538,8 +538,19 @@ class Connections {
           await events.sendTunnelsRemoveJobs();
         } catch (err) {
           // if there are many errors in a row, we block the get-device-info loop
-          const callbackParams = [deviceId, machineId, origDevice.org];
-          await reconfigErrorSLimiter.use(deviceId, ...callbackParams);
+          const { allowed, blockedNow } = await reconfigErrorSLimiter.use(deviceId);
+          if (!allowed && blockedNow) {
+            logger.error('Reconfig rate limit exceeded', { params: { deviceId } });
+
+            await notificationsMgr.sendNotifications([{
+              org: origDevice.org,
+              title: 'Unsuccessful self-healing operations',
+              time: new Date(),
+              device: deviceId,
+              machineId: machineId,
+              details: 'Unsuccessful updating device data. Please contact flexiWAN support'
+            }]);
+          }
 
           logger.error('Failed to apply new configuration from device', {
             params: { device: machineId, err: err.message }

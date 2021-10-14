@@ -155,13 +155,16 @@ class Events {
    * @param  {object} ifc updated interface object
   */
   async interfaceIpExists (device, origIfc, ifc) {
-    logger.info('Interface IP exists', {
-      params: {
-        deviceId: device._id,
-        origIp: origIfc.IPv4,
-        updatedIp: ifc.IPv4
-      }
-    });
+    // no need to print it every time
+    if (origIfc.hasIpOnDevice === false) {
+      logger.info('Interface IP exists', {
+        params: {
+          deviceId: device._id,
+          origIp: origIfc.IPv4,
+          updatedIp: ifc.IPv4
+        }
+      });
+    }
 
     // mark interface as lost IP
     await this.setInterfaceHasIP(device._id, origIfc._id, true);
@@ -170,18 +173,18 @@ class Events {
     await this.removePendingStateFromTunnels(device, origIfc);
 
     // unset related static routes as pending
-    const staticRoutes = device.staticroutes.filter(s => {
-      if (s.configStatus !== configStates.INCOMPLETE) return false;
+    for (let i = 0; i < device.staticroutes.length; i++) {
+      const s = device.staticroutes[i];
+      if (s.configStatus !== configStates.INCOMPLETE) continue;
 
       const isSameIfc = s.ifname === ifc.devId;
 
       const gatewaySubnet = `${s.gateway}/32`;
       const isOverlapping = cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
-      return isSameIfc || isOverlapping;
-    });
 
-    for (const route of staticRoutes) {
-      await this.setIncompleteRouteStatus(route, false, '', device);
+      if (isSameIfc || isOverlapping) {
+        await this.setIncompleteRouteStatus(s, false, '', device);
+      }
     }
   };
 
@@ -257,19 +260,19 @@ class Events {
     await this.setPendingStateToTunnels(device, origIfc, reason);
 
     // set related static routes as pending
-    const staticRoutes = device.staticroutes.filter(s => {
-      if (s.configStatus === configStates.INCOMPLETE) return false;
+    for (let i = 0; i < device.staticroutes.length; i++) {
+      const s = device.staticroutes[i];
+      if (s.configStatus === configStates.INCOMPLETE) continue;
 
       const isSameIfc = s.ifname === ifc.devId;
 
       const gatewaySubnet = `${s.gateway}/32`;
       const isOverlapping = cidr.overlap(`${origIfc.IPv4}/${origIfc.IPv4Mask}`, gatewaySubnet);
-      return isSameIfc || isOverlapping;
-    });
 
-    for (const route of staticRoutes) {
-      const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
-      await this.setIncompleteRouteStatus(route, true, reason, device);
+      if (isSameIfc || isOverlapping) {
+        const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
+        await this.setIncompleteRouteStatus(s, true, reason, device);
+      }
     }
   };
 
@@ -326,7 +329,7 @@ class Events {
           continue;
         }
 
-        const reason = `Tunnel ${tunnel.num} is in pending state`;
+        const reason = eventsReasons.tunnelIsPending(tunnel.num);
         await this.setIncompleteRouteStatus(staticRoute, true, reason, staticRouteDevice);
       }
     }
@@ -466,8 +469,19 @@ class Events {
         const isPublicIpChanged = this.isPublicIpChanged(origIfc, updatedIfc);
         if (isPublicPortChanged || isPublicIpChanged) {
           const deviceId = origDevice._id.toString();
-          const callbackParameters = [this, origDevice, origIfc];
-          await publicAddrInfoLimiter.use(deviceId, ...callbackParameters);
+          const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(deviceId);
+          if (releasedNow) {
+            await this.removePendingStateFromTunnels(origDevice, origIfc);
+          } else if (!allowed && blockedNow) {
+            logger.error('Public address rate limit exceeded. tunnels will set as pending',
+              { params: { deviceId: origDevice._id, interfaceId: origIfc._id } }
+            );
+
+            const reason = `The public address of interface ${origIfc.name}
+            in device ${origDevice.name} is changing at a high rate.
+            Click on the "Sync" button to re-enable self-healing`;
+            await this.setPendingStateToTunnels(origDevice, origIfc, reason);
+          }
         }
 
         if (this.isIpMissing(origIfc, updatedIfc, routerIsRunning)) {

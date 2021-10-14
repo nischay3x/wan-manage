@@ -17,26 +17,11 @@
 
 const Limiter = require('./limiter');
 const configs = require('../configs')();
-const notificationsMgr = require('../notifications/notifications')();
-const logger = require('../logging/logging')({ module: module.filename, type: 'websocket' });
 
 const reconfigBlockTime = configs.get('reconfigErrorBlockTime', 'number');
 
-const onReconfigBlocked = async (deviceId, machineId, org) => {
-  logger.error('Reconfig rate limit exceeded', { params: { deviceId } });
-
-  await notificationsMgr.sendNotifications([{
-    org: org,
-    title: 'Unsuccessful self-healing operations',
-    time: new Date(),
-    device: deviceId,
-    machineId: machineId,
-    details: 'Unsuccessful updating device data. Please contact flexiWAN support'
-  }]);
-};
-
 // 5 times in a minute
-const reconfigErrorSLimiter = new Limiter(5, 60, reconfigBlockTime, undefined, onReconfigBlocked);
+const reconfigErrorSLimiter = new Limiter(5, 60, reconfigBlockTime);
 
 module.exports = {
   reconfigErrorSLimiter

@@ -277,6 +277,10 @@ const interfacesSchema = new Schema({
     }
   },
   // false if ip configured in flexiManage but don't exists in the agent
+  // The purpose of this field is to know if we need to trigger the event of IP restored.
+  // Without this field, when we receive from the device an interface with IP,
+  // we can't know if ip was missing and now it restored,
+  // or it existed without any issues for a long time.
   hasIpOnDevice: {
     type: Boolean,
     default: true

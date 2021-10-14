@@ -19,6 +19,9 @@ const reasons = {
   interfaceHasNoIp: (ifcName, deviceName) => {
     return `Interface ${ifcName} in device ${deviceName} has no IP address`;
   },
+  tunnelIsPending: (tunnelNumber) => {
+    return `Tunnel ${tunnelNumber} is in pending state`;
+  },
   publicPortHighRate: (ifcName, deviceName) => {
     // eslint-disable-next-line max-len
     return `The public port for interface ${ifcName} in device ${deviceName} is changing at a high rate`;

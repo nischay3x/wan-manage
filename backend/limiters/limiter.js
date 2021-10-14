@@ -1,13 +1,7 @@
 const { RateLimiterMemory } = require('rate-limiter-flexible');
 
 class FwLimiter {
-  constructor (
-    counts,
-    duration,
-    blockDuration,
-    onRelease = async () => {},
-    onBlock = async () => {}
-  ) {
+  constructor (counts, duration, blockDuration) {
     this.maxCount = counts;
     this.duration = duration;
     this.blockDuration = blockDuration;
@@ -32,12 +26,10 @@ class FwLimiter {
       duration: duration * 2,
       blockDuration: blockDuration
     });
-
-    this.onReleaseCallback = onRelease;
-    this.onBlockCallback = onBlock;
   }
 
-  async use (key, ...callbacksArgs) {
+  async use (key) {
+    const response = { allowed: true, blockedNow: false, releasedNow: false };
     try {
       // try to consume a point. If blocked, an error will be thrown.
       const res = await this.limiter.consume(key);
@@ -49,16 +41,15 @@ class FwLimiter {
       // executed when the key expires.
       // So we call the release function on the next allowed time.
       if (res.consumedPoints === 1) {
-        await this.onReleaseCallback(...callbacksArgs);
+        response.releasedNow = true;
       }
-
-      return true;
     } catch (err) {
       // at this point, the main limiter is blocked.
+      response.allowed = false;
 
       // only the first time a block is obtained for this key - call the block callback
       if (err.consumedPoints === this.maxCount + 1) {
-        await this.onBlockCallback(...callbacksArgs);
+        response.blockedNow = true;
       }
 
       // only the first time a block is obtained for this key - call the block callback
@@ -71,9 +62,9 @@ class FwLimiter {
           await this.secondaryLimiter.set(key, 0, this.duration);
         }
       }
-
-      return false;
     }
+
+    return response;
   }
 
   async delete (key) {
@@ -81,7 +72,7 @@ class FwLimiter {
     return this.limiter.delete(key);
   }
 
-  async release (key, releaseCallback = null) {
+  async release (key) {
     const isBlocked = await this.isBlocked(key);
     if (!isBlocked) {
       return false;
@@ -95,12 +86,6 @@ class FwLimiter {
     // release the secondary limiter as well;
     await this.secondaryLimiter.delete(key);
 
-    // check if override release callback passed
-    if (releaseCallback) {
-      await releaseCallback();
-    } else {
-      await this.onReleaseCallback();
-    }
     return true;
   }
 
