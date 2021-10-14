@@ -39,7 +39,7 @@ test_backend:
     - redis:latest
   script:
    - cd backend
-   - npm test --forceExit
+   - npm test
   timeout: 5m
 
 #### Package security auditing ####
