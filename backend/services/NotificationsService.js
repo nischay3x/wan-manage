@@ -217,6 +217,42 @@ class NotificationsService {
       );
     }
   }
+
+  /**
+   * Delete all notifications matching the filters
+   *
+   * no response value expected for this operation
+   **/
+  static async notificationsDELETE ({ org, notificationsDeleteRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
+      const { filters } = notificationsDeleteRequest;
+      if (filters) {
+        const matchFilters = [];
+        for (const filter of filters) {
+          filter.type = filter.key === 'time' ? 'date' : 'string';
+          const filterExpr = getFilterExpression(filter);
+          if (filterExpr !== undefined) {
+            matchFilters.push(filterExpr);
+          }
+        }
+        if (matchFilters.length > 0) {
+          query.$and = matchFilters;
+        }
+      }
+      const { deletedCount } = await notificationsDb.deleteMany(query);
+      if (deletedCount === 0) {
+        return Service.rejectResponse('Not found', 404);
+      }
+      return Service.successResponse(null, 204);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
 }
 
 module.exports = NotificationsService;
