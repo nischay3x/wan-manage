@@ -187,7 +187,7 @@ class Events {
   async interfaceIpExists (device, origIfc, ifc) {
     // no need to print it every time
     if (origIfc.hasIpOnDevice === false) {
-      logger.info('Interface IP exists', {
+      logger.info('Interface IP restored', {
         params: {
           deviceId: device._id,
           origIp: origIfc.IPv4,
