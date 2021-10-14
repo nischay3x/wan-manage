@@ -41,8 +41,7 @@ class NotificationsService {
       if (status) {
         query.status = status;
       }
-      const pipeline = op !== 'count' &&
-      [
+      const pipeline = op !== 'count' ? [
         {
           $match: query
         },
@@ -57,7 +56,7 @@ class NotificationsService {
             machineId: 1
           }
         }
-      ];
+      ] : [];
       if (filters) {
         const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
@@ -125,6 +124,7 @@ class NotificationsService {
           return {
             ...element,
             _id: element._id.toString(),
+            deviceId: element.device.toString() || null,
             device: element.device ? devicesNames[element.device] : null || null,
             time: element.time.toISOString()
           };

@@ -70,10 +70,10 @@ class DevicesService {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const { devices: requestIds } = deviceCommand;
+      const devicesIds = deviceCommand.devices && Object.keys(deviceCommand.devices);
       const filter = { org: { $in: orgList } };
-      if (requestIds) {
-        filter._id = { $in: Object.keys(requestIds) };
+      if (devicesIds && devicesIds.length > 0) {
+        filter._id = { $in: devicesIds };
       }
       const opDevices = await devices.find(filter);
       if (opDevices.length === 0) {
@@ -483,7 +483,7 @@ class DevicesService {
           {
             $match: {
               status: 'unread',
-              device: { $in: paginated[0].records.map(d => d._id) }
+              device: { $in: paginated[0].records.map(d => mongoose.Types.ObjectId(d._id)) }
             }
           },
           {

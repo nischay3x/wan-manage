@@ -364,6 +364,10 @@ const applyTunnelAdd = async (devices, user, data) => {
   logger.info('Creating tunnels between devices', {
     params: { devices: selectedDevices }
   });
+  devices = await Promise.all(devices.map(d => d
+    .populate('interfaces.pathlabels', '_id name type')
+    .execPopulate()
+  ));
 
   // Get details for devices to connect
   const opDevices = (devices && selectedDevices)

@@ -7615,6 +7615,7 @@ components:
         title: Router state change
         time: "2019-12-19T12:10:01.667Z"
         device: test0
+        deviceId: 61055a03b4832c4a6c365179
         machineId: "123"
         details: Router state changed to "Not running"
       properties:
@@ -7632,6 +7633,9 @@ components:
         time:
           type: string
         device:
+          type: string
+          nullable: true
+        deviceId:
           type: string
           nullable: true
         machineId:
