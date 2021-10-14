@@ -33,9 +33,8 @@ const configs = require('../configs')();
 const Limiter = require('../limiters/limiter');
 const publicAddrBlockTime = configs.get('publicAddrBlockTime', 'number');
 
-// const publicAddrInfoLimiter = new Limiter(5, 60 * 60, publicAddrBlockTime);
-// Change it
-const publicAddrInfoLimiter = new Limiter(5, 60, publicAddrBlockTime);
+// block public info if changed 5 times in an hour.
+const publicAddrInfoLimiter = new Limiter(5, 60 * 60, publicAddrBlockTime);
 
 class Events {
   constructor () {
@@ -251,24 +250,25 @@ class Events {
       // no need to update active tunnels, go and check routes
       if (tunnel.configStatus === '') {
         await this.tunnelSetToActive(tunnel, device);
+        continue;
+      }
+
+      // make sure both interfaces have IP addresses before removing pending status
+      const ifcA = tunnel.deviceA.interfaces.find(
+        i => i._id.toString() === tunnel.interfaceA.toString());
+      const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(
+        i => i._id.toString() === tunnel.interfaceB.toString());
+
+      if (ifcA.hasIpOnDevice && (tunnel.peer || ifcB.hasIpOnDevice)) {
+        await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
       } else {
-        // make sure both interfaces have IP addresses before removing pending status
-        const ifcA = tunnel.deviceA.interfaces.find(
-          i => i._id.toString() === tunnel.interfaceA.toString());
-        const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(
-          i => i._id.toString() === tunnel.interfaceB.toString());
+        const ifcWithoutIp = tunnel.peer ? ifcA : ifcA.hasIpOnDevice ? ifcB : ifcA;
+        const deviceWithoutIp = tunnel.peer
+          ? tunnel.deviceA : ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
 
-        if (ifcA.hasIpOnDevice && (tunnel.peer || ifcB.hasIpOnDevice)) {
-          await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
-        } else {
-          const ifcWithoutIp = tunnel.peer ? ifcA : ifcA.hasIpOnDevice ? ifcB : ifcA;
-          const deviceWithoutIp = tunnel.peer
-            ? tunnel.deviceA : ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
-
-          // if one event is removed but still no ip on the interface, change the reason
-          const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
-          await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
-        }
+        // if one event is removed but still no ip on the interface, change the reason
+        const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
+        await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
       }
     };
   }
