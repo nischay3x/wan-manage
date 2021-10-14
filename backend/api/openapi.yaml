@@ -8686,6 +8686,7 @@ components:
           enum:
             - Connected
             - Not Connected
+            - Pending
           type: string
         configStatus:
           type: string

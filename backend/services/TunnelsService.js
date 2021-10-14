@@ -22,6 +22,7 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
 const { getFilterExpression } = require('../utils/filterUtils');
+const configStates = require('../deviceLogic/configStates');
 
 class TunnelsService {
   /**
@@ -218,25 +219,34 @@ class TunnelsService {
             configStatus: 1,
             configStatusReason: 1,
             tunnelStatus: {
-              $cond: [{
-                $and: [
-                  { $eq: ['$status', 'up'] },
-                  { $eq: ['$deviceA.status', 'running'] },
-                  { $eq: ['$deviceA.isConnected', true] },
+              $switch: {
+                branches: [
+                  { case: { $eq: ['$configStatus', configStates.INCOMPLETE] }, then: 'Pending' },
                   {
-                    $or: [
-                      // in case of peer, there is no deviceB to check connection for
-                      { $ne: ['$peer', null] },
-                      {
-                        $and: [
-                          { $eq: ['$deviceB.status', 'running'] },
-                          { $eq: ['$deviceB.isConnected', true] }
-                        ]
-                      }
-                    ]
+                    case: {
+                      $and: [
+                        { $eq: ['$status', 'up'] },
+                        { $eq: ['$deviceA.status', 'running'] },
+                        { $eq: ['$deviceA.isConnected', true] },
+                        {
+                          $or: [
+                            // in case of peer, there is no deviceB to check connection for
+                            { $ne: ['$peer', null] },
+                            {
+                              $and: [
+                                { $eq: ['$deviceB.status', 'running'] },
+                                { $eq: ['$deviceB.isConnected', true] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    then: 'Connected'
                   }
-                ]
-              }, 'Connected', 'Not Connected']
+                ],
+                default: 'Not Connected'
+              }
             }
           }
         }
