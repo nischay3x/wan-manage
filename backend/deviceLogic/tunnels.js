@@ -424,7 +424,7 @@ const applyTunnelAdd = async (devices, user, data) => {
   const desired = dbTasks.flat().map(job => job.id);
   const ids = fulfilled.flat().map(job => job.id);
   let message = `${isPeer ? 'peer ' : ''}tunnels creation jobs added.`;
-  if (desired.length === 0) {
+  if (desired.length === 0 || fulfilled.flat().length === 0) {
     message = 'No ' + message;
   } else if (ids.length < desired.length) {
     message = `${ids.length} of ${desired.length} ${message}`;
@@ -1161,7 +1161,9 @@ const applyTunnelDel = async (devices, user, data) => {
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
         const job = elem.value;
-        fulfilled.push(job);
+        if (job.length) {
+          fulfilled.push(job);
+        }
       } else {
         if (!reasons.includes(elem.reason.message)) {
           reasons.push(elem.reason.message);
@@ -1171,9 +1173,16 @@ const applyTunnelDel = async (devices, user, data) => {
     }, { fulfilled: [], reasons: [] });
     const status = fulfilled.length < tunnelIds.length
       ? 'partially completed' : 'completed';
-    const message = fulfilled.length < tunnelIds.length
-      ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added.
-      ${reasons.join('. ')}` : '';
+
+    let message = 'tunnels deletion jobs added';
+    if (fulfilled.length === 0) {
+      message = 'No ' + message;
+    } else {
+      message = fulfilled.length < tunnelIds.length
+        ? `${fulfilled.length} of ${tunnelIds.length} ${message}.
+          ${reasons.join('. ')}, try to delete the remaining tunnels again"`
+        : '';
+    }
     return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found',
@@ -1224,8 +1233,12 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   const deviceBIntf = peer ? null : tunnelResp.deviceB.interfaces
     .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
 
-  const tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
-    deviceAIntf, deviceBIntf, pathLabel, peer);
+  let tunnelJobs = [];
+  // don't send remove jobs for pending tunnels
+  if (tunnelResp.configStatus !== configStates.INCOMPLETE) {
+    tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
+      deviceAIntf, deviceBIntf, pathLabel, peer);
+  }
 
   logger.info('Deleting tunnels from database');
   const resp = await tunnelsModel.findOneAndUpdate(
