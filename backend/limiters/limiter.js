@@ -1,6 +1,6 @@
 const { RateLimiterMemory } = require('rate-limiter-flexible');
 
-class EventsLimiter {
+class FwLimiter {
   constructor (
     counts,
     duration,
@@ -9,17 +9,27 @@ class EventsLimiter {
     onBlock = async () => {}
   ) {
     this.maxCount = counts;
+    this.duration = duration;
     this.blockDuration = blockDuration;
 
+    // Main limiter for a key
     this.limiter = new RateLimiterMemory({
       points: counts,
       duration: duration,
       blockDuration: blockDuration
     });
 
+    // Secondary limiter use to counting how many times the key consumed
+    // *after* it blocked by the main limiter.
+    // if secondary limiter is become blocked, it means that the high rate is still a problem.
+    // In this case, we blocked manually the main limiter for another period of time
+    // and reset the secondary limiter to 0.
+    // Then it starts to count again how many times, the blocked key is consumed.
     this.secondaryLimiter = new RateLimiterMemory({
-      points: counts - 1,
-      duration: duration,
+      points: counts,
+      // secondary limiter window time should be a bit more
+      // to make sure it's not expires before the main limiter
+      duration: duration * 2,
       blockDuration: blockDuration
     });
 
@@ -29,26 +39,36 @@ class EventsLimiter {
 
   async use (key, ...callbacksArgs) {
     try {
-      // check if blocked
+      // try to consume a point. If blocked, an error will be thrown.
       const res = await this.limiter.consume(key);
+
+      // if not blocked, delete the secondary if exists for this key.
+      await this.secondaryLimiter.delete(key);
+
+      // currently, it is not possible to pass a callback that is automatically
+      // executed when the key expires.
+      // So we call the release function on the next allowed time.
       if (res.consumedPoints === 1) {
         await this.onReleaseCallback(...callbacksArgs);
       }
+
       return true;
     } catch (err) {
-      // no more points to use - call block callback
+      // at this point, the main limiter is blocked.
+
+      // only the first time a block is obtained for this key - call the block callback
       if (err.consumedPoints === this.maxCount + 1) {
         await this.onBlockCallback(...callbacksArgs);
       }
 
-      // increment internal limiter
+      // only the first time a block is obtained for this key - call the block callback
       if (err.remainingPoints <= 0) {
         try {
           await this.secondaryLimiter.consume(key);
-        } catch (secondaryRes) {
+        } catch (secRes) {
           // if secondary limiter is blocked, block the main limiter and delete the internal
-          await this.limiter.block(key, this.blockDuration);
-          await this.secondaryLimiter.delete(key);
+          await this.limiter.block(key, this.blockDuration * 2);
+          await this.secondaryLimiter.set(key, 0, this.duration);
         }
       }
 
@@ -109,4 +129,4 @@ class EventsLimiter {
   }
 };
 
-module.exports = EventsLimiter;
+module.exports = FwLimiter;
