@@ -62,7 +62,7 @@ class Events {
   }
 
   /**
-   * Send notification about pending static route
+   * Handle event of static route become pending
    * @param  {object} route route object
    * @param  {object} device device object
    * @param  {string} reason  notification reason
@@ -79,7 +79,7 @@ class Events {
   }
 
   /**
-   * Send notification about pending static route
+   * Handle event of dhcp become pending
    * @param  {object} dhcp dhcp object
    * @param  {object} device device object
    * @param  {object} origIfc interface object
@@ -178,6 +178,28 @@ class Events {
   };
 
   /**
+   * Set incomplete state for tunnel if needed and send notification
+   * @param  {number} num  tunnel number
+   * @param  {string} org  organization id
+   * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
+   * @param  {string} reason  incomplete reason
+   * @param  {object} device  device of incomplete tunnel
+  */
+  async updatePendingTunnelReason (num, org, reason) {
+    await tunnelsModel.updateOne(
+      // Query, use the org and tunnel number
+      { org, num },
+      {
+        $set: {
+          configStatusReason: reason
+        }
+      },
+      // Options
+      { upsert: false }
+    );
+  };
+
+  /**
    * Send notification about interface connectivity state
    * @param  {object} device device object
    * @param  {object} origIfc interface object
@@ -265,15 +287,10 @@ class Events {
   /**
    * Remove pending status from tunnels
    * @param  {object} device device object
-   * @param  {object} origIfc original interface object
+   * @param  {?object} origIfc Original interface object.
+   *  If not specified, The system will remove all device's tunnels
   */
   async removePendingStateFromTunnels (device, origIfc = null) {
-    // check if tunnels are pending due to rate limit
-    const isBlocked = await publicAddrInfoLimiter.isBlocked(device._id.toString());
-    if (isBlocked) {
-      return;
-    }
-
     const orQuery = [];
     if (origIfc) {
       orQuery.push({ deviceA: device._id, interfaceA: origIfc._id });
@@ -292,31 +309,68 @@ class Events {
       .lean();
 
     for (const tunnel of tunnels) {
+      const {
+        configStatus, configStatusReason, deviceA, deviceB, peer, interfaceA, interfaceB
+      } = tunnel;
+
       // no need to update active tunnels, go and check routes
-      if (tunnel.configStatus === '') {
+      if (configStatus === '') {
         await this.tunnelSetToActive(tunnel, device);
         continue;
       }
 
-      // make sure both interfaces have IP addresses before removing pending status
-      const ifcA = tunnel.deviceA.interfaces.find(
-        i => i._id.toString() === tunnel.interfaceA.toString());
-      const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(
-        i => i._id.toString() === tunnel.interfaceB.toString());
+      // get tunnel interfaces
+      const ifcA = deviceA.interfaces.find(i => i._id.toString() === interfaceA.toString());
+      let ifcB = null;
+      if (!peer) {
+        ifcB = deviceB.interfaces.find(i => i._id.toString() === interfaceB.toString());
+      }
 
-      if (ifcA.hasIpOnDevice && (tunnel.peer || ifcB.hasIpOnDevice)) {
-        await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
+      // check if should keep it pending due to other reasons
+      //
+      // check for no ip
+      if (ifcA.hasIpOnDevice === false || (ifcB && ifcB.hasIpOnDevice === false)) {
+        let ifcWithoutIp, deviceWithoutIp;
+        if (peer) {
+          ifcWithoutIp = ifcA;
+          deviceWithoutIp = deviceA;
+        } else {
+          ifcWithoutIp = ifcA.hasIpOnDevice ? ifcB : ifcA;
+          deviceWithoutIp = ifcA.hasIpOnDevice ? deviceB : deviceA;
+        }
+
+        const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
+        if (configStatusReason !== reason) {
+          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+        }
         continue;
       }
 
-      // At this point, we know that interface has no ip. we can't set them as pending
-      const ifcWithoutIp = tunnel.peer ? ifcA : ifcA.hasIpOnDevice ? ifcB : ifcA;
-      const deviceWithoutIp = tunnel.peer
-        ? tunnel.deviceA : ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
+      // check for rate limit blockage
+      const deviceId = device._id.toString();
 
-      // if one event is removed but still no ip on the interface, change the reason
-      const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
-      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+      const ifcAId = interfaceA.toString();
+      const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceId}:${ifcAId}`);
+
+      let ifcBId = null;
+      let isBBlocked = false;
+      if (!peer) {
+        ifcBId = interfaceB.toString();
+        isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceId}:${ifcBId}`);
+      }
+
+      if (isABlocked || isBBlocked) {
+        // change reason to high rate
+        const ifcName = isABlocked ? ifcA.name : ifcB.name;
+        const reason = eventsReasons.publicPortHighRate(ifcName, device.name);
+        if (configStatusReason !== reason) {
+          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+        }
+        continue;
+      }
+
+      // at this point, set tunnel to active
+      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
     };
   }
 
@@ -399,12 +453,19 @@ class Events {
     }).lean();
 
     for (const tunnel of tunnels) {
-      // if tunnel already pending, no need to update it
+      // if tunnel already pending
       if (tunnel.configStatus === configStates.INCOMPLETE) {
+        // if reason is different - update reason
+        if (reason !== tunnel.configStatusReason) {
+          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+        }
+
         await this.tunnelSetToPending(tunnel, device, reason, false);
-      } else {
-        await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+        continue;
       }
+
+      // set active tunnel to pending
+      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
     };
   }
 
@@ -605,7 +666,9 @@ class Events {
         const isPublicIpChanged = this.isPublicIpChanged(origIfc, updatedIfc);
         if (isPublicPortChanged || isPublicIpChanged) {
           const deviceId = origDevice._id.toString();
-          const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(deviceId);
+          const ifcId = origIfc._id.toString();
+          const key = `${deviceId}:${ifcId}`;
+          const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(key);
           if (releasedNow) {
             await this.publicInfoRateLimitIsReleased(origDevice, origIfc);
           } else if (!allowed && blockedNow) {
