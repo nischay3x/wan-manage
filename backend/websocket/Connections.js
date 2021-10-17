@@ -481,19 +481,6 @@ class Connections {
             { runValidators: true }
           ).populate('interfaces.pathlabels', '_id type');
 
-          // from agent version 5,
-          // we send the last device stats entry with get-device-info response.
-          // but for old versions, we set it as false.
-          let routerIsRunning = false;
-          const majorVersion = getMajorVersion(deviceInfo.message.device);
-          if (majorVersion >= 5) {
-            routerIsRunning = deviceInfo.message.stats.running;
-          } else {
-            // try to get it from our in-memory storage
-            const devStatus = this.getDeviceInfo(origDevice.machineId);
-            routerIsRunning = devStatus && devStatus.running ? devStatus.running : false;
-          }
-
           // We create a new instance of events class
           // to know changedDevice and changedTunnels
           const events = new DeviceEvents();
@@ -504,7 +491,7 @@ class Connections {
           await events.addChangedDevice(origDevice._id, origDevice);
 
           const newInterfaces = deviceInfo.message.network.interfaces;
-          await events.checkIfToTriggerEvent(plainJsDevice, newInterfaces, routerIsRunning);
+          await events.checkIfToTriggerEvent(plainJsDevice, newInterfaces);
 
           // Update the reconfig hash before applying to prevent infinite loop
           this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
