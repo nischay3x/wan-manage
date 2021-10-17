@@ -306,15 +306,17 @@ class Events {
 
       if (ifcA.hasIpOnDevice && (tunnel.peer || ifcB.hasIpOnDevice)) {
         await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
-      } else {
-        const ifcWithoutIp = tunnel.peer ? ifcA : ifcA.hasIpOnDevice ? ifcB : ifcA;
-        const deviceWithoutIp = tunnel.peer
-          ? tunnel.deviceA : ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
-
-        // if one event is removed but still no ip on the interface, change the reason
-        const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
-        await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+        continue;
       }
+
+      // At this point, we know that interface has no ip. we can't set them as pending
+      const ifcWithoutIp = tunnel.peer ? ifcA : ifcA.hasIpOnDevice ? ifcB : ifcA;
+      const deviceWithoutIp = tunnel.peer
+        ? tunnel.deviceA : ifcA.hasIpOnDevice ? tunnel.deviceB : tunnel.deviceA;
+
+      // if one event is removed but still no ip on the interface, change the reason
+      const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
+      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
     };
   }
 
@@ -335,7 +337,7 @@ class Events {
         time: new Date(),
         device: device._id,
         machineId: device.machineId,
-        details: `The interface ${origIfc.name} lost its IP address`
+        details: `The interface ${origIfc.name} has no IP address`
       }]);
     }
 
