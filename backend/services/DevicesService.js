@@ -223,7 +223,9 @@ class DevicesService {
           'rangeStart',
           'rangeEnd',
           'dns',
-          'status'
+          'status',
+          'configStatus',
+          'configStatusReason'
         ]);
 
         let macAssignList;
@@ -1319,6 +1321,11 @@ class DevicesService {
           if (!ifc) return d;
           const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
           if (!origIfc) return d;
+
+          if (origIfc.hasIpOnDevice === false) {
+            d.configStatus = configStates.INCOMPLETE;
+            d.configStatusReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+          }
 
           // if the interface is going to be unassigned now but it was assigned
           // and it was in a bridge,

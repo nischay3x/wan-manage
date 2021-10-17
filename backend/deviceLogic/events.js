@@ -70,7 +70,26 @@ class Events {
   async staticRouteSetToPending (route, device, reason) {
     await notificationsMgr.sendNotifications([{
       org: device.org,
-      title: `Static route via ${route.gateway} is in pending state`,
+      title: `Static route via ${route.gateway} in device ${device.name} is in pending state`,
+      time: new Date(),
+      device: device._id,
+      machineId: device.machineId,
+      details: reason
+    }]);
+  }
+
+  /**
+   * Send notification about pending static route
+   * @param  {object} dhcp dhcp object
+   * @param  {object} device device object
+   * @param  {object} origIfc interface object
+   * @param  {string} reason  notification reason
+  */
+  async dhcpSetToPending (dhcp, device, origIfc, reason) {
+    await notificationsMgr.sendNotifications([{
+      org: device.org,
+      title:
+        `DHCP Server for interface ${origIfc.name} in device ${device.name} is in pending state`,
       time: new Date(),
       device: device._id,
       machineId: device.machineId,
@@ -208,8 +227,24 @@ class Events {
     // mark interface as lost IP
     await this.setInterfaceHasIP(device._id, origIfc._id, true);
 
-    // unset related tunnels as pending
-    await this.removePendingStateFromTunnels(device, origIfc);
+    if (origIfc.type === 'WAN') {
+      // unset related tunnels as pending
+      await this.removePendingStateFromTunnels(device, origIfc);
+    }
+
+    if (origIfc.type === 'LAN') {
+      // check DHCP server configs
+      for (let i = 0; i < device.dhcp.length; i++) {
+        const d = device.dhcp[i];
+        if (d.configStatus !== configStates.INCOMPLETE) continue;
+
+        const isSameIfc = d.interface === ifc.devId;
+
+        if (isSameIfc) {
+          await this.setIncompleteDHCPStatus(d, false, '', device, origIfc);
+        }
+      }
+    }
 
     // unset related static routes as pending
     for (let i = 0; i < device.staticroutes.length; i++) {
@@ -309,7 +344,25 @@ class Events {
 
     // set related tunnels as pending
     const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
-    await this.setPendingStateToTunnels(device, origIfc, reason);
+
+    if (origIfc.type === 'WAN') {
+      await this.setPendingStateToTunnels(device, origIfc, reason);
+    }
+
+    if (origIfc.type === 'LAN') {
+      // check DHCP server configs
+      for (let i = 0; i < device.dhcp.length; i++) {
+        const d = device.dhcp[i];
+        if (d.configStatus === configStates.INCOMPLETE) continue;
+
+        const isSameIfc = d.interface === ifc.devId;
+
+        if (isSameIfc) {
+          const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
+          await this.setIncompleteDHCPStatus(d, true, reason, device, origIfc);
+        }
+      }
+    }
 
     // set related static routes as pending
     for (let i = 0; i < device.staticroutes.length; i++) {
@@ -447,7 +500,7 @@ class Events {
 
   /**
    * Set incomplete state for static route if needed
-   * @param  {number} routeId  static route id
+   * @param  {object} route  static route object
    * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
    * @param  {string} reason  incomplete reason
    * @param  {object} device  device of incomplete tunnel
@@ -470,6 +523,35 @@ class Events {
 
     if (isIncomplete) {
       await this.staticRouteSetToPending(route, device, reason);
+    }
+  };
+
+  /**
+   * Set incomplete state for DHCP if needed
+   * @param  {object} dhcp  dhcp object
+   * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
+   * @param  {string} reason  incomplete reason
+   * @param  {object} device  device of incomplete dhcp
+   * @param  {object} origIfc  interface object
+  */
+  async setIncompleteDHCPStatus (dhcp, isIncomplete, reason, device, origIfc) {
+    await this.addChangedDevice(device._id);
+
+    await devices.findOneAndUpdate(
+      { _id: mongoose.Types.ObjectId(device._id) },
+      {
+        $set: {
+          'dhcp.$[elem].configStatus': isIncomplete ? configStates.INCOMPLETE : '',
+          'dhcp.$[elem].configStatusReason': isIncomplete ? reason : ''
+        }
+      },
+      {
+        arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcp._id) }]
+      }
+    );
+
+    if (isIncomplete) {
+      await this.dhcpSetToPending(dhcp, device, origIfc, reason);
     }
   };
 
@@ -499,7 +581,7 @@ class Events {
    * @param  {array} newInterfaces  incoming interfaces from the device
    * @param  {boolean} routerIsRunning  indicate if router is running
   */
-  async checkIfToTriggerEvent (origDevice, newInterfaces, routerIsRunning) {
+  async checkIfToTriggerEvent (origDevice, newInterfaces) {
     try {
       const orig = keyBy(origDevice.interfaces, 'devId');
       const updated = keyBy(newInterfaces, 'devId');
@@ -529,7 +611,7 @@ class Events {
           }
         }
 
-        if (this.isIpMissing(origIfc, updatedIfc, routerIsRunning)) {
+        if (this.isIpMissing(origIfc, updatedIfc)) {
           await this.interfaceIpMissing(origDevice, origIfc, updatedIfc);
         }
 
@@ -653,14 +735,9 @@ class Events {
    * @param  {boolean} routerIsRunning  indicate if router is in running state
    * @return {boolean} if need to trigger event of ip lost
    */
-  isIpMissing (origIfc, updatedIfc, routerIsRunning) {
+  isIpMissing (origIfc, updatedIfc) {
     // check if incoming interface is without ip address
     if (updatedIfc.IPv4 !== '') {
-      return false;
-    }
-
-    // no need to trigger event for LAN interface if router is not running
-    if (origIfc.type === 'LAN' && !routerIsRunning) {
       return false;
     }
 

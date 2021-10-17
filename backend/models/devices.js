@@ -430,7 +430,8 @@ const DHCPSchema = new Schema({
   status: {
     type: String,
     default: 'failed'
-  }
+  },
+  ...configStatusObj
 }, {
   timestamps: true
 });

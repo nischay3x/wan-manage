@@ -947,7 +947,7 @@ const prepareModifyOSPF = (origDevice, newDevice) => {
 const prepareModifyDHCP = (origDevice, newDevice) => {
   // Extract only relevant fields from dhcp database entries
   const [newDHCP, origDHCP] = [
-    newDevice.dhcp.map(dhcp => {
+    newDevice.dhcp.filter(d => d.configStatus !== configStates.INCOMPLETE).map(dhcp => {
       const intf = dhcp.interface;
       return ({
         interface: intf,
@@ -962,7 +962,7 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
       });
     }),
 
-    origDevice.dhcp.map(dhcp => {
+    origDevice.dhcp.filter(d => d.configStatus !== configStates.INCOMPLETE).map(dhcp => {
       const intf = dhcp.interface;
       return ({
         interface: intf,
@@ -1448,7 +1448,12 @@ const sync = async (deviceId, org) => {
 
   // Prepare add-dhcp-config message
   Array.isArray(dhcp) && dhcp.forEach(entry => {
-    const { rangeStart, rangeEnd, dns, macAssign } = entry;
+    const { rangeStart, rangeEnd, dns, macAssign, configStatus } = entry;
+
+    // skip pending dhcp
+    if (configStatus === configStates.INCOMPLETE) {
+      return;
+    }
 
     deviceConfRequests.push({
       entity: 'agent',
