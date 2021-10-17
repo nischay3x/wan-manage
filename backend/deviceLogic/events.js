@@ -193,6 +193,16 @@ class Events {
           updatedIp: ifc.IPv4
         }
       });
+
+      // only at the first time - send notification
+      await notificationsMgr.sendNotifications([{
+        org: device.org,
+        title: 'Interface IP restored',
+        time: new Date(),
+        device: device._id,
+        machineId: device.machineId,
+        details: `The IP address of Interface ${origIfc.name} has been restored`
+      }]);
     }
 
     // mark interface as lost IP
@@ -281,6 +291,18 @@ class Events {
   */
   async interfaceIpMissing (device, origIfc, ifc) {
     logger.info('Interface IP missing', { params: { device, origIfc, ifc } });
+
+    // only at the first time - send notification
+    if (origIfc.hasIpOnDevice) {
+      await notificationsMgr.sendNotifications([{
+        org: device.org,
+        title: 'Interface IP missing',
+        time: new Date(),
+        device: device._id,
+        machineId: device.machineId,
+        details: `The interface ${origIfc.name} lost its IP address`
+      }]);
+    }
 
     // mark interface as lost IP
     await this.setInterfaceHasIP(device._id, origIfc._id, false);
