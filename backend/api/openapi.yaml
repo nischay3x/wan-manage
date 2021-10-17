@@ -763,7 +763,7 @@ paths:
       security:
       - bearerAuth: []
       - apiKey: []
-      summary: Delete all devices matching the filter
+      summary: Delete devices by IDs or matching the filter
       tags:
       - Devices
       x-swagger-router-controller: Devices
@@ -3933,7 +3933,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Delete all jobs matching the filter
+      summary: Delete jobs by IDs or matching the filter
       tags:
       - Jobs
       x-swagger-router-controller: Jobs
