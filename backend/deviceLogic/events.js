@@ -800,6 +800,9 @@ class Events {
  * @param  {object} device  device object
 */
 const activatePendingTunnelsOfDevice = async (device) => {
+  // we have the needed logic for this operation in the event class.
+  // so we use its method to get tunnels via this device
+  // and release them, and then it triggers the events chain once tunnel becomes active.
   const events = new Events();
   await events.removePendingStateFromTunnels(device);
 
