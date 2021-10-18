@@ -37,8 +37,8 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
-const removePendingStateFromTunnels = require('../deviceLogic/events')
-  .removePendingStateFromTunnels;
+const activatePendingTunnelsOfDevice = require('../deviceLogic/events')
+  .activatePendingTunnelsOfDevice;
 const configStates = require('./configStates');
 const { publicAddrInfoLimiter } = require('./events');
 const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
@@ -438,7 +438,7 @@ const apply = async (device, user, data) => {
   await reconfigErrorSLimiter.release(_id.toString());
   const released = await releasePendingTunnels(device[0]);
   if (released) {
-    await removePendingStateFromTunnels(updDevice);
+    await activatePendingTunnelsOfDevice(updDevice);
   }
 
   // Get device current configuration hash

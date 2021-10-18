@@ -44,7 +44,7 @@ describe('deviceEvents', () => {
     updatedIfc.type = 'LAN';
     updatedIfc.IPv4 = '10.10.10.10/24';
 
-    const result = events.isIpMissing(origIfc, updatedIfc, routerIsRunning);
+    const result = events.isIpMissing(updatedIfc, routerIsRunning);
     expect(result).toBe(false);
   });
 
@@ -55,22 +55,22 @@ describe('deviceEvents', () => {
     updatedIfc.type = 'LAN';
     updatedIfc.IPv4 = '10.10.10.10/24';
     routerIsRunning = true;
-    const result = events.isIpMissing(origIfc, updatedIfc, routerIsRunning);
+    const result = events.isIpMissing(updatedIfc, routerIsRunning);
     expect(result).toBe(false);
   });
 
-  it('LAN without ip and router is stopped should be ok', () => {
+  it('LAN without ip and router is stopped should be missing', () => {
     origIfc.type = 'LAN';
     updatedIfc.type = 'LAN';
-    const result = events.isIpMissing(origIfc, updatedIfc, routerIsRunning);
-    expect(result).toBe(false);
+    const result = events.isIpMissing(updatedIfc, routerIsRunning);
+    expect(result).toBe(true);
   });
 
   it('LAN without ip and router is running should be missing', () => {
     origIfc.type = 'LAN';
     updatedIfc.type = 'LAN';
     routerIsRunning = true;
-    const result = events.isIpMissing(origIfc, updatedIfc, routerIsRunning);
+    const result = events.isIpMissing(updatedIfc, routerIsRunning);
     expect(result).toBe(true);
   });
 
@@ -82,7 +82,7 @@ describe('deviceEvents', () => {
     updatedIfc.type = 'WAN';
     updatedIfc.IPv4 = '10.10.10.10/24';
 
-    const result = events.isIpMissing(origIfc, updatedIfc, routerIsRunning);
+    const result = events.isIpMissing(updatedIfc, routerIsRunning);
     expect(result).toBe(false);
   });
 
@@ -93,14 +93,14 @@ describe('deviceEvents', () => {
     updatedIfc.type = 'WAN';
     updatedIfc.IPv4 = '10.10.10.10/24';
     routerIsRunning = true;
-    const result = events.isIpMissing(origIfc, updatedIfc, routerIsRunning);
+    const result = events.isIpMissing(updatedIfc, routerIsRunning);
     expect(result).toBe(false);
   });
 
   it('WAN without ip and router is stopped should be missing', () => {
     origIfc.type = 'WAN';
     updatedIfc.type = 'WAN';
-    const result = events.isIpMissing(origIfc, updatedIfc, routerIsRunning);
+    const result = events.isIpMissing(updatedIfc, routerIsRunning);
     expect(result).toBe(true);
   });
 
@@ -108,7 +108,7 @@ describe('deviceEvents', () => {
     origIfc.type = 'WAN';
     updatedIfc.type = 'WAN';
     routerIsRunning = true;
-    const result = events.isIpMissing(origIfc, updatedIfc, routerIsRunning);
+    const result = events.isIpMissing(updatedIfc, routerIsRunning);
     expect(result).toBe(true);
   });
 });
