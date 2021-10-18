@@ -397,7 +397,7 @@ class Events {
     }
 
     // mark interface as lost IP
-    if (origIfc.hasIpOnDevice === true) {
+    if (origIfc.hasIpOnDevice !== false) {
       await this.setInterfaceHasIP(device._id, origIfc._id, false);
     }
 
