@@ -15,16 +15,11 @@ class FwLimiter {
 
     // Secondary limiter use to counting how many times the key consumed
     // *after* it blocked by the main limiter.
-    // if secondary limiter is become blocked, it means that the high rate is still a problem.
-    // In this case, we blocked manually the main limiter for another period of time
-    // and reset the secondary limiter to 0.
-    // Then it starts to count again how many times, the blocked key is consumed.
+    // In case it is consumed at a high rate, we block the main limiter manually
+    // and reset the secondary limiter to start counting again.
     this.secondaryLimiter = new RateLimiterMemory({
-      points: counts,
-      // secondary limiter window time should be a bit wider
-      // to make sure it's not expires before the main limiter
-      duration: duration * 2,
-      blockDuration: blockDuration
+      points: 9999
+      // secondary limiter no need for duration and blockDuration. It use only for counting
     });
   }
 
@@ -47,20 +42,19 @@ class FwLimiter {
       // at this point, the main limiter is blocked.
       response.allowed = false;
 
-      // only the first time a block is obtained for this key - call the block callback
+      // only on the first time a block is obtained for this key - call the block callback
       if (err.consumedPoints === this.maxCount + 1) {
         response.blockedNow = true;
+        await this.secondaryLimiter.set(key, 0, 0);
       }
 
-      // only the first time a block is obtained for this key - call the block callback
-      if (err.remainingPoints <= 0) {
-        try {
-          await this.secondaryLimiter.consume(key);
-        } catch (secRes) {
-          // if secondary limiter is blocked, block the main limiter and delete the internal
-          await this.limiter.block(key, this.blockDuration * 2);
-          await this.secondaryLimiter.set(key, 0, this.duration);
-        }
+      // count how many times the locked key is used
+      const resPenalty = await this.secondaryLimiter.penalty(key);
+      if (resPenalty.consumedPoints === this.maxCount) {
+        // if secondary limiter consumed -from the blockage time- the same points counts
+        // we block the main limiter and reset the secondary.
+        await this.limiter.block(key, this.blockDuration);
+        await this.secondaryLimiter.set(key, 0, 0);
       }
     }
 
