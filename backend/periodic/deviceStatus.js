@@ -185,7 +185,6 @@ class DeviceStatus {
               return;
             }
             this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
-            connections.setDeviceState(deviceID, lastUpdateEntry.running);
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
             this.generateDevStatsNotifications();

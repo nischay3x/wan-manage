@@ -55,7 +55,6 @@ const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const { getFilterExpression } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
-const configStates = require('../deviceLogic/configStates');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
 
 class DevicesService {
@@ -206,8 +205,8 @@ class DevicesService {
           'ifname',
           'metric',
           'redistributeViaOSPF',
-          'configStatus',
-          'configStatusReason'
+          'isPending',
+          'pendingReason'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;
@@ -224,8 +223,8 @@ class DevicesService {
           'rangeEnd',
           'dns',
           'status',
-          'configStatus',
-          'configStatusReason'
+          'isPending',
+          'pendingReason'
         ]);
 
         let macAssignList;
@@ -1323,8 +1322,8 @@ class DevicesService {
           if (!origIfc) return d;
 
           if (origIfc.hasIpOnDevice === false) {
-            d.configStatus = configStates.INCOMPLETE;
-            d.configStatusReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+            d.isPending = true;
+            d.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
           }
 
           // if the interface is going to be unassigned now but it was assigned
@@ -1365,24 +1364,23 @@ class DevicesService {
       // validate static routes
       if (Array.isArray(deviceRequest.staticroutes)) {
         // if route is via a pending tunnel, set it as pending
-        const incompleteTunnels =
-          origTunnels.filter(t => t.configStatus === configStates.INCOMPLETE);
+        const incompleteTunnels = origTunnels.filter(t => t.isPending);
         const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.hasIpOnDevice === false);
 
         deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
           for (const t of incompleteTunnels) {
             const { ip1, ip2 } = generateTunnelParams(t.num);
             if (ip1 === s.gateway || ip2 === s.gateway) {
-              s.configStatus = configStates.INCOMPLETE;
-              s.configStatusReason = eventsReasons.tunnelIsPending(t.num);
+              s.isPending = true;
+              s.pendingReason = eventsReasons.tunnelIsPending(t.num);
               return s;
             }
           }
 
           for (const ifc of interfacesWithoutIp) {
             if (ifc.IPv4 === s.gateway) {
-              s.configStatus = configStates.INCOMPLETE;
-              s.configStatusReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+              s.isPending = true;
+              s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
               return s;
             }
           }

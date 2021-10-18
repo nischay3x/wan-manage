@@ -23,8 +23,9 @@ const reasons = {
     return `Tunnel ${tunnelNumber} is in pending state`;
   },
   publicPortHighRate: (ifcName, deviceName) => {
-    // eslint-disable-next-line max-len
-    return `The public port for interface ${ifcName} in device ${deviceName} is changing at a high rate`;
+    return `The public address of interface ${ifcName}` +
+    ` in device ${deviceName} is changing at a high rate.` +
+    ' Click on the "Sync" button to re-enable self-healing';
   }
 };
 

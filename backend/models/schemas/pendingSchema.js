@@ -1,7 +1,6 @@
-
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019-2020  flexiWAN Ltd.
+// Copyright (C) 2021  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -16,8 +15,19 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const configStates = {
-  INCOMPLETE: 'incomplete'
+const pendingSchema = {
+  // indicate if this item was sent to flexiEdge or configured only in manage
+  isPending: {
+    type: Boolean,
+    default: false
+  },
+  // reason for incomplete item configuration
+  pendingReason: {
+    type: String,
+    default: ''
+  }
 };
 
-module.exports = configStates;
+module.exports = {
+  pendingSchema
+};

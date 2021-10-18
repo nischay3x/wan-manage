@@ -24,7 +24,6 @@ const devicesModel = require('../models/devices').devices;
 const mongoose = require('mongoose');
 const { generateTunnelParams, generateRandomKeys } = require('../utils/tunnelUtils');
 const { validateIKEv2 } = require('./IKEv2');
-const configStates = require('./configStates');
 const eventsReasons = require('./events/eventReasons');
 
 const deviceQueues = require('../utils/deviceQueue')(
@@ -983,19 +982,16 @@ const addTunnel = async (
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
   let isPending = false;
+  let pendingReason = '';
 
-  let configStatus = ''; // if tunnel exists but isActive was false, reset the configStatus
-  let configStatusReason = '';
   if (deviceAIntf.hasIpOnDevice === false) {
     isPending = true;
-    configStatus = configStates.INCOMPLETE;
-    configStatusReason = eventsReasons.interfaceHasNoIp(deviceAIntf.name, deviceA.name);
+    pendingReason = eventsReasons.interfaceHasNoIp(deviceAIntf.name, deviceA.name);
   }
 
   if (!peer && deviceBIntf.hasIpOnDevice === false) {
     isPending = true;
-    configStatus = configStates.INCOMPLETE;
-    configStatusReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
+    pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
   }
 
   const tunnel = await tunnelsModel.findOneAndUpdate(
@@ -1014,8 +1010,8 @@ const addTunnel = async (
       deviceB: peer ? null : deviceB._id,
       interfaceB: peer ? null : deviceBIntf._id,
       pathlabel: pathLabel,
-      configStatus: configStatus,
-      configStatusReason: configStatusReason,
+      isPending: isPending,
+      pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,
       peer: peer ? peer._id : null
@@ -1174,15 +1170,20 @@ const applyTunnelDel = async (devices, user, data) => {
     const status = fulfilled.length < tunnelIds.length
       ? 'partially completed' : 'completed';
 
-    let message = 'tunnels deletion jobs added';
-    if (fulfilled.length === 0) {
+    const desired = delPromises.flat().map(job => job.id);
+    const ids = fulfilled.flat().map(job => job.id);
+    let message = 'tunnels deletion jobs added.';
+    if (desired.length === 0 || fulfilled.flat().length === 0) {
       message = 'No ' + message;
+    } else if (ids.length < desired.length) {
+      message = `${ids.length} of ${desired.length} ${message}`;
     } else {
-      message = fulfilled.length < tunnelIds.length
-        ? `${fulfilled.length} of ${tunnelIds.length} ${message}.
-          ${reasons.join('. ')}, try to delete the remaining tunnels again"`
-        : '';
+      message = `${ids.length} ${message}`;
     }
+    if (reasons.length > 0) {
+      message = `${message} ${Array.from(reasons).join(' ')}`;
+    }
+
     return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found',
@@ -1235,7 +1236,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
 
   let tunnelJobs = [];
   // don't send remove jobs for pending tunnels
-  if (tunnelResp.configStatus !== configStates.INCOMPLETE) {
+  if (!tunnelResp.isPending) {
     tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
       deviceAIntf, deviceBIntf, pathLabel, peer);
   }
@@ -1383,7 +1384,7 @@ const sync = async (deviceId, org) => {
         { org },
         { $or: [{ deviceA: deviceId }, { deviceB: deviceId }] },
         { isActive: true },
-        { configStatus: { $ne: configStates.INCOMPLETE } } // skip pending tunnels on sync
+        { isPending: { $ne: true } } // skip pending tunnels on sync
       ]
     },
     {

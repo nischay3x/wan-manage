@@ -21,7 +21,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const { firewallRuleSchema } = require('./firewallRule');
-const { configStatusObj } = require('./schemas/configStatus');
+const { pendingSchema } = require('./schemas/pendingSchema');
 
 /**
  * Interfaces Database Schema
@@ -360,7 +360,7 @@ const staticroutesSchema = new Schema({
     type: Boolean,
     default: false
   },
-  ...configStatusObj
+  ...pendingSchema
 }, {
   timestamps: true
 });
@@ -431,7 +431,7 @@ const DHCPSchema = new Schema({
     type: String,
     default: 'failed'
   },
-  ...configStatusObj
+  ...pendingSchema
 }, {
   timestamps: true
 });

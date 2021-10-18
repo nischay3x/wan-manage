@@ -8645,8 +8645,8 @@ components:
         deviceBconf: true
         _id: _id
         tunnelStatus: 'Connected'
-        configStatus: ''
-        configStatusReason: ''
+        isPending: false
+        pendingReason: ''
       properties:
         num:
           type: integer
@@ -8688,12 +8688,9 @@ components:
             - Not Connected
             - Pending
           type: string
-        configStatus:
-          type: string
-          enum:
-            - incomplete
-            - ''
-        configStatusReason:
+        isPending:
+          type: boolean
+        pendingReason:
           type: string
       type: object
     StaticRouteRequest:

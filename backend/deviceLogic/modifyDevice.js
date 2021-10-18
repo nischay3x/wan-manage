@@ -46,7 +46,6 @@ const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
-const configStates = require('./configStates');
 
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
@@ -459,7 +458,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     const tunnels = await tunnelsModel
       .find({
         isActive: true,
-        configStatus: { $ne: configStates.INCOMPLETE }, // no need to reconstruct pending tunnels
+        isPending: { $ne: true }, // no need to reconstruct pending tunnels
         $or: [{ interfaceA: ifc._id }, { interfaceB: ifc._id }]
       })
       .populate('deviceA')
@@ -681,7 +680,7 @@ const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) 
       .find({
         _id: { $in: tunnelsIds },
         isActive: true,
-        configStatus: { $ne: configStates.INCOMPLETE }
+        isPending: { $ne: true }
       })
       .populate('deviceA')
       .populate('deviceB')
@@ -829,7 +828,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
 
-    newDevice.staticroutes.filter(r => r.configStatus !== configStates.INCOMPLETE).map(route => {
+    newDevice.staticroutes.filter(r => !r.isPending).map(route => {
       return ({
         destination: route.destination,
         gateway: route.gateway,
@@ -839,7 +838,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       });
     }),
 
-    origDevice.staticroutes.filter(r => r.configStatus !== configStates.INCOMPLETE).map(route => {
+    origDevice.staticroutes.filter(r => !r.isPending).map(route => {
       return ({
         destination: route.destination,
         gateway: route.gateway,
@@ -947,7 +946,7 @@ const prepareModifyOSPF = (origDevice, newDevice) => {
 const prepareModifyDHCP = (origDevice, newDevice) => {
   // Extract only relevant fields from dhcp database entries
   const [newDHCP, origDHCP] = [
-    newDevice.dhcp.filter(d => d.configStatus !== configStates.INCOMPLETE).map(dhcp => {
+    newDevice.dhcp.filter(d => !d.isPending).map(dhcp => {
       const intf = dhcp.interface;
       return ({
         interface: intf,
@@ -962,7 +961,7 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
       });
     }),
 
-    origDevice.dhcp.filter(d => d.configStatus !== configStates.INCOMPLETE).map(dhcp => {
+    origDevice.dhcp.filter(d => !d.isPending).map(dhcp => {
       const intf = dhcp.interface;
       return ({
         interface: intf,
@@ -1424,10 +1423,10 @@ const sync = async (deviceId, org) => {
 
   // Prepare add-route message
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
-    const { ifname, gateway, destination, metric } = route;
+    const { ifname, gateway, destination, metric, isPending } = route;
 
     // skip pending routes
-    if (route.configStatus === configStates.INCOMPLETE) {
+    if (isPending) {
       return;
     }
 
@@ -1448,10 +1447,10 @@ const sync = async (deviceId, org) => {
 
   // Prepare add-dhcp-config message
   Array.isArray(dhcp) && dhcp.forEach(entry => {
-    const { rangeStart, rangeEnd, dns, macAssign, configStatus } = entry;
+    const { rangeStart, rangeEnd, dns, macAssign, isPending } = entry;
 
     // skip pending dhcp
-    if (configStatus === configStates.INCOMPLETE) {
+    if (isPending) {
       return;
     }
 

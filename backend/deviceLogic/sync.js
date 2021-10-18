@@ -39,7 +39,6 @@ const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
 const activatePendingTunnelsOfDevice = require('../deviceLogic/events')
   .activatePendingTunnelsOfDevice;
-const configStates = require('./configStates');
 const { publicAddrInfoLimiter } = require('./events');
 const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
 // const { publicPortLimiter } = require('../limiters/publicPort');
@@ -471,7 +470,7 @@ const releasePendingTunnels = async (device) => {
   const pendingTunnels = await tunnelsModel.find({
     org: device.org,
     isActive: true,
-    configStatus: configStates.INCOMPLETE,
+    isPending: true,
     $or: [
       { deviceA: device._id },
       { deviceB: device._id }

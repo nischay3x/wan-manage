@@ -18,7 +18,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
-const { configStatusObj } = require('./schemas/configStatus');
+const { pendingSchema } = require('./schemas/pendingSchema');
 
 // Tunnels params schema
 const tunnelKeysSchema = new Schema({
@@ -124,7 +124,7 @@ const tunnelSchema = new Schema({
     ref: 'peers',
     default: null
   },
-  ...configStatusObj
+  ...pendingSchema
 }, {
   timestamps: true
 });

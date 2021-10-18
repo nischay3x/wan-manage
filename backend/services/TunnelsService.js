@@ -22,7 +22,6 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
 const { getFilterExpression } = require('../utils/filterUtils');
-const configStates = require('../deviceLogic/configStates');
 
 class TunnelsService {
   /**
@@ -216,12 +215,12 @@ class TunnelsService {
             encryptionMethod: 1,
             'pathlabel.name': 1,
             'pathlabel.color': 1,
-            configStatus: 1,
-            configStatusReason: 1,
+            isPending: 1,
+            pendingReason: 1,
             tunnelStatus: {
               $switch: {
                 branches: [
-                  { case: { $eq: ['$configStatus', configStates.INCOMPLETE] }, then: 'Pending' },
+                  { case: { $eq: ['$isPending', true] }, then: 'Pending' },
                   {
                     case: {
                       $and: [

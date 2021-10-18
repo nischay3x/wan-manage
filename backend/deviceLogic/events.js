@@ -27,7 +27,6 @@ const { sendRemoveTunnelsJobs } = require('../deviceLogic/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const modifyDeviceApply = require('./modifyDevice').apply;
 const reconstructTunnels = require('./modifyDevice').reconstructTunnels;
-const configStates = require('./configStates');
 const eventsReasons = require('./events/eventReasons');
 const configs = require('../configs')();
 const Limiter = require('../limiters/limiter');
@@ -108,9 +107,7 @@ class Events {
       { params: { deviceId: origDevice._id, interfaceId: origIfc._id } }
     );
 
-    const reason = `The public address of interface ${origIfc.name}
-    in device ${origDevice.name} is changing at a high rate.
-    Click on the "Sync" button to re-enable self-healing`;
+    const reason = eventsReasons.publicPortHighRate(origIfc.name, origDevice.name);
     await this.setPendingStateToTunnels(origDevice, origIfc, reason);
   }
 
@@ -161,8 +158,8 @@ class Events {
       { org, num },
       {
         $set: {
-          configStatus: isIncomplete ? configStates.INCOMPLETE : '',
-          configStatusReason: isIncomplete ? reason : ''
+          isPending: isIncomplete,
+          pendingReason: isIncomplete ? reason : ''
         }
       },
       // Options
@@ -190,7 +187,7 @@ class Events {
       { org, num },
       {
         $set: {
-          configStatusReason: reason
+          pendingReason: reason
         }
       },
       // Options
@@ -259,7 +256,7 @@ class Events {
       // check DHCP server configs
       for (let i = 0; i < device.dhcp.length; i++) {
         const d = device.dhcp[i];
-        if (d.configStatus !== configStates.INCOMPLETE) continue;
+        if (!d.isPending) continue;
 
         const isSameIfc = d.interface === ifc.devId;
 
@@ -272,7 +269,7 @@ class Events {
     // unset related static routes as pending
     for (let i = 0; i < device.staticroutes.length; i++) {
       const s = device.staticroutes[i];
-      if (s.configStatus !== configStates.INCOMPLETE) continue;
+      if (!s.isPending) continue;
 
       const isSameIfc = s.ifname === ifc.devId;
 
@@ -311,11 +308,11 @@ class Events {
 
     for (const tunnel of tunnels) {
       const {
-        configStatus, configStatusReason, deviceA, deviceB, peer, interfaceA, interfaceB
+        isPending, pendingReason, deviceA, deviceB, peer, interfaceA, interfaceB
       } = tunnel;
 
       // no need to update active tunnels, go and check routes
-      if (configStatus === '') {
+      if (!isPending) {
         await this.tunnelSetToActive(tunnel);
         continue;
       }
@@ -341,7 +338,7 @@ class Events {
         }
 
         const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
-        if (configStatusReason !== reason) {
+        if (pendingReason !== reason) {
           await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
         }
         continue;
@@ -364,7 +361,7 @@ class Events {
         // change reason to high rate
         const ifcName = isABlocked ? ifcA.name : ifcB.name;
         const reason = eventsReasons.publicPortHighRate(ifcName, device.name);
-        if (configStatusReason !== reason) {
+        if (pendingReason !== reason) {
           await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
         }
         continue;
@@ -412,7 +409,7 @@ class Events {
       // check DHCP server configs
       for (let i = 0; i < device.dhcp.length; i++) {
         const d = device.dhcp[i];
-        if (d.configStatus === configStates.INCOMPLETE) continue;
+        if (d.isPending) continue;
 
         const isSameIfc = d.interface === ifc.devId;
 
@@ -426,7 +423,7 @@ class Events {
     // set related static routes as pending
     for (let i = 0; i < device.staticroutes.length; i++) {
       const s = device.staticroutes[i];
-      if (s.configStatus === configStates.INCOMPLETE) continue;
+      if (s.isPending) continue;
 
       const isSameIfc = s.ifname === ifc.devId;
 
@@ -457,9 +454,9 @@ class Events {
 
     for (const tunnel of tunnels) {
       // if tunnel already pending
-      if (tunnel.configStatus === configStates.INCOMPLETE) {
+      if (tunnel.isPending) {
         // if reason is different - update reason
-        if (reason !== tunnel.configStatusReason) {
+        if (reason !== tunnel.pendingReason) {
           await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
         }
 
@@ -496,7 +493,7 @@ class Events {
     for (const staticRouteDevice of staticRoutesDevices) {
       for (const staticRoute of staticRouteDevice.staticroutes) {
         // no need to update pending static routes
-        if (staticRoute.configStatus === configStates.INCOMPLETE) {
+        if (staticRoute.isPending) {
           continue;
         }
 
@@ -517,7 +514,7 @@ class Events {
     for (const staticRouteDevice of staticRoutesDevices) {
       for (const staticRoute of staticRouteDevice.staticroutes) {
         // no need to update non pending routes
-        if (staticRoute.configStatus === '') {
+        if (!staticRoute.isPending) {
           continue;
         } else {
           await this.setIncompleteRouteStatus(staticRoute, false, '', staticRouteDevice);
@@ -575,8 +572,8 @@ class Events {
       { _id: mongoose.Types.ObjectId(device._id) },
       {
         $set: {
-          'staticroutes.$[elem].configStatus': isIncomplete ? configStates.INCOMPLETE : '',
-          'staticroutes.$[elem].configStatusReason': isIncomplete ? reason : ''
+          'staticroutes.$[elem].isPending': isIncomplete,
+          'staticroutes.$[elem].pendingReason': isIncomplete ? reason : ''
         }
       },
       {
@@ -604,8 +601,8 @@ class Events {
       { _id: mongoose.Types.ObjectId(device._id) },
       {
         $set: {
-          'dhcp.$[elem].configStatus': isIncomplete ? configStates.INCOMPLETE : '',
-          'dhcp.$[elem].configStatusReason': isIncomplete ? reason : ''
+          'dhcp.$[elem].isPending': isIncomplete,
+          'dhcp.$[elem].pendingReason': isIncomplete ? reason : ''
         }
       },
       {
@@ -825,5 +822,5 @@ const activatePendingTunnelsOfDevice = async (device) => {
 module.exports = Events; // default export
 exports = module.exports;
 
-exports.removePendingStateFromTunnels = activatePendingTunnelsOfDevice; // named export
+exports.activatePendingTunnelsOfDevice = activatePendingTunnelsOfDevice; // named export
 exports.publicAddrInfoLimiter = publicAddrInfoLimiter; // named export
