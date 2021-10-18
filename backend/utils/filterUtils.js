@@ -21,10 +21,9 @@
  * @param {String} filter.key Key to be filtered by
  * @param {String} filter.op filter operation [==, !=, contains...]
  * @param {String} filter.val Value to be filtered
- * @param {String} filter.type Type of the value, optional
  * @returns {Object} Mongoose expression for the $match stage
 */
-const getFilterExpression = ({ key, op, val, type }) => {
+const getFilterExpression = ({ key, op, val }) => {
   // The key is required
   if (!key) return undefined;
   // Two sides case '?' means 'A' && 'B' - for example "device?.name" be replaced by
@@ -36,12 +35,12 @@ const getFilterExpression = ({ key, op, val, type }) => {
     const cond = op.includes('!') ? '$and' : '$or';
     return {
       [cond]: ['A', 'B'].map(side => getFilterExpression({
-        key: key.replace(/\?/g, side), op, val, type
+        key: key.replace(/\?/g, side), op, val
       }))
     };
   }
   // Special case for dates filtering
-  if (type === 'date') {
+  if (['time', 'date', 'created_at'].includes(key)) {
     const date1 = new Date(val);
     const date2 = new Date(val);
     date2.setDate(date1.getDate() + 1); // beginning of the next day
@@ -139,7 +138,23 @@ const passFilters = (obj, filters) => {
   });
 };
 
+/**
+ * Converts array of filters from API request to array of mongoose expressions
+ * @param {Array}  filters an array of filters from API request
+ * @returns {Array} an array of mongoose match expressions
+ */
+const getMatchFilters = (filters) => {
+  const matchFilters = [];
+  for (const filter of filters) {
+    const filterExpr = getFilterExpression(filter);
+    if (filterExpr !== undefined) {
+      matchFilters.push(filterExpr);
+    }
+  }
+  return matchFilters;
+};
+
 module.exports = {
-  getFilterExpression,
+  getMatchFilters,
   passFilters
 };

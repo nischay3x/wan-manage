@@ -21,7 +21,7 @@ const mongoose = require('mongoose');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
-const { getFilterExpression } = require('../utils/filterUtils');
+const { getMatchFilters } = require('../utils/filterUtils');
 
 class TunnelsService {
   /**
@@ -240,14 +240,8 @@ class TunnelsService {
         }
       ];
       if (filters) {
-        const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
-        for (const filter of parsedFilters) {
-          const filterExpr = getFilterExpression(filter);
-          if (filterExpr !== undefined) {
-            matchFilters.push(filterExpr);
-          }
-        }
+        const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
           pipeline.push({
             $match: { $and: matchFilters }

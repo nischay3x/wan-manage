@@ -52,7 +52,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
-const { getFilterExpression } = require('../utils/filterUtils');
+const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 
 class DevicesService {
@@ -347,14 +347,8 @@ class DevicesService {
       ];
 
       if (filters) {
-        const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
-        for (const filter of parsedFilters) {
-          const filterExpr = getFilterExpression(filter);
-          if (filterExpr !== undefined) {
-            matchFilters.push(filterExpr);
-          }
-        }
+        const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
           pipeline.push({
             $match: { $and: matchFilters }
@@ -987,13 +981,7 @@ class DevicesService {
         return Service.rejectResponse('Only ids or filters can be specified as a parameter', 400);
       }
       if (filters) {
-        const matchFilters = [];
-        for (const filter of filters) {
-          const filterExpr = getFilterExpression(filter);
-          if (filterExpr !== undefined) {
-            matchFilters.push(filterExpr);
-          }
-        }
+        const matchFilters = getMatchFilters(filters);
         if (matchFilters.length > 0) {
           query.$and = matchFilters;
         }

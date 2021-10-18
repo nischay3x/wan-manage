@@ -22,7 +22,7 @@ const { devices } = require('../models/devices');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const { getFilterExpression } = require('../utils/filterUtils');
+const { getMatchFilters } = require('../utils/filterUtils');
 
 class NotificationsService {
   /**
@@ -58,15 +58,8 @@ class NotificationsService {
         }
       ] : [];
       if (filters) {
-        const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
-        for (const filter of parsedFilters) {
-          filter.type = filter.key === 'time' ? 'date' : 'string';
-          const filterExpr = getFilterExpression(filter);
-          if (filterExpr !== undefined) {
-            matchFilters.push(filterExpr);
-          }
-        }
+        const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
           pipeline.push({
             $match: { $and: matchFilters }
@@ -229,14 +222,7 @@ class NotificationsService {
       const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
       const { filters } = notificationsDeleteRequest;
       if (filters) {
-        const matchFilters = [];
-        for (const filter of filters) {
-          filter.type = filter.key === 'time' ? 'date' : 'string';
-          const filterExpr = getFilterExpression(filter);
-          if (filterExpr !== undefined) {
-            matchFilters.push(filterExpr);
-          }
-        }
+        const matchFilters = getMatchFilters(filters);
         if (matchFilters.length > 0) {
           query.$and = matchFilters;
         }
