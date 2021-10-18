@@ -23,8 +23,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const {
   prepareTunnelRemoveJob,
   prepareTunnelAddJob,
-  queueTunnel,
-  oneTunnelDel
+  queueTunnel
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg, validateDhcpConfig } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
@@ -466,7 +465,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       .populate('peer');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, pathlabel, num, _id, peer } = tunnel;
+      let { deviceA, deviceB, pathlabel, num, peer } = tunnel;
       // IMPORTANT: Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
       if (deviceA._id.toString() === device._id.toString()) {
@@ -491,111 +490,102 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       // been removed, we remove the tunnel from both the devices and the MGMT
       const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
         tunnel, ifcA, ifcB, peer);
-      const pathlabels = modifiedIfcsMap[ifc._id] && modifiedIfcsMap[ifc._id].pathlabels
-        ? modifiedIfcsMap[ifc._id].pathlabels.map(label => label._id.toString())
-        : [];
-      const pathLabelRemoved = pathlabel && !pathlabels.includes(pathlabel.toString());
 
-      if (!(ifc._id in modifiedIfcsMap) || pathLabelRemoved) {
-        // TODO: what is the case here? Might it be related to event changes?
-        await oneTunnelDel(_id, user.username, org);
-      } else {
-        const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
-        const modifiedIfcB = peer ? null : modifiedIfcsMap[tunnel.interfaceB.toString()];
-        const loggerParams = {
-          machineA: deviceA.machineId,
-          machineB: peer ? null : deviceB.machineId,
-          tunnelNum: tunnel.num
-        };
-        // skip interfaces without IP or GW
-        const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
-          (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
+      const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
+      const modifiedIfcB = peer ? null : modifiedIfcsMap[tunnel.interfaceB.toString()];
+      const loggerParams = {
+        machineA: deviceA.machineId,
+        machineB: peer ? null : deviceB.machineId,
+        tunnelNum: tunnel.num
+      };
+      // skip interfaces without IP or GW
+      const missingNetParameters = _ifc => isObject(_ifc) && (_ifc.addr === '' ||
+        (_ifc.dhcp === 'yes' && _ifc.gateway === ''));
 
-        if (missingNetParameters(modifiedIfcA) || (!peer && missingNetParameters(modifiedIfcB))) {
-          logger.info('Missing network parameters, the tunnel will not be rebuilt', {
-            params: loggerParams
-          });
-          continue;
-        }
-        // if dhcp was changed from 'no' to 'yes'
-        // then we need to wait for a new config from the agent
-        const waitingDhcpInfoA =
-          (isObject(modifiedIfcA) && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes');
-        const waitingDhcpInfoB = peer
-          ? false
-          : (isObject(modifiedIfcB) && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
-
-        if (waitingDhcpInfoA || waitingDhcpInfoB) {
-          logger.info('Waiting a new config from DHCP, the tunnel will not be rebuilt', {
-            params: loggerParams
-          });
-          continue;
-        }
-        // this could happen if both interfaces are modified at the same time
-        // we need to skip adding duplicated jobs
-        if (tunnel.pendingTunnelModification) {
-          logger.warn('The tunnel is rebuilt from another modification request', {
-            params: loggerParams
-          });
-          continue;
-        }
-
-        // only rebuild tunnels when IP, Public IP or port is changed
-        const tunnelParametersModified = (origIfc, modifiedIfc) => isObject(modifiedIfc) && (
-          modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
-          modifiedIfc.mtu !== origIfc.mtu ||
-          modifiedIfc.PublicIP !== origIfc.PublicIP ||
-          modifiedIfc.PublicPort !== origIfc.PublicPort ||
-          modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
-        );
-        if (!tunnelParametersModified(ifcA, modifiedIfcA) &&
-          (peer === null && !tunnelParametersModified(ifcB, modifiedIfcB))) {
-          continue;
-        }
-
-        // no need to recreate the tunnel with local direct connection
-        const isLocal = (ifcA, ifcB) => {
-          return !ifcA.PublicIP || !ifcB.PublicIP ||
-            ifcA.PublicIP === ifcB.PublicIP;
-        };
-        const skipLocal = peer
-          ? false
-          : (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
-            modifiedIfcA.mtu === ifcA.mtu && isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
-            (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
-            modifiedIfcB.mtu === ifcB.mtu && isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
-
-        if (skipLocal) {
-          continue;
-        }
-
-        await setTunnelsPendingInDB([tunnel._id], org, true);
-        let title = '';
-        if (peer) {
-          // eslint-disable-next-line max-len
-          title = `Delete peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${peer.name})`;
-        } else {
-          // eslint-disable-next-line max-len
-          title = `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
-        }
-        const removeTunnelJobs = await queueTunnel(
-          false,
-          title,
-          tasksDeviceA,
-          tasksDeviceB,
-          user.username,
-          org,
-          deviceA.machineId,
-          peer ? null : deviceB.machineId,
-          deviceA._id,
-          peer ? null : deviceB._id,
-          num,
-          pathlabel,
-          peer
-        );
-        tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
-        removedTunnels.push(tunnel._id);
+      if (missingNetParameters(modifiedIfcA) || (!peer && missingNetParameters(modifiedIfcB))) {
+        logger.info('Missing network parameters, the tunnel will not be rebuilt', {
+          params: loggerParams
+        });
+        continue;
       }
+      // if dhcp was changed from 'no' to 'yes'
+      // then we need to wait for a new config from the agent
+      const waitingDhcpInfoA =
+        (isObject(modifiedIfcA) && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes');
+      const waitingDhcpInfoB = peer
+        ? false
+        : (isObject(modifiedIfcB) && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
+
+      if (waitingDhcpInfoA || waitingDhcpInfoB) {
+        logger.info('Waiting a new config from DHCP, the tunnel will not be rebuilt', {
+          params: loggerParams
+        });
+        continue;
+      }
+      // this could happen if both interfaces are modified at the same time
+      // we need to skip adding duplicated jobs
+      if (tunnel.pendingTunnelModification) {
+        logger.warn('The tunnel is rebuilt from another modification request', {
+          params: loggerParams
+        });
+        continue;
+      }
+
+      // only rebuild tunnels when IP, Public IP or port is changed
+      const tunnelParametersModified = (origIfc, modifiedIfc) => isObject(modifiedIfc) && (
+        modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
+        modifiedIfc.mtu !== origIfc.mtu ||
+        modifiedIfc.PublicIP !== origIfc.PublicIP ||
+        modifiedIfc.PublicPort !== origIfc.PublicPort ||
+        modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
+      );
+      if (!tunnelParametersModified(ifcA, modifiedIfcA) &&
+        (peer === null && !tunnelParametersModified(ifcB, modifiedIfcB))) {
+        continue;
+      }
+
+      // no need to recreate the tunnel with local direct connection
+      const isLocal = (ifcA, ifcB) => {
+        return !ifcA.PublicIP || !ifcB.PublicIP ||
+          ifcA.PublicIP === ifcB.PublicIP;
+      };
+      const skipLocal = peer
+        ? false
+        : (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
+          modifiedIfcA.mtu === ifcA.mtu && isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
+          (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
+          modifiedIfcB.mtu === ifcB.mtu && isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
+
+      if (skipLocal) {
+        continue;
+      }
+
+      await setTunnelsPendingInDB([tunnel._id], org, true);
+      let title = '';
+      if (peer) {
+        // eslint-disable-next-line max-len
+        title = `Delete peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${peer.name})`;
+      } else {
+        // eslint-disable-next-line max-len
+        title = `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
+      }
+      const removeTunnelJobs = await queueTunnel(
+        false,
+        title,
+        tasksDeviceA,
+        tasksDeviceB,
+        user.username,
+        org,
+        deviceA.machineId,
+        peer ? null : deviceB.machineId,
+        deviceA._id,
+        peer ? null : deviceB._id,
+        num,
+        pathlabel,
+        peer
+      );
+      tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
+      removedTunnels.push(tunnel._id);
     }
   }
   // Send modify device job only if required
