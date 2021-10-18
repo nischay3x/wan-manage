@@ -69,7 +69,7 @@ const apply = async (devices, user, data) => {
     // be updated again when the device sends periodic message
     deviceStatus.setDeviceState(machineId, 'pending');
     const startParams = {};
-    startParams.interfaces = buildInterfaces(device.interfaces, device.ospf);
+    startParams.interfaces = buildInterfaces(device.interfaces.toObject(), device.ospf.toObject());
 
     const tasks = [{ entity: 'agent', message: 'start-router', params: startParams }];
     applyPromises.push(deviceQueues

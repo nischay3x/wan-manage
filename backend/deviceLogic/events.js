@@ -745,6 +745,11 @@ class Events {
    * @return {boolean} if need to trigger event of ip restored
   */
   isPublicPortChanged (origIfc, updatedIfc) {
+    // if not ip, there is no public port, so we can't count it as change
+    if (updatedIfc.IPv4 === '' || updatedIfc.public_port === '') {
+      return false;
+    }
+
     if (origIfc.PublicPort === updatedIfc.public_port.toString()) {
       return false;
     }
@@ -759,6 +764,11 @@ class Events {
    * @return {boolean} if need to trigger event of ip restored
   */
   isPublicIpChanged (origIfc, updatedIfc) {
+    // if not ip, there is no public port, so we can't count it as change
+    if (updatedIfc.IPv4 === '' || updatedIfc.public_ip === '') {
+      return false;
+    }
+
     if (origIfc.PublicIP === updatedIfc.public_ip) {
       return false;
     }
