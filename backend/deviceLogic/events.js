@@ -80,12 +80,11 @@ class Events {
 
   /**
    * Handle event of dhcp become pending
-   * @param  {object} dhcp dhcp object
    * @param  {object} device device object
    * @param  {object} origIfc interface object
    * @param  {string} reason  notification reason
   */
-  async dhcpSetToPending (dhcp, device, origIfc, reason) {
+  async dhcpSetToPending (device, origIfc, reason) {
     await notificationsMgr.sendNotifications([{
       org: device.org,
       title:
@@ -611,7 +610,7 @@ class Events {
     );
 
     if (isIncomplete) {
-      await this.dhcpSetToPending(dhcp, device, origIfc, reason);
+      await this.dhcpSetToPending(device, origIfc, reason);
     }
   };
 
