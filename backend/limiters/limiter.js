@@ -77,7 +77,7 @@ class FwLimiter {
       return false;
     }
 
-    // release the secondary limiter as well;
+    // release the secondary limiter as well
     await this.secondaryLimiter.delete(key);
 
     return true;
