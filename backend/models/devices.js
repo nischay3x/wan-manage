@@ -282,8 +282,7 @@ const interfacesSchema = new Schema({
   // we can't know if ip was missing and now it restored,
   // or it existed without any issues for a long time.
   hasIpOnDevice: {
-    type: Boolean,
-    default: true
+    type: Boolean
   },
   // Device running status
   status: {
