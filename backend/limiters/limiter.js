@@ -27,7 +27,7 @@ class FwLimiter {
     this.limiter = new RateLimiterMemory({
       points: counts,
       duration: duration,
-      blockDuration: blockDuration
+      blockDuration: blockDuration // "blockDuration" must be greater than "duration"
     });
 
     // Secondary limiter use to counting how many times the key consumed
