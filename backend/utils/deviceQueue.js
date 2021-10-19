@@ -521,6 +521,28 @@ class DeviceQueues {
   }
 
   /**
+   * Removes all jobs matching the filters array according
+   * to an organizations id.
+   * @param  {string} org     organization id
+   * @param  {Array}  filters an array of filters matching the jobs to be removed
+   */
+  async removeJobsByOrgAndFilters (org, filters) {
+    try {
+      await this.iterateJobsByOrg(org, 'all', async (job) => {
+        const removedJob = await job.remove(err => { if (err) throw err; });
+        const { method } = removedJob.data.response;
+        this.callRemoveRegisteredCallback(method, removedJob);
+        return true;
+      }, 0, -1, 'asc', 0, -1, filters);
+    } catch (err) {
+      logger.warn('Encountered an error while removing jobs', {
+        params: { org: org, filters: filters, err: err.message }
+      });
+      throw err;
+    }
+  }
+
+  /**
    * Gets the number of pending (waiting/running) jobs
    * for the device specified by "deviceId"
    * @param  {string} deviceId device UUID
