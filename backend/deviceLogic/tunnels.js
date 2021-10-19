@@ -24,6 +24,8 @@ const devicesModel = require('../models/devices').devices;
 const mongoose = require('mongoose');
 const { generateTunnelParams, generateRandomKeys } = require('../utils/tunnelUtils');
 const { validateIKEv2 } = require('./IKEv2');
+const eventsReasons = require('./events/eventReasons');
+const publicAddrInfoLimiter = require('./publicAddressLimiter');
 
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -412,7 +414,9 @@ const applyTunnelAdd = async (devices, user, data) => {
     if (elem.status === 'fulfilled') {
       const job = elem.value;
       arr.push(job);
-    }
+    } else {
+      reasons.add(elem.reason.message);
+    };
     return arr;
   }, []);
 
@@ -422,7 +426,7 @@ const applyTunnelAdd = async (devices, user, data) => {
   const desired = dbTasks.flat().map(job => job.id);
   const ids = fulfilled.flat().map(job => job.id);
   let message = `${isPeer ? 'peer ' : ''}tunnels creation jobs added.`;
-  if (desired.length === 0) {
+  if (desired.length === 0 || fulfilled.flat().length === 0) {
     message = 'No ' + message;
   } else if (ids.length < desired.length) {
     message = `${ids.length} of ${desired.length} ${message}`;
@@ -648,7 +652,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
         logger.error('Tunnels search error (general error)', {
           params: { reason: err.message }
         });
-        reject(new Error('Tunnel ID not found'));
+        reject(err);
       });
   });
   return tPromise;
@@ -980,6 +984,32 @@ const addTunnel = async (
   // Generate IPsec Keys and store them in the database
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
+  // check if need to create the tunnel as pending
+  let isPending = false;
+  let pendingReason = '';
+
+  if (deviceAIntf.hasIpOnDevice === false) {
+    isPending = true;
+    pendingReason = eventsReasons.interfaceHasNoIp(deviceAIntf.name, deviceA.name);
+  }
+
+  if (!peer && deviceBIntf.hasIpOnDevice === false) {
+    isPending = true;
+    pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
+  }
+
+  if (!peer) {
+    const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${deviceAIntf._id}`);
+    const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${deviceBIntf._id}`);
+
+    if (isABlocked || isBBlocked) {
+      isPending = true;
+      pendingReason = isABlocked
+        ? eventsReasons.publicPortHighRate(deviceAIntf.name, deviceA.name)
+        : eventsReasons.publicPortHighRate(deviceBIntf.name, deviceB.name);
+    }
+  }
+
   const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
     {
@@ -996,6 +1026,8 @@ const addTunnel = async (
       deviceB: peer ? null : deviceB._id,
       interfaceB: peer ? null : deviceBIntf._id,
       pathlabel: pathLabel,
+      isPending: isPending,
+      pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,
       peer: peer ? peer._id : null
@@ -1003,6 +1035,11 @@ const addTunnel = async (
     // Options
     { upsert: true, new: true }
   );
+
+  // don't send jobs for pending tunnels
+  if (isPending) {
+    throw new Error('Tunnel set to pending');
+  }
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
     tunnel,
@@ -1136,7 +1173,9 @@ const applyTunnelDel = async (devices, user, data) => {
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
         const job = elem.value;
-        fulfilled.push(job);
+        if (job.length) {
+          fulfilled.push(job);
+        }
       } else {
         if (!reasons.includes(elem.reason.message)) {
           reasons.push(elem.reason.message);
@@ -1146,9 +1185,21 @@ const applyTunnelDel = async (devices, user, data) => {
     }, { fulfilled: [], reasons: [] });
     const status = fulfilled.length < tunnelIds.length
       ? 'partially completed' : 'completed';
-    const message = fulfilled.length < tunnelIds.length
-      ? `${fulfilled.length} of ${tunnelIds.length} tunnels deletion jobs added.
-      ${reasons.join('. ')}` : '';
+
+    const desired = delPromises.flat().map(job => job.id);
+    const ids = fulfilled.flat().map(job => job.id);
+    let message = 'tunnels deletion jobs added.';
+    if (desired.length === 0 || fulfilled.flat().length === 0) {
+      message = 'No ' + message;
+    } else if (ids.length < desired.length) {
+      message = `${ids.length} of ${desired.length} ${message}`;
+    } else {
+      message = `${ids.length} ${message}`;
+    }
+    if (reasons.length > 0) {
+      message = `${message} ${Array.from(reasons).join(' ')}`;
+    }
+
     return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found',
@@ -1199,8 +1250,12 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   const deviceBIntf = peer ? null : tunnelResp.deviceB.interfaces
     .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
 
-  const tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
-    deviceAIntf, deviceBIntf, pathLabel, peer);
+  let tunnelJobs = [];
+  // don't send remove jobs for pending tunnels
+  if (!tunnelResp.isPending) {
+    tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
+      deviceAIntf, deviceBIntf, pathLabel, peer);
+  }
 
   logger.info('Deleting tunnels from database');
   const resp = await tunnelsModel.findOneAndUpdate(
@@ -1217,6 +1272,11 @@ const oneTunnelDel = async (tunnelID, user, org) => {
     // Options
     { upsert: false, new: true }
   );
+
+  // throw this error after removing from database
+  if (tunnelResp.isPending) {
+    throw new Error('Tunnel was in pending state');
+  }
 
   if (resp === null) throw new Error('Error deleting tunnel');
 
@@ -1344,7 +1404,8 @@ const sync = async (deviceId, org) => {
       $and: [
         { org },
         { $or: [{ deviceA: deviceId }, { deviceB: deviceId }] },
-        { isActive: true }
+        { isActive: true },
+        { isPending: { $ne: true } } // skip pending tunnels on sync
       ]
     },
     {
@@ -1535,13 +1596,60 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };
 
+const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
+  let tunnelsJobs = [];
+
+  const tunnels = await tunnelsModel.find(
+    { _id: { $in: tunnelsIds }, isActive: true }
+  ).populate('deviceA').populate('deviceB');
+
+  for (const tunnel of tunnels) {
+    const ifcA = tunnel.deviceA.interfaces.find(ifc => {
+      return ifc._id.toString() === tunnel.interfaceA.toString();
+    });
+    const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(ifc => {
+      return ifc._id.toString() === tunnel.interfaceB.toString();
+    });
+
+    const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel, ifcA, ifcB, tunnel.peer);
+
+    let title = null;
+    if (tunnel.peer) {
+      // eslint-disable-next-line max-len
+      title = `Delete peer tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.peer.name})`;
+    } else {
+      // eslint-disable-next-line max-len
+      title = `Delete tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.deviceB.hostname}, ${ifcB.name})`;
+    }
+
+    const removeTunnelJobs = await queueTunnel(
+      false,
+      title,
+      tasksDeviceA,
+      tasksDeviceB,
+      username,
+      tunnel.org,
+      tunnel.deviceA.machineId,
+      tunnel.deviceB.machineId,
+      tunnel.deviceA._id,
+      tunnel.deviceB._id,
+      tunnel.num,
+      tunnel.pathlabel
+    );
+
+    tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
+  }
+
+  return tunnelsJobs;
+};
+
 const getInterfacesWithPathLabels = device => {
   const deviceIntfs = [];
   device.interfaces.forEach(intf => {
     if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
       const labelsSet = new Set(intf.pathlabels.map(label => {
         // DIA interfaces cannot be used in tunnels
-        return label.type !== 'DIA' ? label._id : null;
+        return label.type !== 'DIA' ? label._id.toString() : null;
       }));
       deviceIntfs.push({
         labelsSet: labelsSet,
@@ -1569,5 +1677,6 @@ module.exports = {
   prepareTunnelRemoveJob: prepareTunnelRemoveJob,
   prepareTunnelAddJob: prepareTunnelAddJob,
   queueTunnel: queueTunnel,
-  oneTunnelDel: oneTunnelDel
+  oneTunnelDel: oneTunnelDel,
+  sendRemoveTunnelsJobs: sendRemoveTunnelsJobs
 };

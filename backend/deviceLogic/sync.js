@@ -23,6 +23,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const deviceStatus = require('../periodic/deviceStatus')();
 const { devices } = require('../models/devices');
+const tunnelsModel = require('../models/tunnels');
 const mlPolicySyncHandler = require('./mlpolicy').sync;
 const mlPolicyCompleteHandler = require('./mlpolicy').completeSync;
 const firewallPolicySyncHandler = require('./firewallPolicy').sync;
@@ -36,6 +37,11 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
+const activatePendingTunnelsOfDevice = require('./events')
+  .activatePendingTunnelsOfDevice;
+const publicAddrInfoLimiter = require('./publicAddressLimiter');
+const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
+// const { publicPortLimiter } = require('../limiters/publicPort');
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -417,15 +423,22 @@ const apply = async (device, user, data) => {
   const { _id, machineId, hostname, org, versions } = device[0];
 
   // Reset auto sync in database
-  await devices.findOneAndUpdate(
+  const updDevice = await devices.findOneAndUpdate(
     { org, _id },
     {
       'sync.state': 'syncing',
       'sync.autoSync': 'on',
       'sync.trials': 0
     },
-    { sync: 1 }
-  );
+    { sync: 1, new: true }
+  ).lean();
+
+  // release existing limiters if the device is blocked
+  await reconfigErrorsLimiter.release(_id.toString());
+  const released = await releasePublicAddrLimiterBlockage(device[0]);
+  if (released) {
+    await activatePendingTunnelsOfDevice(updDevice);
+  }
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(
@@ -451,6 +464,41 @@ const apply = async (device, user, data) => {
     status: 'completed',
     message: ''
   };
+};
+
+const releasePublicAddrLimiterBlockage = async (device) => {
+  const pendingTunnels = await tunnelsModel.find({
+    org: device.org,
+    isActive: true,
+    isPending: true,
+    $or: [
+      { deviceA: device._id },
+      { deviceB: device._id }
+    ]
+  }).lean();
+
+  const deviceId = device._id;
+  let tunnelReleased = false;
+  for (let i = 0; i < pendingTunnels.length; i++) {
+    const t = pendingTunnels[i];
+    const ifcAId = t.interfaceA.toString();
+    const ifcBId = t.peer ? null : t.interfaceB.toString();
+    const isAReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcAId}`);
+    if (isAReleased) {
+      tunnelReleased = true;
+      break;
+    }
+
+    if (ifcBId) {
+      const isBReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcBId}`);
+      if (isBReleased) {
+        tunnelReleased = true;
+        break;
+      }
+    }
+  }
+
+  return tunnelReleased;
 };
 
 // Register a method that updates sync state

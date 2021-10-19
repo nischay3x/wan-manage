@@ -44,6 +44,7 @@ const {
 } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets, mapLteNames, mapWifiNames } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');
 const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
 const deviceQueues = require('../utils/deviceQueue')(
@@ -54,6 +55,7 @@ const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
+const eventsReasons = require('../deviceLogic/events/eventReasons');
 
 class DevicesService {
   /**
@@ -202,7 +204,9 @@ class DevicesService {
           'gateway',
           'ifname',
           'metric',
-          'redistributeViaOSPF'
+          'redistributeViaOSPF',
+          'isPending',
+          'pendingReason'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;
@@ -218,7 +222,9 @@ class DevicesService {
           'rangeStart',
           'rangeEnd',
           'dns',
-          'status'
+          'status',
+          'isPending',
+          'pendingReason'
         ]);
 
         let macAssignList;
@@ -1154,6 +1160,11 @@ class DevicesService {
         orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
       }
 
+      const origTunnels = await tunnelsModel.find({
+        isActive: true,
+        $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+      }).lean();
+
       // Make sure interfaces are not deleted, only modified
       if (Array.isArray(deviceRequest.interfaces)) {
         // not allowed to assign path labels of a different organization
@@ -1176,6 +1187,9 @@ class DevicesService {
             updIntf.internetAccess = origIntf.internetAccess;
             // Device type is assigned by system only
             updIntf.deviceType = origIntf.deviceType;
+
+            // This field is set by changed to true by events logic only
+            updIntf.hasIpOnDevice = origIntf.hasIpOnDevice;
 
             // Check tunnels connectivity
             if (origIntf.isAssigned) {
@@ -1378,6 +1392,11 @@ class DevicesService {
           const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
           if (!origIfc) return d;
 
+          if (origIfc.hasIpOnDevice === false) {
+            d.isPending = true;
+            d.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+          }
+
           // if the interface is going to be unassigned now but it was assigned
           // and it was in a bridge,
           // we check if we can reassociate the dhcp to another assigned interface in the bridge.
@@ -1415,12 +1434,32 @@ class DevicesService {
 
       // validate static routes
       if (Array.isArray(deviceRequest.staticroutes)) {
-        const tunnels = await tunnelsModel.find({
-          isActive: true,
-          $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
-        }, { num: 1 }).lean();
+        // if route is via a pending tunnel, set it as pending
+        const incompleteTunnels = origTunnels.filter(t => t.isPending);
+        const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.hasIpOnDevice === false);
+
+        deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
+          for (const t of incompleteTunnels) {
+            const { ip1, ip2 } = generateTunnelParams(t.num);
+            if (ip1 === s.gateway || ip2 === s.gateway) {
+              s.isPending = true;
+              s.pendingReason = eventsReasons.tunnelIsPending(t.num);
+              return s;
+            }
+          }
+
+          for (const ifc of interfacesWithoutIp) {
+            if (ifc.IPv4 === s.gateway) {
+              s.isPending = true;
+              s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+              return s;
+            }
+          }
+          return s;
+        });
+
         for (const route of deviceRequest.staticroutes) {
-          const { valid, err } = validateStaticRoute(deviceToValidate, tunnels, route);
+          const { valid, err } = validateStaticRoute(deviceToValidate, origTunnels, route);
           if (!valid) {
             logger.warn('Wrong static route parameters',
               {

@@ -19,6 +19,7 @@ const configs = require('../configs')();
 const Joi = require('@hapi/joi');
 const Devices = require('./Devices');
 const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
+const DeviceEvents = require('../deviceLogic/events');
 const createError = require('http-errors');
 const orgModel = require('../models/organizations');
 const { devices } = require('../models/devices');
@@ -30,6 +31,7 @@ const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require(
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
+const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 
 class Connections {
   constructor () {
@@ -247,7 +249,8 @@ class Connections {
                 deviceObj: resp[0]._id,
                 machineId: resp[0].machineId,
                 version: resp[0].versions.agent,
-                ready: false
+                ready: false,
+                running: devInfo ? devInfo.running : null
               });
               return done(true);
             } else {
@@ -442,30 +445,6 @@ class Connections {
             return i;
           }
 
-          // from device internetAccess type is boolean, in management it is enum yes/no
-          const prevInternetAccess = i.internetAccess === 'yes';
-          if (updatedConfig.internetAccess !== undefined &&
-            i.monitorInternet && updatedConfig.internetAccess !== prevInternetAccess) {
-            const newInterfaceState = updatedConfig.internetAccess ? 'online' : 'offline';
-            const details = `Interface ${i.name} state changed to "${newInterfaceState}"`;
-            logger.info(details, {
-              params: {
-                machineId,
-                updatedConfig
-              }
-            });
-            notificationsMgr.sendNotifications([
-              {
-                org: origDevice.org,
-                title: 'Interface connection change',
-                time: new Date(),
-                device: origDevice._id,
-                machineId,
-                details
-              }
-            ]);
-          };
-
           const updInterface = {
             ...i.toJSON(),
             PublicIP: updatedConfig.public_ip && i.useStun
@@ -474,7 +453,8 @@ class Connections {
               ? updatedConfig.public_port : i.PublicPort,
             NatType: updatedConfig.nat_type || i.NatType,
             internetAccess: updatedConfig.internetAccess === undefined ? ''
-              : updatedConfig.internetAccess ? 'yes' : 'no'
+              : updatedConfig.internetAccess ? 'yes' : 'no',
+            hasIpOnDevice: updatedConfig.IPv4 !== ''
           };
 
           if (!i.isAssigned) {
@@ -492,13 +472,27 @@ class Connections {
           return updInterface;
         });
 
+        const deviceId = origDevice._id.toString();
+
         try {
           // Update interfaces in DB
-          const updDevice = await devices.findOneAndUpdate(
+          await devices.findOneAndUpdate(
             { machineId },
             { $set: { interfaces } },
-            { new: true, runValidators: true }
+            { runValidators: true }
           ).populate('interfaces.pathlabels', '_id type');
+
+          // We create a new instance of events class
+          // to know changedDevice and changedTunnels
+          const events = new DeviceEvents();
+
+          const plainJsDevice = origDevice.toObject({ minimize: false });
+
+          // add current device to changed devices in order to run modify process for it
+          await events.addChangedDevice(origDevice._id, origDevice);
+
+          const newInterfaces = deviceInfo.message.network.interfaces;
+          await events.checkIfToTriggerEvent(plainJsDevice, newInterfaces);
 
           // Update the reconfig hash before applying to prevent infinite loop
           this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
@@ -511,12 +505,41 @@ class Connections {
               machineId
             }
           });
-          await modifyDeviceDispatcher.apply(
-            [origDevice],
-            { username: 'system' },
-            { newDevice: updDevice, org: origDevice.org.toString() }
-          );
+
+          // add tunnels jobs before modify
+          await events.sendTunnelsCreateJobs();
+
+          // modify jobs
+          const modifyDevices = await events.prepareModifyDispatcherParameters();
+          for (const modified in modifyDevices) {
+            await modifyDeviceDispatcher.apply(
+              [modifyDevices[modified].orig],
+              { username: 'system' },
+              {
+                org: modifyDevices[modified].orig.org.toString(),
+                newDevice: modifyDevices[modified].updated
+              }
+            );
+          }
+
+          // remove tunnels jobs after modify
+          await events.sendTunnelsRemoveJobs();
         } catch (err) {
+          // if there are many errors in a row, we block the get-device-info loop
+          const { allowed, blockedNow } = await reconfigErrorsLimiter.use(deviceId);
+          if (!allowed && blockedNow) {
+            logger.error('Reconfig errors rate-limit exceeded', { params: { deviceId } });
+
+            await notificationsMgr.sendNotifications([{
+              org: origDevice.org,
+              title: 'Unsuccessful self-healing operations',
+              time: new Date(),
+              device: deviceId,
+              machineId: machineId,
+              details: 'Unsuccessful updating device data. Please contact flexiWAN support'
+            }]);
+          }
+
           logger.error('Failed to apply new configuration from device', {
             params: { device: machineId, err: err.message }
           });
@@ -796,6 +819,15 @@ class Connections {
    */
   getDeviceInfo (deviceID) {
     return this.devices.getDeviceInfo(deviceID);
+  }
+
+  /**
+   * Set device state by device ID
+   * @param  {string} deviceID device machine id
+   * @return void
+   */
+  setDeviceState (deviceID, state) {
+    this.devices.updateDeviceInfo(deviceID, 'running', state);
   }
 
   /**

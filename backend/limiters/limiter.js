@@ -1,0 +1,128 @@
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2021  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+const { RateLimiterMemory } = require('rate-limiter-flexible');
+
+class FwLimiter {
+  constructor (counts, duration, blockDuration) {
+    this.maxCount = counts;
+    this.duration = duration;
+    this.blockDuration = blockDuration;
+
+    // Main limiter for a key
+    this.limiter = new RateLimiterMemory({
+      points: counts,
+      duration: duration,
+      blockDuration: blockDuration // "blockDuration" must be greater than "duration"
+    });
+
+    // Secondary limiter use to counting how many times the key consumed
+    // *after* it blocked by the main limiter.
+    // In case it is consumed at a high rate, we block the main limiter manually
+    // and reset the secondary limiter to start counting again.
+    this.secondaryLimiter = new RateLimiterMemory({
+      points: 9999
+      // secondary limiter no need for duration and blockDuration. It use only for counting
+    });
+  }
+
+  async use (key) {
+    const response = { allowed: true, blockedNow: false, releasedNow: false };
+    try {
+      // try to consume a point. If blocked, an error will be thrown.
+      const res = await this.limiter.consume(key);
+
+      // if not blocked, delete the secondary if exists for this key.
+      await this.secondaryLimiter.delete(key);
+
+      // currently, it is not possible to pass a callback that is automatically
+      // executed when the key expires.
+      // So we call the release function on the next allowed time.
+      if (res.consumedPoints === 1) {
+        response.releasedNow = true;
+      }
+    } catch (err) {
+      // at this point, the main limiter is blocked.
+      response.allowed = false;
+
+      // only on the first time a block is obtained for this key - call the block callback
+      if (err.consumedPoints === this.maxCount + 1) {
+        response.blockedNow = true;
+        await this.secondaryLimiter.set(key, 0, 0);
+      }
+
+      // count how many times the locked key is used
+      const resPenalty = await this.secondaryLimiter.penalty(key);
+      if (resPenalty.consumedPoints === this.maxCount) {
+        // if secondary limiter consumed -from the blockage time- the same points counts
+        // we block the main limiter and reset the secondary.
+        await this.limiter.block(key, this.blockDuration);
+        await this.secondaryLimiter.set(key, 0, 0);
+      }
+    }
+
+    return response;
+  }
+
+  async delete (key) {
+    await this.secondaryLimiter.delete(key);
+    return this.limiter.delete(key);
+  }
+
+  async release (key) {
+    const isBlocked = await this.isBlocked(key);
+    if (!isBlocked) {
+      return false;
+    }
+
+    const isDeleted = await this.delete(key);
+    if (!isDeleted) {
+      return false;
+    }
+
+    // release the secondary limiter as well
+    await this.secondaryLimiter.delete(key);
+
+    return true;
+  }
+
+  async isSecondaryBlocked (key) {
+    const secondaryRes = await this.secondaryLimiter.get(key);
+    if (secondaryRes && secondaryRes.remainingPoints < 0) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  async isBlocked (key) {
+    const res = await this.limiter.get(key);
+    const isSecondaryBlocked = await this.isSecondaryBlocked(key);
+
+    if (res !== null && res.remainingPoints < 0) {
+      return true;
+    }
+
+    if (isSecondaryBlocked) {
+      return true;
+    }
+
+    return false;
+  }
+};
+
+module.exports = FwLimiter;

@@ -215,26 +215,37 @@ class TunnelsService {
             encryptionMethod: 1,
             'pathlabel.name': 1,
             'pathlabel.color': 1,
+            isPending: 1,
+            pendingReason: 1,
             tunnelStatus: {
-              $cond: [{
-                $and: [
-                  { $eq: ['$status', 'up'] },
-                  { $eq: ['$deviceA.status', 'running'] },
-                  { $eq: ['$deviceA.isConnected', true] },
+              $switch: {
+                branches: [
+                  { case: { $eq: ['$isPending', true] }, then: 'Pending' },
                   {
-                    $or: [
-                      // in case of peer, there is no deviceB to check connection for
-                      { $ne: ['$peer', null] },
-                      {
-                        $and: [
-                          { $eq: ['$deviceB.status', 'running'] },
-                          { $eq: ['$deviceB.isConnected', true] }
-                        ]
-                      }
-                    ]
+                    case: {
+                      $and: [
+                        { $eq: ['$status', 'up'] },
+                        { $eq: ['$deviceA.status', 'running'] },
+                        { $eq: ['$deviceA.isConnected', true] },
+                        {
+                          $or: [
+                            // in case of peer, there is no deviceB to check connection for
+                            { $ne: ['$peer', null] },
+                            {
+                              $and: [
+                                { $eq: ['$deviceB.status', 'running'] },
+                                { $eq: ['$deviceB.isConnected', true] }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    then: 'Connected'
                   }
-                ]
-              }, 'Connected', 'Not Connected']
+                ],
+                default: 'Not Connected'
+              }
             }
           }
         }

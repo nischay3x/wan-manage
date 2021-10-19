@@ -150,7 +150,7 @@ class PeersService {
 
           let jobs = [];
           if (isNeedToReconstructTunnels) {
-            jobs = await reconstructTunnels(ids, orgList[0], user.username, true);
+            jobs = await reconstructTunnels(ids, user.username, true);
           } else {
             for (const tunnel of tunnels) {
               const tasks = [{

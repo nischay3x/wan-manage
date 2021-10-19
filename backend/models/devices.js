@@ -21,6 +21,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const { firewallRuleSchema } = require('./firewallRule');
+const { pendingSchema } = require('./schemas/pendingSchema');
 
 /**
  * Interfaces Database Schema
@@ -275,6 +276,14 @@ const interfacesSchema = new Schema({
       }
     }
   },
+  // false if ip configured in flexiManage but don't exists in the agent
+  // The purpose of this field is to know if we need to trigger the event of IP restored.
+  // Without this field, when we receive from the device an interface with IP,
+  // we can't know if ip was missing and now it restored,
+  // or it existed without any issues for a long time.
+  hasIpOnDevice: {
+    type: Boolean
+  },
   // Device running status
   status: {
     type: String,
@@ -349,7 +358,8 @@ const staticroutesSchema = new Schema({
   redistributeViaOSPF: {
     type: Boolean,
     default: false
-  }
+  },
+  ...pendingSchema
 }, {
   timestamps: true
 });
@@ -419,7 +429,8 @@ const DHCPSchema = new Schema({
   status: {
     type: String,
     default: 'failed'
-  }
+  },
+  ...pendingSchema
 }, {
   timestamps: true
 });
