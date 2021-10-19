@@ -414,7 +414,9 @@ const applyTunnelAdd = async (devices, user, data) => {
     if (elem.status === 'fulfilled') {
       const job = elem.value;
       arr.push(job);
-    }
+    } else {
+      reasons.add(elem.reason.message);
+    };
     return arr;
   }, []);
 
@@ -650,7 +652,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
         logger.error('Tunnels search error (general error)', {
           params: { reason: err.message }
         });
-        reject(new Error('Tunnel ID not found'));
+        reject(err);
       });
   });
   return tPromise;
@@ -1036,7 +1038,7 @@ const addTunnel = async (
 
   // don't send jobs for pending tunnels
   if (isPending) {
-    return [];
+    throw new Error('Tunnel set to pending');
   }
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
@@ -1270,6 +1272,11 @@ const oneTunnelDel = async (tunnelID, user, org) => {
     // Options
     { upsert: false, new: true }
   );
+
+  // throw this error after removing from database
+  if (tunnelResp.isPending) {
+    throw new Error('Tunnel was in pending state');
+  }
 
   if (resp === null) throw new Error('Error deleting tunnel');
 
