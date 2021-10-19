@@ -100,7 +100,7 @@ class Events {
     );
 
     const reason = eventsReasons.publicPortHighRate(origIfc.name, origDevice.name);
-    await this.setPendingStateToTunnels(origDevice, origIfc, reason);
+    await this.setPendingStateToTunnels(origDevice, origIfc, reason, false);
   }
 
   /**
@@ -401,14 +401,19 @@ class Events {
    * @param  {object} origIfc original interface before the event
    * @param  {string} reason indicate why tunnel should be pending
   */
-  async setPendingStateToTunnels (device, origIfc, reason) {
-    const tunnels = await tunnelsModel.find({
+  async setPendingStateToTunnels (device, origIfc, reason, includingPeers = true) {
+    const query = {
       $or: [
         { deviceA: device._id, interfaceA: origIfc._id },
         { deviceB: device._id, interfaceB: origIfc._id }
       ],
       isActive: true
-    }).lean();
+    };
+
+    if (!includingPeers) {
+      query.peer = null; // only normal tunnels
+    }
+    const tunnels = await tunnelsModel.find(query).lean();
 
     for (const tunnel of tunnels) {
       // if tunnel already pending

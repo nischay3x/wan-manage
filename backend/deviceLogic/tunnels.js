@@ -996,17 +996,18 @@ const addTunnel = async (
     pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
   }
 
-  const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${deviceAIntf._id}`);
-  const isBBlocked = peer
-    ? false
-    : await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${deviceBIntf._id}`);
+  if (!peer) {
+    const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${deviceAIntf._id}`);
+    const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${deviceBIntf._id}`);
 
-  if (isABlocked || isBBlocked) {
-    isPending = true;
-    pendingReason = isABlocked
-      ? eventsReasons.publicPortHighRate(deviceAIntf.name, deviceA.name)
-      : eventsReasons.publicPortHighRate(deviceBIntf.name, deviceB.name);
+    if (isABlocked || isBBlocked) {
+      isPending = true;
+      pendingReason = isABlocked
+        ? eventsReasons.publicPortHighRate(deviceAIntf.name, deviceA.name)
+        : eventsReasons.publicPortHighRate(deviceBIntf.name, deviceB.name);
+    }
   }
+
   const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
     {

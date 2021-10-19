@@ -532,15 +532,30 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       }
 
       // only rebuild tunnels when IP, Public IP or port is changed
-      const tunnelParametersModified = (origIfc, modifiedIfc) => isObject(modifiedIfc) && (
-        modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
-        modifiedIfc.mtu !== origIfc.mtu ||
-        modifiedIfc.PublicIP !== origIfc.PublicIP ||
-        modifiedIfc.PublicPort !== origIfc.PublicPort ||
-        modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
-      );
-      if (!tunnelParametersModified(ifcA, modifiedIfcA) &&
-        (peer === null && !tunnelParametersModified(ifcB, modifiedIfcB))) {
+      const tunnelParametersModified = (origIfc, modifiedIfc) => {
+        if (!isObject(modifiedIfc)) {
+          return false;
+        }
+
+        const changed = (
+          modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
+          modifiedIfc.mtu !== origIfc.mtu
+        );
+
+        if (changed || peer) {
+          return changed;
+        }
+
+        return (
+          modifiedIfc.PublicIP !== origIfc.PublicIP ||
+          modifiedIfc.PublicPort !== origIfc.PublicPort ||
+          modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
+        );
+      };
+      const ifcAModified = tunnelParametersModified(ifcA, modifiedIfcA);
+      const ifcBModified = peer ? false : tunnelParametersModified(ifcB, modifiedIfcB);
+
+      if (!ifcAModified && !ifcBModified) {
         continue;
       }
 
