@@ -31,7 +31,7 @@ const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require(
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
-const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
+const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 
 class Connections {
   constructor () {
@@ -453,7 +453,8 @@ class Connections {
               ? updatedConfig.public_port : i.PublicPort,
             NatType: updatedConfig.nat_type || i.NatType,
             internetAccess: updatedConfig.internetAccess === undefined ? ''
-              : updatedConfig.internetAccess ? 'yes' : 'no'
+              : updatedConfig.internetAccess ? 'yes' : 'no',
+            hasIpOnDevice: updatedConfig.IPv4 !== ''
           };
 
           if (!i.isAssigned) {
@@ -525,7 +526,7 @@ class Connections {
           await events.sendTunnelsRemoveJobs();
         } catch (err) {
           // if there are many errors in a row, we block the get-device-info loop
-          const { allowed, blockedNow } = await reconfigErrorSLimiter.use(deviceId);
+          const { allowed, blockedNow } = await reconfigErrorsLimiter.use(deviceId);
           if (!allowed && blockedNow) {
             logger.error('Reconfig errors rate-limit exceeded', { params: { deviceId } });
 

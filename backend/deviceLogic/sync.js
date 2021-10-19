@@ -37,10 +37,10 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
-const activatePendingTunnelsOfDevice = require('../deviceLogic/events')
+const activatePendingTunnelsOfDevice = require('./events')
   .activatePendingTunnelsOfDevice;
-const { publicAddrInfoLimiter } = require('./events');
-const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
+const publicAddrInfoLimiter = require('./publicAddressLimiter');
+const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 // const { publicPortLimiter } = require('../limiters/publicPort');
 
 // Create a object of all sync handlers
@@ -434,8 +434,8 @@ const apply = async (device, user, data) => {
   ).lean();
 
   // release existing limiters if the device is blocked
-  await reconfigErrorSLimiter.release(_id.toString());
-  const released = await releasePendingTunnels(device[0]);
+  await reconfigErrorsLimiter.release(_id.toString());
+  const released = await releasePublicAddrLimiterBlockage(device[0]);
   if (released) {
     await activatePendingTunnelsOfDevice(updDevice);
   }
@@ -466,7 +466,7 @@ const apply = async (device, user, data) => {
   };
 };
 
-const releasePendingTunnels = async (device) => {
+const releasePublicAddrLimiterBlockage = async (device) => {
   const pendingTunnels = await tunnelsModel.find({
     org: device.org,
     isActive: true,

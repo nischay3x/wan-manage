@@ -22,17 +22,11 @@ const notificationsMgr = require('../notifications/notifications')();
 const cidr = require('cidr-tools');
 const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
-const { sendRemoveTunnelsJobs } = require('../deviceLogic/tunnels');
+const { sendRemoveTunnelsJobs } = require('./tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const modifyDeviceApply = require('./modifyDevice').apply;
-const reconstructTunnels = require('./modifyDevice').reconstructTunnels;
+const { apply, reconstructTunnels } = require('./modifyDevice');
 const eventsReasons = require('./events/eventReasons');
-const configs = require('../configs')();
-const Limiter = require('../limiters/limiter');
-const publicAddrBlockTime = configs.get('publicAddrBlockTime', 'number');
-
-// block public info if changed 5 times in an hour.
-const publicAddrInfoLimiter = new Limiter(5, 60 * 60, publicAddrBlockTime);
+const publicAddrInfoLimiter = require('./publicAddressLimiter');
 
 class Events {
   constructor () {
@@ -117,28 +111,6 @@ class Events {
   async publicInfoRateLimitIsReleased (origDevice, origIfc) {
     await this.removePendingStateFromTunnels(origDevice, origIfc);
   }
-
-  /**
-   * Set IP exists on the interface
-   * @param  {number} deviceId device id
-   * @param  {number} ifcId    interface id
-   * @param  {boolean} hasIP  indicate if ip exists in the device side
-  */
-  async setInterfaceHasIP (deviceId, ifcId, hasIP) {
-    await this.addChangedDevice(deviceId);
-
-    await devices.findOneAndUpdate(
-      { _id: deviceId },
-      {
-        $set: {
-          'interfaces.$[elem].hasIpOnDevice': hasIP
-        }
-      },
-      {
-        arrayFilters: [{ 'elem._id': ifcId }]
-      }
-    );
-  };
 
   /**
    * Set incomplete state for tunnel if needed and send notification
@@ -238,11 +210,6 @@ class Events {
         machineId: device.machineId,
         details: `The IP address of Interface ${origIfc.name} has been restored`
       }]);
-    }
-
-    // mark the interface as one that has IP
-    if (origIfc.hasIpOnDevice !== true) {
-      await this.setInterfaceHasIP(device._id, origIfc._id, true);
     }
 
     if (origIfc.type === 'WAN') {
@@ -391,15 +358,10 @@ class Events {
       }]);
     }
 
-    // mark interface as lost IP
-    if (origIfc.hasIpOnDevice !== false) {
-      await this.setInterfaceHasIP(device._id, origIfc._id, false);
-    }
-
-    // set related tunnels as pending
     const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
 
     if (origIfc.type === 'WAN') {
+      // set related tunnels as pending
       await this.setPendingStateToTunnels(device, origIfc, reason);
     }
 
@@ -412,7 +374,6 @@ class Events {
         const isSameIfc = d.interface === ifc.devId;
 
         if (isSameIfc) {
-          const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
           await this.setIncompleteDHCPStatus(d, true, reason, device, origIfc);
         }
       }
@@ -429,7 +390,6 @@ class Events {
       const isOverlapping = cidr.overlap(`${origIfc.IPv4}/${origIfc.IPv4Mask}`, gatewaySubnet);
 
       if (isSameIfc || isOverlapping) {
-        const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
         await this.setIncompleteRouteStatus(s, true, reason, device);
       }
     }
@@ -472,7 +432,7 @@ class Events {
    * @param  {object} tunnel tunnel object
    * @param  {object} device device that caused the event
    * @param  {string} reason indicate why tunnel should be pending
-   * @param  {boolean} reason indicate if need to notify
+   * @param  {boolean} notify indicate if need to notify
   */
   async tunnelSetToPending (tunnel, device, reason, notify = true) {
     if (notify) {
@@ -819,7 +779,7 @@ const activatePendingTunnelsOfDevice = async (device) => {
   await events.sendTunnelsCreateJobs();
 
   for (const modified in modifyDevices) {
-    await modifyDeviceApply(
+    await apply(
       [modifyDevices[modified].orig],
       { username: 'system' },
       {

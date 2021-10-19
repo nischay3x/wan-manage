@@ -25,6 +25,7 @@ const mongoose = require('mongoose');
 const { generateTunnelParams, generateRandomKeys } = require('../utils/tunnelUtils');
 const { validateIKEv2 } = require('./IKEv2');
 const eventsReasons = require('./events/eventReasons');
+const publicAddrInfoLimiter = require('./publicAddressLimiter');
 
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -981,6 +982,7 @@ const addTunnel = async (
   // Generate IPsec Keys and store them in the database
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
+  // check if need to create the tunnel as pending
   let isPending = false;
   let pendingReason = '';
 
@@ -994,6 +996,17 @@ const addTunnel = async (
     pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
   }
 
+  const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${deviceAIntf._id}`);
+  const isBBlocked = peer
+    ? false
+    : await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${deviceBIntf._id}`);
+
+  if (isABlocked || isBBlocked) {
+    isPending = true;
+    pendingReason = isABlocked
+      ? eventsReasons.publicPortHighRate(deviceAIntf.name, deviceA.name)
+      : eventsReasons.publicPortHighRate(deviceBIntf.name, deviceB.name);
+  }
   const tunnel = await tunnelsModel.findOneAndUpdate(
     // Query, use the org and tunnel number
     {

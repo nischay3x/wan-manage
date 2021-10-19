@@ -24,7 +24,7 @@ const notificationsMgr = require('../notifications/notifications')();
 const configs = require('../configs')();
 const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const orgModel = require('../models/organizations');
-const { reconfigErrorSLimiter } = require('../limiters/reconfigErrors');
+const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 
 /***
  * This class gets periodic status from all connected devices
@@ -225,7 +225,7 @@ class DeviceStatus {
             if ((reconfig && reconfig !== deviceInfo.reconfig) || needNewIKEv2Certificate) {
               // Check if device is blocked due to many error in a row
               const deviceId = deviceInfo.deviceObj.toString();
-              const isBlocked = await reconfigErrorSLimiter.isBlocked(deviceId);
+              const isBlocked = await reconfigErrorsLimiter.isBlocked(deviceId);
               if (!isBlocked) {
                 // Call get-device-info and reconfig
                 connections.sendDeviceInfoMsg(deviceID, deviceInfo.deviceObj);

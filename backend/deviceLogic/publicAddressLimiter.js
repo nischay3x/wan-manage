@@ -14,15 +14,10 @@
 
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-const Limiter = require('./limiter');
+const Limiter = require('../limiters/limiter');
 const configs = require('../configs')();
+const publicAddrBlockTime = configs.get('publicAddrBlockTime', 'number');
 
-const reconfigBlockTime = configs.get('reconfigErrorBlockTime', 'number');
+const publicAddrInfoLimiter = new Limiter(5, 60 * 60, publicAddrBlockTime);
 
-// 5 times in a minute
-const reconfigErrorsLimiter = new Limiter(5, 60, reconfigBlockTime);
-
-module.exports = {
-  reconfigErrorsLimiter
-};
+module.exports = publicAddrInfoLimiter;
