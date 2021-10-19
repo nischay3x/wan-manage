@@ -22,7 +22,7 @@ const { devices } = require('../models/devices');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const { getFilterExpression } = require('../utils/filterUtils');
+const { getMatchFilters } = require('../utils/filterUtils');
 
 class NotificationsService {
   /**
@@ -58,15 +58,8 @@ class NotificationsService {
         }
       ] : [];
       if (filters) {
-        const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
-        for (const filter of parsedFilters) {
-          filter.type = filter.key === 'time' ? 'date' : 'string';
-          const filterExpr = getFilterExpression(filter);
-          if (filterExpr !== undefined) {
-            matchFilters.push(filterExpr);
-          }
-        }
+        const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
           pipeline.push({
             $match: { $and: matchFilters }
@@ -208,6 +201,35 @@ class NotificationsService {
       );
       if (notificationsPutRequest.ids && res.n !== notificationsPutRequest.ids.length) {
         throw new Error('Some notification IDs were not found');
+      }
+      return Service.successResponse(null, 204);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Delete all notifications matching the filters
+   *
+   * no response value expected for this operation
+   **/
+  static async notificationsDELETE ({ org, notificationsDeleteRequest }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
+      const { filters } = notificationsDeleteRequest;
+      if (filters) {
+        const matchFilters = getMatchFilters(filters);
+        if (matchFilters.length > 0) {
+          query.$and = matchFilters;
+        }
+      }
+      const { deletedCount } = await notificationsDb.deleteMany(query);
+      if (deletedCount === 0) {
+        return Service.rejectResponse('Not found', 404);
       }
       return Service.successResponse(null, 204);
     } catch (e) {

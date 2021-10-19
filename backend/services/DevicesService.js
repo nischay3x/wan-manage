@@ -53,7 +53,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
-const { getFilterExpression } = require('../utils/filterUtils');
+const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
 
@@ -353,14 +353,8 @@ class DevicesService {
       ];
 
       if (filters) {
-        const matchFilters = [];
         const parsedFilters = JSON.parse(filters);
-        for (const filter of parsedFilters) {
-          const filterExpr = getFilterExpression(filter);
-          if (filterExpr !== undefined) {
-            matchFilters.push(filterExpr);
-          }
-        }
+        const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
           pipeline.push({
             $match: { $and: matchFilters }
@@ -973,6 +967,83 @@ class DevicesService {
       });
     } catch (e) {
       return DevicesService.handleRequestError(e, { deviceStatus: 'connected', traces: [] });
+    }
+  }
+
+  /**
+   * Delete all devices matched the filters
+   *
+   * no response value expected for this operation
+   **/
+  static async devicesDELETE ({ org, devicesDeleteRequest }, { user }) {
+    let session;
+    try {
+      session = await mongoConns.getMainDB().startSession();
+      await session.startTransaction();
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
+      const { ids, filters } = devicesDeleteRequest;
+      if (ids && filters) {
+        return Service.rejectResponse('Only ids or filters can be specified as a parameter', 400);
+      }
+      if (filters) {
+        const matchFilters = getMatchFilters(filters);
+        if (matchFilters.length > 0) {
+          query.$and = matchFilters;
+        }
+      } else if (ids) {
+        query._id = { $in: ids.map(id => mongoose.Types.ObjectId(id)) };
+      }
+      const delDevices = await devices.find(query).session(session);
+      if (delDevices.length === 0) {
+        session.abortTransaction();
+        return Service.rejectResponse('Devices for deletion not found', 404);
+      }
+      const devIds = delDevices.map(d => d._id);
+      const tunnelCount = await tunnelsModel.countDocuments({
+        $or: [{ deviceA: { $in: devIds } }, { deviceB: { $in: devIds } }],
+        isActive: true,
+        org: { $in: orgList }
+      }).session(session);
+
+      if (tunnelCount > 0) {
+        logger.debug('Tunnels found when deleting device',
+          { params: { filters }, user: user });
+        throw new Error('All devices tunnels must be deleted before deleting devices');
+      }
+      for (const dev of delDevices) {
+        connections.deviceDisconnect(dev.machineId);
+      }
+      const deviceCount = await devices.countDocuments({
+        account: delDevices[0].account
+      }).session(session);
+
+      const orgCount = await devices.countDocuments({
+        account: delDevices[0].account, org: orgList[0]
+      }).session(session);
+
+      // Unregister a device (by adding - count)
+      await flexibilling.registerDevice({
+        account: delDevices[0].account,
+        org: orgList[0],
+        count: deviceCount,
+        orgCount: orgCount,
+        increment: -delDevices.length
+      }, session);
+
+      // Now we can remove the device
+      await devices.deleteMany(query).session(session);
+
+      await session.commitTransaction();
+      session = null;
+
+      return Service.successResponse(null, 204);
+    } catch (e) {
+      if (session) session.abortTransaction();
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 

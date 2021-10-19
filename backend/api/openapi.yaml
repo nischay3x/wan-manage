@@ -712,6 +712,63 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+    delete:
+      operationId: devicesDELETE
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevicesDeleteRequest'
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Delete devices by IDs or matching the filter
+      tags:
+      - Devices
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/latestVersions:
     get:
       operationId: devicesLatestVersionsGET
@@ -3876,7 +3933,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Delete all jobs
+      summary: Delete jobs by IDs or matching the filter
       tags:
       - Jobs
       x-swagger-router-controller: Jobs
@@ -4176,6 +4233,63 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Modify notifications
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+    delete:
+      operationId: notificationsDELETE
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationsDeleteRequest'
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Delete all notifications matching the filter
       tags:
       - Notifications
       x-swagger-router-controller: Notifications
@@ -7582,6 +7696,10 @@ components:
           items:
             type: integer
           type: array
+        filters:
+          items:
+            $ref: '#/components/schemas/Filter'
+          type: array
     NotificationRequest:
       properties:
         count:
@@ -7643,6 +7761,12 @@ components:
         details:
           type: string
       type: object
+    NotificationsDeleteRequest:
+      properties:
+        filters:
+          items:
+            $ref: '#/components/schemas/Filter'
+          type: array
     JobAttempt:
       example:
         max: 7
@@ -9911,6 +10035,33 @@ components:
               $ref: '#/components/schemas/WifiBand2.4GHz'
             5GHz:
               $ref: '#/components/schemas/WifiBand5GHz'
+    DevicesDeleteRequest:
+      properties:
+        ids:
+          items:
+            type: string
+          type: array
+        filters:
+          items:
+            $ref: '#/components/schemas/Filter'
+          type: array
+    Filter:
+      example:
+        key: name
+        op: ==
+        val: example
+      properties:
+        key:
+          type: string
+        op:
+          type: string
+        val:
+          type: string
+      required:
+      - key
+      - op
+      - val
+      type: object
   securitySchemes:
     apiKey:
       in: header
