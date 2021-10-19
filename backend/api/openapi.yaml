@@ -10035,9 +10035,11 @@ components:
             type: string
           type: array
         filters:
-          items:
-            $ref: '#/components/schemas/Filter'
-          type: array
+          oneOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/Filter'
+            - type: string
     Filter:
       example:
         key: name
