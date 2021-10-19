@@ -985,14 +985,24 @@ class DevicesService {
       const { ids, filters } = devicesDeleteRequest;
       if (ids && filters) {
         return Service.rejectResponse('Only ids or filters can be specified as a parameter', 400);
-      }
-      if (filters) {
+      } else if (filters === 'all') {
+        // Delete all devices request protection
+        logger.debug('Delete All devices request received');
+      } else if (filters && (!Array.isArray(filters) || filters.length === 0)) {
+        return Service.rejectResponse(
+          'To delete ALL devices please add filters=\'all\' parameter', 400
+        );
+      } else if (filters) {
         const matchFilters = getMatchFilters(filters);
         if (matchFilters.length > 0) {
           query.$and = matchFilters;
+        } else {
+          return Service.rejectResponse('There is an error in specified filters', 400);
         }
       } else if (ids) {
         query._id = { $in: ids.map(id => mongoose.Types.ObjectId(id)) };
+      } else {
+        return Service.rejectResponse('Ids or filters must be specified as a parameter', 400);
       }
       const delDevices = await devices.find(query).session(session);
       if (delDevices.length === 0) {
