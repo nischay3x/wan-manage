@@ -149,6 +149,8 @@ const getMatchFilters = (filters) => {
     const filterExpr = getFilterExpression(filter);
     if (filterExpr !== undefined) {
       matchFilters.push(filterExpr);
+    } else {
+      throw new Error('There is an error in filter: ' + JSON.stringify(filter));
     }
   }
   return matchFilters;
