@@ -25,7 +25,8 @@ const reasons = {
   publicPortHighRate: (ifcName, deviceName) => {
     return `The public address of interface ${ifcName}` +
     ` in device ${deviceName} is changing at a high rate.` +
-    ' Click on the "Sync" button to re-enable self-healing';
+    ' Recommended action: Disable STUN on the interface.' +
+    ' To release the rate-limit blocking click on "Sync" button';
   }
 };
 

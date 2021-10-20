@@ -23,7 +23,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const deviceStatus = require('../periodic/deviceStatus')();
 const { devices } = require('../models/devices');
-const tunnelsModel = require('../models/tunnels');
 const mlPolicySyncHandler = require('./mlpolicy').sync;
 const mlPolicyCompleteHandler = require('./mlpolicy').completeSync;
 const firewallPolicySyncHandler = require('./firewallPolicy').sync;
@@ -467,38 +466,20 @@ const apply = async (device, user, data) => {
 };
 
 const releasePublicAddrLimiterBlockage = async (device) => {
-  const pendingTunnels = await tunnelsModel.find({
-    org: device.org,
-    isActive: true,
-    isPending: true,
-    $or: [
-      { deviceA: device._id },
-      { deviceB: device._id }
-    ]
-  }).lean();
+  let blockagesReleased = false;
 
-  const deviceId = device._id;
-  let tunnelReleased = false;
-  for (let i = 0; i < pendingTunnels.length; i++) {
-    const t = pendingTunnels[i];
-    const ifcAId = t.interfaceA.toString();
-    const ifcBId = t.peer ? null : t.interfaceB.toString();
-    const isAReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcAId}`);
-    if (isAReleased) {
-      tunnelReleased = true;
-      break;
-    }
+  const wanIfcs = device.interfaces.filter(i => i.type === 'WAN');
+  const deviceId = device._id.toString();
 
-    if (ifcBId) {
-      const isBReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcBId}`);
-      if (isBReleased) {
-        tunnelReleased = true;
-        break;
-      }
+  for (const ifc of wanIfcs) {
+    const ifcId = ifc._id.toString();
+    const isReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcId}`);
+    if (isReleased) {
+      blockagesReleased = true;
     }
   }
 
-  return tunnelReleased;
+  return blockagesReleased;
 };
 
 // Register a method that updates sync state
