@@ -33,8 +33,8 @@ describe('Limiter functionally', () => {
     testLimiter = new Limiter(5, 10, 10);
   });
 
-  it('should be blocked before 5 times', async (done) => {
-    for (let i = 0; i < 5; i++) {
+  it('should not be blocked before 5 times', async (done) => {
+    for (let i = 0; i < 4; i++) {
       await sleep(1);
       await testLimiter.use(key);
     }
@@ -45,7 +45,7 @@ describe('Limiter functionally', () => {
   });
 
   it('should be blocked after 5 times', async (done) => {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       await sleep(1);
       await testLimiter.use(key);
     }
@@ -56,7 +56,7 @@ describe('Limiter functionally', () => {
   });
 
   it('should be released after 10 seconds', async (done) => {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       await sleep(1);
       await testLimiter.use(key);
     }
@@ -72,7 +72,7 @@ describe('Limiter functionally', () => {
   });
 
   it('should be expired after 10 seconds without activity', async (done) => {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       await sleep(1);
       await testLimiter.use(key);
     }
@@ -90,7 +90,7 @@ describe('Limiter functionally', () => {
   // test the secondary limiter
   it('should not be released after 10 seconds if still error', async (done) => {
     // block it quickly
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       await testLimiter.use(key);
     }
     // should be blocked until for 10 seconds
@@ -124,15 +124,9 @@ describe('Limiter functionally', () => {
     let res = await testLimiter.isBlocked(key);
     expect(res).toBe(true);
 
-    // only the main should be blocked
-    res = await testLimiter.isSecondaryBlocked(key);
-    expect(res).toBe(false);
-
     await testLimiter.release(key);
 
     res = await testLimiter.isBlocked(key);
-    expect(res).toBe(false);
-    res = await testLimiter.isSecondaryBlocked(key);
     expect(res).toBe(false);
 
     res = await testLimiter.limiter.get(key);
