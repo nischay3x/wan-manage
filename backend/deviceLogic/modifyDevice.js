@@ -1239,8 +1239,8 @@ const apply = async (device, user, data) => {
 
   const origDevice = device[0];
   const updDevice = data.newDevice;
-  const updRules = updDevice.firewall.rules;
-  const origRules = origDevice.firewall.rules;
+  const updRules = updDevice.firewall.rules.toObject();
+  const origRules = origDevice.firewall.rules.toObject();
   const rulesModified =
     origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
     !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
