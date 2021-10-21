@@ -267,8 +267,8 @@ class Events {
       $or: orQuery,
       isActive: true
     })
-      .populate('deviceA', 'name interfaces')
-      .populate('deviceB', 'name interfaces')
+      .populate('deviceA', '_id name interfaces')
+      .populate('deviceB', '_id name interfaces')
       .lean();
 
     for (const tunnel of tunnels) {
@@ -309,27 +309,20 @@ class Events {
         continue;
       }
 
-      // check for rate limit blockage
-      const deviceId = device._id.toString();
-
-      const ifcAId = interfaceA.toString();
-      const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceId}:${ifcAId}`);
-
-      let ifcBId = null;
-      let isBBlocked = false;
+      // check for rate limit blockage, peer is not blocked by public address limiter
       if (!peer) {
-        ifcBId = interfaceB.toString();
-        isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceId}:${ifcBId}`);
-      }
+        const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
+        const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
+        if (isABlocked || isBBlocked) {
+          const reason = isABlocked
+            ? eventsReasons.publicPortHighRate(ifcA.name, deviceA.name)
+            : eventsReasons.publicPortHighRate(ifcB.name, deviceB.name);
 
-      if (isABlocked || isBBlocked) {
-        // change reason to high rate
-        const ifcName = isABlocked ? ifcA.name : ifcB.name;
-        const reason = eventsReasons.publicPortHighRate(ifcName, device.name);
-        if (pendingReason !== reason) {
-          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+          if (pendingReason !== reason) {
+            await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+          }
+          continue;
         }
-        continue;
       }
 
       // at this point, set tunnel to active

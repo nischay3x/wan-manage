@@ -30,10 +30,10 @@ const sleep = seconds => {
 describe('Limiter functionally', () => {
   let testLimiter = null;
   beforeEach(() => {
-    testLimiter = new Limiter(5, 10, 10);
+    testLimiter = new Limiter('test', 5, 10, 10);
   });
 
-  it('should be blocked before 5 times', async (done) => {
+  it('should not be blocked before the sixth time', async (done) => {
     for (let i = 0; i < 5; i++) {
       await sleep(1);
       await testLimiter.use(key);
@@ -44,7 +44,7 @@ describe('Limiter functionally', () => {
     done();
   });
 
-  it('should be blocked after 5 times', async (done) => {
+  it('should be blocked at the sixth time', async (done) => {
     for (let i = 0; i < 6; i++) {
       await sleep(1);
       await testLimiter.use(key);
@@ -90,10 +90,10 @@ describe('Limiter functionally', () => {
   // test the secondary limiter
   it('should not be released after 10 seconds if still error', async (done) => {
     // block it quickly
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       await testLimiter.use(key);
     }
-    // should be blocked until for 10 seconds
+    // should be blocked for 10 seconds
 
     await sleep(7);
 
@@ -124,20 +124,12 @@ describe('Limiter functionally', () => {
     let res = await testLimiter.isBlocked(key);
     expect(res).toBe(true);
 
-    // only the main should be blocked
-    res = await testLimiter.isSecondaryBlocked(key);
-    expect(res).toBe(false);
-
     await testLimiter.release(key);
 
     res = await testLimiter.isBlocked(key);
     expect(res).toBe(false);
-    res = await testLimiter.isSecondaryBlocked(key);
-    expect(res).toBe(false);
 
     res = await testLimiter.limiter.get(key);
-    expect(res).toBe(null);
-    res = await testLimiter.secondaryLimiter.get(key);
     expect(res).toBe(null);
     done();
   });
