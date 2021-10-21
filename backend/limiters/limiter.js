@@ -47,7 +47,7 @@ class FwLimiter {
       // limiter is blocked.
       response.allowed = false;
 
-      // check if blocked now or the key is
+      // check if blocked now or the key is already blocked
       if (err.consumedPoints === this.maxCount + 1) {
         response.blockedNow = true;
       }
