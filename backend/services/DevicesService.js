@@ -381,6 +381,8 @@ class DevicesService {
             isApproved: 1,
             isConnected: 1,
             name: 1,
+            description: 1,
+            serial: 1,
             hostname: 1,
             machineId: 1,
             sync: 1,
