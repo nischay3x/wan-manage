@@ -53,7 +53,8 @@ class FwLimiter {
       }
 
       // check if during the blockage time, the same high rate is continues
-      // in order to keep the same convention, we blocked only at the 6th, 11th, 16th
+      // in order to keep the same convention, we blocked only at the (points + 1).
+      // For example, 5 times in 10 minutes. Only at the 6th, 11th, 16th times it will be blocked.
       // that's why we decrement one from the consumed points in the following check
       if ((err.consumedPoints - 1) % this.maxCount === 0) {
         await this.limiter.block(key, this.blockDuration);
