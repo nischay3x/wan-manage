@@ -998,16 +998,10 @@ const addTunnel = async (
     pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
   }
 
+  // on creation tunnel we remove the public address limiter if exists
+  await publicAddrInfoLimiter.release(`${deviceA._id}:${deviceAIntf._id}`);
   if (!peer) {
-    const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${deviceAIntf._id}`);
-    const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${deviceBIntf._id}`);
-
-    if (isABlocked || isBBlocked) {
-      isPending = true;
-      pendingReason = isABlocked
-        ? eventsReasons.publicPortHighRate(deviceAIntf.name, deviceA.name)
-        : eventsReasons.publicPortHighRate(deviceBIntf.name, deviceB.name);
-    }
+    await publicAddrInfoLimiter.release(`${deviceB._id}:${deviceBIntf._id}`);
   }
 
   const tunnel = await tunnelsModel.findOneAndUpdate(
