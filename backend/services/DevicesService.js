@@ -347,6 +347,9 @@ class DevicesService {
             _id: { $toString: '$_id' },
             'deviceStatus.state': {
               $cond: [{ $eq: ['$isConnected', true] }, '$status', 'pending']
+            },
+            'sync.state': {
+              $cond: [{ $eq: ['$isConnected', true] }, '$sync.state', 'unknown']
             }
           }
         }
