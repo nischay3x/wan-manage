@@ -21,7 +21,7 @@ const configs = require('../configs')();
 const reconfigBlockTime = configs.get('reconfigErrorBlockTime', 'number');
 
 // 5 times in a minute
-const reconfigErrorsLimiter = new Limiter(5, 60, reconfigBlockTime);
+const reconfigErrorsLimiter = new Limiter('reconfigErrorsLimiter', 5, 60, reconfigBlockTime);
 
 module.exports = {
   reconfigErrorsLimiter

@@ -18,25 +18,16 @@
 const { RateLimiterMemory } = require('rate-limiter-flexible');
 
 class FwLimiter {
-  constructor (counts, duration, blockDuration) {
+  constructor (name, counts, duration, blockDuration) {
+    this.name = name;
     this.maxCount = counts;
     this.duration = duration;
     this.blockDuration = blockDuration;
 
-    // Main limiter for a key
     this.limiter = new RateLimiterMemory({
       points: counts,
       duration: duration,
-      blockDuration: blockDuration // "blockDuration" must be greater than "duration"
-    });
-
-    // Secondary limiter use to counting how many times the key consumed
-    // *after* it blocked by the main limiter.
-    // In case it is consumed at a high rate, we block the main limiter manually
-    // and reset the secondary limiter to start counting again.
-    this.secondaryLimiter = new RateLimiterMemory({
-      points: 9999
-      // secondary limiter no need for duration and blockDuration. It use only for counting
+      blockDuration: blockDuration
     });
   }
 
@@ -46,15 +37,6 @@ class FwLimiter {
       // try to consume a point. If blocked, an error will be thrown.
       const resConsume = await this.limiter.consume(key);
 
-      if (resConsume.remainingPoints === 0) {
-        response.blockedNow = true;
-      }
-
-      if (resConsume.remainingPoints <= 0) {
-        response.allowed = false;
-        await this.secondaryLimiter.set(key, 0, 0);
-      }
-
       // currently, it is not possible to pass a callback that is automatically
       // executed when the key expires.
       // So we call the release function on the next allowed time.
@@ -62,16 +44,19 @@ class FwLimiter {
         response.releasedNow = true;
       }
     } catch (err) {
-      // at this point, the main limiter is blocked.
+      // limiter is blocked.
       response.allowed = false;
 
-      // count how many times the locked key is used
-      const resPenalty = await this.secondaryLimiter.penalty(key);
-      if (resPenalty.consumedPoints >= (this.maxCount - 1)) {
-        // if secondary limiter consumed -from the blockage time- the same points counts
-        // we block the main limiter and reset the secondary.
+      // check if blocked now or the key is
+      if (err.consumedPoints === this.maxCount + 1) {
+        response.blockedNow = true;
+      }
+
+      // check if during the blockage time, the same high rate is continues
+      // in order to keep the same convention, we blocked only at the 6th, 11th, 16th
+      // that's why we decrement one from the consumed points in the following check
+      if ((err.consumedPoints - 1) % this.maxCount === 0) {
         await this.limiter.block(key, this.blockDuration);
-        await this.secondaryLimiter.set(key, 0, 0);
       }
     }
 
@@ -79,7 +64,6 @@ class FwLimiter {
   }
 
   async delete (key) {
-    await this.secondaryLimiter.delete(key);
     return this.limiter.delete(key);
   }
 
@@ -94,16 +78,13 @@ class FwLimiter {
       return false;
     }
 
-    // release the secondary limiter as well
-    await this.secondaryLimiter.delete(key);
-
     return true;
   }
 
   async isBlocked (key) {
     const res = await this.limiter.get(key);
 
-    if (res !== null && res.remainingPoints <= 0) {
+    if (res !== null && res.remainingPoints < 0) {
       return true;
     }
 

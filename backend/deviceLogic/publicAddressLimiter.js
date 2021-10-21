@@ -18,6 +18,6 @@ const Limiter = require('../limiters/limiter');
 const configs = require('../configs')();
 const publicAddrBlockTime = configs.get('publicAddrBlockTime', 'number');
 
-const publicAddrInfoLimiter = new Limiter(5, 60 * 60, publicAddrBlockTime);
+const publicAddrInfoLimiter = new Limiter('publicAddressLimiter', 5, 60 * 60, publicAddrBlockTime);
 
 module.exports = publicAddrInfoLimiter;
