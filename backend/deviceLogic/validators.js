@@ -17,6 +17,7 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
+const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const maxMetric = 2 * 10 ** 9;
 /**
@@ -487,8 +488,8 @@ const isIPv4Address = (ip, mask) => {
   if (!net.isIPv4(ip)) {
     return false;
   };
-  const octets = ip.split('.');
-  if (['0', '255'].includes(octets[3])) {
+  const ipCidr = new IPCidr(`${ip}/${mask}`);
+  if (ipCidr.start() === ip || ipCidr.end() === ip) {
     return false;
   }
   return true;
