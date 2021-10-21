@@ -23,10 +23,10 @@ const reasons = {
     return `Tunnel ${tunnelNumber} is in pending state`;
   },
   publicPortHighRate: (ifcName, deviceName) => {
-    return `The public address of interface ${ifcName}` +
+    return `The public IP/Port of interface ${ifcName}` +
     ` in device ${deviceName} is changing at a high rate.` +
-    ' Recommended action: Disable STUN on the interface.' +
-    ' To release the rate-limit blocking click on "Sync" button';
+    ' Click on "Sync" button to re-enable self-healing.' +
+    ' Recommended action: Disable STUN on the interface';
   }
 };
 
