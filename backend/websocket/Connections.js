@@ -484,7 +484,7 @@ class Connections {
 
           // We create a new instance of events class
           // to know changedDevice and changedTunnels
-          const events = new DeviceEvents();
+          let events = new DeviceEvents();
 
           const plainJsDevice = origDevice.toObject({ minimize: false });
 
@@ -524,6 +524,9 @@ class Connections {
 
           // remove tunnels jobs after modify
           await events.sendTunnelsRemoveJobs();
+
+          // remove the variable from the memory.
+          events = null;
         } catch (err) {
           // if there are many errors in a row, we block the get-device-info loop
           const { allowed, blockedNow } = await reconfigErrorsLimiter.use(deviceId);
