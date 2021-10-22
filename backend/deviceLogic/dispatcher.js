@@ -91,7 +91,6 @@ const methods = {
   },
   upgrade: {
     apply: upgrade.apply,
-    complete: upgrade.complete,
     error: upgrade.error,
     remove: upgrade.remove
   },

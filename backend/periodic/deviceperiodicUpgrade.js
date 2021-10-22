@@ -81,14 +81,12 @@ class DeviceSwUpgrade {
         // jobs already in the devices' queue.
         const query = versionDeadline < now
           ? {
-            'versions.device': { $ne: version },
-            $and: [{ 'upgradeSchedule.jobQueued': { $ne: true } }]
+            'versions.device': { $ne: version }
           }
           : {
-            'upgradeSchedule.time': { $lte: new Date(now) },
             $and: [
-              { 'versions.device': { $ne: version } },
-              { 'upgradeSchedule.jobQueued': { $ne: true } }
+              { 'upgradeSchedule.time': { $lte: new Date(now) } },
+              { 'versions.device': { $ne: version } }
             ]
           };
 
@@ -118,27 +116,6 @@ class DeviceSwUpgrade {
               periodic: { task: this.taskInfo }
             });
           });
-          // Mark the jobs has been queued to the devices
-          const deviceIDs = orgDevice.devices.map(device => { return device._id; });
-          const result = await devices.updateMany(
-            { _id: { $in: deviceIDs }, org: orgDevice._id },
-            { $set: { 'upgradeSchedule.jobQueued': true } }
-          );
-          if (result.nModified !== deviceIDs.length) {
-            logger.error('Device upgrade pending was not set for all devices', {
-              params: {
-                devices: deviceIDs,
-                expected: deviceIDs.length,
-                set: result.nModified
-              },
-              periodic: { task: this.taskInfo }
-            });
-          } else {
-            logger.info('Device upgrade pending flag set for scheduled devices', {
-              params: { devices: deviceIDs },
-              periodic: { task: this.taskInfo }
-            });
-          }
         }
       } catch (err) {
         logger.error('Device periodic task failed', {
