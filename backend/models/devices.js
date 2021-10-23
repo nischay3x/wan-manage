@@ -588,11 +588,6 @@ const versionUpgradeSchema = new Schema({
   time: {
     type: Date,
     default: null
-  },
-  // queued or not
-  jobQueued: {
-    type: Boolean,
-    default: false
   }
 });
 

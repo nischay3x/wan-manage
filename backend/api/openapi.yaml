@@ -7888,7 +7888,6 @@ components:
         org: org
         isConnected: true
         upgradeSchedule:
-          jobQueued: true
           _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
@@ -8035,7 +8034,6 @@ components:
         org: org
         isConnected: true
         upgradeSchedule:
-          jobQueued: true
           _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
@@ -8144,7 +8142,6 @@ components:
       type: object
     UpgradeSchedule:
       example:
-        jobQueued: true
         _id: _id
         time: "2019-12-19T12:10:01.667Z"
       properties:
@@ -8155,8 +8152,6 @@ components:
         time:
           type: string
           nullable: true
-        jobQueued:
-          type: boolean
       type: object
     Interface:
       example:

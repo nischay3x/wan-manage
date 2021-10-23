@@ -296,7 +296,7 @@ devicesRouter.route('/upgdSched')
         return next(createError(404, 'Some devices were not found'));
       }
 
-      const set = { $set: { upgradeSchedule: { time: req.body.date, jobQueued: false } } };
+      const set = { $set: { upgradeSchedule: { time: req.body.date } } };
       const options = { upsert: false, useFindAndModify: false };
       await devices.updateMany(query, set, options);
     } catch (err) {
@@ -311,7 +311,7 @@ devicesRouter.route('/:deviceId/upgdSched')
   .post(cors.corsWithOptions, async (req, res, next) => {
     try {
       const query = { _id: req.params.deviceId };
-      const set = { $set: { upgradeSchedule: { time: req.body.date, jobQueued: false } } };
+      const set = { $set: { upgradeSchedule: { time: req.body.date } } };
       const options = { upsert: false, useFindAndModify: false };
       const res = await devices.updateOne(query, set, options);
       if (res.n === 0) return next(createError(404));

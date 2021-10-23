@@ -265,7 +265,7 @@ class DevicesService {
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
     retDevice.org = retDevice.org.toString();
-    retDevice.upgradeSchedule = pick(item.upgradeSchedule, ['jobQueued', '_id', 'time']);
+    retDevice.upgradeSchedule = pick(item.upgradeSchedule, ['_id', 'time']);
     retDevice.upgradeSchedule._id = retDevice.upgradeSchedule._id.toString();
     retDevice.upgradeSchedule.time = (retDevice.upgradeSchedule.time)
       ? retDevice.upgradeSchedule.time.toISOString() : null;
@@ -544,8 +544,7 @@ class DevicesService {
       const set = {
         $set: {
           upgradeSchedule: {
-            time: devicesUpgradeRequest.date,
-            jobQueued: false
+            time: devicesUpgradeRequest.date
           }
         }
       };
@@ -568,8 +567,7 @@ class DevicesService {
       const set = {
         $set: {
           upgradeSchedule: {
-            time: deviceUpgradeRequest.date,
-            jobQueued: false
+            time: deviceUpgradeRequest.date
           }
         }
       };
