@@ -7888,8 +7888,8 @@ components:
         org: org
         isConnected: true
         upgradeSchedule:
-          _id: _id
           jobQueued: true
+          _id: _id
           time: "2019-12-19T12:10:01.667Z"
         description: description
         deviceStatus: deviceStatus
