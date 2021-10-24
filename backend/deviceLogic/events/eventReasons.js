@@ -24,9 +24,11 @@ const reasons = {
   },
   publicPortHighRate: (ifcName, deviceName) => {
     return `The public IP/Port of interface ${ifcName}` +
-    ` in device ${deviceName} is changing at a high rate.` +
-    ' Click on "Sync" button to re-enable self-healing.' +
-    ' Recommended action: Disable STUN on the interface';
+    ` in device ${deviceName} is changing at a high rate.\n` +
+    ' Usually this is due to ISP symmetric NAT with port randomization.\n' +
+    ' Self-healing is disabled for this tunnel and it might lose connection.\n' +
+    ' Recommended action: Disable STUN on the mentioned interface.\n' +
+    ' Click on "Sync" button for that device to re-enable self-healing.';
   }
 };
 
