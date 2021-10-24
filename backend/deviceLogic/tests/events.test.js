@@ -15,7 +15,20 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../../configs')();
+
+// deviceQueues is needed to release resources when the test finishes
+// otherwise the test stuck and not finished
+const deviceQueues = require('../../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
+
 const DeviceEvents = require('../events');
+
+afterAll(() => {
+  deviceQueues.shutdown();
+});
 
 describe('deviceEvents', () => {
   const events = new DeviceEvents();
