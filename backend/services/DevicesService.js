@@ -567,7 +567,8 @@ class DevicesService {
       const set = {
         $set: {
           upgradeSchedule: {
-            time: deviceUpgradeRequest.date
+            time: deviceUpgradeRequest.date,
+            jobQueued: false
           }
         }
       };
