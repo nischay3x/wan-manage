@@ -66,32 +66,8 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
  * @param  {Object}   data      Additional data used by caller
  * @return {None}
  */
-const apply = async (devicesIn, user, data) => {
-  // If the apply method was called for multiple devices, extract
-  // only the devices that appear in the body. If it was called for
-  // a single device, simply used the first device in the devices array.
-  let opDevices;
-  if (data.devices) {
-    const selectedDevices = data.devices;
-    opDevices = (devicesIn && selectedDevices)
-      ? devicesIn.filter((device) => {
-        const inSelected = selectedDevices.hasOwnProperty(device._id);
-        return !!inSelected;
-      }) : [];
-  } else {
-    opDevices = devicesIn;
-  }
-
-  // Filter out devices that already have
-  // a pending upgrade job in the queue.
-  opDevices = await devices.find({
-    $and: [
-      { _id: { $in: opDevices } },
-      { 'upgradeSchedule.jobQueued': { $ne: true } }
-    ]
-  },
-  '_id machineId hostname'
-  );
+const apply = async (opDevices, user, data) => {
+  // opDevices is a filtered array of selected devices (mongoose objects)
 
   const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
   const version = await swUpdater.getLatestDevSwVersion();
@@ -106,7 +82,7 @@ const apply = async (devicesIn, user, data) => {
   });
 
   // Set the upgrade job pending flag for all devices.
-  // This prevents queuing additional upgrade tasks as long
+  // This prevents queuing additional periodic upgrade tasks as long
   // as there's a pending upgrade task in a device's queue.
   const deviceIDs = opDevices.map(dev => { return dev._id; });
   await setQueuedUpgradeFlag(deviceIDs, org, true);

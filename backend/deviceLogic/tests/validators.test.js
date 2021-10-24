@@ -164,6 +164,31 @@ describe('validateDevice', () => {
     expect(result).toMatchObject(failureObject);
   });
 
+  it('Should be a valid device if valid IP address is set on interface', () => {
+    device.interfaces[1].IPv4 = '95.217.233.255';
+    device.interfaces[1].IPv4Mask = '15';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid device if broadcast address is set on interface', () => {
+    device.interfaces[1].IPv4 = '95.217.255.255';
+    device.interfaces[1].IPv4Mask = '15';
+    failureObject.err = `Invalid IP address for ${device.interfaces[1].name}: ` +
+      `${device.interfaces[1].IPv4}/${device.interfaces[1].IPv4Mask}`;
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if network address is set on interface', () => {
+    device.interfaces[1].IPv4 = '95.216.0.0';
+    device.interfaces[1].IPv4Mask = '15';
+    failureObject.err = `Invalid IP address for ${device.interfaces[1].name}: ` +
+      `${device.interfaces[1].IPv4}/${device.interfaces[1].IPv4Mask}`;
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
   it('Should be an invalid device if WAN IPv4 address is null', () => {
     device.interfaces[0].IPv4 = null;
     failureObject.err = `Interface ${device.interfaces[0].name} does not have an IP address`;
