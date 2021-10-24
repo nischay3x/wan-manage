@@ -24,9 +24,8 @@ const createError = require('http-errors');
 const { verifyPermissionEx } = require('../authenticate');
 
 function handleError (err, request, response, next) {
-  logger.error(err);
-  const code = err.code || 400;
-  return next(createError(code, err.error));
+  logger.error(err.error);
+  return next(createError(err.code, err.error));
 }
 
 /**
@@ -64,8 +63,11 @@ function openApiRouter (openapiSchemas) {
       const controllerName = request.openapi.schema['x-openapi-router-controller'];
       const serviceName = request.openapi.schema['x-openapi-router-service'];
       if (!controllers[controllerName] || controllers[controllerName] === undefined) {
-        handleError(`request sent to controller '${controllerName}' which has not been defined`,
-          request, response, next);
+        const err = {
+          code: 400,
+          error: `request sent to controller '${controllerName}' which has not been defined`
+        };
+        handleError(err, request, response, next);
       } else {
         const apiController = new controllers[controllerName](Services[serviceName]);
         const controllerOperation = request.openapi.schema.operationId;
