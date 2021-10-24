@@ -8185,6 +8185,7 @@ components:
         pathlabels: path labels list
         dnsServers: [8.8.8.8, 8.8.4.4]
         dnsDomains: [subdomain.maindomain]
+        isPublicAddressRateLimited: false
       properties:
         _id:
           maxLength: 24
@@ -8290,6 +8291,9 @@ components:
             cost:
               type: integer
               nullable: true
+        isPublicAddressRateLimited:
+          type: boolean
+          description: Specifies whether the IP or port address for this interface changes at a high rate
       type: object
     DeviceVersion:
       example:

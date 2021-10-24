@@ -56,6 +56,7 @@ const { TypedError, ErrorTypes } = require('../utils/errors');
 const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
+const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 
 class DevicesService {
   /**
@@ -125,7 +126,9 @@ class DevicesService {
    *
    * @param {mongo Device Object} item
    */
-  static selectDeviceParams (item) {
+  static async selectDeviceParams (item) {
+    const deviceId = item._id.toString();
+
     // Pick relevant fields
     const retDevice = pick(item, [
       'org',
@@ -154,7 +157,7 @@ class DevicesService {
     // pick interfaces
     let retInterfaces;
     if (item.interfaces) {
-      retInterfaces = item.interfaces.map(i => {
+      retInterfaces = await Promise.all(item.interfaces.map(async i => {
         const retIf = pick(i, [
           'IPv6',
           'PublicIP',
@@ -191,8 +194,12 @@ class DevicesService {
         retIf._id = retIf._id.toString();
         // if device is not connected then internet access status is unknown
         retIf.internetAccess = retDevice.isConnected ? retIf.internetAccess : '';
+
+        retIf.isPublicAddressRateLimited =
+          await publicAddrInfoLimiter.isBlocked(`${deviceId}:${retIf._id}`);
+
         return retIf;
-      });
+      }));
     } else retInterfaces = [];
 
     let retStaticRoutes;
@@ -510,9 +517,9 @@ class DevicesService {
       } else if (requestParams.response === 'ids') {
         devicesMap = paginated[0].records;
       } else {
-        devicesMap = paginated[0].records.map(d => {
-          return DevicesService.selectDeviceParams(d);
-        });
+        devicesMap = Promise.all(paginated[0].records.map(async d => {
+          return await DevicesService.selectDeviceParams(d);
+        }));
       }
       return Service.successResponse(devicesMap);
     } catch (e) {
@@ -618,7 +625,7 @@ class DevicesService {
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description');
-      const device = DevicesService.selectDeviceParams(result);
+      const device = await DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
     } catch (e) {
@@ -1565,7 +1572,7 @@ class DevicesService {
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;
       DevicesService.setLocationHeader(server, response, modifyDevResult.ids, orgList[0]);
-      const deviceObj = DevicesService.selectDeviceParams(updDevice);
+      const deviceObj = await DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
       if (session) session.abortTransaction();
