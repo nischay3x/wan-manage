@@ -57,13 +57,36 @@ class NotificationsService {
           }
         }
       ] : [];
+      let devicesArray;
       if (filters) {
         const parsedFilters = JSON.parse(filters);
         const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
-          pipeline.push({
-            $match: { $and: matchFilters }
-          });
+          // if there is a 'device.*' filter we need another query, $lookup will not work
+          // because 'devices' and 'notifications' are in different databases
+          const [deviceFilters, notificationFilters] = matchFilters.reduce((res, filter) => {
+            for (const key in filter) {
+              if (key.startsWith('device.')) {
+                res[0].push({ [key.replace('device.', '')]: filter[key] });
+              } else {
+                res[1].push(filter);
+              }
+            }
+            return res;
+          }, [[], []]);
+          if (deviceFilters.length > 0) {
+            devicesArray = await devices.find({
+              $and: [...deviceFilters, {
+                org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
+              }]
+            }, { name: 1 });
+            notificationFilters.push({ device: { $in: devicesArray.map(d => d._id) } });
+          };
+          if (notificationFilters.length > 0) {
+            pipeline.push({
+              $match: { $and: notificationFilters }
+            });
+          }
         }
       }
       if (sortField) {
@@ -101,9 +124,12 @@ class NotificationsService {
       let devicesNames = {};
       if (op !== 'count' && notifications[0].meta.length > 0) {
         response.setHeader('records-total', notifications[0].meta[0].total);
-        const devicesArray = await devices.find({
-          _id: { $in: notifications[0].records.map(n => n.device) }
-        }, { name: 1 });
+        if (!devicesArray) {
+          // there was no 'device.*' filter
+          devicesArray = await devices.find({
+            _id: { $in: notifications[0].records.map(n => n.device) }
+          }, { name: 1 });
+        }
         devicesNames = devicesArray.reduce((r, d) => ({ ...r, [d._id]: d.name }), {});
       };
       const result = (op === 'count')
