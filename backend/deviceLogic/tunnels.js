@@ -172,9 +172,6 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
             } else {
               // Create a list of path labels that are common to both interfaces.
               const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
-              if (labelsIntersection.length === 0) {
-                reasons.add('Some devices have interfaces without specified Path Labels.');
-              }
               for (const label of labelsIntersection) {
                 // Skip tunnel if the label is not included in
                 // the list of labels specified by the user
