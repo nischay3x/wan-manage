@@ -522,7 +522,7 @@ class DevicesService {
       } else if (requestParams.response === 'ids') {
         devicesMap = paginated[0].records;
       } else {
-        devicesMap = Promise.all(paginated[0].records.map(async d => {
+        devicesMap = await Promise.all(paginated[0].records.map(async d => {
           return await DevicesService.selectDeviceParams(d);
         }));
       }
