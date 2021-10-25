@@ -488,9 +488,11 @@ const isIPv4Address = (ip, mask) => {
   if (!net.isIPv4(ip)) {
     return false;
   };
-  const ipCidr = new IPCidr(`${ip}/${mask}`);
-  if (ipCidr.start() === ip || ipCidr.end() === ip) {
-    return false;
+  if (mask < 32) {
+    const ipCidr = new IPCidr(`${ip}/${mask}`);
+    if (ipCidr.start() === ip || ipCidr.end() === ip) {
+      return false;
+    }
   }
   return true;
 };
