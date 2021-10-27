@@ -2677,7 +2677,7 @@ class DevicesService {
                   }
                 },
                 // Metadata
-                { priority: 'medium', attempts: 1, removeOnComplete: false },
+                { priority: 'normal', attempts: 1, removeOnComplete: false },
                 // Complete callback
                 callback
               );
