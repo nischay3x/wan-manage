@@ -62,7 +62,7 @@ const apply = async (devices, user, data) => {
         }
       },
       // Metadata
-      { priority: 'medium', attempts: 1, removeOnComplete: false },
+      { priority: 'normal', attempts: 1, removeOnComplete: false },
       // Complete callback
       null
     ));
