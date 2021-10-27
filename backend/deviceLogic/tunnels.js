@@ -140,7 +140,11 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
       // TBD: key exchange should be dynamic
       const specifiedLabels = new Set(pathLabels);
       const createForAllLabels = specifiedLabels.has('FFFFFF');
+
       if (deviceAIntfs.length && deviceBIntfs.length) {
+        // if need to add a message about the absence of common labels
+        let isFoundInterfacesWithCommonLabels = false;
+
         for (let idxA = 0; idxA < deviceAIntfs.length; idxA++) {
           for (let idxB = 0; idxB < deviceBIntfs.length; idxB++) {
             const wanIfcA = deviceAIntfs[idxA];
@@ -151,6 +155,9 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
             // If no path labels were selected, create a tunnel
             // only if both interfaces aren't assigned with labels
             if (specifiedLabels.size === 0) {
+              // mark the bellow field as true since here we don't search for common interfaces
+              isFoundInterfacesWithCommonLabels = true;
+
               if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
                 // If a tunnel already exists, skip the configuration
                 const tunnelFound = await getTunnel(org, null, wanIfcA, wanIfcB);
@@ -173,6 +180,7 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
               // Create a list of path labels that are common to both interfaces.
               const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
               for (const label of labelsIntersection) {
+                isFoundInterfacesWithCommonLabels = true;
                 // Skip tunnel if the label is not included in
                 // the list of labels specified by the user
                 const shouldSkipTunnel =
@@ -199,6 +207,10 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
             }
           };
         };
+
+        if (!isFoundInterfacesWithCommonLabels) {
+          reasons.add('Some devices have interfaces without specified Path Labels.');
+        }
       } else {
         logger.info('Failed to connect tunnel between devices', {
           params: {
