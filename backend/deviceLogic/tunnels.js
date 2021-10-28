@@ -856,6 +856,20 @@ const prepareTunnelAddJob = async (
           'integ-alg': peer.espIntegAlg,
           'dh-group': peer.espDhGroup,
           'key-size': parseInt(peer.espKeySize)
+        },
+        'local-ts': {
+          protocol: peer.localProtocol,
+          'start-port': peer.localPortRangeStart,
+          'end-port': peer.localPortRangeEnd,
+          'start-addr': peer.localIpRangeStart,
+          'end-addr': peer.localIpRangeEnd
+        },
+        'remote-ts': {
+          protocol: peer.remoteProtocol,
+          'start-port': peer.remotePortRangeStart,
+          'end-port': peer.remotePortRangeEnd,
+          'start-addr': peer.remoteIpRangeStart,
+          'end-addr': peer.remoteIpRangeEnd
         }
       };
     } else {
