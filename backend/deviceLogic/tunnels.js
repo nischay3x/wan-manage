@@ -831,34 +831,54 @@ const prepareTunnelAddJob = async (
   });
 
   if (tunnel.encryptionMethod === 'ikev2') {
-    // construct IKEv2 tunnel
-    paramsDeviceA.ikev2 = {
-      role: 'initiator',
-      'remote-device-id': peer ? peer.remoteFQDN : deviceB.machineId,
-      lifetime: configs.get('ikev2Lifetime', 'number'),
-      ike: {
-        'crypto-alg': 'aes-cbc',
-        'integ-alg': 'hmac-sha2-256-128',
-        'dh-group': 'modp-2048',
-        'key-size': 256
-      },
-      esp: {
-        'crypto-alg': 'aes-cbc',
-        'integ-alg': 'hmac-sha2-256-128',
-        'dh-group': 'ecp-256',
-        'key-size': 256
-      },
-      certificate: peer ? null : deviceB.IKEv2.certificate
-    };
-
-    // for peers - we use psk with ikev2
     if (peer) {
-      paramsDeviceA.ikev2['local-device-id'] = peer.localFQDN;
-      paramsDeviceA.ikev2.mode = 'psk';
-      paramsDeviceA.ikev2.psk = peer.psk;
-      delete paramsDeviceA.ikev2.certificate;
+      let localDeviceId = peer.localId;
+      if (localDeviceId === 'Automatic') {
+        localDeviceId = deviceAIntf.PublicIP;
+      }
+
+      // construct IKEv2 tunnel
+      paramsDeviceA.ikev2 = {
+        role: 'initiator',
+        mode: 'psk',
+        psk: peer.psk,
+        'remote-device-id': peer.remoteId,
+        'local-device-id': localDeviceId,
+        lifetime: parseInt(peer.sessionLifeTime),
+        ike: {
+          'crypto-alg': peer.ikeCryptoAlg,
+          'integ-alg': peer.ikeIntegAlg,
+          'dh-group': peer.ikeDhGroup,
+          'key-size': parseInt(peer.ikeKeySize)
+        },
+        esp: {
+          'crypto-alg': peer.espCryptoAlg,
+          'integ-alg': peer.espIntegAlg,
+          'dh-group': peer.espDhGroup,
+          'key-size': parseInt(peer.espKeySize)
+        }
+      };
     } else {
-      // no need to fill ikev2 for deviceB for peer
+      // construct IKEv2 tunnel
+      paramsDeviceA.ikev2 = {
+        role: 'initiator',
+        'remote-device-id': deviceB.machineId,
+        lifetime: configs.get('ikev2Lifetime', 'number'),
+        ike: {
+          'crypto-alg': 'aes-cbc',
+          'integ-alg': 'hmac-sha2-256-128',
+          'dh-group': 'modp-2048',
+          'key-size': 256
+        },
+        esp: {
+          'crypto-alg': 'aes-cbc',
+          'integ-alg': 'hmac-sha2-256-128',
+          'dh-group': 'ecp-256',
+          'key-size': 256
+        },
+        certificate: deviceB.IKEv2.certificate
+      };
+
       paramsDeviceB.ikev2 = {
         role: 'responder',
         'remote-device-id': deviceA.machineId,
