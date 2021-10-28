@@ -19,7 +19,6 @@ const configs = require('../configs')();
 const Service = require('./Service');
 const Peers = require('../models/peers');
 const Tunnels = require('../models/tunnels');
-const pick = require('lodash/pick');
 const isEqual = require('lodash/isEqual');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -31,22 +30,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 
 class PeersService {
-  static selectPeerParams (item) {
-    // Pick relevant fields
-    const retPeer = pick(item, [
-      'name',
-      'localFQDN',
-      'remoteFQDN',
-      'remoteIP',
-      'urls',
-      'ips',
-      'psk'
-    ]);
-
-    retPeer._id = item._id.toString();
-    return retPeer;
-  }
-
   /**
    * Retrieve peers
    *
@@ -63,7 +46,7 @@ class PeersService {
       }).skip(offset).limit(limit).lean();
 
       const peers = response.map(p => {
-        return PeersService.selectPeerParams(p);
+        return { ...p, _id: p._id.toString() };
       });
 
       return Service.successResponse(peers);
