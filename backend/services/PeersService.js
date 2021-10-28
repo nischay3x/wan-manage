@@ -19,8 +19,8 @@ const configs = require('../configs')();
 const Service = require('./Service');
 const Peers = require('../models/peers');
 const Tunnels = require('../models/tunnels');
-const pick = require('lodash/pick');
 const isEqual = require('lodash/isEqual');
+const omit = require('lodash/omit');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { reconstructTunnels } = require('../deviceLogic/modifyDevice');
@@ -31,22 +31,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 
 class PeersService {
-  static selectPeerParams (item) {
-    // Pick relevant fields
-    const retPeer = pick(item, [
-      'name',
-      'localFQDN',
-      'remoteFQDN',
-      'remoteIP',
-      'urls',
-      'ips',
-      'psk'
-    ]);
-
-    retPeer._id = item._id.toString();
-    return retPeer;
-  }
-
   /**
    * Retrieve peers
    *
@@ -63,7 +47,7 @@ class PeersService {
       }).skip(offset).limit(limit).lean();
 
       const peers = response.map(p => {
-        return PeersService.selectPeerParams(p);
+        return { ...p, _id: p._id.toString() };
       });
 
       return Service.successResponse(peers);
@@ -110,7 +94,7 @@ class PeersService {
       const origPeer = await Peers.findOne({
         org: { $in: orgList },
         _id: id
-      });
+      }).lean();
 
       if (!origPeer) {
         logger.error('Failed to find peer', {
@@ -119,12 +103,10 @@ class PeersService {
         throw new Error('The peer was not updated. Please check the ID or org parameters');
       }
 
-      const isNeedToReconstructTunnels = (
-        origPeer.localFQDN !== peer.localFQDN ||
-        origPeer.remoteFQDN !== peer.remoteFQDN ||
-        origPeer.remoteIP !== peer.remoteIP ||
-        origPeer.psk !== peer.psk
-      );
+      const nonRelevantFields = ['name', 'urls', 'ips', '_id', 'org', 'createdAt', 'updatedAt'];
+      const origFieldsToRecreate = omit(origPeer, ...nonRelevantFields);
+      const newFieldsToRecreate = omit(peer, ...nonRelevantFields);
+      const isNeedToReconstructTunnels = !isEqual(origFieldsToRecreate, newFieldsToRecreate);
 
       // for these fields, no need to recreate but to modify
       const isNeedToModifyTunnels = (
@@ -132,15 +114,11 @@ class PeersService {
         !isEqual(origPeer.ips, peer.ips)
       );
 
-      origPeer.name = peer.name;
-      origPeer.localFQDN = peer.localFQDN;
-      origPeer.remoteFQDN = peer.remoteFQDN;
-      origPeer.remoteIP = peer.remoteIP;
-      origPeer.psk = peer.psk;
-      origPeer.urls = peer.urls || [];
-      origPeer.ips = peer.ips || [];
-
-      const updatedPeer = await origPeer.save();
+      const updatedPeer = await Peers.findOneAndUpdate(
+        { org: { $in: orgList }, _id: id },
+        peer,
+        { upsert: false, new: true, runValidators: true }
+      );
 
       let reconstructedTunnels = 0;
       if (isNeedToReconstructTunnels || isNeedToModifyTunnels) {

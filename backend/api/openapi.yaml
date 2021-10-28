@@ -8711,16 +8711,101 @@ components:
           - installed
           - uninstalling
           type: string
+    PeerDhGroup:
+      type: string
+      enum:
+        - none
+        - modp-768
+        - modp-1024
+        - modp-1536
+        - modp-2048
+        - modp-3072
+        - modp-4096
+        - modp-6144
+        - modp-8192
+        - ecp-256
+        - ecp-384
+        - ecp-521
+        - modp-1024-160
+        - modp-2048-224
+        - modp-2048-256
+        - ecp-192
+    PeerCryptoAlg:
+      type: string
+      enum:
+        - des-iv64
+        - des
+        - 3des
+        - rc5
+        - idea
+        - cast
+        - blowfish
+        - 3idea
+        - des-iv32
+        - null
+        - aes-cbc
+        - aes-ctr
+        - aes-gcm-16
+    PeerKeySize:
+      type: string
+      enum:
+        - '128'
+        - '256'
+    PeerProtocol:
+      type: string
+      enum:
+        - any
+        - icmp
+        - tcp
+        - udp
+    PeerIntegAlg:
+      type: string
+      enum:
+        - none
+        - md5-96
+        - sha1-96
+        - des-mac
+        - kpdk-md5
+        - aes-xcbc-96
+        - md5-128
+        - sha1-160
+        - cmac-96
+        - aes-128-gmac
+        - aes-192-gmac
+        - aes-256-gmac
+        - hmac-sha2-256-128
+        - hmac-sha2-384-192
+        - hmac-sha2-512-256
     Peer:
       example:
         _id: _id
         name: Cloud Provider Name
-        localFQDN: a4bbd424b1
-        remoteFQDN: 100.100.100.100
+        idType: fqdn
+        localId: a4bbd424b1
+        remoteId: 100.100.100.100
         psk: 123456f5621c1a95997997c8cd123456
         remoteIP: 100.100.100.100
         urls: [monitoring.com]
         ips: [1.1.1.1, 8.8.8.8]
+        ikeDhGroup: modp-2048
+        ikeCryptoAlg: aes-cbc
+        ikeKeySize: 256
+        ikeIntegAlg: hmac-sha2-256-128
+        espCryptoAlg: aes-cbc
+        espKeySize: 256
+        espIntegAlg: hmac-sha2-256-128
+        espDhGroup: ecp-256
+        sessionLifeTime: 3600
+        localIpRangeStart: 0.0.0.0
+        localIpRangeEnd: 255.255.255.255
+        localPortRangeStart: 0
+        localPortRangeEnd: 65535
+        localProtocol: any
+        remoteIpRangeStart: 0.0.0.0
+        remoteIpRangeEnd: 255.255.255.255
+        remotePortRangeStart: 0
+        remotePortRangeEnd: 65535
+        remoteProtocol: any
       properties:
         _id:
           maxLength: 24
@@ -8728,9 +8813,14 @@ components:
           type: string
         name:
           type: string
-        localFQDN:
+        idType:
           type: string
-        remoteFQDN:
+          enum:
+            - fqdn
+            - ip4-addr
+        localId:
+          type: string
+        remoteId:
           type: string
         psk:
           type: string
@@ -8746,6 +8836,48 @@ components:
           type: array
           items:
             type: string
+        ikeDhGroup:
+          $ref: '#/components/schemas/PeerDhGroup'
+        ikeCryptoAlg:
+          $ref: '#/components/schemas/PeerCryptoAlg'
+        ikeKeySize:
+          $ref: '#/components/schemas/PeerKeySize'
+        ikeIntegAlg:
+          $ref: '#/components/schemas/PeerIntegAlg'
+        espDhGroup:
+          $ref: '#/components/schemas/PeerDhGroup'
+        espCryptoAlg:
+          $ref: '#/components/schemas/PeerCryptoAlg'
+        espKeySize:
+          $ref: '#/components/schemas/PeerKeySize'
+        espIntegAlg:
+          $ref: '#/components/schemas/PeerIntegAlg'
+        sessionLifeTime:
+          type: string
+        localIpRangeStart:
+          type: string
+          format: ipv4
+        localIpRangeEnd:
+          type: string
+          format: ipv4
+        localPortRangeStart:
+          type: string
+        localPortRangeEnd:
+          type: string
+        localProtocol:
+          $ref: '#/components/schemas/PeerProtocol'
+        remoteIpRangeStart:
+          type: string
+          format: ipv4
+        remoteIpRangeEnd:
+          type: string
+          format: ipv4
+        remotePortRangeStart:
+          type: string
+        remotePortRangeEnd:
+          type: string
+        remoteProtocol:
+          $ref: '#/components/schemas/PeerProtocol'
     PeersIdPUTResponse:
       required:
         - updatedPeer
