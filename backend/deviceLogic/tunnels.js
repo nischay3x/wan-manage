@@ -851,6 +851,8 @@ const prepareTunnelAddJob = async (
         role: 'initiator',
         mode: 'psk',
         psk: peer.psk,
+        'local-device-id-type': peer.idType,
+        'remote-device-id-type': peer.idType,
         'remote-device-id': peer.remoteId,
         'local-device-id': localDeviceId,
         lifetime: parseInt(peer.sessionLifeTime),
