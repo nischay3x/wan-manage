@@ -82,6 +82,9 @@ const getFilterExpression = ({ key, op, val }) => {
       return { [key]: { $lte: val } };
     case '>=':
       return { [key]: { $gte: val } };
+    case 'in':
+      if (!Array.isArray(val)) val = val.split(',');
+      return { [key]: { $in: val } };
     default:
       return undefined;
   }
@@ -132,6 +135,9 @@ const passFilters = (obj, filters) => {
         return (new RegExp(val, 'g')).test(objVal);
       case '!contains':
         return (new RegExp('^((?!' + val + ').)*$', 'g')).test(objVal);
+      case 'in':
+        if (!Array.isArray(val)) val = val.split(',');
+        return val.includes(objVal);
       default:
         return false;
     }
