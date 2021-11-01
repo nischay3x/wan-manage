@@ -32,6 +32,7 @@ const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLog
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
+const getRandom = require('../utils/random-key');
 
 class Connections {
   constructor () {
@@ -856,25 +857,28 @@ class Connections {
       return { valid: true, err: '' };
     }
   ) {
-    var info = this.devices.getDeviceInfo(device);
-    var seq = this.msgSeq++;
-    var msgQ = this.msgQueue;
-    var p = new Promise(function (resolve, reject) {
+    const info = this.devices.getDeviceInfo(device);
+    const seq = this.msgSeq++;
+
+    const key = `${seq}:${getRandom(8)}`;
+
+    const msgQ = this.msgQueue;
+    const p = new Promise(function (resolve, reject) {
       if (info.socket && (org == null || info.org === org)) {
         // Increment seq and update queue with resolve function for this promise,
         // set timeout to clear when no response received
-        var tohandle = setTimeout(() => {
+        const tohandle = setTimeout(() => {
           reject(new TypedError(ErrorTypes.TIMEOUT, 'Error: Send Timeout'));
           // delete queue for this seq
-          delete msgQ[seq];
+          delete msgQ[key];
         }, timeout);
-        msgQ[seq] = {
+        msgQ[key] = {
           resolver: resolve,
           rejecter: reject,
           tohandle: tohandle,
           validator: responseValidator
         };
-        info.socket.send(JSON.stringify({ seq: seq, msg: msg, jobid: jobid }));
+        info.socket.send(JSON.stringify({ seq: key, msg: msg, jobid: jobid }));
       } else reject(new Error('Send General Error'));
     });
     return p;
