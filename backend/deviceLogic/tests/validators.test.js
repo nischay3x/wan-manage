@@ -189,6 +189,18 @@ describe('validateDevice', () => {
     expect(result).toMatchObject(failureObject);
   });
 
+  it('Should be an invalid device if Public IP has an overlap with another WAN interface', () => {
+    device.interfaces[0].IPv4 = '192.168.1.1';
+    device.interfaces[0].IPv4Mask = '24';
+    device.interfaces[0].PublicIP = '1.1.1.1';
+    device.interfaces[1].IPv4 = '1.1.1.1';
+    device.interfaces[1].IPv4Mask = '32';
+    failureObject.err = `IP address of [${device.interfaces[1].name}]` +
+      ` has an overlap with Public IP of [${device.interfaces[0].name}]`;
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
   it('Should be an invalid device if WAN IPv4 address is null', () => {
     device.interfaces[0].IPv4 = null;
     failureObject.err = `Interface ${device.interfaces[0].name} does not have an IP address`;
