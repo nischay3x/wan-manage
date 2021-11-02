@@ -92,6 +92,10 @@ class DeviceStatus {
      * @return {{valid: boolean, err: string}}
      */
   validateDevStatsMessage (msg) {
+    if (!Array.isArray(msg)) {
+      return { valid: false, err: 'get-device-stats response should be an array' };
+    };
+
     if (msg.length === 0) return { valid: true, err: '' };
 
     const devStatsSchema = Joi.object().keys({
