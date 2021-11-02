@@ -22,7 +22,11 @@ const tunnelsModel = require('../models/tunnels');
 const tunnelIDsModel = require('../models/tunnelids');
 const devicesModel = require('../models/devices').devices;
 const mongoose = require('mongoose');
-const { generateTunnelParams, generateRandomKeys } = require('../utils/tunnelUtils');
+const {
+  generateTunnelParams,
+  generateRandomKeys,
+  getTunnelsPipeline
+} = require('../utils/tunnelUtils');
 const { validateIKEv2 } = require('./IKEv2');
 const eventsReasons = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
@@ -1190,10 +1194,24 @@ const updateTunnelIsConnected = (
  * @return {None}
  */
 const applyTunnelDel = async (devices, user, data) => {
-  const selectedTunnels = data.tunnels;
-  const tunnelIds = Object.keys(selectedTunnels);
-  logger.info('Delete tunnels ', { params: { tunnels: selectedTunnels } });
-
+  const { tunnels, filters } = data;
+  logger.info('Delete tunnels ', { params: { tunnels, filters } });
+  let tunnelIds = [];
+  if (tunnels) {
+    tunnelIds = Object.keys(tunnels);
+  } else if (filters) {
+    const updateStatusInDb = filters.includes('tunnelStatus');
+    const statusesInDb = require('../periodic/statusesInDb')();
+    if (updateStatusInDb) {
+      // need to update changed statuses from memory to DB
+      await statusesInDb.updateDevicesStatuses([data.org]);
+      await statusesInDb.updateTunnelsStatuses([data.org]);
+    }
+    const pipeline = await getTunnelsPipeline([data.org], filters, updateStatusInDb);
+    pipeline.push({ $project: { _id: { $toString: '$_id' } } });
+    const filteredIds = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
+    tunnelIds = filteredIds.map(t => t._id);
+  }
   if (devices && tunnelIds.length > 0) {
     const org = data.org;
     const userName = user.username;
