@@ -40,24 +40,51 @@ class AppIdentificationsService {
    * @throw error, if not valid
    */
   static validateAppIdentification (appIdentificationRequest) {
-    if (!appIdentificationRequest.name.startsWith('custom:')) {
+    const { name, category, serviceClass, importance, rules } = appIdentificationRequest;
+    if (!name) {
+      throw new Error('\'name\' is required');
+    }
+    if (!name.startsWith('custom:')) {
       throw new Error('\'name\' must start with \'custom:\'');
     }
-    if (!Array.isArray(appIdentificationRequest.rules)) {
+    if (!/^[a-z0-9-_:]{2,30}$/i.test(name)) {
+      throw new Error('Invalid \'name\' format');
+    }
+    if (!category) {
+      throw new Error('\'category\' is required');
+    }
+    if (!/^[a-z0-9-_ .!#%():@[\]]{2,30}$/i.test(category)) {
+      throw new Error('Invalid \'category\' format');
+    }
+    if (!serviceClass) {
+      throw new Error('\'serviceClass\' is required');
+    }
+    if (!/^[a-z0-9-_ .!#%():@[\]]{2,30}$/i.test(serviceClass)) {
+      throw new Error('Invalid \'serviceClass\' format');
+    }
+    if (!importance) {
+      throw new Error('\'importance\' is required');
+    }
+    if (!['high', 'medium', 'low'].includes(importance)) {
+      throw new Error(
+        '\'importance\' should be equal to one of the allowed values: \'high\', \'medium\', \'low\''
+      );
+    }
+    if (!Array.isArray(rules)) {
       throw new Error('\'rules\' must be an array');
     }
-    appIdentificationRequest.rules.forEach(rule => {
+    rules.forEach(rule => {
       if (!rule.ip && !rule.ports) {
         throw new Error('\'ip\' or \'ports\' must be specified');
       }
       if (rule.ports) {
         if (!validatePortRange(rule.ports)) {
-          throw new Error(`[${rule.ports}] - ports should be a valid ports range`);
+          throw new Error(`[${rule.ports}] - 'ports' should be a valid ports range`);
         }
       }
       if (rule.ip) {
         if (!validateIPv4WithMask(rule.ip)) {
-          throw new Error(`[${rule.ip}] - ip should be a valid ipv4 with mask`);
+          throw new Error(`[${rule.ip}] - 'ip' should be a valid IPv4 address with mask`);
         };
         const [, mask] = rule.ip.split('/');
         const ipCidr = new IPCidr(rule.ip);
