@@ -136,7 +136,7 @@ const validatePortRange = (range) => {
   if (!(range || '').includes('-')) return isPort(range);
 
   const [portLow, portHigh] = (range || '').split('-');
-  return isPort(portLow) && isPort(portHigh);
+  return isPort(portLow) && isPort(portHigh) && (+portLow < +portHigh);
 };
 const validateMachineID = (id) => { return /^[a-f0-9-]{1,50}$/i.test(id || ''); };
 const validateSerial = (id) => {
