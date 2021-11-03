@@ -30,8 +30,44 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 var mongoose = require('mongoose');
 const find = require('lodash/find');
 const remove = require('lodash/remove');
+const IPCidr = require('ip-cidr');
+const { validateIPv4WithMask, validatePortRange } = require('../models/validators');
 
 class AppIdentificationsService {
+  /**
+   * Validate the App Identification request
+   * @param {Object} appIdentificationRequest - the App Identification Request object
+   * @throw error, if not valid
+   */
+  static validateAppIdentification (appIdentificationRequest) {
+    if (!appIdentificationRequest.name.startsWith('custom:')) {
+      throw new Error('\'name\' must start with \'custom:\'');
+    }
+    if (!Array.isArray(appIdentificationRequest.rules)) {
+      throw new Error('\'rules\' must be an array');
+    }
+    appIdentificationRequest.rules.forEach(rule => {
+      if (!rule.ip && !rule.ports) {
+        throw new Error('\'ip\' or \'ports\' must be specified');
+      }
+      if (rule.ports) {
+        if (!validatePortRange(rule.ports)) {
+          throw new Error(`[${rule.ports}] - ports should be a valid ports range`);
+        }
+      }
+      if (rule.ip) {
+        if (!validateIPv4WithMask(rule.ip)) {
+          throw new Error(`[${rule.ip}] - ip should be a valid ipv4 with mask`);
+        };
+        const [, mask] = rule.ip.split('/');
+        const ipCidr = new IPCidr(rule.ip);
+        if (ipCidr.start() + '/' + mask !== rule.ip) {
+          throw new Error(`[${rule.ip}] - invalid prefix for given mask`);
+        }
+      }
+    });
+  }
+
   static async appIdentificationsGET ({ limit, org, offset }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -92,6 +128,9 @@ class AppIdentificationsService {
       // identifications collection, then locate and update the entry within the
       // appIdentifications array
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      AppIdentificationsService.validateAppIdentification(appIdentification);
+
       const appIdentsRes =
         await appIdentifications.findOne({ 'meta.org': { $in: orgList } });
 
@@ -144,7 +183,7 @@ class AppIdentificationsService {
           appIdentifications: []
         };
       }
-
+      AppIdentificationsService.validateAppIdentification(appIdentification);
       // Object id will be assigned to both _id and id fields in order to maintain schema
       // consistency across collections of imported  and custom app identifications.
       // Whenever imported collection is being updated from remote uri, it has the
