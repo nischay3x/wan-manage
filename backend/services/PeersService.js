@@ -199,7 +199,12 @@ class PeersService {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Check if tunnels existing with this peer configurations
-      const tunnels = await Tunnels.find({ peer: id }).lean();
+      const tunnels = await Tunnels.find({
+        peer: id,
+        org: { $in: orgList },
+        isActive: true
+      }).lean();
+
       if (tunnels.length) {
         const err = 'All peer tunnels must be deleted before deleting the peer configuration';
         throw new Error(err);
