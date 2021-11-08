@@ -16,6 +16,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const randomNum = require('../utils/random-key');
+const mongoose = require('mongoose');
+const { getMatchFilters } = require('../utils/filterUtils');
 
 /**
  * Generates various tunnel parameters that will
@@ -66,8 +68,172 @@ const generateRandomKeys = () => {
   };
 };
 
+/**
+ * Generates a pipeline for mongoose aggregate query to get filtered tunnels
+ * @return {Array} an array of query stages
+ */
+const getTunnelsPipeline = (orgList, filters) => {
+  const pipeline = [{
+    $match: {
+      org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) },
+      isActive: true
+    }
+  },
+  {
+    $lookup: {
+      from: 'devices',
+      localField: 'deviceA',
+      foreignField: '_id',
+      as: 'deviceA'
+    }
+  },
+  { $unwind: '$deviceA' },
+  {
+    $lookup: {
+      from: 'devices',
+      localField: 'deviceB',
+      foreignField: '_id',
+      as: 'deviceB'
+    }
+  },
+  {
+    $unwind: {
+      path: '$deviceB',
+      preserveNullAndEmptyArrays: true // for peers we don't use deviceB
+    }
+  },
+  {
+    $lookup: {
+      from: 'pathlabels',
+      localField: 'pathlabel',
+      foreignField: '_id',
+      as: 'pathlabel'
+    }
+  },
+  {
+    $unwind: {
+      path: '$pathlabel',
+      preserveNullAndEmptyArrays: true
+    }
+  },
+  {
+    $addFields: {
+      interfaceADetails: {
+        $filter: {
+          input: '$deviceA.interfaces',
+          as: 'f',
+          cond: {
+            $eq: ['$$f._id', '$interfaceA']
+          }
+        }
+      },
+      interfaceBDetails: {
+        $filter: {
+          input: '$deviceB.interfaces',
+          as: 'f',
+          cond: {
+            $eq: ['$$f._id', '$interfaceB']
+          }
+        }
+      }
+    }
+  },
+  { $unwind: '$interfaceADetails' },
+  {
+    $unwind: {
+      path: '$interfaceBDetails',
+      preserveNullAndEmptyArrays: true
+    }
+  },
+  {
+    $lookup: {
+      from: 'peers',
+      localField: 'peer',
+      foreignField: '_id',
+      as: 'peer'
+    }
+  },
+  {
+    $unwind: {
+      path: '$peer',
+      preserveNullAndEmptyArrays: true
+    }
+  },
+  {
+    $project: {
+      num: 1,
+      isActive: 1,
+      'interfaceADetails.name': 1,
+      'interfaceBDetails.name': 1,
+      peer: 1,
+      'interfaceADetails.PublicPort': 1,
+      'interfaceBDetails.PublicPort': 1,
+      'interfaceADetails.PublicIP': 1,
+      'interfaceBDetails.PublicIP': 1,
+      'deviceA.name': 1,
+      'deviceA.machineId': 1,
+      'deviceA._id': 1,
+      'deviceA.isConnected': 1,
+      'deviceA.status': 1,
+      'deviceB.name': 1,
+      'deviceB.machineId': 1,
+      'deviceB._id': 1,
+      'deviceB.isConnected': 1,
+      'deviceB.status': 1,
+      deviceAconf: 1,
+      deviceBconf: 1,
+      encryptionMethod: 1,
+      'pathlabel.name': 1,
+      'pathlabel.color': 1,
+      isPending: 1,
+      pendingReason: 1,
+      tunnelStatus: {
+        $switch: {
+          branches: [
+            { case: { $eq: ['$isPending', true] }, then: 'Pending' },
+            {
+              case: {
+                $and: [
+                  { $eq: ['$status', 'up'] },
+                  { $eq: ['$deviceA.status', 'running'] },
+                  { $eq: ['$deviceA.isConnected', true] },
+                  {
+                    $or: [
+                      // in case of peer, there is no deviceB to check connection for
+                      { $ne: ['$peer', null] },
+                      {
+                        $and: [
+                          { $eq: ['$deviceB.status', 'running'] },
+                          { $eq: ['$deviceB.isConnected', true] }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              then: 'Connected'
+            }
+          ],
+          default: 'Not Connected'
+        }
+      }
+    }
+  }];
+  if (filters) {
+    const parsedFilters = typeof filters === 'string' ? JSON.parse(filters) : filters;
+    const matchFilters = getMatchFilters(parsedFilters);
+    if (matchFilters.length > 0) {
+      pipeline.push({
+        $match: { $and: matchFilters }
+      });
+    }
+  }
+  return pipeline;
+};
+
 // Default exports
 module.exports = {
   generateTunnelParams,
-  generateRandomKeys
+  generateRandomKeys,
+  getTunnelsPipeline
 };

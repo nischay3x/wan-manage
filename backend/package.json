@@ -1,6 +1,6 @@
 {
   "name": "flexiwansite",
-  "version": "4.2.9",
+  "version": "5.1.11",
   "private": true,
   "license": "GNU Affero General Public License",
   "scripts": {
@@ -50,8 +50,8 @@
     "passport-jwt": "^4.0.0",
     "passport-local": "^1.0.0",
     "passport-local-mongoose": "^5.0.1",
+    "rate-limiter-flexible": "^2.3.0",
     "redis": "^3.1.2",
-    "redis-leader": "^0.1.0",
     "request": "^2.88.0",
     "swagger-ui-express": "^4.0.2",
     "uuid": "^3.3.2",

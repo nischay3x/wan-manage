@@ -17,6 +17,7 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
+const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const maxMetric = 2 * 10 ** 9;
 /**
@@ -84,11 +85,12 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
 /**
  * Checks whether firewall rules are valid
  * @param {Array} rules - array of firewall rules to validate
- * @param {Object}  device - the device to check for device-specific rules
- * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
+ * @param {Array}  interfaces - interfaces of the device to check for device-specific rules
+ * @return {{valid: boolean, err: string}}  test result + error, if rules are invalid
  */
-const validateFirewallRules = (rules, device = undefined) => {
+const validateFirewallRules = (rules, interfaces = undefined) => {
   const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
+  const usedInboundPorts = [];
   // Common rules validation
   for (const rule of rules) {
     const { direction, inbound, classification } = rule;
@@ -97,20 +99,40 @@ const validateFirewallRules = (rules, device = undefined) => {
       return { valid: false, err: 'Wrong inbound rule type' };
     }
     const { destination } = classification;
-    // Destination must be specified for inbound rules
-    if (direction === 'inbound' && !destination) {
-      return { valid: false, err: 'Destination must be specified for inbound rule' };
-    }
-
-    for (const [side, { trafficId, trafficTags, ipPort, ipProtoPort }]
-      of Object.entries(classification)) {
-      // Only ip, ports and protocols allowed for inbound rule destination
-      if (!ipProtoPort && side === 'destination' && direction === 'inbound') {
+    if (direction === 'inbound') {
+      // Destination must be specified for inbound rules
+      if (!destination || !destination.ipProtoPort) {
+        return { valid: false, err: 'Destination must be specified for inbound rules' };
+      }
+      // Ports must be specified in edgeAccess and portForward inbound rules
+      if (inbound !== 'nat1to1' && !destination.ipProtoPort.ports) {
         return {
           valid: false,
-          err: 'Only ip, ports and protocols allowed for inbound rule destination'
+          err: 'Ports must be specified in edgeAccess and portForward inbound rules'
         };
       }
+      // Inbound rules destination ports can't be overlapped
+      if (direction === 'inbound' && destination.ipProtoPort.ports) {
+        const { ports } = destination.ipProtoPort;
+        let portLow, portHigh;
+        if (ports.includes('-')) {
+          [portLow, portHigh] = ports.split('-').map(p => +p);
+        } else {
+          portLow = portHigh = +ports;
+        }
+        for (const [usedPortLow, usedPortHigh] of usedInboundPorts) {
+          if ((usedPortLow <= portLow && portLow <= usedPortHigh) ||
+            (usedPortLow <= portHigh && portHigh <= usedPortHigh) ||
+            (portLow <= usedPortLow && usedPortLow <= portHigh) ||
+            (portLow <= usedPortHigh && usedPortHigh <= portHigh)) {
+            return { valid: false, err: `Inbound rule destination ports ${ports} overlapped` };
+          }
+        }
+        usedInboundPorts.push([portLow, portHigh]);
+      }
+    }
+    for (const side of ['source', 'destination']) {
+      const { trafficId, trafficTags, ipPort, ipProtoPort } = classification[side] || {};
       // trafficId cannot be empty string or null
       if (isEmpty(trafficId) && trafficId !== undefined) {
         return { valid: false, err: 'Traffic name must be specified' };
@@ -121,14 +143,11 @@ const validateFirewallRules = (rules, device = undefined) => {
           return { valid: false, err: 'IP or ports range must be specified' };
         }
       };
-      if (ipProtoPort && !trafficId && !trafficTags) {
-        const { ip, ports, protocols } = ipProtoPort;
-        if (inbound !== 'nat1to1' && !ip && !ports && !protocols) {
-          return { valid: false, err: 'IP, ports or protocols must be specified' };
-        };
+      if (ipProtoPort && inbound !== 'nat1to1' && !trafficId && !trafficTags) {
+        const { protocols } = ipProtoPort;
         if (!Array.isArray(protocols) || protocols.length === 0) {
           return { valid: false, err: 'At least one protocol must be specified' };
-        }
+        };
       };
       if (trafficTags) {
         // Traffic Tags not allowed for source
@@ -145,7 +164,7 @@ const validateFirewallRules = (rules, device = undefined) => {
   };
 
   // Device-specific rules validation
-  if (device) {
+  if (interfaces) {
     // Port forward rules validation
     const forwardedPorts = {};
     const internalPorts = {};
@@ -155,9 +174,12 @@ const validateFirewallRules = (rules, device = undefined) => {
       if (isEmpty(devId)) {
         return { valid: false, err: 'WAN interface must be specified in port forward rule' };
       }
-      const dstIfc = device.interfaces.find(ifc => ifc.devId === devId);
-      if (!dstIfc || dstIfc !== 'WAN') {
-        return { valid: false, err: 'Only WAN interface can be selected in port forward rule' };
+      const dstIfc = interfaces.find(ifc => ifc.devId === devId);
+      if (!dstIfc || !dstIfc.isAssigned || dstIfc.type !== 'WAN') {
+        return {
+          valid: false,
+          err: 'Only Assigned WAN interface can be selected in port forward rule'
+        };
       }
       if (isEmpty(internalIP)) {
         return { valid: false, err: 'Internal IP address must be specified in port forward rule' };
@@ -178,7 +200,6 @@ const validateFirewallRules = (rules, device = undefined) => {
         const [portLow, portHigh] = destPorts.split('-');
         for (let usedPort = +portLow; usedPort <= +portHigh; usedPort++) {
           forwardedPorts[devId].push(usedPort);
-          console.log(usedPort, +internalPortStart + usedPort - portLow);
           internalPorts[internalIP].push(+internalPortStart + usedPort - portLow);
         }
       } else {
@@ -322,16 +343,34 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
           err: 'IP addresses of the assigned interfaces have an overlap'
         };
       }
+      // prevent Public IP / WAN overlap
+      if (ifc1.PublicIP && cidr.overlap(ifc2Subnet, ifc1.PublicIP)) {
+        return {
+          valid: false,
+          err: `IP address of [${ifc2.name}] has an overlap with Public IP of [${ifc1.name}]`
+        };
+      }
     }
   }
 
   // Checks if all assigned WAN interfaces metrics are different
-  const metricsArray = wanIfcs.map(i => Number(i.metric));
+  const { metricsArray, pathLabels } = wanIfcs.reduce((a, v) => {
+    a.metricsArray.push(Number(v.metric));
+    a.pathLabels = a.pathLabels.concat(v.pathlabels.map((p) => p._id));
+    return a;
+  }, { metricsArray: [], pathLabels: [] });
   const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
   if (hasDuplicates) {
     return {
       valid: false,
-      err: 'Duplicated metrics are not allowed on VPP WAN interfaces'
+      err: 'Duplicated metrics are not allowed on WAN interfaces'
+    };
+  }
+  const hasPathLabelsDuplicates = pathLabels.length !== new Set(pathLabels).size;
+  if (hasPathLabelsDuplicates) {
+    return {
+      valid: false,
+      err: 'Setting the same path label on multiple WAN interfaces is not allowed'
     };
   }
 
@@ -399,7 +438,10 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
 
   // Firewall rules validation
   if (device.firewall) {
-    const { valid, err } = validateFirewallRules(device.firewall.rules);
+    const { interfaces, firewall, policies } = device;
+    const globalRules = policies && policies.firewall && policies.firewall.policy &&
+      policies.firewall.status.startsWith('install') ? policies.firewall.policy.rules : [];
+    const { valid, err } = validateFirewallRules([...globalRules, ...firewall.rules], interfaces);
     if (!valid) {
       return { valid, err };
     }
@@ -453,9 +495,11 @@ const isIPv4Address = (ip, mask) => {
   if (!net.isIPv4(ip)) {
     return false;
   };
-  const octets = ip.split('.');
-  if (['0', '255'].includes(octets[3])) {
-    return false;
+  if (mask < 32) {
+    const ipCidr = new IPCidr(`${ip}/${mask}`);
+    if (ipCidr.start() === ip || ipCidr.end() === ip) {
+      return false;
+    }
   }
   return true;
 };

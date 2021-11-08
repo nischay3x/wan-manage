@@ -36,6 +36,11 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
+const activatePendingTunnelsOfDevice = require('./events')
+  .activatePendingTunnelsOfDevice;
+const publicAddrInfoLimiter = require('./publicAddressLimiter');
+const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
+// const { publicPortLimiter } = require('../limiters/publicPort');
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -270,10 +275,6 @@ const queueFullSyncJob = async (device, hash, org) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  logger.info('Sync device job complete', {
-    params: { result: res, jobId: jobId }
-  });
-
   const { handlers, machineId } = res;
 
   // Reset hash value for full-sync messages
@@ -421,15 +422,22 @@ const apply = async (device, user, data) => {
   const { _id, machineId, hostname, org, versions } = device[0];
 
   // Reset auto sync in database
-  await devices.findOneAndUpdate(
+  const updDevice = await devices.findOneAndUpdate(
     { org, _id },
     {
       'sync.state': 'syncing',
       'sync.autoSync': 'on',
       'sync.trials': 0
     },
-    { sync: 1 }
-  );
+    { sync: 1, new: true }
+  ).lean();
+
+  // release existing limiters if the device is blocked
+  await reconfigErrorsLimiter.release(_id.toString());
+  const released = await releasePublicAddrLimiterBlockage(device[0]);
+  if (released) {
+    await activatePendingTunnelsOfDevice(updDevice);
+  }
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(
@@ -455,6 +463,23 @@ const apply = async (device, user, data) => {
     status: 'completed',
     message: ''
   };
+};
+
+const releasePublicAddrLimiterBlockage = async (device) => {
+  let blockagesReleased = false;
+
+  const wanIfcs = device.interfaces.filter(i => i.type === 'WAN');
+  const deviceId = device._id.toString();
+
+  for (const ifc of wanIfcs) {
+    const ifcId = ifc._id.toString();
+    const isReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcId}`);
+    if (isReleased) {
+      blockagesReleased = true;
+    }
+  }
+
+  return blockagesReleased;
 };
 
 // Register a method that updates sync state

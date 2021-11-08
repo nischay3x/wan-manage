@@ -66,6 +66,10 @@ class DevicesController {
     await Controller.handleRequest(request, response, this.service.devicesIdDELETE);
   }
 
+  async devicesDELETE (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesDELETE);
+  }
+
   async devicesIdExecutePOST (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdExecutePOST);
   }
@@ -84,6 +88,10 @@ class DevicesController {
 
   async devicesIdRoutesGET (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdRoutesGET);
+  }
+
+  async devicesIdTunnelsGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdTunnelsGET);
   }
 
   async devicesIdStaticroutesGET (request, response) {

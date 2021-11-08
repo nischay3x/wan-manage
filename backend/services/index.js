@@ -32,6 +32,7 @@ const PathLabelsService = require('./PathLabelsService');
 const MLPoliciesService = require('./MultiLinkPoliciesService');
 const ApplicationsService = require('./ApplicationsService');
 const FirewallPoliciesService = require('./FirewallPoliciesService');
+const PeersService = require('./PeersService');
 
 module.exports = {
   AccessTokensService,
@@ -50,5 +51,6 @@ module.exports = {
   PathLabelsService,
   MLPoliciesService,
   ApplicationsService,
-  FirewallPoliciesService
+  FirewallPoliciesService,
+  PeersService
 };

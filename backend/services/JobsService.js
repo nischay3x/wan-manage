@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2020  flexiWAN Ltd.
+// Copyright (C) 2021  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const createError = require('http-errors');
 const Service = require('./Service');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
@@ -22,7 +23,6 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
-const { paginated } = require('../utils/pagination');
 const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
@@ -70,8 +70,8 @@ class JobsService {
    * @param {String} ids Filter on job ids (comma separated) (optional)
    * returns List
    **/
-  static async jobsGET (requestParams, { user }, response) {
-    const { org, offset, limit, sortField, sortOrder, status, ids } = requestParams;
+  static async jobsGET (requestParams, { user }) {
+    const { org, offset, limit, status, ids, filters } = requestParams;
     try {
       const stateOpts = ['complete', 'failed', 'inactive', 'delayed', 'active'];
       // Check state provided is allowed
@@ -95,33 +95,17 @@ class JobsService {
             result.push(parsedJob);
           }
         );
-        response.setHeader('records-total', result.length);
-        return Service.successResponse(
-          paginated(result, offset, limit, sortField, sortOrder)
-        );
+        return Service.successResponse(result);
       }
-      if (status === 'all') {
-        await Promise.all(
-          stateOpts.map(async (s) => {
-            await deviceQueues.iterateJobsByOrg(orgList[0].toString(), s, (job) => {
-              const parsedJob = JobsService.selectJobsParams(job);
-              result.push(parsedJob);
-            });
-          })
-        );
-      } else {
-        await deviceQueues.iterateJobsByOrg(orgList[0].toString(),
-          status, (job) => {
-            const parsedJob = JobsService.selectJobsParams(job);
-            result.push(parsedJob);
-          }
-        );
-      }
-
-      response.setHeader('records-total', result.length);
-      return Service.successResponse(
-        paginated(result, offset, limit, sortField, sortOrder)
+      const parsedFilters = filters ? JSON.parse(filters) : [];
+      await deviceQueues.iterateJobsByOrg(orgList[0].toString(),
+        status, (job) => {
+          const parsedJob = JobsService.selectJobsParams(job);
+          result.push(parsedJob);
+          return true; // Mark job as done
+        }, 0, -1, 'desc', offset, limit, parsedFilters
       );
+      return Service.successResponse(result);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -131,14 +115,22 @@ class JobsService {
   }
 
   /**
-   * Delete jobs
+   * Delete all jobs matching the filters
    *
    * no response value expected for this operation
    **/
   static async jobsDELETE ({ org, jobsDeleteRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-      await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), jobsDeleteRequest.ids);
+      const { ids, filters } = jobsDeleteRequest;
+      if (ids && filters) {
+        throw createError(400, 'Only ids or filters can be specified as a parameter');
+      }
+      if (ids) {
+        await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), ids);
+      } else {
+        await deviceQueues.removeJobsByOrgAndFilters(orgList[0].toString(), filters);
+      }
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(

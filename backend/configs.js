@@ -115,7 +115,7 @@ const configEnv = {
     // Client static root directory
     clientStaticDir: 'public',
     // Mgmt-Agent protocol version
-    agentApiVersion: '4.0.0',
+    agentApiVersion: '5.0.0',
     // Mgmt log files
     logFilePath: './logs/app.log',
     reqLogFilePath: './logs/req.log',
@@ -173,7 +173,11 @@ const configEnv = {
     // Number of days before expiration to renew IKEv2 keys. Default = 30 days
     ikev2RenewBeforeExpireDays: 30,
     // IKEv2 lifetime parameter in seconds.
-    ikev2Lifetime: 3600
+    ikev2Lifetime: 3600,
+    // Reconfig block time in seconds.
+    reconfigErrorBlockTime: 60 * 60, // one hour
+    // Public IP/Port block time in seconds.
+    publicAddrBlockTime: 60 * 60 // one hour
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -186,7 +190,7 @@ const configEnv = {
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
-    agentApiVersion: '4.0.0',
+    agentApiVersion: '5.0.0',
     // Kue prefix
     kuePrefix: 'testq'
   },

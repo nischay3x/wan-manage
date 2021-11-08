@@ -18,6 +18,7 @@
 const net = require('net');
 const email = require('isemail');
 const urlValidator = require('valid-url');
+const validator = require('validator');
 const filenamify = require('filenamify');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
 
@@ -135,7 +136,7 @@ const validatePortRange = (range) => {
   if (!(range || '').includes('-')) return isPort(range);
 
   const [portLow, portHigh] = (range || '').split('-');
-  return isPort(portLow) && isPort(portHigh);
+  return isPort(portLow) && isPort(portHigh) && (+portLow < +portHigh);
 };
 const validateMachineID = (id) => { return /^[a-f0-9-]{1,50}$/i.test(id || ''); };
 const validateSerial = (id) => {
@@ -168,6 +169,8 @@ const validateMtu = (val) => val && validateIsInteger(val) && +val >= 500 && +va
 const validateOSPFArea = (val) => val !== null && (validateIPv4(val) || (validateIsInteger(val) && +val >= 0));
 const validateOSPFCost = (val) => val === null || (validateIsInteger(val) && +val >= 0 && +val < 65535);
 const validateOSPFInterval = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
+const validateFQDN = val => val && validator.isFQDN(val);
+const validateStringNoSpaces = str => { return str === '' || /^\S+$/i.test(str || ''); };
 
 module.exports = {
   validateDHCP,
@@ -209,5 +212,7 @@ module.exports = {
   validateIsInteger,
   validateOSPFArea,
   validateOSPFCost,
-  validateOSPFInterval
+  validateOSPFInterval,
+  validateFQDN,
+  validateStringNoSpaces
 };

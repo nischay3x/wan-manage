@@ -20,9 +20,10 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
-const firewallPoliciesModel = require('../models/firewallPolicies');
+const notificationsModel = require('../models/notifications');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
+const statusesInDb = require('../periodic/statusesInDb')();
 const { deviceStats } = require('../models/analytics/deviceStats');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
@@ -32,12 +33,9 @@ const net = require('net');
 const pick = require('lodash/pick');
 const path = require('path');
 const uniqBy = require('lodash/uniqBy');
-const omit = require('lodash/omit');
-const isEqual = require('lodash/isEqual');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
-const { queueFirewallPolicyJob } = require('../deviceLogic/firewallPolicy');
 const { validateOperations } = require('../deviceLogic/interfaces');
 const {
   validateDevice,
@@ -46,6 +44,7 @@ const {
 } = require('../deviceLogic/validators');
 const { getAllOrganizationLanSubnets, mapLteNames, mapWifiNames } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
+const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');
 const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
 const deviceQueues = require('../utils/deviceQueue')(
@@ -54,6 +53,10 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
+const { getMatchFilters } = require('../utils/filterUtils');
+const TunnelsService = require('./TunnelsService');
+const eventsReasons = require('../deviceLogic/events/eventReasons');
+const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 
 class DevicesService {
   /**
@@ -67,8 +70,15 @@ class DevicesService {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
-      const opDevices = await devices.find({ org: { $in: orgList } })
-        .populate('interfaces.pathlabels', '_id name description color type');
+      const devicesIds = deviceCommand.devices && Object.keys(deviceCommand.devices);
+      const filter = { org: { $in: orgList } };
+      if (devicesIds && devicesIds.length > 0) {
+        filter._id = { $in: devicesIds };
+      }
+      const opDevices = await devices.find(filter);
+      if (opDevices.length === 0) {
+        return Service.rejectResponse('Devices not found', 404);
+      }
       // Apply the device command
       const { ids, status, message } = await dispatcher.apply(opDevices, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
@@ -95,10 +105,9 @@ class DevicesService {
       const opDevice = await devices.find({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      })
-        .populate('interfaces.pathlabels', '_id name description color type'); ;
+      });
 
-      if (opDevice.length !== 1) return Service.rejectResponse('Device not found');
+      if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
 
       const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
@@ -117,7 +126,9 @@ class DevicesService {
    *
    * @param {mongo Device Object} item
    */
-  static selectDeviceParams (item) {
+  static async selectDeviceParams (item) {
+    const deviceId = item._id.toString();
+
     // Pick relevant fields
     const retDevice = pick(item, [
       'org',
@@ -147,7 +158,7 @@ class DevicesService {
     // pick interfaces
     let retInterfaces;
     if (item.interfaces) {
-      retInterfaces = item.interfaces.map(i => {
+      retInterfaces = await Promise.all(item.interfaces.map(async i => {
         const retIf = pick(i, [
           'IPv6',
           'PublicIP',
@@ -184,8 +195,12 @@ class DevicesService {
         retIf._id = retIf._id.toString();
         // if device is not connected then internet access status is unknown
         retIf.internetAccess = retDevice.isConnected ? retIf.internetAccess : '';
+
+        retIf.isPublicAddressRateLimited =
+          await publicAddrInfoLimiter.isBlocked(`${deviceId}:${retIf._id}`);
+
         return retIf;
-      });
+      }));
     } else retInterfaces = [];
 
     let retStaticRoutes;
@@ -197,7 +212,9 @@ class DevicesService {
           'gateway',
           'ifname',
           'metric',
-          'redistributeViaOSPF'
+          'redistributeViaOSPF',
+          'isPending',
+          'pendingReason'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;
@@ -213,7 +230,9 @@ class DevicesService {
           'rangeStart',
           'rangeEnd',
           'dns',
-          'status'
+          'status',
+          'isPending',
+          'pendingReason'
         ]);
 
         let macAssignList;
@@ -279,26 +298,244 @@ class DevicesService {
    * limit Integer The numbers of items to return (optional)
    * returns List
    **/
-  static async devicesGET ({ org, offset, limit }, { user }) {
+  static async devicesGET (requestParams, { user }, response) {
+    const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await devices.find({ org: { $in: orgList } })
-        .skip(offset)
-        .limit(limit)
-        .populate('interfaces.pathlabels', '_id name description color type')
-        .populate('policies.firewall.policy', '_id name description')
-        .populate('policies.multilink.policy', '_id name description')
-        .populate({
-          path: 'applications.applicationInfo',
-          populate: {
-            path: 'libraryApp'
+      const updateStatusInDb = (filters && /state|isConnected/.test(filters)) ||
+        /state|isConnected/.test(sortField);
+      if (updateStatusInDb) {
+        // need to update changed statuses from memory to DB
+        await statusesInDb.updateDevicesStatuses(orgList);
+      }
+
+      // FIXME:
+      // .populate({
+      //   path: 'applications.applicationInfo',
+      //   populate: {
+      //     path: 'libraryApp'
+      //   }
+      // });
+
+      const pipeline = [
+        {
+          $match: {
+            org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
+          }
+        },
+        {
+          $lookup: {
+            from: 'multilinkpolicies',
+            localField: 'policies.multilink.policy',
+            foreignField: '_id',
+            as: 'policies.multilink.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.multilink.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'firewallpolicies',
+            localField: 'policies.firewall.policy',
+            foreignField: '_id',
+            as: 'policies.firewall.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.firewall.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'pathlabels',
+            localField: 'interfaces.pathlabels',
+            foreignField: '_id',
+            as: 'pathlabels'
+          }
+        },
+        {
+          $addFields: {
+            _id: { $toString: '$_id' },
+            'deviceStatus.state': {
+              $cond: [{ $eq: ['$isConnected', true] }, '$status', 'pending']
+            },
+            'sync.state': {
+              $cond: [{ $eq: ['$isConnected', true] }, '$sync.state', 'unknown']
+            }
+          }
+        }
+      ];
+
+      if (filters) {
+        const parsedFilters = JSON.parse(filters);
+        const matchFilters = getMatchFilters(parsedFilters);
+        if (matchFilters.length > 0) {
+          pipeline.push({
+            $match: { $and: matchFilters }
+          });
+        }
+      }
+      if (sortField) {
+        const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
+        pipeline.push({
+          $sort: { [sortField]: order }
+        });
+      };
+      const paginationParams = [{
+        $skip: offset > 0 ? +offset : 0
+      }];
+      if (limit !== undefined) {
+        paginationParams.push({ $limit: +limit });
+      };
+
+      if (requestParams.response === 'summary') {
+        pipeline.push({
+          $project: {
+            org: { $toString: '$org' },
+            isApproved: 1,
+            isConnected: 1,
+            name: 1,
+            description: 1,
+            serial: 1,
+            hostname: 1,
+            machineId: 1,
+            sync: 1,
+            versions: 1,
+            interfaces: { isAssigned: 1, name: 1, type: 1, IPv4: 1, PublicIP: 1 },
+            pathlabels: { name: 1, description: 1, color: 1, type: 1 },
+            'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
+            'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            deviceState: '$deviceStatus.state'
           }
         });
-
-      const devicesMap = result.map(item => {
-        return DevicesService.selectDeviceParams(item);
+      } else if (requestParams.response === 'ids') {
+        pipeline.push({ $project: { _id: 1 } });
+      } else {
+        // fields to return in detailed response
+        const respFields = [
+          'org',
+          'description',
+          'deviceToken',
+          'machineId',
+          'site',
+          'hostname',
+          'serial',
+          'name',
+          'isApproved',
+          'fromToken',
+          'account',
+          'ipList',
+          'policies',
+          'pathlabels',
+          'versions',
+          'staticroutes',
+          'dhcp',
+          'deviceSpecificRulesEnabled',
+          'firewall',
+          'upgradeSchedule',
+          'sync',
+          'ospf',
+          'isConnected',
+          'deviceState'
+        ];
+        // populate pathlabels for every interface
+        pipeline.push({
+          $unwind: {
+            path: '$interfaces',
+            preserveNullAndEmptyArrays: true
+          }
+        }, {
+          $lookup: {
+            from: 'pathlabels',
+            localField: 'interfaces.pathlabels',
+            foreignField: '_id',
+            as: 'interfaces.pathlabels'
+          }
+        }, {
+          $addFields: {
+            'interfaces.pathlabels': {
+              $map: {
+                input: '$interfaces.pathlabels',
+                as: 'pl',
+                in: {
+                  _id: { $toString: '$$pl._id' },
+                  name: '$$pl.name',
+                  description: '$$pl.description',
+                  color: '$$pl.color',
+                  type: '$$pl.type'
+                }
+              }
+            }
+          }
+        }, {
+          $group: {
+            _id: '$_id',
+            // name: { $first: '$name' },
+            ...respFields.reduce((r, f) => ({ ...r, [f]: { $first: '$' + f } }), { }),
+            interfaces: { $push: '$interfaces' }
+          }
+        });
+      }
+      pipeline.push({
+        $facet: {
+          records: paginationParams,
+          meta: [{ $count: 'total' }]
+        }
       });
 
+      const paginated = await devices.aggregate(pipeline).allowDiskUse(true);
+      if (paginated[0].meta.length > 0) {
+        response.setHeader('records-total', paginated[0].meta[0].total);
+      };
+      let devicesMap;
+      if (requestParams.response === 'summary') {
+        // add pending notifications count for the summary request
+        const pendingNotificationsArr = await notificationsModel.aggregate([
+          {
+            $match: {
+              status: 'unread',
+              device: { $in: paginated[0].records.map(d => mongoose.Types.ObjectId(d._id)) }
+            }
+          },
+          {
+            $group: {
+              _id: '$device',
+              count: { $sum: 1 }
+            }
+          },
+          {
+            $project: {
+              _id: { $toString: '$_id' },
+              count: 1
+            }
+          }
+        ]);
+        devicesMap = paginated[0].records.map(d => {
+          const { count } = pendingNotificationsArr.find(n => n._id === d._id) || { count: 0 };
+          d.pendingNotifications = count;
+          if (!updateStatusInDb) {
+            // get the actual status from memory if it was not updated in DB
+            d.isConnected = connections.isConnected(d.machineId);
+            d.deviceStatus = d.isConnected
+              ? deviceStatus.getDeviceStatus(d.machineId) || { state: d.deviceState } : {};
+          } else {
+            d.deviceStatus = { state: d.deviceState };
+          }
+          return d;
+        });
+      } else if (requestParams.response === 'ids') {
+        devicesMap = paginated[0].records;
+      } else {
+        devicesMap = await Promise.all(paginated[0].records.map(async d => {
+          return await DevicesService.selectDeviceParams(d);
+        }));
+      }
       return Service.successResponse(devicesMap);
     } catch (e) {
       return Service.rejectResponse(
@@ -318,7 +555,7 @@ class DevicesService {
       // are found in the database. This is done to prevent a partial
       // schedule of the devices in case of a user's mistake.
       if (numOfIdsFound < devicesUpgradeRequest.devices.length) {
-        return Service.rejectResponse('Some devices were not found');
+        return Service.rejectResponse('Some devices were not found', 404);
       }
 
       const set = {
@@ -357,7 +594,7 @@ class DevicesService {
       const options = { upsert: false, useFindAndModify: false };
       const res = await devices.updateOne(query, set, options);
       if (res.n === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       } else {
         return Service.successResponse(null, 204);
       }
@@ -409,7 +646,7 @@ class DevicesService {
             path: 'libraryApp'
           }
         });
-      const device = DevicesService.selectDeviceParams(result);
+      const device = await DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
     } catch (e) {
@@ -490,7 +727,7 @@ class DevicesService {
       }).lean();
 
       if (!deviceObject) {
-        throw new Error('Device or Interface not found');
+        return Service.rejectResponse('Device or Interface not found', 404);
       };
 
       const supportedMessages = {
@@ -630,7 +867,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -681,6 +918,9 @@ class DevicesService {
           case 'agentui':
             errorMessage = 'Failed to get flexiEdge UI logs';
             break;
+          case 'application_ids':
+            errorMessage = 'Failed to get Application Identification logs';
+            break;
           default:
             errorMessage = 'Failed to get device logs';
         }
@@ -712,7 +952,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -759,6 +999,93 @@ class DevicesService {
   }
 
   /**
+   * Delete all devices matched the filters
+   *
+   * no response value expected for this operation
+   **/
+  static async devicesDELETE ({ org, devicesDeleteRequest }, { user }) {
+    let session;
+    try {
+      session = await mongoConns.getMainDB().startSession();
+      await session.startTransaction();
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
+      const { ids, filters } = devicesDeleteRequest;
+      if (ids && filters) {
+        return Service.rejectResponse('Only ids or filters can be specified as a parameter', 400);
+      } else if (filters === 'all') {
+        // Delete all devices request protection
+        logger.debug('Delete All devices request received');
+      } else if (filters && (!Array.isArray(filters) || filters.length === 0)) {
+        return Service.rejectResponse(
+          'To delete ALL devices please add filters=\'all\' parameter', 400
+        );
+      } else if (filters) {
+        const matchFilters = getMatchFilters(filters);
+        if (matchFilters.length > 0) {
+          query.$and = matchFilters;
+        } else {
+          return Service.rejectResponse('There is an error in specified filters', 400);
+        }
+      } else if (ids) {
+        query._id = { $in: ids.map(id => mongoose.Types.ObjectId(id)) };
+      } else {
+        return Service.rejectResponse('Ids or filters must be specified as a parameter', 400);
+      }
+      const delDevices = await devices.find(query).session(session);
+      if (delDevices.length === 0) {
+        session.abortTransaction();
+        return Service.rejectResponse('Devices for deletion not found', 404);
+      }
+      const devIds = delDevices.map(d => d._id);
+      const tunnelCount = await tunnelsModel.countDocuments({
+        $or: [{ deviceA: { $in: devIds } }, { deviceB: { $in: devIds } }],
+        isActive: true,
+        org: { $in: orgList }
+      }).session(session);
+
+      if (tunnelCount > 0) {
+        logger.debug('Tunnels found when deleting device',
+          { params: { filters }, user: user });
+        throw new Error('All devices tunnels must be deleted before deleting devices');
+      }
+      for (const dev of delDevices) {
+        connections.deviceDisconnect(dev.machineId);
+      }
+      const deviceCount = await devices.countDocuments({
+        account: delDevices[0].account
+      }).session(session);
+
+      const orgCount = await devices.countDocuments({
+        account: delDevices[0].account, org: orgList[0]
+      }).session(session);
+
+      // Unregister a device (by adding - count)
+      await flexibilling.registerDevice({
+        account: delDevices[0].account,
+        org: orgList[0],
+        count: deviceCount,
+        orgCount: orgCount,
+        increment: -delDevices.length
+      }, session);
+
+      // Now we can remove the device
+      await devices.deleteMany(query).session(session);
+
+      await session.commitTransaction();
+      session = null;
+
+      return Service.successResponse(null, 204);
+    } catch (e) {
+      if (session) session.abortTransaction();
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Delete device
    *
    * id String Numeric ID of the Device to delete
@@ -770,6 +1097,17 @@ class DevicesService {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const delDevice = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      }).session(session);
+
+      if (!delDevice) {
+        session.abortTransaction();
+        return Service.rejectResponse('Device for deletion not found', 404);
+      }
+
       const tunnelCount = await tunnelsModel.countDocuments({
         $or: [{ deviceA: id }, { deviceB: id }],
         isActive: true,
@@ -782,24 +1120,18 @@ class DevicesService {
         throw new Error('All device tunnels must be deleted before deleting a device');
       }
 
-      const delDevices = await devices.find({
-        _id: mongoose.Types.ObjectId(id),
-        org: { $in: orgList }
-      }).session(session);
-
-      if (!delDevices.length) throw new Error('Device for deletion not found');
-      connections.deviceDisconnect(delDevices[0].machineId);
+      connections.deviceDisconnect(delDevice.machineId);
       const deviceCount = await devices.countDocuments({
-        account: delDevices[0].account
+        account: delDevice.account
       }).session(session);
 
       const orgCount = await devices.countDocuments({
-        account: delDevices[0].account, org: orgList[0]
+        account: delDevice.account, org: orgList[0]
       }).session(session);
 
       // Unregister a device (by adding -1)
       await flexibilling.registerDevice({
-        account: delDevices[0].account,
+        account: delDevice.account,
         org: orgList[0],
         count: deviceCount,
         orgCount: orgCount,
@@ -844,7 +1176,12 @@ class DevicesService {
         org: { $in: orgList }
       })
         .session(session)
+        .populate('policies.firewall.policy', '_id name rules')
         .populate('interfaces.pathlabels', '_id name description color type');
+
+      if (!origDevice) {
+        return Service.rejectResponse('Device not found', 404);
+      }
 
       // Don't allow any changes if the device is not approved
       if (!origDevice.isApproved && !deviceRequest.isApproved) {
@@ -860,6 +1197,11 @@ class DevicesService {
       if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
         orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
       }
+
+      const origTunnels = await tunnelsModel.find({
+        isActive: true,
+        $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+      }).lean();
 
       // Make sure interfaces are not deleted, only modified
       if (Array.isArray(deviceRequest.interfaces)) {
@@ -883,6 +1225,9 @@ class DevicesService {
             updIntf.internetAccess = origIntf.internetAccess;
             // Device type is assigned by system only
             updIntf.deviceType = origIntf.deviceType;
+
+            // This field is set by changed to true by events logic only
+            updIntf.hasIpOnDevice = origIntf.hasIpOnDevice;
 
             // Check tunnels connectivity
             if (origIntf.isAssigned) {
@@ -919,25 +1264,61 @@ class DevicesService {
                   }
                 }
               }
-              if (!updIntf.isAssigned || origIntf.type !== updIntf.type) {
-                // check firewall rules
-                if (deviceRequest.firewall) {
-                  const { rules } = deviceRequest.firewall;
-                  if (rules.some(r => r.direction === 'inbound' &&
-                    r.classification.destination.ipProtoPort.interface === origIntf.devId)) {
-                    throw new Error(
-                      `Not allowed to change WAN interface ${origIntf.name},\
-                      it is reffered in inbound firewall rules.`
-                    );
+            }
+            // check firewall rules
+            if (deviceRequest.firewall) {
+              let hadInbound = false;
+              let hadOutbound = false;
+              let hasInbound = false;
+              let hasOutbound = false;
+              for (const rule of deviceRequest.firewall.rules) {
+                if (rule.direction === 'inbound') {
+                  if (rule.classification.destination.ipProtoPort.interface === origIntf.devId) {
+                    hadInbound = true;
                   }
-                  if (rules.some(r => r.direction === 'outbound' &&
-                    r.interfaces.includes(origIntf.devId))) {
-                    throw new Error(
-                      `Not allowed to change LAN interface ${origIntf.name},\
-                      it is reffered in outbound firewall rules.`
-                    );
+                  if (rule.classification.destination.ipProtoPort.interface === updIntf.devId) {
+                    hasInbound = true;
                   }
                 }
+                if (rule.direction === 'outbound') {
+                  if (rule.interfaces.includes(origIntf.devId)) {
+                    hadOutbound = true;
+                  }
+                  if (rule.interfaces.includes(updIntf.devId)) {
+                    hasOutbound = true;
+                  }
+                }
+              }
+              if (origIntf.type !== updIntf.type) {
+                if (hadInbound && updIntf.type !== 'WAN') {
+                  throw new Error(
+                    `WAN interface ${origIntf.name} \
+                    has firewall rules. Please remove rules before modifying.`
+                  );
+                }
+                if (hadOutbound && updIntf.type !== 'LAN') {
+                  throw new Error(
+                    `LAN Interface ${origIntf.name} \
+                    has firewall rules. Please remove rules before modifying.`
+                  );
+                }
+              }
+              if ((hasOutbound || hasInbound) && !updIntf.isAssigned) {
+                throw new Error(
+                  `Installing firewall on unassigned interface ${origIntf.name} is not allowed`
+                );
+              }
+              if (hasOutbound && updIntf.type !== 'LAN') {
+                throw new Error(
+                  `${updIntf.type} Interface ${origIntf.name} configured with outbound rules. \
+                  Outbound rules are allowed on LAN only.`
+                );
+              }
+              if (hasInbound && updIntf.type !== 'WAN') {
+                throw new Error(
+                  `${updIntf.type} Interface ${origIntf.name} configured with inbound rules. \
+                  Inbound rules are allowed on WAN only.`
+                );
               }
             }
 
@@ -967,7 +1348,7 @@ class DevicesService {
             if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
               if (updIntf.metric && updIntf.metric !== origIntf.metric) {
                 throw new Error(
-                  `Not allowed to change metric of unassigned interfaces (${origIntf.name})`
+                  `Changing metric of unassigned interfaces (${origIntf.name}) is not allowed`
                 );
               }
               updIntf.metric = origIntf.metric;
@@ -975,7 +1356,7 @@ class DevicesService {
             // don't update MTU on an unassigned interface,
             if (!updIntf.isAssigned && updIntf.mtu && updIntf.mtu !== origIntf.mtu) {
               throw new Error(
-                `Not allowed to change MTU of unassigned interfaces (${origIntf.name})`
+                `Changing MTU of unassigned interfaces (${origIntf.name}) is not allowed`
               );
             }
 
@@ -1049,6 +1430,11 @@ class DevicesService {
           const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
           if (!origIfc) return d;
 
+          if (origIfc.hasIpOnDevice === false) {
+            d.isPending = true;
+            d.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+          }
+
           // if the interface is going to be unassigned now but it was assigned
           // and it was in a bridge,
           // we check if we can reassociate the dhcp to another assigned interface in the bridge.
@@ -1086,12 +1472,32 @@ class DevicesService {
 
       // validate static routes
       if (Array.isArray(deviceRequest.staticroutes)) {
-        const tunnels = await tunnelsModel.find({
-          isActive: true,
-          $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
-        }, { num: 1 }).lean();
+        // if route is via a pending tunnel, set it as pending
+        const incompleteTunnels = origTunnels.filter(t => t.isPending);
+        const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.hasIpOnDevice === false);
+
+        deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
+          for (const t of incompleteTunnels) {
+            const { ip1, ip2 } = generateTunnelParams(t.num);
+            if (ip1 === s.gateway || ip2 === s.gateway) {
+              s.isPending = true;
+              s.pendingReason = eventsReasons.tunnelIsPending(t.num);
+              return s;
+            }
+          }
+
+          for (const ifc of interfacesWithoutIp) {
+            if (ifc.IPv4 === s.gateway) {
+              s.isPending = true;
+              s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+              return s;
+            }
+          }
+          return s;
+        });
+
         for (const route of deviceRequest.staticroutes) {
-          const { valid, err } = validateStaticRoute(deviceToValidate, tunnels, route);
+          const { valid, err } = validateStaticRoute(deviceToValidate, origTunnels, route);
           if (!valid) {
             logger.warn('Wrong static route parameters',
               {
@@ -1134,7 +1540,12 @@ class DevicesService {
           throw new Error(err);
         }
       }
-
+      // Need to validate device specific rules combined with global policy rules
+      if (deviceToValidate.firewall) {
+        deviceToValidate.policies = {
+          firewall: origDevice.policies.firewall.toObject()
+        };
+      }
       const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
 
       if (!valid) {
@@ -1175,58 +1586,14 @@ class DevicesService {
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      let modifyDevResult = { ids: [] };
-      if (origDevice) {
-        modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
-          org: orgList[0],
-          newDevice: updDevice
-        });
-      }
+      const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
+        org: orgList[0],
+        newDevice: updDevice
+      });
 
-      // If firewall rules modified then need to send install firewall policy job to the device
-      const modifyFirewallResult = { ids: [] };
-      const updRules = updDevice.firewall.rules.toObject();
-      const origRules = origDevice.firewall.rules.toObject();
-      const rulesModified =
-        origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
-        !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
-          isEqual(
-            omit(updatedRule, ['_id', 'name', 'classification']),
-            omit(origRules[index], ['_id', 'name', 'classification'])
-          ) &&
-          isEqual(
-            omit(updatedRule.classification.source, ['_id']),
-            omit(origRules[index].classification.source, ['_id'])
-          ) &&
-          isEqual(
-            omit(updatedRule.classification.destination, ['_id']),
-            omit(origRules[index].classification.destination, ['_id'])
-          )
-        ));
-
-      if (rulesModified) {
-        const requestTime = Date.now();
-        const { firewall } = updDevice.policies;
-        let firewallPolicy;
-        if (firewall && firewall.status && firewall.status.startsWith('install')) {
-          firewallPolicy = await firewallPoliciesModel.findOne(
-            { org: orgList[0], _id: firewall.policy },
-            { rules: 1, name: 1 }
-          ).session(session);
-        };
-        const jobs = await queueFirewallPolicyJob(
-          [updDevice],
-          firewallPolicy || updDevice.deviceSpecificRulesEnabled ? 'install' : 'uninstall',
-          requestTime,
-          firewallPolicy,
-          user,
-          orgList[0]
-        );
-        modifyFirewallResult.ids = jobs.filter(j => j.status === 'fulfilled').map(j => j.value);
-      }
-      const status = [...modifyDevResult.ids, ...modifyFirewallResult.ids].length > 0 ? 202 : 200;
+      const status = modifyDevResult.ids.length > 0 ? 202 : 200;
       DevicesService.setLocationHeader(server, response, modifyDevResult.ids, orgList[0]);
-      const deviceObj = DevicesService.selectDeviceParams(updDevice);
+      const deviceObj = await DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
       if (session) session.abortTransaction();
@@ -1254,7 +1621,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device || device.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       if (!connections.isConnected(device[0].machineId)) {
@@ -1312,7 +1679,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
 
       const device = deviceObject[0];
@@ -1359,12 +1726,17 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+
       const deleteRoute = device.staticroutes.filter((s) => {
         return (s.id === route);
       });
+      if (deleteRoute.length !== 1) {
+        return Service.rejectResponse('Static route not found', 404);
+      }
 
-      if (deleteRoute.length !== 1) throw new Error('Static route not found');
       const copy = Object.assign({}, deleteRoute[0].toObject());
       copy.org = orgList[0];
       copy.method = 'staticroutes';
@@ -1397,7 +1769,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!device) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!device.isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
@@ -1483,7 +1855,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject || deviceObject.length === 0) {
-        return Service.rejectResponse('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject[0].isApproved && !staticRouteRequest.isApproved) {
         return Service.rejectResponse('Device must be first approved', 400);
@@ -1701,6 +2073,39 @@ class DevicesService {
   }
 
   /**
+   * Retrieve device tunnels
+   *
+   * id Object Numeric ID of the Device to fetch information about
+   * returns List
+   **/
+  static async devicesIdTunnelsGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const tunnels = await tunnelsModel.find({
+        isActive: true,
+        org: { $in: orgList },
+        $or: [{ deviceA: id }, { deviceB: id }]
+      }).populate('deviceA', 'name interfaces machineId')
+        .populate('deviceB', 'name interfaces machineId')
+        .populate('pathlabel')
+        .populate('peer')
+        .lean();
+
+      const tunnelMap = tunnels.map((d) => {
+        return TunnelsService.selectTunnelParams(d);
+      });
+
+      return Service.successResponse(tunnelMap);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Retrieve device tunnel statistics information
    *
    * id Object Numeric ID of the Device to fetch information about
@@ -1773,12 +2178,12 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       const deleteDhcp = device.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
 
-      if (deleteDhcp.length !== 1) throw new Error('DHCP ID not found');
+      if (deleteDhcp.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       const deleteDhcpObj = deleteDhcp[0].toObject();
 
@@ -1834,11 +2239,11 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       const resultDhcp = device.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (resultDhcp.length !== 1) throw new Error('DHCP ID not found');
+      if (resultDhcp.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       const result = {
         _id: resultDhcp[0].id,
@@ -1876,7 +2281,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -1888,7 +2293,7 @@ class DevicesService {
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
+      if (dhcpFiltered.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
 
@@ -1938,7 +2343,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -1950,7 +2355,7 @@ class DevicesService {
       const dhcpFiltered = deviceObject.dhcp.filter((s) => {
         return (s.id === dhcpId);
       });
-      if (dhcpFiltered.length !== 1) throw new Error('DHCP ID not found');
+      if (dhcpFiltered.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
       const dhcpObject = dhcpFiltered[0].toObject();
 
       // allow to patch only in the case of failed
@@ -2002,7 +2407,7 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
       let result = [];
       const start = offset || 0;
       const size = limit || device.dhcp.length;
@@ -2097,7 +2502,7 @@ class DevicesService {
         org: { $in: orgList }
       }).session(session);
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -2183,7 +2588,7 @@ class DevicesService {
       }).lean();
 
       if (!deviceObject) {
-        throw new Error('Device or Interface not found');
+        return Service.rejectResponse('Device or Interface not found', 404);
       };
 
       const selectedIf = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
@@ -2288,7 +2693,7 @@ class DevicesService {
                   }
                 },
                 // Metadata
-                { priority: 'medium', attempts: 1, removeOnComplete: false },
+                { priority: 'normal', attempts: 1, removeOnComplete: false },
                 // Complete callback
                 callback
               );
@@ -2410,7 +2815,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -2460,7 +2865,7 @@ class DevicesService {
         }
       );
 
-      if (!device) throw new Error('Device not found');
+      if (!device) return Service.rejectResponse('Device not found', 404);
 
       return Service.successResponse(device.ospf, 200);
     } catch (e) {
@@ -2479,7 +2884,7 @@ class DevicesService {
    * ospfConfigs ospfConfigs
    * returns OSPF configuration
    **/
-  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user }, response) {
+  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -2487,7 +2892,7 @@ class DevicesService {
         org: { $in: orgList }
       });
       if (!deviceObject) {
-        throw new Error('Device not found');
+        return Service.rejectResponse('Device not found', 404);
       }
       if (!deviceObject.isApproved) {
         throw new Error('Device must be first approved');
@@ -2503,7 +2908,7 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
-      DevicesService.setLocationHeader(response, ids, orgList[0]);
+      DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(ospfConfigs, 202);
     } catch (e) {
       return Service.rejectResponse(
@@ -2517,7 +2922,7 @@ class DevicesService {
    * Sets Location header of the response, used in some integrations
    * @param {Object} response - response to http request
    * @param {Array} jobsIds - array of jobs ids
-   * @param {string} orgId - ID of the organzation
+   * @param {string} orgId - ID of the organization
    */
   static setLocationHeader (server, response, jobsIds, orgId) {
     if (jobsIds.length) {

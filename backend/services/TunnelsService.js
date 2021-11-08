@@ -18,51 +18,32 @@
 const Service = require('./Service');
 const Tunnels = require('../models/tunnels');
 const mongoose = require('mongoose');
-const pick = require('lodash/pick');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
+const statusesInDb = require('../periodic/statusesInDb')();
+const { getTunnelsPipeline } = require('../utils/tunnelUtils');
 
 class TunnelsService {
   /**
-   * Select the API fields from mongo Tunnel Object
+   * Extends mongo results with tunnel status info
    *
    * @param {mongo Tunnel Object} item
    */
-  static selectTunnelParams (item) {
-    // Pick relevant fields
-    const retTunnel = pick(item, [
-      'num',
-      'isActive',
-      'interfaceA',
-      'interfaceB',
-      'deviceA',
-      'deviceAconf',
-      'deviceB',
-      'deviceBconf',
-      'encryptionMethod',
-      '_id',
-      'pathlabel']);
-
-    retTunnel.interfaceADetails =
-      retTunnel.deviceA.interfaces.filter((ifc) => {
-        return ifc._id.toString() === '' + retTunnel.interfaceA;
-      })[0];
-    retTunnel.interfaceBDetails =
-      retTunnel.deviceB.interfaces.filter((ifc) => {
-        return ifc._id.toString() === '' + retTunnel.interfaceB;
-      })[0];
-
+  static selectTunnelParams (retTunnel) {
     const tunnelId = retTunnel.num;
     // Add tunnel status
     retTunnel.tunnelStatusA =
       deviceStatus.getTunnelStatus(retTunnel.deviceA.machineId, tunnelId) || {};
 
     // Add tunnel status
-    retTunnel.tunnelStatusB =
-      deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
+    retTunnel.tunnelStatusB = retTunnel.peer
+      ? {}
+      : deviceStatus.getTunnelStatus(retTunnel.deviceB.machineId, tunnelId) || {};
 
-    retTunnel.deviceA = pick(retTunnel.deviceA, ['_id', 'name']);
-    retTunnel.deviceB = pick(retTunnel.deviceB, ['_id', 'name']);
+    // if no filter or ordering by status then db can be not updated,
+    // we get the status directly from memory
+    retTunnel.tunnelStatus = (retTunnel.peer || retTunnel.tunnelStatusB.status === 'up') &&
+      retTunnel.tunnelStatusA.status === 'up' ? 'Connected' : 'Not Connected';
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -104,30 +85,59 @@ class TunnelsService {
   /**
    * Retrieve device tunnels information
    *
-   * id String Numeric ID of the Device to fetch tunnel information about
-   * offset Integer The number of items to skip before starting to collect the result set (optional)
-   * limit Integer The numbers of items to return (optional)
-   * returns List
+   * @param {Integer} offset The number of items to skip before collecting the result (optional)
+   * @param {Integer} limit The numbers of items to return (optional)
+   * @param {String} sortField The field by which the data will be ordered (optional)
+   * @param {String} sortOrder Sorting order [asc|desc] (optional)
+   * @param {Array} filters Array of filter strings in format 'key|operation|value' (optional)
    **/
-  static async tunnelsGET ({ org, offset, limit }, { user }) {
+  static async tunnelsGET (requestParams, { user }, response) {
+    const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const response = await Tunnels.find({
-        org: { $in: orgList },
-        isActive: true
-      })
-        .skip(offset)
-        .limit(limit)
-        .populate('deviceA', 'name interfaces machineId')
-        .populate('deviceB', 'name interfaces machineId')
-        .populate('pathlabel');
-
-      // Populate interface details
-      const tunnelMap = response.map((d) => {
-        return TunnelsService.selectTunnelParams(d);
+      const updateStatusInDb = (filters && filters.includes('tunnelStatus')) ||
+        sortField === 'tunnelStatus';
+      if (updateStatusInDb) {
+        // need to update changed statuses from memory to DB
+        await statusesInDb.updateDevicesStatuses(orgList);
+        await statusesInDb.updateTunnelsStatuses(orgList);
+      }
+      const pipeline = getTunnelsPipeline(orgList, filters);
+      if (sortField) {
+        const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
+        pipeline.push({
+          $sort: { [sortField]: order }
+        });
+      };
+      const paginationParams = [{
+        $skip: offset > 0 ? +offset : 0
+      }];
+      if (limit !== undefined) {
+        paginationParams.push({ $limit: +limit });
+      };
+      pipeline.push({
+        $facet: {
+          records: paginationParams,
+          meta: [{ $count: 'total' }]
+        }
       });
 
-      return Service.successResponse(tunnelMap);
+      const paginated = await Tunnels.aggregate(pipeline).allowDiskUse(true);
+      if (paginated[0].meta.length > 0) {
+        response.setHeader('records-total', paginated[0].meta[0].total);
+      };
+
+      const tunnelsMap = paginated[0].records.map((d) => {
+        const tunnelStatusInDb = d.tunnelStatus;
+        const retTunnel = TunnelsService.selectTunnelParams(d);
+        // get the status from db if it was updated
+        if (updateStatusInDb) {
+          retTunnel.tunnelStatus = tunnelStatusInDb;
+        }
+        return retTunnel;
+      });
+
+      return Service.successResponse(tunnelsMap);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

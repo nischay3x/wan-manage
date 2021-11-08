@@ -29,7 +29,7 @@ class FirewallPoliciesService {
 
     // Duplicate names are not allowed in the same organization
     const hasDuplicateName = await FirewallPolicies.findOne(
-      { org, name, _id: { $ne: _id } }
+      { org, name: { $regex: name, $options: 'i' }, _id: { $ne: _id } }
     );
     if (hasDuplicateName) {
       return {

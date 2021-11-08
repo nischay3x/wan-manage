@@ -37,43 +37,45 @@ const { buildInterfaces } = require('./interfaces');
  * @param  {Object}   data      Additional data used by caller
  * @return {None}
  */
-const apply = async (device, user, data) => {
-  device = device[0].toObject();
-  logger.info('Starting device:', {
-    params: { machineId: device.machineId, user: user, data: data }
-  });
+const apply = async (devices, user, data) => {
+  const { username } = user;
+  const { org } = data;
+  const opDevices = await Promise.all(devices.map(d => d
+    .populate('policies.firewall.policy', '_id name rules')
+    .populate('interfaces.pathlabels', '_id name description color type')
+    .execPopulate()
+  ));
 
+  const errors = [];
   let organizationLanSubnets = [];
   if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-    organizationLanSubnets = await getAllOrganizationLanSubnets(device.org);
+    organizationLanSubnets = await getAllOrganizationLanSubnets(org);
   }
+  const applyPromises = [];
+  for (const device of opDevices) {
+    const { machineId } = device;
+    logger.info('Starting device:', { params: { machineId, user, data } });
 
-  const deviceValidator = validateDevice(device, true, organizationLanSubnets);
+    const { valid, err } = validateDevice(device.toObject(), true, organizationLanSubnets);
+    if (!valid) {
+      logger.warn('Start command validation failed', { params: { device, err } });
+      if (!errors.includes(err)) {
+        errors.push(err);
+      }
+      continue;
+    }
 
-  if (!deviceValidator.valid) {
-    logger.warn('Start command validation failed',
-      {
-        params: { device: device, err: deviceValidator.err }
-      });
-    throw new Error(deviceValidator.err);
-  }
+    // Set the device state to "pending". Device state will
+    // be updated again when the device sends periodic message
+    deviceStatus.setDeviceState(machineId, 'pending');
+    const startParams = {};
+    startParams.interfaces = buildInterfaces(device.interfaces.toObject(), device.ospf.toObject());
 
-  deviceStatus.setDeviceStatsField(device.machineId, 'state', 'pending');
-  const startParams = {};
-  startParams.interfaces = buildInterfaces(device.interfaces, device.ospf);
-
-  const tasks = [];
-  const userName = user.username;
-  const org = data.org;
-  const { machineId } = device;
-
-  tasks.push({ entity: 'agent', message: 'start-router', params: startParams });
-
-  try {
-    const job = await deviceQueues
+    const tasks = [{ entity: 'agent', message: 'start-router', params: startParams }];
+    applyPromises.push(deviceQueues
       .addJob(
         machineId,
-        userName,
+        username,
         org,
         // Data
         { title: 'Start device ' + device.hostname, tasks: tasks },
@@ -89,14 +91,34 @@ const apply = async (device, user, data) => {
         { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null
-      );
-
-    logger.info('Start device job queued', { job: job });
-    return { ids: [job.id], status: 'completed', message: '' };
-  } catch (err) {
-    logger.error('Start device job failed', { params: { machineId, error: err.message } });
-    throw (new Error(err.message || 'Internal server error'));
+      )
+    );
   }
+  const promisesStatus = await Promise.allSettled(applyPromises);
+  const { fulfilled, reasons } = promisesStatus.reduce(({ fulfilled, reasons }, elem) => {
+    if (elem.status === 'fulfilled') {
+      const job = elem.value;
+      logger.info('Start device job queued', {
+        params: {
+          jobId: job.id,
+          machineId: job.type
+        }
+      });
+      fulfilled.push(job.id);
+    } else {
+      if (!reasons.includes(elem.reason.message)) {
+        reasons.push(elem.reason.message);
+      }
+    };
+    return { fulfilled, reasons };
+  }, { fulfilled: [], reasons: errors });
+  const status = fulfilled.length < opDevices.length
+    ? 'partially completed' : 'completed';
+  const message = fulfilled.length < opDevices.length
+    ? `Warning: ${fulfilled.length} of ${opDevices.length} start device jobs added.` +
+      `Some devices have following errors: ${reasons.join('. ')}`
+    : `Start device job${opDevices.length > 1 ? 's' : ''} added successfully`;
+  return { ids: fulfilled, status, message };
 };
 
 /**
@@ -107,7 +129,6 @@ const apply = async (device, user, data) => {
  * @return {void}
  */
 const complete = (jobId, res) => {
-  logger.info('Start Machine complete', { params: { result: res, jobId: jobId } });
   if (!res || !res.device || !res.org) {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
     return;
