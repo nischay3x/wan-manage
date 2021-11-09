@@ -1,8 +1,8 @@
 const { randomBytes } = require('crypto');
 const configs = require('../configs')();
-const forge = require('node-forge');
+// const forge = require('node-forge');
 const axios = require('axios');
-const pki = forge.pki;
+// const pki = forge.pki;
 const selfsigned = require('selfsigned');
 
 const generateOpenVpnPKI = () => {
