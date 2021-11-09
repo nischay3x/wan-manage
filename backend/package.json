@@ -53,6 +53,7 @@
     "rate-limiter-flexible": "^2.3.0",
     "redis": "^3.1.2",
     "request": "^2.88.0",
+    "selfsigned": "^1.10.11",
     "swagger-ui-express": "^4.0.2",
     "uuid": "^3.3.2",
     "valid-url": "^1.0.9",

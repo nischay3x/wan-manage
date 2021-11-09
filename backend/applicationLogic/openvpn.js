@@ -29,8 +29,8 @@ const {
 } = require('../utils/networks');
 
 const {
-  generateKeys,
-  generateCA,
+  // generateKeys,
+  generateOpenVpnPKI,
   generateTlsKey,
   generateDhKey
 } = require('../utils/certificates');
@@ -357,13 +357,15 @@ const getDeviceKeys = async application => {
 
   if (!application.configuration.keys) {
     isNew = true;
-    const ca = generateCA();
-    const server = generateKeys(ca.privateKey);
+    const pems = generateOpenVpnPKI();
+    // const server = generateKeys(ca.privateKey);
+
+    caPrivateKey = pems.private;
+    caPublicKey = pems.cert;
+    serverKey = pems.clientprivate;
+    serverCrt = pems.clientcert;
+
     tlsKey = generateTlsKey();
-    caPrivateKey = ca.privateKey;
-    caPublicKey = ca.publicKey;
-    serverKey = server.privateKey;
-    serverCrt = server.publicKey;
 
     // check if there is DH key on stack
     const dhKeyDoc = await diffieHellmans.findOne();

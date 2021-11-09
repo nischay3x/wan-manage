@@ -3,73 +3,76 @@ const configs = require('../configs')();
 const forge = require('node-forge');
 const axios = require('axios');
 const pki = forge.pki;
+const selfsigned = require('selfsigned');
 
-const generateCA = () => {
-  var keys = pki.rsa.generateKeyPair(2048);
-  var cert = pki.createCertificate();
-  cert.publicKey = keys.publicKey;
-  cert.serialNumber = '01';
-  cert.validity.notBefore = new Date();
-  cert.validity.notAfter = new Date();
-  cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
-  cert.validity.notBefore.setDate(cert.validity.notBefore.getDate() - 1);
+const generateOpenVpnPKI = () => {
+  var attrs = [{ name: 'commonName', value: 'contoso.com' }];
+  var pems = selfsigned.generate(attrs, { days: 365, clientCertificate: true });
+  // var keys = pki.rsa.generateKeyPair(2048);
+  // var cert = pki.createCertificate();
+  // cert.publicKey = keys.publicKey;
+  // cert.serialNumber = '01';
+  // cert.validity.notBefore = new Date();
+  // cert.validity.notAfter = new Date();
+  // cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
+  // cert.validity.notBefore.setDate(cert.validity.notBefore.getDate() - 1);
 
-  var attrs = [{
-    name: 'commonName',
-    value: 'ChangeMe'
-  }];
+  // var attrs = [{
+  //   name: 'commonName',
+  //   value: 'ChangeMe'
+  // }];
 
-  cert.setSubject(attrs);
+  // cert.setSubject(attrs);
 
-  cert.setIssuer(attrs);
+  // cert.setIssuer(attrs);
 
-  cert.setExtensions([{
-    name: 'subjectKeyIdentifier'
-  }, {
-    name: 'authorityKeyIdentifier',
-    keyIdentifier: true,
-    authorityCertIssuer: true,
-    serialNumber: true
-  }, {
-    name: 'basicConstraints',
-    cA: true
-  }]);
+  // cert.setExtensions([{
+  //   name: 'subjectKeyIdentifier'
+  // }, {
+  //   name: 'authorityKeyIdentifier',
+  //   keyIdentifier: true,
+  //   authorityCertIssuer: true,
+  //   serialNumber: true
+  // }, {
+  //   name: 'basicConstraints',
+  //   cA: true
+  // }]);
 
-  cert.sign(keys.privateKey, forge.md.sha256.create());
+  // cert.sign(keys.privateKey, forge.md.sha256.create());
 
-  var certificate = pki.certificateToPem(cert);
-  var privateKey = pki.privateKeyToPem(keys.privateKey);
+  // var certificate = pki.certificateToPem(cert);
+  // var privateKey = pki.privateKeyToPem(keys.privateKey);
 
-  return { publicKey: certificate, privateKey: privateKey };
+  return pems;
 };
 
-const generateKeys = (caKay) => {
-  var keys = pki.rsa.generateKeyPair(2048);
-  var cert = pki.createCertificate();
-  cert.publicKey = keys.publicKey;
-  cert.serialNumber = '02';
-  cert.validity.notBefore = new Date();
-  cert.validity.notAfter = new Date();
-  cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
+// const generateKeys = (caKay) => {
+//   var keys = pki.rsa.generateKeyPair(2048);
+//   var cert = pki.createCertificate();
+//   cert.publicKey = keys.publicKey;
+//   cert.serialNumber = '02';
+//   cert.validity.notBefore = new Date();
+//   cert.validity.notAfter = new Date();
+//   cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
 
-  var attrs = [{
-    name: 'commonName',
-    value: 'ChangeMe'
-  }];
+//   var attrs = [{
+//     name: 'commonName',
+//     value: 'ChangeMe'
+//   }];
 
-  cert.setSubject(attrs);
+//   cert.setSubject(attrs);
 
-  cert.setIssuer(attrs);
+//   cert.setIssuer(attrs);
 
-  // Sign with CA private key
-  var caPrivateKey = pki.privateKeyFromPem(caKay);
-  cert.sign(caPrivateKey, forge.md.sha256.create());
+//   // Sign with CA private key
+//   var caPrivateKey = pki.privateKeyFromPem(caKay);
+//   cert.sign(caPrivateKey, forge.md.sha256.create());
 
-  var certificate = pki.certificateToPem(cert);
-  var privateKey = pki.privateKeyToPem(keys.privateKey);
+//   var certificate = pki.certificateToPem(cert);
+//   var privateKey = pki.privateKeyToPem(keys.privateKey);
 
-  return { publicKey: certificate, privateKey: privateKey };
-};
+//   return { publicKey: certificate, privateKey: privateKey };
+// };
 
 const generateTlsKey = () => {
   const buf = randomBytes(256);
@@ -77,11 +80,8 @@ const generateTlsKey = () => {
 
   const key = splitLineEveryNChars(hex, /(.{32})/g);
 
-  const ret = `
-#
-# 2048 bit OpenVPN static key
-#
------BEGIN OpenVPN Static key V1-----
+  const ret =
+`-----BEGIN OpenVPN Static key V1-----
 ${key}
 -----END OpenVPN Static key V1-----`;
 
@@ -113,8 +113,8 @@ const generateDhKey = () => {
 };
 
 module.exports = {
-  generateKeys,
-  generateCA,
+  // generateKeys,
+  generateOpenVpnPKI,
   generateDhKey,
   generateTlsKey
 };
