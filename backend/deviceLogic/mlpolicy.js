@@ -29,6 +29,7 @@ const { getDevicesAppIdentificationJobInfo } = require('./appIdentification');
 const appComplete = require('./appIdentification').complete;
 const appError = require('./appIdentification').error;
 const appRemove = require('./appIdentification').remove;
+const { getMajorVersion } = require('../versioning');
 
 const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
@@ -171,7 +172,7 @@ const apply = async (deviceList, user, data) => {
   const { org } = data;
   const { op, id } = data.meta;
 
-  let mLPolicy, session, deviceIds;
+  let mLPolicy, session, deviceIds, opDevices;
   const requestTime = Date.now();
 
   try {
@@ -205,6 +206,28 @@ const apply = async (deviceList, user, data) => {
         ? await getOpDevices(data.devices, org, mLPolicy)
         : [deviceList[0]._id];
 
+      const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
+      opDevices = filterDevices(deviceList, deviceIdsSet, op);
+
+      // link-quality is supported from version 5 only
+      if (op === 'install') {
+        if (opDevices.some(device => getMajorVersion(device.versions.agent) < 5)) {
+          if (mLPolicy.rules.some(rule => {
+            return (rule.action.links.some(link => {
+              return link.order === 'link-quality';
+            }));
+          })) {
+            throw createError(400,
+              'Link-quality is supported from version 5.1.X.' +
+              ' Some devices have lower version'
+            );
+          }
+        }
+      }
+
+      // TBD: On device validation, don't allow same label on multiple interfaces
+      // TBD: Don't allow link-quality with DIA label
+
       // Update devices policy in the database
       const update = op === 'install'
         ? {
@@ -237,9 +260,6 @@ const apply = async (deviceList, user, data) => {
   }
 
   // Queue policy jobs
-  const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
-  const opDevices = filterDevices(deviceList, deviceIdsSet, op);
-
   const jobs = await queueMlPolicyJob(opDevices, op, requestTime, mLPolicy, user, org);
   const failedToQueue = [];
   const succeededToQueue = [];

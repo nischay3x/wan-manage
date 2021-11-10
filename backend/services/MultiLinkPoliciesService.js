@@ -269,6 +269,8 @@ class MultiLinkPoliciesService {
         throw createError(400, message);
       }
 
+      // TBD: dispatch apply to devices
+
       const MLPolicy = await MultiLinkPolicies.findOneAndUpdate(
         {
           org: { $in: orgList },
