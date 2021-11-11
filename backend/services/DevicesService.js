@@ -397,7 +397,7 @@ class DevicesService {
             machineId: 1,
             sync: 1,
             versions: 1,
-            interfaces: { isAssigned: 1, name: 1, type: 1, IPv4: 1, PublicIP: 1 },
+            interfaces: { isAssigned: 1, name: 1, type: 1, IPv4: 1, PublicIP: 1, devId: 1 },
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
