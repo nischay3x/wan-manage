@@ -23,6 +23,8 @@ const MultiLinkPolicies = require('../models/mlpolicies');
 const { devices } = require('../models/devices');
 const pathLabelsModel = require('../models/pathlabels');
 const { ObjectId } = require('mongoose').Types;
+const { applyPolicy } = require('../deviceLogic/mlpolicy');
+const { getMajorVersion } = require('../versioning');
 
 const emptyPrefix = {
   ip: '',
@@ -38,7 +40,7 @@ const emptyApp = {
 };
 
 class MultiLinkPoliciesService {
-  static async verifyRequestSchema (mLPolicyRequest, org) {
+  static async verifyRequestSchema (mLPolicyRequest, org, opDevices) {
     const { _id, name, rules } = mLPolicyRequest;
     // Check if any enabled rule exists
     if (!rules.some(rule => rule.enabled)) {
@@ -85,11 +87,21 @@ class MultiLinkPoliciesService {
           message: 'Enabled rule must contain Path Labels'
         };
       }
+
+      // Link-quality with DIA labels not allowed
+      if (rule.action.links.some(link => (link.order === 'link-quality' &&
+          link.pathlabels.some(label => label.type === 'DIA')
+      ))) {
+        return {
+          valid: false,
+          message: 'Link-quality with DIA labels not allowed'
+        };
+      };
     };
 
     // Duplicate names are not allowed in the same organization
     const hasDuplicateName = await MultiLinkPolicies.findOne(
-      { org, name: { $regex: name, $options: 'i' }, _id: { $ne: _id } }
+      { org, name: { $regex: name, $options: 'i' }, _id: { $ne: ObjectId(_id) } }
     );
     if (hasDuplicateName) {
       return {
@@ -114,6 +126,20 @@ class MultiLinkPoliciesService {
         message: 'Not allowed to assign path labels of a different organization'
       };
     };
+
+    if (opDevices.some(device => getMajorVersion(device.versions.agent) < 5)) {
+      if (rules.some(rule => {
+        return (rule.action.links.some(link => {
+          return link.order === 'link-quality';
+        }));
+      })) {
+        return {
+          valid: false,
+          message: 'Link-quality is supported from version 5.1.X.' +
+            ' Some devices have lower version'
+        };
+      }
+    }
 
     return { valid: true, message: '' };
   }
@@ -261,15 +287,20 @@ class MultiLinkPoliciesService {
       const { name, description, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
+      const opDevices = await devices.find(
+        {
+          org: orgList[0],
+          'policies.multilink.policy': id,
+          'policies.multilink.status': { $in: ['installing', 'installed'] }
+        }
+      );
       // Verify request schema
       const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
-        mLPolicyRequest, orgList[0]
+        mLPolicyRequest, orgList[0], opDevices
       );
       if (!valid) {
         throw createError(400, message);
       }
-
-      // TBD: dispatch apply to devices
 
       const MLPolicy = await MultiLinkPolicies.findOneAndUpdate(
         {
@@ -300,9 +331,11 @@ class MultiLinkPoliciesService {
       if (!MLPolicy) {
         return Service.rejectResponse('Not found', 404);
       }
+      // apply on devices
+      const applied = await applyPolicy(opDevices, MLPolicy, 'install', user, orgList[0]);
 
       const converted = JSON.parse(JSON.stringify(MLPolicy));
-      return Service.successResponse(converted);
+      return Service.successResponse({ ...converted, ...applied });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

@@ -161,7 +161,7 @@ const filterDevices = (devices, deviceIds, op) => {
 };
 
 /**
- * Creates and queues add/remove policy jobs.
+ * Called from dispatcher, runs required validations and calls applyPolicy
  * @async
  * @param  {Array}    deviceList    an array of the devices to be modified
  * @param  {Object}   user          User object
@@ -173,7 +173,6 @@ const apply = async (deviceList, user, data) => {
   const { op, id } = data.meta;
 
   let mLPolicy, session, deviceIds, opDevices;
-  const requestTime = Date.now();
 
   try {
     session = await mongoConns.getMainDB().startSession();
@@ -209,8 +208,16 @@ const apply = async (deviceList, user, data) => {
       const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
       opDevices = filterDevices(deviceList, deviceIdsSet, op);
 
-      // link-quality is supported from version 5 only
       if (op === 'install') {
+        // link-quality with DIA labels not allowed
+        if (mLPolicy.rules.some(rule => (rule.action.links.some(link =>
+          (link.order === 'link-quality' && link.pathlabels.some(label => label.type === 'DIA'))
+        )))) {
+          throw createError(400,
+            'Link-quality with DIA labels not allowed'
+          );
+        };
+        // link-quality is supported from version 5 only
         if (opDevices.some(device => getMajorVersion(device.versions.agent) < 5)) {
           if (mLPolicy.rules.some(rule => {
             return (rule.action.links.some(link => {
@@ -224,10 +231,32 @@ const apply = async (deviceList, user, data) => {
           }
         }
       }
+    });
+  } catch (err) {
+    throw err.name === 'MongoError'
+      ? new Error() : err;
+  } finally {
+    session.endSession();
+  }
+  return applyPolicy(opDevices, mLPolicy, op, user, org);
+};
 
-      // TBD: On device validation, don't allow same label on multiple interfaces
-      // TBD: Don't allow link-quality with DIA label
-
+/**
+ * Updates devices, creates and queues add/remove policy jobs.
+ * @async
+ * @param  {Array}    opDevices     an array of the devices to be modified
+ * @param  {Object}   mLPolicy      the policy to apply
+ * @param  {String}   op            operation [install|uninstall]
+ * @param  {Object}   user          User object
+ * @param  {String}   org           Org ID
+ */
+const applyPolicy = async (opDevices, mLPolicy, op, user, org) => {
+  let session;
+  const deviceIds = opDevices.map(device => device._id);
+  const requestTime = Date.now();
+  try {
+    session = await mongoConns.getMainDB().startSession();
+    await session.withTransaction(async () => {
       // Update devices policy in the database
       const update = op === 'install'
         ? {
@@ -520,5 +549,6 @@ module.exports = {
   completeSync: completeSync,
   error: error,
   remove: remove,
-  sync: sync
+  sync: sync,
+  applyPolicy: applyPolicy
 };
