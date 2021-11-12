@@ -91,8 +91,9 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
 const validateFirewallRules = (rules, interfaces = undefined) => {
   const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
   const usedInboundPorts = [];
+  const enabledRules = rules.filter(r => r.enabled);
   // Common rules validation
-  for (const rule of rules) {
+  for (const rule of enabledRules) {
     const { direction, inbound, classification } = rule;
     // Inbound rule type must be specified
     if (direction === 'inbound' && !inboundRuleTypes.includes(inbound)) {
@@ -168,7 +169,7 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
     // Port forward rules validation
     const forwardedPorts = {};
     const internalPorts = {};
-    for (const rule of rules.filter(r => r.inbound === 'portForward')) {
+    for (const rule of enabledRules.filter(r => r.inbound === 'portForward')) {
       const { internalIP, internalPortStart, classification } = rule;
       const { ports: destPorts, interface: devId } = classification.destination.ipProtoPort;
       if (isEmpty(devId)) {
