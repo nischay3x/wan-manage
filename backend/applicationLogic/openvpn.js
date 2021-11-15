@@ -249,21 +249,21 @@ const getSubnetForDevice = (config, deviceId = '') => {
 
 const onVpnJobComplete = async (org, app, op, deviceId) => {
   if (op === 'uninstall') {
-    // release the subnet if deploy job removed
+    // release the subnet if install job removed
     await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
   }
 };
 
 const onVpnJobRemoved = async (org, app, op, deviceId) => {
-  if (op === 'deploy') {
-    // release the subnet if deploy job removed
+  if (op === 'install') {
+    // release the subnet if install job removed
     await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
   }
 };
 
 const onVpnJobFailed = async (org, app, op, deviceId) => {
-  if (op === 'deploy') {
-    // release the subnet if deploy job removed
+  if (op === 'install') {
+    // release the subnet if install job removed
     await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
   }
 };
@@ -290,12 +290,12 @@ const releaseSubnetForDevice = async (org, appId, deviceId) => {
 /**
  * Validate application. called before starting to install application on the devices
  * @param {object} app the application will be installed
- * @param {string} op the operation of the job (deploy, config, etc.)
+ * @param {string} op the operation of the job (install, config, etc.)
  * @param {[ObjectID]} deviceIds the devices id, that application should installed on them
  * @return {{valid: boolean, err: string}}  test result + error if message is invalid
  */
 const validateVpnApplication = (app, op, deviceIds) => {
-  if (op === 'deploy') {
+  if (op === 'install') {
     // prevent installation if there are missing required configurations
     if (!app.configuration.remoteClientIp || !app.configuration.connectionsPerDevice) {
       return {
@@ -400,7 +400,7 @@ const getDeviceKeys = async application => {
  * Generate params object to be sent to the device
  * @param {object} device the device to get params for
  * @param {string} applicationId the application id to be installed
- * @param {string} op the operation of the job (deploy, config, etc.)
+ * @param {string} op the operation of the job (install, config, etc.)
  * @return {object} params to be sent to device
 */
 const getOpenVpnParams = async (device, applicationId, op) => {
@@ -411,7 +411,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     .populate('libraryApp').lean();
   const config = application.configuration;
 
-  if (op === 'deploy' || op === 'config' || op === 'upgrade') {
+  if (op === 'install' || op === 'config' || op === 'upgrade') {
     // get the WanIp to be used by remote vpn server to listen
     const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 

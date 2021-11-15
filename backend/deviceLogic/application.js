@@ -39,7 +39,7 @@ const {
 } = require('../applicationLogic/applications');
 
 /**
- * Creates and queues add/remove deploy application jobs.
+ * Creates and queues applications jobs.
  * @async
  * @param  {Array}    deviceList    an array of the devices to be modified
  * @param  {Object}   user          User object
@@ -75,7 +75,7 @@ const apply = async (deviceList, user, data) => {
       // get the devices id by updated device list
       deviceIds = deviceList.map(d => d._id);
 
-      if (op === 'deploy') {
+      if (op === 'install') {
         if (!app || app.removed) {
           throw createError(500, `Application ${id} does not purchased`);
         }
@@ -94,7 +94,7 @@ const apply = async (deviceList, user, data) => {
 
       let update;
 
-      if (op === 'deploy') {
+      if (op === 'install') {
         for (let i = 0; i < deviceList.length; i++) {
           const device = deviceList[i];
           const query = { _id: device._id };
@@ -242,7 +242,7 @@ const complete = async (jobId, res) => {
   const { _id } = res.application.device;
   try {
     const update =
-      op === 'deploy' || op === 'upgrade' || op === 'config'
+      op === 'install' || op === 'upgrade' || op === 'config'
         ? { $set: { 'applications.$.status': 'installed' } }
         : { $set: { 'applications.$.status': 'uninstalled' } };
 
@@ -294,7 +294,7 @@ const error = async (jobId, res) => {
     let status = '';
 
     switch (op) {
-      case 'deploy':
+      case 'install':
         status = 'installation failed';
         break;
       case 'config':
@@ -377,7 +377,7 @@ const queueApplicationJob = async (
   // and job message to be handled by the device
   let jobTitle = '';
   let message = '';
-  if (op === 'deploy') {
+  if (op === 'install') {
     jobTitle = `Install ${application.libraryApp.name} application`;
     message = 'install-service';
   } else if (op === 'upgrade') {
@@ -432,7 +432,7 @@ const queueApplicationJob = async (
           data: data
         },
         // Metadata
-        { priority: 'high', attempts: op === 'deploy' ? 2 : 1, removeOnComplete: false },
+        { priority: 'high', attempts: op === 'install' ? 2 : 1, removeOnComplete: false },
         // Complete callback
         null
       )

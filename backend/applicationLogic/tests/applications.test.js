@@ -51,7 +51,7 @@ describe('Validate vpn configuration', () => {
 
   it('Should be an invalid configuration', () => {
     app.configuration = {};
-    const result = validateApplication(app, 'deploy', devicesIds);
+    const result = validateApplication(app, 'install', devicesIds);
     failureObject.err = 'Required configurations is missing. Please check again the configurations';
     expect(result).toMatchObject(failureObject);
   });
@@ -62,7 +62,7 @@ describe('Validate vpn configuration', () => {
       ObjectId('5e65290fbe66a2335718e082'),
       ObjectId('5e65290fbe66a2335718e083')
     ];
-    const result = validateApplication(app, 'deploy', devicesIds);
+    const result = validateApplication(app, 'install', devicesIds);
     failureObject.err = 'There are no remained subnets. Please check the configurations';
     expect(result).toMatchObject(failureObject);
   });
@@ -81,7 +81,7 @@ describe('Validate vpn configuration', () => {
       }
     ];
 
-    const result = validateApplication(app, 'deploy', devicesIds);
+    const result = validateApplication(app, 'install', devicesIds);
     failureObject.err = 'There are no remained subnets. Please check the configurations';
     expect(result).toMatchObject(failureObject);
   });
@@ -100,7 +100,7 @@ describe('Validate vpn configuration', () => {
       }
     ];
 
-    const result = validateApplication(app, 'deploy', devicesIds);
+    const result = validateApplication(app, 'install', devicesIds);
     expect(result).toMatchObject(successObject);
   });
 
@@ -114,7 +114,7 @@ describe('Validate vpn configuration', () => {
       }
     ];
 
-    const result = validateApplication(app, 'deploy', devicesIds);
+    const result = validateApplication(app, 'install', devicesIds);
     expect(result).toMatchObject(successObject);
   });
 
@@ -134,7 +134,7 @@ describe('Validate vpn configuration', () => {
       }
     ];
 
-    const result = validateApplication(app, 'deploy', devicesIds);
+    const result = validateApplication(app, 'install', devicesIds);
     expect(result).toMatchObject(successObject);
   });
 
@@ -157,7 +157,7 @@ describe('Validate vpn configuration', () => {
       }
     ];
 
-    const result = validateApplication(app, 'deploy', devicesIds);
+    const result = validateApplication(app, 'install', devicesIds);
     expect(result).toMatchObject(successObject);
   });
 
