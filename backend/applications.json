@@ -1,17 +1,21 @@
 {
   "meta": {
-    "time": 15875544035
+    "time": 1636980481687
   },
   "applications": [
     {
       "name": "Remote VPN",
-      "description": "Allow remote VPN access",
-      "latestVersion": "5.1.0",
-      "createdDate": 1590392115232,
-      "creator": "Open VPN ltd.",
-      "cpuRequirements": 4,
-      "ramRequirements": 4,
-      "components": ["Manage", "Edge", "Client"]
+      "identifier": "com.flexiwan.remotevpn",
+      "description": "Allows users to connect to the corporate network remotely",
+      "latestVersion": "1.0.0",
+      "createdDate": 1636980481687,
+      "creator": "flexiWAN",
+      "components": {
+        "agent": {
+          "installationFile": "./applications/remotevpn.tar.gz",
+          "startOnInstallation": false
+        }
+      }
     }
   ]
 }
