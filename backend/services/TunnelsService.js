@@ -43,7 +43,8 @@ class TunnelsService {
     // if no filter or ordering by status then db can be not updated,
     // we get the status directly from memory
     retTunnel.tunnelStatus = (retTunnel.peer || retTunnel.tunnelStatusB.status === 'up') &&
-      retTunnel.tunnelStatusA.status === 'up' ? 'Connected' : 'Not Connected';
+      retTunnel.tunnelStatusA.status === 'up' ? 'Connected'
+      : retTunnel.tunnelStatus ? retTunnel.tunnelStatus : 'Not Connected';
 
     retTunnel._id = retTunnel._id.toString();
 
