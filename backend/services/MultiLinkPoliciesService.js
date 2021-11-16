@@ -23,6 +23,8 @@ const MultiLinkPolicies = require('../models/mlpolicies');
 const { devices } = require('../models/devices');
 const pathLabelsModel = require('../models/pathlabels');
 const { ObjectId } = require('mongoose').Types;
+const { applyPolicy } = require('../deviceLogic/mlpolicy');
+const { validateMultilinkPolicy } = require('../deviceLogic/validators');
 
 const emptyPrefix = {
   ip: '',
@@ -85,11 +87,21 @@ class MultiLinkPoliciesService {
           message: 'Enabled rule must contain Path Labels'
         };
       }
+
+      // Link-quality with DIA labels not allowed
+      if (rule.action.links.some(link => (link.order === 'link-quality' &&
+          link.pathlabels.some(label => label.type === 'DIA')
+      ))) {
+        return {
+          valid: false,
+          message: 'Link-quality with DIA labels not allowed'
+        };
+      };
     };
 
     // Duplicate names are not allowed in the same organization
     const hasDuplicateName = await MultiLinkPolicies.findOne(
-      { org, name: { $regex: name, $options: 'i' }, _id: { $ne: _id } }
+      { org, name: { $regex: name, $options: 'i' }, _id: { $ne: ObjectId(_id) } }
     );
     if (hasDuplicateName) {
       return {
@@ -114,7 +126,6 @@ class MultiLinkPoliciesService {
         message: 'Not allowed to assign path labels of a different organization'
       };
     };
-
     return { valid: true, message: '' };
   }
 
@@ -261,12 +272,25 @@ class MultiLinkPoliciesService {
       const { name, description, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
+      const opDevices = await devices.find(
+        {
+          org: orgList[0],
+          'policies.multilink.policy': id,
+          'policies.multilink.status': { $in: ['installing', 'installed'] }
+        }
+      );
       // Verify request schema
       const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
         mLPolicyRequest, orgList[0]
       );
       if (!valid) {
         throw createError(400, message);
+      }
+
+      // Devices specific apply validation
+      const { valid: validToApply, err } = validateMultilinkPolicy(mLPolicyRequest, opDevices);
+      if (!validToApply) {
+        throw createError(400, err);
       }
 
       const MLPolicy = await MultiLinkPolicies.findOneAndUpdate(
@@ -298,9 +322,11 @@ class MultiLinkPoliciesService {
       if (!MLPolicy) {
         return Service.rejectResponse('Not found', 404);
       }
+      // apply on devices
+      const applied = await applyPolicy(opDevices, MLPolicy, 'install', user, orgList[0]);
 
       const converted = JSON.parse(JSON.stringify(MLPolicy));
-      return Service.successResponse(converted);
+      return Service.successResponse({ ...converted, ...applied });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

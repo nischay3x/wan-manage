@@ -66,7 +66,7 @@ const prepareFirewallJobInfo = (device, policyParams, op, org, apps, requestTime
   ];
   const data = {
     policy: {
-      device: { _id: device._id, firewallPolicy: device.policies.firewall },
+      device: { _id: device._id, firewallPolicy: policyParams ? policyParams.id : '' },
       requestTime: requestTime,
       op: op,
       org: org
@@ -103,10 +103,10 @@ const getFirewallParameters = (policy, device) => {
   // global rules must be applied after device specific rules
   // assuming there will be not more than 10000 local rules
   const globalShift = 10000;
-  const policyRules = policy ? policy.rules.toObject()
+  const policyRules = policy ? policy.rules
     .filter(r => r.enabled)
     .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
-  const deviceRules = device.deviceSpecificRulesEnabled ? device.firewall.rules.toObject()
+  const deviceRules = device.deviceSpecificRulesEnabled ? device.firewall.rules
     .filter(r => r.enabled) : [];
   const firewallRules = [...policyRules, ...deviceRules]
     .sort((r1, r2) => r1.priority - r2.priority);
@@ -294,7 +294,7 @@ const getFirewallPolicy = async (id, org) => {
   const firewallPolicy = await firewallPoliciesModel.findOne(
     { org: org, _id: id },
     { rules: 1, name: 1 }
-  );
+  ).lean();
   return firewallPolicy;
 };
 
@@ -352,7 +352,7 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, firewallPolicy
 };
 
 /**
- * Creates and queues add/remove policy jobs.
+ * Called from dispatcher, runs required validations and calls applyPolicy
  * @async
  * @param  {Array}    deviceList    an array of the devices to be modified
  * @param  {Object}   user          User object
@@ -364,7 +364,6 @@ const apply = async (deviceList, user, data) => {
   const { op, id } = data.meta;
 
   let firewallPolicy, deviceIds;
-  const requestTime = Date.now();
 
   try {
     if (op === 'install') {
@@ -388,12 +387,12 @@ const apply = async (deviceList, user, data) => {
 
     if (op === 'install') {
       const reqDevices = await devices.find(
-        { org: org, _id: { $in: deviceIds }, deviceSpecificRulesEnabled: 1 },
-        { name: 1, interfaces: 1, 'firewall.rules': 1 }
-      );
+        { org: org, _id: { $in: deviceIds } },
+        { name: 1, interfaces: 1, 'firewall.rules': 1, deviceSpecificRulesEnabled: 1 }
+      ).lean();
       for (const dev of reqDevices) {
         const { valid, err } = validateFirewallRules(
-          [...firewallPolicy.rules.toObject(), ...dev.firewall.rules.toObject()],
+          [...firewallPolicy.rules, ...dev.firewall.rules],
           dev.interfaces
         );
         if (!valid) {
@@ -401,18 +400,32 @@ const apply = async (deviceList, user, data) => {
         }
       }
     }
-
-    // Update devices policy in the database
-    await updateDevicesBeforeJob(deviceIds, op, requestTime, firewallPolicy, org);
   } catch (err) {
     throw err.name === 'MongoError'
       ? new Error() : err;
   }
-
-  // Queue policy jobs
   const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
   const opDevices = filterDevices(deviceList, deviceIdsSet, op);
+  return applyPolicy(opDevices, firewallPolicy, op, user, org);
+};
 
+/**
+ * Updates devices, creates and queues add/remove policy jobs.
+ * @async
+ * @param  {Array}   opDevices        an array of the devices to be modified
+ * @param  {Object}  firewallPolicy   the policy to apply
+ * @param  {String}  op               operation [install|uninstall]
+ * @param  {Object}  user             User object
+ * @param  {String}  org              Org ID
+ */
+const applyPolicy = async (opDevices, firewallPolicy, op, user, org) => {
+  const deviceIds = opDevices.map(device => device._id);
+  const requestTime = Date.now();
+
+  // Update devices policy in the database
+  await updateDevicesBeforeJob(deviceIds, op, requestTime, firewallPolicy, org);
+
+  // Queue policy jobs
   const jobs = await queueFirewallPolicyJob(opDevices, op, requestTime, firewallPolicy, user, org);
   const failedToQueue = [];
   const succeededToQueue = [];
@@ -629,7 +642,7 @@ const sync = async (deviceId, org) => {
         rules: 1,
         name: 1
       }
-    );
+    ).lean();
   }
   // if no firewall policy then device specific rules will be sent
   const params = getFirewallParameters(firewallPolicy, device);
@@ -658,5 +671,6 @@ module.exports = {
   error: error,
   remove: remove,
   sync: sync,
+  applyPolicy,
   getDevicesFirewallJobInfo
 };
