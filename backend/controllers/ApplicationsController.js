@@ -22,28 +22,28 @@ class ApplicationsController {
     this.service = Service;
   }
 
-  async applicationsLibraryGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationsLibraryGET);
+  async appstoreGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstoreGET);
   }
 
-  async applicationsGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationsGET);
+  async appstorePurchasedGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchasedGET);
   }
 
-  async applicationPOST (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationPOST);
+  async appstorePurchasedIdPOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchasedIdPOST);
   }
 
-  async applicationDELETE (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationDELETE);
+  async appstorePurchasedIdDELETE (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchasedIdDELETE);
   }
 
-  async applicationsConfigurationPUT (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationsConfigurationPUT);
+  async appstorePurchasedIdPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchasedIdPUT);
   }
 
-  async applicationGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationGET);
+  async appstorePurchasedIdGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchasedIdGET);
   }
 
   async applicationsUpgradePOST (request, response) {

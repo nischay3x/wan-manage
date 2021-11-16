@@ -19,7 +19,6 @@ const applications = require('../models/applications');
 
 const {
   isVpn,
-  getOpenVpnInitialConfiguration,
   validateVpnConfiguration,
   onVpnJobComplete,
   onVpnJobRemoved,
@@ -28,18 +27,10 @@ const {
   getOpenVpnParams,
   pickOnlyVpnAllowedFields,
   needToUpdatedVpnServers
-} = require('./openvpn');
-
-const getInitialConfigObject = libraryApp => {
-  if (isVpn(libraryApp.name)) {
-    return getOpenVpnInitialConfiguration();
-  } else {
-    return {};
-  };
-};
+} = require('./remotevpn');
 
 const pickAllowedFieldsOnly = (configurationRequest, app) => {
-  if (isVpn(app.libraryApp.name)) {
+  if (isVpn(app.appStoreApp.identifier)) {
     return pickOnlyVpnAllowedFields(configurationRequest, app);
   } else {
     return configurationRequest;
@@ -47,43 +38,35 @@ const pickAllowedFieldsOnly = (configurationRequest, app) => {
 };
 
 const validateConfiguration = async (configurationRequest, app, orgList) => {
-  if (isVpn(app.libraryApp.name)) {
+  if (isVpn(app.appStoreApp.identifier)) {
     return await validateVpnConfiguration(configurationRequest, app, orgList);
   } else {
-    return { valid: true, err: '' };
+    return { valid: false, err: 'Invalid application' };
   }
 };
 
 const validateApplication = (app, op, deviceIds) => {
-  const appName = app.libraryApp.name;
-
-  if (isVpn(appName)) {
+  if (isVpn(app.appStoreApp.identifier)) {
     return validateVpnApplication(app, op, deviceIds);
   };
 
-  return { valid: true, err: '' };
+  return { valid: false, err: 'Invalid application' };
 };
 
 const onJobComplete = async (org, app, op, deviceId) => {
-  const appName = app.libraryApp.name;
-
-  if (isVpn(appName)) {
+  if (isVpn(app.appStoreApp.identifier)) {
     await onVpnJobComplete(org, app, op, deviceId);
   }
 };
 
 const onJobFailed = async (org, app, op, deviceId) => {
-  const appName = app.libraryApp.name;
-
-  if (isVpn(appName)) {
+  if (isVpn(app.appStoreApp.identifier)) {
     await onVpnJobFailed(org, app, op, deviceId);
   }
 };
 
 const onJobRemoved = async (org, app, op, deviceId) => {
-  const appName = app.libraryApp.name;
-
-  if (isVpn(appName)) {
+  if (isVpn(app.appStoreApp.identifier)) {
     await onVpnJobRemoved(org, app, op, deviceId);
   }
 };
@@ -97,12 +80,10 @@ const onJobRemoved = async (org, app, op, deviceId) => {
  * @return {Object}               parameters object
  */
 const getJobParams = async (device, application, op) => {
-  const appName = application.libraryApp.name;
-
-  if (isVpn(appName)) {
+  if (isVpn(application.appStoreApp.identifier)) {
     return {
       type: 'open-vpn',
-      name: appName,
+      name: application.appStoreApp.name,
       config: await getOpenVpnParams(device, application._id, op)
     };
   }
@@ -111,26 +92,22 @@ const getJobParams = async (device, application, op) => {
 };
 
 const saveConfiguration = async (application, updatedConfig) => {
-  const appName = application.libraryApp.name;
-  if (isVpn(appName)) {
+  if (isVpn(application.appStoreApp.identifier)) {
     // reset the subnets array
-    // in the jobs logic, new subnets will allocated
+    // in the jobs logic, new subnets will be allocated
     updatedConfig.subnets = [];
   }
 
   const updatedApp = await applications.findOneAndUpdate(
     { _id: application._id },
     { $set: { configuration: updatedConfig } },
-    { new: true, upsert: false }
-  );
-
-  await updatedApp.populate('libraryApp').populate('org').execPopulate();
+    { new: true, upsert: false, runValidators: true }
+  ).populate('appStoreApp').lean();
 
   return updatedApp;
 };
 const needToUpdatedDevices = (application, oldConfig, newConfig) => {
-  const appName = application.libraryApp.name;
-  if (isVpn(appName)) {
+  if (isVpn(application.appStoreApp.identifier)) {
     return needToUpdatedVpnServers(oldConfig, newConfig);
   } else {
     return true;
@@ -138,7 +115,6 @@ const needToUpdatedDevices = (application, oldConfig, newConfig) => {
 };
 
 module.exports = {
-  getInitialConfigObject,
   validateConfiguration,
   pickAllowedFieldsOnly,
   validateApplication,

@@ -18,19 +18,61 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
+const {
+  validateApplicationIdentifier
+} = require('./validators');
+
+const agentComponentSchema = new Schema({
+  installationPath: {
+    type: String,
+    required: true
+  },
+  installationPathType: {
+    type: String,
+    enum: ['local', 'url'],
+    required: true
+  },
+  startOnInstallation: {
+    type: Boolean,
+    required: true,
+    default: false
+  }
+}, { _id: false });
+
+const componentsSchema = new Schema({
+  agent: {
+    type: agentComponentSchema,
+    required: false
+  },
+  manage: {}
+}, { _id: false });
+
+const versionSchema = new Schema({
+  version: {
+    type: String,
+    required: true,
+    match: [
+      /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/,
+      'version must be a valid Semver version'
+    ]
+  },
+  components: {
+    type: componentsSchema,
+    required: true
+  }
+}, { _id: false });
 
 /**
- * Library Database Schema
+ * App store Database Schema
  *
  * A schema for the documents that stores all applications we offer
  */
-const applicationLibrarySchema = new Schema(
+const applicationStoreSchema = new Schema(
   {
     // application name
     name: {
       type: String,
       required: true,
-      unique: true,
       index: true,
       minlength: [2, 'App name must be at least 2'],
       maxlength: [30, 'App name must be at most 30']
@@ -42,14 +84,19 @@ const applicationLibrarySchema = new Schema(
       minlength: [2, 'Description must be at least 2'],
       maxlength: [100, 'Description must be at most 100']
     },
-    // latest version
-    latestVersion: {
+    identifier: {
       type: String,
       required: true,
-      match: [
-        /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/,
-        'installedVersion must be a valid Semver version'
-      ]
+      unique: true,
+      index: true,
+      validate: {
+        validator: validateApplicationIdentifier,
+        message: 'identifier is invalid'
+      }
+    },
+    versions: {
+      type: [versionSchema],
+      required: true
     },
     // the time of repository update time
     // used to check if the app is not updated
@@ -60,39 +107,14 @@ const applicationLibrarySchema = new Schema(
     // who is the creator of this application
     creator: {
       type: String,
+      required: true,
       minlength: [2, 'Creator must be at least 2'],
       maxlength: [30, 'Creator must be at most 30']
-    },
-    // cpu requirements
-    cpuRequirements: {
-      type: Number
-    },
-    // ram requirements
-    ramRequirements: {
-      type: Number
-    },
-    // the FlexiWAN components used by application
-    components: {
-      type: [String],
-      enum: ['Manage', 'Edge', 'Client']
-    },
-    // // the FlexiWAN components used by application
-    // operatingSystem: {
-    //   type: [String],
-    //   enum: ['Windows', 'Linux']
-    // },
-    // application dependencies
-    dependencies: {
-      type: [String]
-    },
-    // application permissions
-    permissions: {
-      // TODO: complete here
     }
   },
   {
     // set collection name to prevent from mongoose to pluralize to 'libraries'
-    collection: 'applicationsLibrary',
+    collection: 'applicationStore',
     timestamps: true
   }
 );
@@ -100,4 +122,4 @@ const applicationLibrarySchema = new Schema(
 // Default exports
 module.exports = mongoConns
   .getMainDB()
-  .model('applicationsLibrary', applicationLibrarySchema);
+  .model('applicationStore', applicationStoreSchema);

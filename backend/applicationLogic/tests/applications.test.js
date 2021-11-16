@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { ObjectId } = require('mongoose').Types;
-const { isVpn, getSubnetForDevice } = require('../openvpn');
+const { isVpn, getSubnetForDevice } = require('../remotevpn');
 const {
   validateApplication,
   needToUpdatedDevices
@@ -40,7 +40,7 @@ describe('Validate vpn configuration', () => {
         name: 'Remote VPN'
       },
       configuration: {
-        remoteClientIp: '192.168.0.0/24',
+        vpnNetwork: '192.168.0.0/24',
         connectionsPerDevice: 128,
         subnets: []
       }
@@ -147,7 +147,7 @@ describe('Validate vpn configuration', () => {
       ObjectId('5e65290fbe66a2335718e084')
     ];
 
-    app.configuration.remoteClientIp = '192.168.0.0/24';
+    app.configuration.vpnNetwork = '192.168.0.0/24';
     app.configuration.connectionsPerDevice = 64;
 
     app.configuration.subnets = [
@@ -229,14 +229,14 @@ describe('Validate vpn configuration', () => {
 
   beforeEach(() => {
     oldConfig = {
-      remoteClientIp: '192.168.0.0/24',
+      vpnNetwork: '192.168.0.0/24',
       connectionsPerDevice: 8,
       serverPort: '1194',
       dnsIp: '8.8.8.8',
       dnsDomain: 'local.dns'
     };
     newConfig = {
-      remoteClientIp: '192.168.0.0/24',
+      vpnNetwork: '192.168.0.0/24',
       connectionsPerDevice: 8,
       serverPort: '1194',
       dnsIp: '8.8.8.8',
@@ -249,8 +249,8 @@ describe('Validate vpn configuration', () => {
     expect(res).toBe(false);
   });
 
-  it('Should return true if remoteClientIp is different', () => {
-    newConfig.remoteClientIp = '192.168.0.0/25';
+  it('Should return true if vpnNetwork is different', () => {
+    newConfig.vpnNetwork = '192.168.0.0/25';
     const res = needToUpdatedDevices(app, oldConfig, newConfig);
     expect(res).toBe(true);
   });

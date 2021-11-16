@@ -7,15 +7,20 @@
       "name": "Remote VPN",
       "identifier": "com.flexiwan.remotevpn",
       "description": "Allows users to connect to the corporate network remotely",
-      "latestVersion": "1.0.0",
       "createdDate": 1636980481687,
       "creator": "flexiWAN",
-      "components": {
-        "agent": {
-          "installationFile": "./applications/remotevpn.tar.gz",
-          "startOnInstallation": false
+      "versions": [
+        {
+          "version": "1.0.0",
+          "components": {
+            "agent": {
+              "installationPath": "./applications/remotevpn/install.tar.gz",
+              "installationPathType": "local",
+              "startOnInstallation": false
+            }
+          }
         }
-      }
+      ]
     }
   ]
 }

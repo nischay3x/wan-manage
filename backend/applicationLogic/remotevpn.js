@@ -21,6 +21,9 @@ const pick = require('lodash/pick');
 const applications = require('../models/applications');
 const { devices } = require('../models/devices');
 const diffieHellmans = require('../models/diffieHellmans');
+const {
+  validateFQDN
+} = require('../models/validators');
 
 const {
   getAvailableIps,
@@ -36,41 +39,18 @@ const {
 } = require('../utils/certificates');
 
 /**
- * Get initial configuration object for VPN application
- * @return {object}
- */
-const getOpenVpnInitialConfiguration = () => {
-  return {
-    authentications: [
-      {
-        type: 'G-Suite',
-        enabled: false,
-        domainName: '',
-        group: ''
-      },
-      {
-        type: 'Office365',
-        enabled: false,
-        domainName: '',
-        group: ''
-      }
-    ]
-  };
-};
-
-/**
  * Indicate if application is remote vpn
  * @param {string} applicationName
  * @return {boolean}
  */
-const isVpn = applicationName => {
-  return applicationName === 'Remote VPN';
+const isVpn = applicationIdentifier => {
+  return applicationIdentifier === 'com.flexiwan.remotevpn';
 };
 
 const allowedFields = [
   'networkId',
   'serverPort',
-  'remoteClientIp',
+  'vpnNetwork',
   'connectionsPerDevice',
   'routeAllOverVpn',
   'dnsIp',
@@ -82,32 +62,27 @@ const pickOnlyVpnAllowedFields = configurationRequest => {
   return pick(configurationRequest, allowedFields);
 };
 
-const domainRegex = new RegExp(/(^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$)/);
-const getAuthValidator = type => {
+// const domainRegex = new RegExp(/(^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$)/);
+const getAuthValidator = () => {
   return Joi.object().keys({
-    type: Joi.string().valid(type).required(),
     enabled: Joi.boolean().required(),
-    domainName: Joi.string().required().when('enabled', {
-      is: true,
-      then: Joi.invalid(''),
-      otherwise: Joi.allow('')
-    }).custom((val, helpers) => {
-      const domains = val.split(',');
-      const invalid = domains.filter(d => !d.trim().match(domainRegex));
-      if (invalid.length) {
-        return helpers.error(`Invalid domain name: ${invalid[0]}`);
-      }
-      return val.toString();
-    }),
-    group: Joi.string().allow('').optional()
+    domains: Joi.string().required().custom((val, helpers) => {
+      const domainList = val.split(/\s*,\s*/);
+      const valid = domainList.every(d => validateFQDN(d));
+      if (!valid) {
+        return helpers.message('domains is not valid');
+      };
+
+      return val;
+    }).when('enabled', { is: true, then: Joi.required(), otherwise: Joi.allow('') })
   }).required();
 };
 
 const vpnConfigSchema = Joi.object().keys({
   networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
-  serverPort: Joi.number().port().optional().allow(''),
-  remoteClientIp: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
-  routeAllOverVpn: Joi.boolean().optional(),
+  serverPort: Joi.number().port().required(),
+  vpnNetwork: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
+  routeAllOverVpn: Joi.boolean().required(),
   connectionsPerDevice: Joi.number().min(8)
     .custom((val, helpers) => {
       const isPowerOfTwo = (Math.log(val) / Math.log(2)) % 1 === 0;
@@ -120,13 +95,13 @@ const vpnConfigSchema = Joi.object().keys({
     .required(),
   dnsIp: Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' }).allow('').optional(),
   dnsDomain: Joi.string().min(3).max(50).allow('').optional(),
-  authentications: Joi.array().length(2).items(
-    getAuthValidator('G-Suite'),
-    getAuthValidator('Office365')
-  ).optional()
+  authentications: Joi.object({
+    gsuite: getAuthValidator(),
+    office365: getAuthValidator()
+  })
 }).custom((obj, helpers) => {
-  const { remoteClientIp, connectionsPerDevice } = obj;
-  const mask = remoteClientIp.split('/').pop();
+  const { vpnNetwork, connectionsPerDevice } = obj;
+  const mask = vpnNetwork.split('/').pop();
   const range = getAvailableIps(mask);
 
   if (typeof helpers.original.connectionsPerDevice === 'number') {
@@ -172,10 +147,10 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
   }
 
   // validate subnets
-  if (configurationRequest.remoteClientIp && configurationRequest.connectionsPerDevice) {
+  if (configurationRequest.vpnNetwork && configurationRequest.connectionsPerDevice) {
     const installedDevices = await devices.find({
       org: { $in: orgList },
-      'applications.applicationInfo': applicationId,
+      'applications.app': applicationId,
       $or: [
         { 'applications.status': 'installed' },
         { 'applications.status': 'installing' }
@@ -183,7 +158,7 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
     });
 
     const updatedSubnetsCount = calculateNumberOfSubnets(
-      configurationRequest.remoteClientIp,
+      configurationRequest.vpnNetwork,
       configurationRequest.connectionsPerDevice
     );
 
@@ -200,12 +175,12 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
 
 /**
  * divide network and return the subnets count
- * @param {string} remoteClientIp
+ * @param {string} vpnNetwork
  * @param {string} connectionsPerDevice
  * @return {number}  number of splitted subnets
  */
-const calculateNumberOfSubnets = (remoteClientIp, connectionsPerDevice) => {
-  const mask = remoteClientIp.split('/').pop();
+const calculateNumberOfSubnets = (vpnNetwork, connectionsPerDevice) => {
+  const mask = vpnNetwork.split('/').pop();
 
   const deviceMask = getSubnetMask(connectionsPerDevice);
 
@@ -235,7 +210,7 @@ const getSubnetForDevice = (config, deviceId = '') => {
   if (freeSubnetOnDb) return [{ ...freeSubnetOnDb, device: ObjectId(deviceId) }, 'update'];
 
   // allocate the next subnet
-  const [ip, mask] = config.remoteClientIp.split('/');
+  const [ip, mask] = config.vpnNetwork.split('/');
   const deviceMask = getSubnetMask(config.connectionsPerDevice);
   const range = getAvailableIps(deviceMask);
   const deviceNumber = config.subnets ? config.subnets.length : 0;
@@ -297,7 +272,7 @@ const releaseSubnetForDevice = async (org, appId, deviceId) => {
 const validateVpnApplication = (app, op, deviceIds) => {
   if (op === 'install') {
     // prevent installation if there are missing required configurations
-    if (!app.configuration.remoteClientIp || !app.configuration.connectionsPerDevice) {
+    if (!app.configuration.vpnNetwork || !app.configuration.connectionsPerDevice) {
       return {
         valid: false,
         err: 'Required configurations is missing. Please check again the configurations'
@@ -309,7 +284,7 @@ const validateVpnApplication = (app, op, deviceIds) => {
     const takenSubnets = subnets ? subnets.filter(s => s.device != null).length : 0;
 
     const totalNumberOfSubnets = calculateNumberOfSubnets(
-      app.configuration.remoteClientIp,
+      app.configuration.vpnNetwork,
       app.configuration.connectionsPerDevice
     );
 
@@ -463,7 +438,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
 
     params.version = version;
     params.routeAllOverVpn = config.routeAllOverVpn || false;
-    params.remoteClientIp = deviceSubnet.subnet;
+    params.vpnNetwork = deviceSubnet.subnet;
     params.port = config.serverPort ? config.serverPort : '';
     params.deviceWANIp = wanIp;
     params.caKey = caPrivateKey;
@@ -480,7 +455,7 @@ const getOpenVpnParams = async (device, applicationId, op) => {
 };
 
 const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
-  if (oldConfig.remoteClientIp !== updatedConfig.remoteClientIp) return true;
+  if (oldConfig.vpnNetwork !== updatedConfig.vpnNetwork) return true;
   if (oldConfig.connectionsPerDevice !== updatedConfig.connectionsPerDevice) return true;
   if (oldConfig.serverPort !== updatedConfig.serverPort) return true;
   if (oldConfig.dnsIp !== updatedConfig.dnsIp) return true;
@@ -490,7 +465,6 @@ const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
 
 module.exports = {
   isVpn,
-  getOpenVpnInitialConfiguration,
   validateVpnConfiguration,
   getSubnetForDevice,
   onVpnJobComplete,

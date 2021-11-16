@@ -26,9 +26,11 @@ const mongoConns = require('../mongoConns.js')();
  */
 const applicationSchema = new Schema({
   // reference to application in library
-  libraryApp: {
+  appStoreApp: {
     type: Schema.Types.ObjectId,
-    ref: 'applicationsLibrary'
+    required: true,
+    index: true,
+    ref: 'applicationStore'
   },
   // reference to organization that installed this application
   org: {
@@ -49,14 +51,6 @@ const applicationSchema = new Schema({
     type: Date,
     required: true
   },
-  // indicates if organization removed this app
-  // in this case we still storing the configs but marks this app as removed
-  removed: {
-    type: Boolean,
-    default: false
-  },
-  // indicates if organization removed this app
-  // in this case we still storing the configs but marks this app as removed
   pendingToUpgrade: {
     type: Boolean
   },

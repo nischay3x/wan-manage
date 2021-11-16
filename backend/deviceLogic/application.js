@@ -76,7 +76,7 @@ const apply = async (deviceList, user, data) => {
       deviceIds = deviceList.map(d => d._id);
 
       if (op === 'install') {
-        if (!app || app.removed) {
+        if (!app) {
           throw createError(500, `Application ${id} does not purchased`);
         }
       }
@@ -100,14 +100,14 @@ const apply = async (deviceList, user, data) => {
           const query = { _id: device._id };
 
           const appExists = device.applications && device.applications.find(
-            a => a.applicationInfo && a.applicationInfo.toString() === app._id.toString());
+            a => a.app && a.app.toString() === app._id.toString());
 
           if (appExists) {
             if (appExists.status === 'installing') {
               throw createError(500, `Device ${device.name} has a pending installation job`);
             }
 
-            query['applications.applicationInfo'] = id;
+            query['applications.app'] = id;
             update = {
               $set: { 'applications.$.status': 'installing' }
             };
@@ -115,7 +115,7 @@ const apply = async (deviceList, user, data) => {
             update = {
               $push: {
                 applications: {
-                  applicationInfo: app._id,
+                  app: app._id,
                   status: 'installing',
                   requestTime: requestTime
                 }
@@ -131,19 +131,19 @@ const apply = async (deviceList, user, data) => {
         // set update to null because we are already updated in this case
         update = null;
       } else if (op === 'upgrade') {
-        query['applications.applicationInfo'] = id;
+        query['applications.app'] = id;
 
         update = {
           $set: { 'applications.$.status': 'upgrading' }
         };
       } else if (op === 'config') {
-        query['applications.applicationInfo'] = id;
+        query['applications.app'] = id;
 
         update = {
           $set: { 'applications.$.status': 'installing' }
         };
       } else if (op === 'uninstall') {
-        query['applications.applicationInfo'] = id;
+        query['applications.app'] = id;
 
         update = {
           $set: { 'applications.$.status': 'uninstalling' }
@@ -208,7 +208,7 @@ const apply = async (deviceList, user, data) => {
       {
         _id: { $in: failedDevices },
         org: org,
-        'applications.applicationInfo': app._id
+        'applications.app': app._id
       },
       { $set: { 'applications.$.status': 'job queue failed' } },
       { upsert: false }
@@ -259,7 +259,7 @@ const complete = async (jobId, res) => {
       {
         _id: _id,
         org: org,
-        'applications.applicationInfo': app._id
+        'applications.app': app._id
       },
       update,
       { upsert: false }
@@ -309,7 +309,7 @@ const error = async (jobId, res) => {
     }
 
     await devices.updateOne(
-      { _id: _id, org: org, 'applications.applicationInfo': app._id },
+      { _id: _id, org: org, 'applications.app': app._id },
       { $set: { 'applications.$.status': status } },
       { upsert: false }
     );
@@ -347,7 +347,7 @@ const remove = async (job) => {
         {
           _id: _id,
           org: org,
-          'applications.applicationInfo': app._id
+          'applications.app': app._id
         },
         { $set: { 'applications.$.status': status } },
         { upsert: false }
@@ -379,16 +379,16 @@ const queueApplicationJob = async (
   let message = '';
   if (op === 'install') {
     jobTitle = `Install ${application.libraryApp.name} application`;
-    message = 'install-service';
+    message = 'application-install';
   } else if (op === 'upgrade') {
     jobTitle = `Upgrade ${application.libraryApp.name} application`;
-    message = 'upgrade-service';
+    message = 'application-upgrade';
   } else if (op === 'config') {
     jobTitle = `Update ${application.libraryApp.name} configuration`;
-    message = 'modify-service';
+    message = 'application-configure';
   } else if (op === 'uninstall') {
     jobTitle = `Uninstall ${application.libraryApp.name} application`;
-    message = 'uninstall-service';
+    message = 'application-uninstall';
   } else {
     return jobs;
   }
@@ -402,7 +402,9 @@ const queueApplicationJob = async (
     const tasks = [{
       entity: 'agent',
       message: message,
-      params: params
+      params: {
+        applicationParams: params
+      }
     }];
 
     // response data

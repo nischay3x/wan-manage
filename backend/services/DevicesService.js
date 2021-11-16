@@ -311,9 +311,9 @@ class DevicesService {
 
       // FIXME:
       // .populate({
-      //   path: 'applications.applicationInfo',
+      //   path: 'applications.app',
       //   populate: {
-      //     path: 'libraryApp'
+      //     path: 'applicationStore'
       //   }
       // });
 
@@ -641,9 +641,9 @@ class DevicesService {
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description')
         .populate({
-          path: 'applications.applicationInfo',
+          path: 'applications.app',
           populate: {
-            path: 'libraryApp'
+            path: 'applicationStore'
           }
         });
       const device = await DevicesService.selectDeviceParams(result);

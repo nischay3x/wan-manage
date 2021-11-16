@@ -7325,9 +7325,63 @@ paths:
       x-swagger-router-controller: FirewallPolicies
       x-openapi-router-controller: FirewallPoliciesController
       x-openapi-router-service: FirewallPoliciesService
-  /applicationLibrary:
+  /appstore:
     get:
-      operationId: applicationsLibraryGET
+      operationId: appstoreGET
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Application'
+                type: array
+          x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all repository applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /appstore/purchased:
+    get:
+      operationId: appstorePurchasedGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -7365,64 +7419,15 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all repository applications
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
-  /applications:
-    get:
-      operationId: applicationsGET
-      responses:
-        "200":
-          # content:
-          #   application/json:
-          #     schema:
-          #       type: object
-          #       properties:
-          #         applications:
-          #           items:
-          #             $ref: '#/components/schemas/PurchasedApplicationList'
-          #           type: array
-          #           x-content-type: application/json
-          description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
       summary: Get all installed applications
       tags:
       - Applications
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
-  /applications/{id}:
+  /appstore/purchased/{id}:
     get:
-      operationId: applicationGET
+      operationId: appstorePurchasedIdGET
       parameters:
       - description: Purchased application id
         explode: true
@@ -7474,7 +7479,7 @@ paths:
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
     post:
-      operationId: applicationPOST
+      operationId: appstorePurchasedIdPOST
       parameters:
       - description: Purchased application id
         explode: true
@@ -7526,7 +7531,7 @@ paths:
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
     put:
-      operationId: applicationsConfigurationPUT
+      operationId: appstorePurchasedIdPUT
       parameters:
       - description: application id to update
         explode: true
@@ -7583,7 +7588,7 @@ paths:
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
     delete:
-      operationId: applicationDELETE
+      operationId: appstorePurchasedIdDELETE
       parameters:
       - description: Application id to remove
         explode: true
@@ -7594,7 +7599,7 @@ paths:
           type: string
         style: simple
       responses:
-        "200":
+        "204":
           description: Successful operation
         "401":
           content:
@@ -7860,106 +7865,65 @@ components:
         server:
           type: string
       type: object
+    ConfigurationRequest:
+      type: object
     Application:
-      example:
-        _id: library id
-        name: Application Name
-        description: description
-        latestVersion: 1.2.3.4
-        cpuRequirements: 4
-        ramRequirements: 4
-        components:
-        - Manage
-        - Edge
-        - Client
-        operatingSystem:
-        - Linux
-        - Windows
-        dependencies: []
-        createdAt: date
-        createdDate: date
-        creator: Application creator
-        repositoryTime: timestamp
-        updatedAt: date
       properties:
         _id:
+          maxLength: 24
+          minLength: 24
           type: string
         name:
           type: string
+        creator:
+          type: string
         description:
           type: string
-        latestVersion:
+        identifier:
           type: string
-        cpuRequirements:
-          type: number
-        ramRequirements:
-          type: number
+        versions:
+          items:
+            $ref: '#/components/schemas/ApplicationVersion'
+          type: array
+    ApplicationVersion:
+      properties:
+        version:
+          type: string
         components:
-          type: array
-        operatingSystem:
-          type: array
-        dependencies:
-          type: array
-    ConfigurationRequest:
-      type: object
+          type: object
+          properties:
+            agent:
+              type: object
+              properties:
+                installationPath:
+                  type: string
+                installationPathType:
+                  type: string
+                  enum:
+                    - local
+                    - url
+                startOnInstallation:
+                  type: boolean
+            manage:
+              type: object
     PurchasedApplication:
       example:
         _id: _id
         app: library object
         org: organization object
         installedVersion: 1.2.3.5
-        purchasedDate: date
         configuration: object
-        updatedAt: date
-        removed: false
       properties:
         _id:
-          maxLength: 24
-          minLength: 24
           type: string
         app:
           type: string
         org:
           type: string
-        installedVersion2:
+        installedVersion:
           type: string
         configuration:
           type: object
-        removed:
-          type: boolean
-    # PurchasedApplication:
-    #   example:
-    #     _id: _id
-    #     app: library object
-    #     org: organization object
-    #     installedVersion: 1.2.3.5
-    #     statuses:
-    #       installed: 1
-    #       pending: 0
-    #       failed: 0
-    #       deleted: 1
-    #   properties:
-    #     _id:
-    #       maxLength: 24
-    #       minLength: 24
-    #       type: string
-    #     app:
-    #       type: object
-    #     org:
-    #       type: object
-    #     installedVersion:
-    #       type: string
-    #     statuses:
-    #       type: object
-    #       properties:
-    #         installed:
-    #           type: number
-    #         pending:
-    #           type: number
-    #         failed:
-    #           type: number
-    #         deleted:
-    #           type: number
     AppIdentificationRules:
       example:
         ip: 127.0.0.1
@@ -8558,7 +8522,7 @@ components:
         _id: _id
         isApproved: true
         applications:
-        - applicationInfo: applicationInfo
+        - app: app
           status: status
         staticroutes:
         - id: 1
@@ -8633,14 +8597,6 @@ components:
           items:
             $ref: '#/components/schemas/Interface'
           type: array
-        # applications:
-          # items:
-          #   type: object
-          #   properties:
-          #     applicationInfo:
-          #       type: string
-          #     status:
-          #       type: string
         deviceSpecificRulesEnabled:
           type: boolean
         firewallRules:

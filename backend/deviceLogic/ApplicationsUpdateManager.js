@@ -18,7 +18,7 @@
 // const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
-const applicationsLibrary = require('../models/applicationsLibrary');
+const applicationStore = require('../models/applicationStore');
 const applications = require('../models/applications');
 const organizations = require('../models/organizations');
 const { membership } = require('../models/membership');
@@ -69,7 +69,6 @@ class ApplicationsUpdateManager {
       {
         $match: {
           libraryApp: ObjectId(libraryApp._id),
-          removed: false,
           installedVersion: { $ne: libraryApp.latestVersion },
           pendingToUpgrade: { $ne: true }
         }
@@ -78,7 +77,7 @@ class ApplicationsUpdateManager {
         $lookup: {
           from: 'devices',
           localField: '_id',
-          foreignField: 'applications.applicationInfo',
+          foreignField: 'applications.app',
           as: 'devices'
         }
       },
@@ -161,7 +160,7 @@ class ApplicationsUpdateManager {
     * @return {void}
     */
   async pollApplications () {
-    logger.info('Begin fetching global applications file', {
+    logger.info('Begin fetching appStore file', {
       params: { applicationsUri: this.applicationsUri }
     });
     try {
@@ -183,14 +182,15 @@ class ApplicationsUpdateManager {
       const options = {
         upsert: true,
         useFindAndModify: false,
-        new: true
+        new: true,
+        runValidators: true
       };
 
       let isUpdated = false;
 
       for (let i = 0; i < appList.length; i++) {
         // skip if app is not changed on repository
-        let app = await applicationsLibrary.findOne({ name: appList[i].name });
+        let app = await applicationStore.findOne({ identifier: appList[i].identifier });
         if (app && app.repositoryTime === body.meta.time) {
           continue;
         }
@@ -198,14 +198,18 @@ class ApplicationsUpdateManager {
         isUpdated = true;
 
         const set = { $set: { repositoryTime: body.meta.time, ...appList[i] } };
-        app = await applicationsLibrary.findOneAndUpdate({ name: appList[i].name }, set, options);
+        app = await applicationStore.findOneAndUpdate(
+          { name: appList[i].name },
+          set,
+          options
+        );
 
         // check if devices needs to upgrade
         await this.checkDevicesUpgrade(app);
       }
 
       if (isUpdated) {
-        logger.info('Library database updated', {
+        logger.info('appStore database updated', {
           params: { time: body.meta.time, appsCount: appList.length }
         });
       }

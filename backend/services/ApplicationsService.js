@@ -15,8 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const mongoose = require('mongoose');
 const Service = require('./Service');
-const applicationsLibrary = require('../models/applicationsLibrary');
+const appStore = require('../models/applicationStore');
 const { devices } = require('../models/devices');
 const applications = require('../models/applications');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -25,7 +26,6 @@ const ObjectId = require('mongoose').Types.ObjectId;
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 const {
-  getInitialConfigObject,
   validateConfiguration,
   pickAllowedFieldsOnly,
   saveConfiguration,
@@ -34,19 +34,45 @@ const {
 
 class ApplicationsService {
   /**
-   * get all applications in our applications library
+   * Select the API fields from application Object
+   * @param {Object} item - jobs object
+   */
+  static selectApplicationParams (item) {
+    item._id = item._id.toString();
+
+    if (item.org) {
+      if (mongoose.Types.ObjectId.isValid(item.org)) {
+        item.org = item.org.toString();
+      } else {
+        item.org._id = item.org._id.toString();
+      }
+    }
+
+    if (item.appStoreApp) {
+      if (mongoose.Types.ObjectId.isValid(item.appStoreApp)) {
+        item.org = item.appStoreApp.toString();
+      } else {
+        item.appStoreApp._id = item.appStoreApp._id.toString();
+      }
+    }
+
+    return item;
+  }
+
+  /**
+   * get all applications in our applications store
    *
    * @static
    * @param {*} { user }
    * @returns {Object} object with applications array
    * @memberof ApplicationsService
    */
-  static async applicationsLibraryGET ({ user }) {
+  static async appstoreGET ({ user }) {
     try {
-      const appsList = await applicationsLibrary.find().lean();
+      const appsList = await appStore.find().lean();
 
       const mapped = appsList.map(app => {
-        return { ...app, _id: app._id.toString() };
+        return ApplicationsService.selectApplicationParams(app);
       });
 
       return Service.successResponse(mapped);
@@ -67,20 +93,20 @@ class ApplicationsService {
    * @returns {Object} object with applications array
    * @memberof ApplicationsService
    */
-  static async applicationGET ({ org, id }, { user }) {
+  static async appstorePurchasedIdGET ({ org, id }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
+      const orgList = await getAccessTokenOrgList(user, org, true);
 
       // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      const installedApp = await applications
-        .findOne({ org: { $in: orgList }, removed: false, _id: id })
-        .populate('libraryApp').populate('org');
+      const app = await applications
+        .findOne({ org: { $in: orgList }, _id: id })
+        .populate('appStoreApp').lean();
 
-      return Service.successResponse({ application: installedApp });
+      return Service.successResponse(ApplicationsService.selectApplicationParams(app));
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -98,18 +124,21 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationsGET ({ org }, { user }) {
+  static async appstorePurchasedGET ({ org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
+      let orgList = await getAccessTokenOrgList(user, org, true);
+      orgList = orgList.map(o => mongoose.Types.ObjectId(o));
+
       const installed = await applications.aggregate([
-        { $match: { org: { $in: orgList.map(o => ObjectId(o)) }, removed: false } },
+        { $match: { org: { $in: orgList } } },
         {
           $lookup: {
             from: 'devices',
             let: { id: '$_id' },
             pipeline: [
+              { $match: { org: { $in: orgList } } },
               { $unwind: '$applications' },
-              { $match: { $expr: { $eq: ['$applications.applicationInfo', '$$id'] } } },
+              { $match: { $expr: { $eq: ['$applications.app', '$$id'] } } },
               { $project: { 'applications.status': 1 } },
               { $group: { _id: '$applications.status', count: { $sum: 1 } } }
             ],
@@ -119,7 +148,7 @@ class ApplicationsService {
         {
           $project: {
             _id: 1,
-            libraryApp: 1,
+            appStoreApp: 1,
             org: 1,
             installedVersion: 1,
             pendingToUpgrade: 1,
@@ -128,8 +157,7 @@ class ApplicationsService {
         }
       ]).allowDiskUse(true);
 
-      await applications.populate(installed, { path: 'libraryApp' });
-      await applications.populate(installed, { path: 'org' });
+      await applications.populate(installed, { path: 'appStoreApp' });
 
       const response = installed.map(app => {
         const statusesTotal = {
@@ -152,11 +180,13 @@ class ApplicationsService {
         const { ...rest } = app;
         return {
           ...rest,
+          _id: app._id.toString(),
+          org: app.org.toString(),
           statuses: statusesTotal
         };
       });
 
-      return Service.successResponse({ applications: response });
+      return Service.successResponse(response);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -174,54 +204,43 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationPOST ({ org, id }, { user }) {
+  static async appstorePurchasedIdPOST ({ org, id }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
+      const orgList = await getAccessTokenOrgList(user, org, true);
 
       // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      // check if application._id is an application in library
-      const libraryApp = await applicationsLibrary.findOne({ _id: id });
-      if (!libraryApp) {
+      // check if application._id is an application in the appstore
+      const appStoreApp = await appStore.findOne({ _id: id });
+      if (!appStoreApp) {
         return Service.rejectResponse('Application id is not known', 500);
       }
 
-      // check if app already installed
-      let appExists = await applications.findOne({
-        org: { $in: orgList }, libraryApp: id
+      // check if app already purchased
+      const alreadyPurchased = await applications.findOne({
+        org: { $in: orgList }, appStoreApp: appStoreApp._id
       });
 
-      if (appExists && !appExists.removed) {
+      if (alreadyPurchased) {
         return Service.rejectResponse('This Application is already purchased', 500);
-      }
-
-      // don't create new app if this app installed in the past but removed
-      if (appExists && appExists.removed) {
-        appExists.removed = false;
-        appExists.purchasedDate = Date.now();
-        appExists.save();
-
-        appExists = await appExists.populate('libraryApp').populate('org').execPopulate();
-
-        return Service.successResponse(appExists);
       }
 
       // create app
       let installedApp = await applications.create({
-        libraryApp: libraryApp._id,
+        appStoreApp: appStoreApp._id,
         org: orgList[0],
-        installedVersion: libraryApp.latestVersion,
+        installedVersion: appStoreApp.versions[appStoreApp.versions.length - 1].version,
         purchasedDate: Date.now(),
-        configuration: getInitialConfigObject(libraryApp)
+        configuration: {}
       });
 
-      // return populated document
-      installedApp = await installedApp.populate('libraryApp').populate('org').execPopulate();
+      installedApp = await applications.findOne({ _id: installedApp._id })
+        .populate('appStoreApp').lean();
 
-      return Service.successResponse(installedApp);
+      return Service.successResponse(ApplicationsService.selectApplicationParams(installedApp));
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -239,25 +258,19 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationDELETE ({ org, id }, { user }, response) {
+  static async appstorePurchasedIdDELETE ({ org, id }, { user }, response) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
+      const orgList = await getAccessTokenOrgList(user, org, true);
 
       // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id)) {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      await applications.updateOne(
-        { _id: id, org: { $in: orgList }, removed: false },
-        { $set: { removed: true } },
-        { upsert: false }
-      );
-
       // send jobs to device that installed or installing this app
       const opDevices = await devices.find({
         org: { $in: orgList },
-        'applications.applicationInfo': id,
+        'applications.app': id,
         $or: [
           { 'applications.status': 'installed' },
           { 'applications.status': 'installing' }
@@ -265,11 +278,16 @@ class ApplicationsService {
       });
 
       if (opDevices.length) {
-        await dispatcher.apply(opDevices, 'application',
-          user, { org: orgList[0], meta: { op: 'uninstall', id: id } });
+        await dispatcher.apply(
+          opDevices, 'application', user, { org: orgList[0], meta: { op: 'uninstall', id: id } }
+        );
       }
 
-      return Service.successResponse({ data: 'ok' });
+      await applications.deleteOne(
+        { _id: id, org: { $in: orgList } }
+      );
+
+      return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -287,9 +305,9 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationsConfigurationPUT ({ id, configurationRequest, org }, { user }) {
+  static async appstorePurchasedIdPUT ({ id, configurationRequest, org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, org, false);
+      const orgList = await getAccessTokenOrgList(user, org, true);
 
       // check if user didn't pass request body or if app id is invalid
       if (!ObjectId.isValid(id) || Object.keys(configurationRequest).length === 0) {
@@ -297,10 +315,12 @@ class ApplicationsService {
       }
 
       const app = await applications
-        .findOne({ org: { $in: orgList }, removed: false, _id: id })
-        .populate('libraryApp').populate('org').lean();
+        .findOne({ org: { $in: orgList }, _id: id })
+        .populate('appStoreApp').lean();
 
-      if (!app) return Service.rejectResponse('Invalid application id', 500);
+      if (!app) {
+        return Service.rejectResponse('Invalid application id', 500);
+      }
 
       // this configuration object is dynamically.
       // we need to pick only allowed fields for given application
@@ -327,7 +347,7 @@ class ApplicationsService {
       if (isNeedToUpdatedDevices) {
         const opDevices = await devices.find({
           org: { $in: orgList },
-          'applications.applicationInfo': id,
+          'applications.app': id,
           'applications.status': { $in: ['installed', 'installing', 'configuration failed'] }
         });
 
@@ -337,7 +357,7 @@ class ApplicationsService {
         }
       }
 
-      return Service.successResponse({ application: updated });
+      return Service.successResponse(ApplicationsService.selectApplicationParams(updated));
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -379,7 +399,7 @@ class ApplicationsService {
       // send jobs to device
       const opDevices = await devices.find({
         org: { $in: orgList },
-        'applications.applicationInfo': id
+        'applications.app': id
       });
 
       await dispatcher.apply(opDevices, 'application',
