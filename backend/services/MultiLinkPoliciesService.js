@@ -24,7 +24,7 @@ const { devices } = require('../models/devices');
 const pathLabelsModel = require('../models/pathlabels');
 const { ObjectId } = require('mongoose').Types;
 const { applyPolicy } = require('../deviceLogic/mlpolicy');
-const { getMajorVersion } = require('../versioning');
+const { validateMultilinkPolicy } = require('../deviceLogic/validators');
 
 const emptyPrefix = {
   ip: '',
@@ -40,7 +40,7 @@ const emptyApp = {
 };
 
 class MultiLinkPoliciesService {
-  static async verifyRequestSchema (mLPolicyRequest, org, opDevices) {
+  static async verifyRequestSchema (mLPolicyRequest, org) {
     const { _id, name, rules } = mLPolicyRequest;
     // Check if any enabled rule exists
     if (!rules.some(rule => rule.enabled)) {
@@ -126,21 +126,6 @@ class MultiLinkPoliciesService {
         message: 'Not allowed to assign path labels of a different organization'
       };
     };
-
-    if (opDevices.some(device => getMajorVersion(device.versions.agent) < 5)) {
-      if (rules.some(rule => {
-        return (rule.action.links.some(link => {
-          return link.order === 'link-quality';
-        }));
-      })) {
-        return {
-          valid: false,
-          message: 'Link-quality is supported from version 5.1.X.' +
-            ' Some devices have lower version'
-        };
-      }
-    }
-
     return { valid: true, message: '' };
   }
 
@@ -296,10 +281,16 @@ class MultiLinkPoliciesService {
       );
       // Verify request schema
       const { valid, message } = await MultiLinkPoliciesService.verifyRequestSchema(
-        mLPolicyRequest, orgList[0], opDevices
+        mLPolicyRequest, orgList[0]
       );
       if (!valid) {
         throw createError(400, message);
+      }
+
+      // Devices specific apply validation
+      const { valid: validToApply, err } = validateMultilinkPolicy(mLPolicyRequest, opDevices);
+      if (!validToApply) {
+        throw createError(400, err);
       }
 
       const MLPolicy = await MultiLinkPolicies.findOneAndUpdate(

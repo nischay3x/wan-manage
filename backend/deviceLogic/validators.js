@@ -19,6 +19,7 @@ const net = require('net');
 const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
+const { getMajorVersion } = require('../versioning');
 const maxMetric = 2 * 10 ** 9;
 /**
  * Checks whether a value is empty
@@ -567,11 +568,36 @@ const validateStaticRoute = (device, tunnels, route) => {
   return { valid: true, err: '' };
 };
 
+/**
+ * Checks whether multilink policy device specific rules are valid
+ * @param {Object} policy     - a multilink policy to validate
+ * @param {Array}  devices    - an array of devices
+ * @return {{valid: boolean, err: string}}  test result + error, if invalid
+ */
+const validateMultilinkPolicy = (policy, devices) => {
+  // link-quality is supported from version 5 only
+  if (devices.some(device => getMajorVersion(device.versions.agent) < 5)) {
+    if (policy.rules.some(rule => {
+      return (rule.action.links.some(link => {
+        return link.order === 'link-quality';
+      }));
+    })) {
+      return {
+        valid: false,
+        err: 'Link-quality is supported from version 5.1.X.' +
+          ' Some devices have lower version'
+      };
+    }
+  }
+  return { valid: true, err: '' };
+};
+
 module.exports = {
   isIPv4Address,
   validateDevice,
   validateDhcpConfig,
   validateStaticRoute,
   validateModifyDeviceMsg,
+  validateMultilinkPolicy,
   validateFirewallRules
 };

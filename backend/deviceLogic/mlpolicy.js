@@ -29,7 +29,7 @@ const { getDevicesAppIdentificationJobInfo } = require('./appIdentification');
 const appComplete = require('./appIdentification').complete;
 const appError = require('./appIdentification').error;
 const appRemove = require('./appIdentification').remove;
-const { getMajorVersion } = require('../versioning');
+const { validateMultilinkPolicy } = require('./validators');
 
 const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
@@ -209,26 +209,10 @@ const apply = async (deviceList, user, data) => {
       opDevices = filterDevices(deviceList, deviceIdsSet, op);
 
       if (op === 'install') {
-        // link-quality with DIA labels not allowed
-        if (mLPolicy.rules.some(rule => (rule.action.links.some(link =>
-          (link.order === 'link-quality' && link.pathlabels.some(label => label.type === 'DIA'))
-        )))) {
-          throw createError(400,
-            'Link-quality with DIA labels not allowed'
-          );
-        };
-        // link-quality is supported from version 5 only
-        if (opDevices.some(device => getMajorVersion(device.versions.agent) < 5)) {
-          if (mLPolicy.rules.some(rule => {
-            return (rule.action.links.some(link => {
-              return link.order === 'link-quality';
-            }));
-          })) {
-            throw createError(400,
-              'Link-quality is supported from version 5.1.X.' +
-              ' Some devices have lower version'
-            );
-          }
+        // Devices specific validation
+        const { valid, err } = validateMultilinkPolicy(mLPolicy, opDevices);
+        if (!valid) {
+          throw createError(400, err);
         }
       }
     });
