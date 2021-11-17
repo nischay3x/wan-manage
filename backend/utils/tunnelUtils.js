@@ -212,6 +212,16 @@ const getTunnelsPipeline = (orgList, filters) => {
                 ]
               },
               then: 'Connected'
+            },
+            {
+              case: {
+                // tunnel status unknown if one of devices is not connected
+                $or: [
+                  { $eq: ['$deviceA.isConnected', false] },
+                  { $eq: ['$deviceB.isConnected', false] }
+                ]
+              },
+              then: 'N/A'
             }
           ],
           default: 'Not Connected'

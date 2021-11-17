@@ -1259,7 +1259,7 @@ const apply = async (device, user, data) => {
     ));
 
   if (rulesModified) {
-    modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice);
+    modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice.toObject());
   }
 
   const modified =

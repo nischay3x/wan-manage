@@ -19,6 +19,7 @@ const net = require('net');
 const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
+const { getMajorVersion } = require('../versioning');
 const maxMetric = 2 * 10 ** 9;
 /**
  * Checks whether a value is empty
@@ -91,8 +92,9 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
 const validateFirewallRules = (rules, interfaces = undefined) => {
   const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
   const usedInboundPorts = [];
+  const enabledRules = rules.filter(r => r.enabled);
   // Common rules validation
-  for (const rule of rules) {
+  for (const rule of enabledRules) {
     const { direction, inbound, classification } = rule;
     // Inbound rule type must be specified
     if (direction === 'inbound' && !inboundRuleTypes.includes(inbound)) {
@@ -168,7 +170,7 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
     // Port forward rules validation
     const forwardedPorts = {};
     const internalPorts = {};
-    for (const rule of rules.filter(r => r.inbound === 'portForward')) {
+    for (const rule of enabledRules.filter(r => r.inbound === 'portForward')) {
       const { internalIP, internalPortStart, classification } = rule;
       const { ports: destPorts, interface: devId } = classification.destination.ipProtoPort;
       if (isEmpty(devId)) {
@@ -566,11 +568,36 @@ const validateStaticRoute = (device, tunnels, route) => {
   return { valid: true, err: '' };
 };
 
+/**
+ * Checks whether multilink policy device specific rules are valid
+ * @param {Object} policy     - a multilink policy to validate
+ * @param {Array}  devices    - an array of devices
+ * @return {{valid: boolean, err: string}}  test result + error, if invalid
+ */
+const validateMultilinkPolicy = (policy, devices) => {
+  // link-quality is supported from version 5 only
+  if (devices.some(device => getMajorVersion(device.versions.agent) < 5)) {
+    if (policy.rules.some(rule => {
+      return (rule.action.links.some(link => {
+        return link.order === 'link-quality';
+      }));
+    })) {
+      return {
+        valid: false,
+        err: 'Link-quality is supported from version 5.1.X.' +
+          ' Some devices have lower version'
+      };
+    }
+  }
+  return { valid: true, err: '' };
+};
+
 module.exports = {
   isIPv4Address,
   validateDevice,
   validateDhcpConfig,
   validateStaticRoute,
   validateModifyDeviceMsg,
+  validateMultilinkPolicy,
   validateFirewallRules
 };

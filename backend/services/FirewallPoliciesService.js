@@ -22,9 +22,10 @@ const FirewallPolicies = require('../models/firewallPolicies');
 const { devices } = require('../models/devices');
 const { ObjectId } = require('mongoose').Types;
 const { validateFirewallRules } = require('../deviceLogic/validators');
+const { applyPolicy } = require('../deviceLogic/firewallPolicy');
 
 class FirewallPoliciesService {
-  static async verifyRequestSchema (firewallPolicyRequest, org) {
+  static async verifyRequestSchema (firewallPolicyRequest, org, devices = []) {
     const { _id, name, rules } = firewallPolicyRequest;
 
     // Duplicate names are not allowed in the same organization
@@ -38,9 +39,20 @@ class FirewallPoliciesService {
       };
     };
 
-    const { valid, err: message } = validateFirewallRules(rules);
-    if (!valid) {
-      return { valid, message };
+    const devicesWithSpecificRules = devices.filter(d => d.deviceSpecificRulesEnabled);
+    if (devicesWithSpecificRules.length > 0) {
+      for (const device of devicesWithSpecificRules) {
+        const allRules = [...rules, ...device.firewall.rules];
+        const { valid, err: message } = validateFirewallRules(allRules, device.interfaces);
+        if (!valid) {
+          return { valid, message };
+        }
+      }
+    } else {
+      const { valid, err: message } = validateFirewallRules(rules);
+      if (!valid) {
+        return { valid, message };
+      }
     }
 
     return { valid: true, message: '' };
@@ -183,9 +195,24 @@ class FirewallPoliciesService {
       const { name, description, isDefault, rules } = firewallPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
+      const opDevices = await devices.find(
+        {
+          org: orgList[0],
+          'policies.firewall.policy': id,
+          'policies.firewall.status': { $in: ['installing', 'installed'] }
+        },
+        {
+          name: 1,
+          machineId: 1,
+          interfaces: 1,
+          'firewall.rules': 1,
+          deviceSpecificRulesEnabled: 1
+        }
+      ).lean();
+
       // Verify request schema
       const { valid, message } = await FirewallPoliciesService.verifyRequestSchema(
-        firewallPolicyRequest, orgList[0]
+        firewallPolicyRequest, orgList[0], opDevices
       );
       if (!valid) {
         throw createError(400, message);
@@ -228,8 +255,11 @@ class FirewallPoliciesService {
         return Service.rejectResponse('Not found', 404);
       }
 
+      // apply on devices
+      const applied = await applyPolicy(opDevices, firewallPolicy, 'install', user, orgList[0]);
+
       const converted = JSON.parse(JSON.stringify(firewallPolicy));
-      return Service.successResponse(converted);
+      return Service.successResponse({ ...converted, ...applied });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

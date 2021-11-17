@@ -9415,6 +9415,7 @@ components:
             - Connected
             - Not Connected
             - Pending
+            - N/A
           type: string
         isPending:
           type: boolean
