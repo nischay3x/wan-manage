@@ -643,7 +643,7 @@ class DevicesService {
         .populate({
           path: 'applications.app',
           populate: {
-            path: 'applicationStore'
+            path: 'appStoreApp'
           }
         });
       const device = await DevicesService.selectDeviceParams(result);

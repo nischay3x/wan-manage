@@ -32,8 +32,7 @@ const {
 } = require('../utils/networks');
 
 const {
-  // generateKeys,
-  generateOpenVpnPKI,
+  generateRemoteVpnPKI,
   generateTlsKey,
   generateDhKey
 } = require('../utils/certificates');
@@ -52,9 +51,9 @@ const allowedFields = [
   'serverPort',
   'vpnNetwork',
   'connectionsPerDevice',
-  'routeAllOverVpn',
-  'dnsIp',
-  'dnsDomain',
+  'routeAllTrafficOverVpn',
+  'dnsIps',
+  'dnsDomains',
   'authentications'
 ];
 
@@ -82,7 +81,7 @@ const vpnConfigSchema = Joi.object().keys({
   networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
   serverPort: Joi.number().port().required(),
   vpnNetwork: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
-  routeAllOverVpn: Joi.boolean().required(),
+  routeAllTrafficOverVpn: Joi.boolean().required(),
   connectionsPerDevice: Joi.number().min(8)
     .custom((val, helpers) => {
       const isPowerOfTwo = (Math.log(val) / Math.log(2)) % 1 === 0;
@@ -93,8 +92,31 @@ const vpnConfigSchema = Joi.object().keys({
       return val.toString();
     })
     .required(),
-  dnsIp: Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' }).allow('').optional(),
-  dnsDomain: Joi.string().min(3).max(50).allow('').optional(),
+  dnsIps: Joi.string().custom((val, helpers) => {
+    const domainList = val.split(/\s*,\s*/);
+
+    const ipSchema = Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' });
+
+    const valid = domainList.every(d => {
+      const res = ipSchema.validate(d);
+      return res.error === undefined;
+    });
+
+    if (valid) {
+      return val;
+    } else {
+      return helpers.message('dnsIps is not valid');
+    }
+  }).allow('').optional(),
+  dnsDomains: Joi.string().custom((val, helpers) => {
+    const domainList = val.split(/\s*,\s*/);
+    const valid = domainList.every(d => validateFQDN(d));
+    if (!valid) {
+      return helpers.message('dnsDomains is not valid');
+    };
+
+    return val;
+  }).allow('').optional(),
   authentications: Joi.object({
     gsuite: getAuthValidator(),
     office365: getAuthValidator()
@@ -332,8 +354,7 @@ const getDeviceKeys = async application => {
 
   if (!application.configuration.keys) {
     isNew = true;
-    const pems = generateOpenVpnPKI();
-    // const server = generateKeys(ca.privateKey);
+    const pems = generateRemoteVpnPKI();
 
     caPrivateKey = pems.private;
     caPublicKey = pems.cert;
@@ -378,15 +399,15 @@ const getDeviceKeys = async application => {
  * @param {string} op the operation of the job (install, config, etc.)
  * @return {object} params to be sent to device
 */
-const getOpenVpnParams = async (device, applicationId, op) => {
+const getRemoteVpnParams = async (device, applicationId, op) => {
   const params = {};
   const { _id, interfaces } = device;
 
   const application = await applications.findOne({ _id: applicationId })
-    .populate('libraryApp').lean();
+    .populate('appStoreApp').lean();
   const config = application.configuration;
 
-  if (op === 'install' || op === 'config' || op === 'upgrade') {
+  if (op === 'config') {
     // get the WanIp to be used by remote vpn server to listen
     const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
 
@@ -425,29 +446,28 @@ const getOpenVpnParams = async (device, applicationId, op) => {
     // set subnet to device to prevent same subnet on multiple devices
     await applications.updateOne(query, update);
 
-    let version = application.installedVersion;
-    if (op === 'upgrade') {
-      version = application.libraryApp.latestVersion;
-    }
+    // let version = application.installedVersion;
+    // if (op === 'upgrade') {
+    //   version = application.appStoreApp.latestVersion;
+    // }
 
-    const dnsIp = config.dnsIp && config.dnsIp !== ''
-      ? config.dnsIp.split(';') : [];
+    const dnsIps = config.dnsIps && config.dnsIps !== ''
+      ? config.dnsIps.split(/\s*,\s*/) : [];
 
-    const dnsDomain = config.dnsDomain && config.dnsDomain !== ''
-      ? config.dnsDomain.split(';') : [];
+    const dnsDomains = config.dnsDomains && config.dnsDomains !== ''
+      ? config.dnsDomains.split(/\s*,\s*/) : [];
 
-    params.version = version;
-    params.routeAllOverVpn = config.routeAllOverVpn || false;
+    params.routeAllTrafficOverVpn = config.routeAllTrafficOverVpn || false;
     params.vpnNetwork = deviceSubnet.subnet;
     params.port = config.serverPort ? config.serverPort : '';
-    params.deviceWANIp = wanIp;
+    params.wanIp = wanIp;
     params.caKey = caPrivateKey;
     params.caCrt = caPublicKey;
     params.serverKey = serverKey;
     params.serverCrt = serverCrt;
     params.tlsKey = tlsKey;
-    params.dnsIp = dnsIp;
-    params.dnsName = dnsDomain;
+    params.dnsIps = dnsIps;
+    params.dnsDomains = dnsDomains;
     params.dhKey = dhKey;
   }
 
@@ -458,8 +478,8 @@ const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
   if (oldConfig.vpnNetwork !== updatedConfig.vpnNetwork) return true;
   if (oldConfig.connectionsPerDevice !== updatedConfig.connectionsPerDevice) return true;
   if (oldConfig.serverPort !== updatedConfig.serverPort) return true;
-  if (oldConfig.dnsIp !== updatedConfig.dnsIp) return true;
-  if (oldConfig.dnsDomain !== updatedConfig.dnsDomain) return true;
+  if (oldConfig.dnsIps !== updatedConfig.dnsIps) return true;
+  if (oldConfig.dnsDomains !== updatedConfig.dnsDomains) return true;
   return false;
 };
 
@@ -472,6 +492,6 @@ module.exports = {
   onVpnJobFailed,
   validateVpnApplication,
   pickOnlyVpnAllowedFields,
-  getOpenVpnParams,
+  getRemoteVpnParams,
   needToUpdatedVpnServers
 };

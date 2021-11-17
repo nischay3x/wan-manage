@@ -36,7 +36,7 @@ describe('Validate vpn configuration', () => {
   let devicesIds = null;
   beforeEach(() => {
     app = {
-      libraryApp: {
+      appStoreApp: {
         name: 'Remote VPN'
       },
       configuration: {
@@ -219,7 +219,7 @@ describe('Validate vpn name', () => {
 
 describe('Validate vpn configuration', () => {
   const app = {
-    libraryApp: {
+    appStoreApp: {
       name: 'Remote VPN'
     }
   };
@@ -232,15 +232,15 @@ describe('Validate vpn configuration', () => {
       vpnNetwork: '192.168.0.0/24',
       connectionsPerDevice: 8,
       serverPort: '1194',
-      dnsIp: '8.8.8.8',
-      dnsDomain: 'local.dns'
+      dnsIps: '8.8.8.8',
+      dnsDomains: 'local.dns'
     };
     newConfig = {
       vpnNetwork: '192.168.0.0/24',
       connectionsPerDevice: 8,
       serverPort: '1194',
-      dnsIp: '8.8.8.8',
-      dnsDomain: 'local.dns'
+      dnsIps: '8.8.8.8',
+      dnsDomains: 'local.dns'
     };
   });
 
@@ -267,14 +267,14 @@ describe('Validate vpn configuration', () => {
     expect(res).toBe(true);
   });
 
-  it('Should return true if dnsIp is different', () => {
-    newConfig.dnsIp = '8.8.4.4';
+  it('Should return true if dnsIps is different', () => {
+    newConfig.dnsIps = '8.8.4.4';
     const res = needToUpdatedDevices(app, oldConfig, newConfig);
     expect(res).toBe(true);
   });
 
-  it('Should return true if dnsDomain is different', () => {
-    newConfig.dnsDomain = 'local2.dns';
+  it('Should return true if dnsDomains is different', () => {
+    newConfig.dnsDomains = 'local2.dns';
     const res = needToUpdatedDevices(app, oldConfig, newConfig);
     expect(res).toBe(true);
   });

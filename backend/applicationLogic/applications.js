@@ -24,7 +24,7 @@ const {
   onVpnJobRemoved,
   onVpnJobFailed,
   validateVpnApplication,
-  getOpenVpnParams,
+  getRemoteVpnParams,
   pickOnlyVpnAllowedFields,
   needToUpdatedVpnServers
 } = require('./remotevpn');
@@ -80,15 +80,40 @@ const onJobRemoved = async (org, app, op, deviceId) => {
  * @return {Object}               parameters object
  */
 const getJobParams = async (device, application, op) => {
-  if (isVpn(application.appStoreApp.identifier)) {
-    return {
-      type: 'open-vpn',
-      name: application.appStoreApp.name,
-      config: await getOpenVpnParams(device, application._id, op)
-    };
+  let params = {
+    name: application.appStoreApp.name,
+    identifier: application.appStoreApp.identifier
+  };
+
+  const version = application.appStoreApp.versions.find(v => {
+    return v.version === application.installedVersion;
+  });
+
+  if (!version) {
+    throw new Error('Invalid installed version');
   }
 
-  return {};
+  if (op === 'install') {
+    params.installationFilePath = version.components.agent.installationPath;
+    params.installationPathType = version.components.agent.installationPathType;
+    params.startOnInstallation = version.components.agent.startOnInstallation;
+  }
+
+  if (isVpn(application.appStoreApp.identifier)) {
+    const vpnParams = await getRemoteVpnParams(device, application._id, op);
+    if (op === 'install') {
+      params = { ...params, ...vpnParams };
+
+      // for install job, we passed the config parameters as well
+      const vpnConfigParams = await getRemoteVpnParams(device, application._id, 'config');
+      vpnConfigParams.identifier = application.appStoreApp.identifier;
+      params = { ...params, configParams: vpnConfigParams };
+    } else {
+      params = { ...params, ...vpnParams };
+    }
+  }
+
+  return params;
 };
 
 const saveConfiguration = async (application, updatedConfig) => {

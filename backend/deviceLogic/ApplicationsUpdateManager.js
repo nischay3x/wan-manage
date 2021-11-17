@@ -59,17 +59,17 @@ class ApplicationsUpdateManager {
     * Upgrade application version on devices if needed.
     * if yes - notify and send emails
     * @async
-    * @param {application} libraryApp
+    * @param {application} appStoreApp
     * @param {Boolean}
     * @return {void}
     */
-  async checkDevicesUpgrade (libraryApp) {
-    // get devices with old version of libraryApp
+  async checkDevicesUpgrade (appStoreApp) {
+    // get devices with old version of appStoreApp
     const oldVersionsDevices = await applications.aggregate([
       {
         $match: {
-          libraryApp: ObjectId(libraryApp._id),
-          installedVersion: { $ne: libraryApp.latestVersion },
+          appStoreApp: ObjectId(appStoreApp._id),
+          installedVersion: { $ne: appStoreApp.latestVersion },
           pendingToUpgrade: { $ne: true }
         }
       },
@@ -100,12 +100,12 @@ class ApplicationsUpdateManager {
 
         if (devices.length) {
           const oldVersion = app.installedVersion;
-          const newVersion = libraryApp.latestVersion;
+          const newVersion = appStoreApp.latestVersion;
 
           devices.forEach(device => {
             notifications.push({
               org: app.org,
-              title: `Application ${libraryApp.name} upgrade`,
+              title: `Application ${appStoreApp.name} upgrade`,
               time: new Date(),
               device: device._id,
               machineId: device.machineId,
@@ -134,7 +134,7 @@ class ApplicationsUpdateManager {
           await mailer.sendMailHTML(
             configs.get('mailerFromAddress'),
             emailAddresses,
-            `Upgrade Your ${libraryApp.name} Application`,
+            `Upgrade Your ${appStoreApp.name} Application`,
             `<h2>Your application need to upgrade</h2><br>
             <b>Click below to upgrade your application:</b>
             <p><a href="${configs.get('uiServerUrl')}/applications">

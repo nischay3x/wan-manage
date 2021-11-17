@@ -61,7 +61,11 @@ const apply = async (deviceList, user, data) => {
       app = await applications.findOne({
         org: org,
         _id: id
-      }).populate('libraryApp').lean().session(session);
+      }).populate('appStoreApp').lean().session(session);
+
+      if (!app) {
+        throw createError(500, `Application ${id} does not purchased`);
+      }
 
       // if the user selected multiple devices, the request goes to devicesApplyPOST function
       // and the deviceList variable here contain *all* the devices even they are not selected.
@@ -73,13 +77,7 @@ const apply = async (deviceList, user, data) => {
       }
 
       // get the devices id by updated device list
-      deviceIds = deviceList.map(d => d._id);
-
-      if (op === 'install') {
-        if (!app) {
-          throw createError(500, `Application ${id} does not purchased`);
-        }
-      }
+      deviceIds = deviceList.map(d => d._id.toString());
 
       const { valid, err } = validateApplication(app, op, deviceIds);
       if (!valid) {
@@ -104,7 +102,8 @@ const apply = async (deviceList, user, data) => {
 
           if (appExists) {
             if (appExists.status === 'installing') {
-              throw createError(500, `Device ${device.name} has a pending installation job`);
+              // TODO: What to do in this case?
+              continue;
             }
 
             query['applications.app'] = id;
@@ -123,8 +122,6 @@ const apply = async (deviceList, user, data) => {
             };
           }
 
-          // this updated should be for each device separately
-          // because some of them already have this application and some of them haven't
           await devices.updateOne(query, update, { upsert: false }).session(session);
         }
 
@@ -242,7 +239,7 @@ const complete = async (jobId, res) => {
   const { _id } = res.application.device;
   try {
     const update =
-      op === 'install' || op === 'upgrade' || op === 'config'
+      op === 'install' || op === 'upgrade' || op === 'config' || op === 'start' || op === 'stop'
         ? { $set: { 'applications.$.status': 'installed' } }
         : { $set: { 'applications.$.status': 'uninstalled' } };
 
@@ -251,7 +248,7 @@ const complete = async (jobId, res) => {
       // update version on db
       await applications.updateOne(
         { org: org, _id: app._id },
-        { $set: { installedVersion: app.libraryApp.latestVersion, pendingToUpgrade: false } }
+        { $set: { installedVersion: app.appStoreApp.latestVersion, pendingToUpgrade: false } }
       );
     }
 
@@ -378,17 +375,23 @@ const queueApplicationJob = async (
   let jobTitle = '';
   let message = '';
   if (op === 'install') {
-    jobTitle = `Install ${application.libraryApp.name} application`;
+    jobTitle = `Install ${application.appStoreApp.name} application`;
     message = 'application-install';
   } else if (op === 'upgrade') {
-    jobTitle = `Upgrade ${application.libraryApp.name} application`;
+    jobTitle = `Upgrade ${application.appStoreApp.name} application`;
     message = 'application-upgrade';
   } else if (op === 'config') {
-    jobTitle = `Update ${application.libraryApp.name} configuration`;
+    jobTitle = `Configure ${application.appStoreApp.name} application`;
     message = 'application-configure';
   } else if (op === 'uninstall') {
-    jobTitle = `Uninstall ${application.libraryApp.name} application`;
+    jobTitle = `Uninstall ${application.appStoreApp.name} application`;
     message = 'application-uninstall';
+  } else if (op === 'start') {
+    jobTitle = `Start ${application.appStoreApp.name} application`;
+    message = 'application-start';
+  } else if (op === 'stop') {
+    jobTitle = `Stop ${application.appStoreApp.name} application`;
+    message = 'application-stop';
   } else {
     return jobs;
   }
@@ -402,9 +405,7 @@ const queueApplicationJob = async (
     const tasks = [{
       entity: 'agent',
       message: message,
-      params: {
-        applicationParams: params
-      }
+      params: params
     }];
 
     // response data

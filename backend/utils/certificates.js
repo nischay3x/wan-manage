@@ -5,7 +5,7 @@ const axios = require('axios');
 // const pki = forge.pki;
 const selfsigned = require('selfsigned');
 
-const generateOpenVpnPKI = () => {
+const generateRemoteVpnPKI = () => {
   var attrs = [{ name: 'commonName', value: 'contoso.com' }];
   var pems = selfsigned.generate(attrs, { days: 365, clientCertificate: true });
   // var keys = pki.rsa.generateKeyPair(2048);
@@ -114,7 +114,7 @@ const generateDhKey = () => {
 
 module.exports = {
   // generateKeys,
-  generateOpenVpnPKI,
+  generateRemoteVpnPKI,
   generateDhKey,
   generateTlsKey
 };

@@ -23,6 +23,17 @@ const mongoConns = require('../mongoConns.js')();
 const { firewallRuleSchema } = require('./firewallRule');
 const { pendingSchema } = require('./schemas/pendingSchema');
 
+const statusEnums = [
+  '',
+  'installing',
+  'installed',
+  'uninstalling',
+  'job queue failed',
+  'job deleted',
+  'installation failed',
+  'uninstallation failed'
+];
+
 /**
  * Interfaces Database Schema
  */
@@ -533,19 +544,7 @@ const deviceApplicationSchema = new Schema({
   },
   status: {
     type: String,
-    enum: [
-      '',
-      'installing',
-      'upgrading',
-      'installed',
-      'uninstalling',
-      'job queue failed',
-      'job deleted',
-      'installation failed',
-      'uninstallation failed',
-      'configuration failed',
-      'job failed'
-    ],
+    enum: [...statusEnums, 'upgrading'],
     default: ''
   },
   requestTime: {
@@ -566,16 +565,7 @@ const deviceMultilinkPolicySchema = new Schema({
   },
   status: {
     type: String,
-    enum: [
-      '',
-      'installing',
-      'installed',
-      'uninstalling',
-      'job queue failed',
-      'job deleted',
-      'installation failed',
-      'uninstallation failed'
-    ],
+    enum: statusEnums,
     default: ''
   },
   // TODO: check if really needed
@@ -597,16 +587,7 @@ const deviceFirewallPolicySchema = new Schema({
   },
   status: {
     type: String,
-    enum: [
-      '',
-      'installing',
-      'installed',
-      'uninstalling',
-      'job queue failed',
-      'job deleted',
-      'installation failed',
-      'uninstallation failed'
-    ],
+    enum: statusEnums,
     default: ''
   },
   requestTime: {
