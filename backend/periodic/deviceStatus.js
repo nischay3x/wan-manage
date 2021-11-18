@@ -109,6 +109,7 @@ class DeviceStatus {
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().optional(),
+      application_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
       ikev2: Joi.object({
         certificateExpiration: Joi.string().allow('').optional(),
@@ -405,6 +406,20 @@ class DeviceStatus {
     const timeDelta = rawStats.period;
     const ifStats = rawStats.hasOwnProperty('stats') ? rawStats.stats : {};
     const devStats = {};
+
+    const appStatus = rawStats.application_stats;
+    if (rawStats.hasOwnProperty('application_stats') && Object.entries(appStatus).length !== 0) {
+      if (!this.status[machineId].applicationStatus) {
+        this.status[machineId].applicationStatus = {};
+      }
+      // Generate tunnel notifications
+      Object.entries(appStatus).forEach(ent => {
+        const [identifer, status] = ent;
+        this.status[machineId].applicationStatus[identifer] = {
+          running: status.running
+        };
+      });
+    }
 
     // Set tunnel status in memory for now
     const tunnelStatus = rawStats.tunnel_stats;
