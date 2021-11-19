@@ -405,7 +405,7 @@ class DevicesService {
           }
         });
       } else if (requestParams.response === 'ids') {
-        pipeline.push({ $project: { _id: 1 } });
+        pipeline.push({ $project: { _id: 1, name: 1 } });
       } else {
         // fields to return in detailed response
         const respFields = [

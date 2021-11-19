@@ -58,7 +58,7 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
-const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
+const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub, mtu, reasons) => {
   const devicesLen = opDevices.length;
   const tasks = [];
 
@@ -71,7 +71,24 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, reasons) => {
     throw new Error('Not supported key exchange method');
   }
 
-  for (let idxA = 0; idxA < devicesLen - 1; idxA++) {
+  let hubIdx = -1;
+  let aLoopStart = 0;
+  let aLoopStop = devicesLen - 1;
+  if (topology === 'hubAndSpoke') {
+    // Find index of hub
+    hubIdx = opDevices.findIndex((d) => d._id === hub);
+    if (hubIdx === -1) {
+      logger.error('Tunnel creation failed',
+        { params: { reason: 'Hub device not found', hub } }
+      );
+      throw new Error('Hub device not found');
+    }
+    aLoopStart = hubIdx;
+    aLoopStop = hubIdx + 1;
+  }
+
+  for (let idxA = aLoopStart; idxA < aLoopStop; idxA++) {
+    // TBD: B loop start / stop + check that idx A != idx B
     for (let idxB = idxA + 1; idxB < devicesLen; idxB++) {
       const deviceA = opDevices[idxA];
       const deviceB = opDevices[idxB];
@@ -401,6 +418,20 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('At least 2 devices must be selected to create tunnels');
   }
 
+  const { topology, hub, mtu } = data;
+  if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
+    logger.error('Unknown topology when creating tunnels', { params: { topology: topology } });
+    throw new Error('Unknown topology when creating tunnels');
+  }
+  if (topology === 'hubAndSpoke' && (!hub || hub === '')) {
+    logger.error('Hub must be specified for hub and spoke topology', { params: { hub: hub } });
+    throw new Error('Hub must be specified for hub and spoke topology');
+  }
+  if (mtu !== 'default' && mtu !== '1500') {
+    logger.error('Illegal MTU when creating tunnels', { params: { mtu: mtu } });
+    throw new Error('Illegal MTU when creating tunnels');
+  }
+
   let dbTasks = [];
   const userName = user.username;
   const org = data.org;
@@ -415,7 +446,7 @@ const applyTunnelAdd = async (devices, user, data) => {
     dbTasks = dbTasks.concat(tasks);
   } else {
     const tasks = await handleTunnels(
-      org, userName, opDevices, data.meta.pathLabels, reasons);
+      org, userName, opDevices, data.meta.pathLabels, topology, hub, mtu, reasons);
     dbTasks = dbTasks.concat(tasks);
   }
 
