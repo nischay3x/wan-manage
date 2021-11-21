@@ -386,7 +386,7 @@ class MultiLinkPoliciesService {
         org: orgList[0].toString(),
         name: name,
         description: description,
-        rules: rules
+        rules: rules.filter(rule => rule.enabled)
       });
 
       result = await result.populate(
