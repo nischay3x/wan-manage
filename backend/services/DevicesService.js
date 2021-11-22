@@ -301,8 +301,8 @@ class DevicesService {
     const { org, offset, limit, sortField, sortOrder, filters } = requestParams;
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const updateStatusInDb = (filters && /state|isConnected/.test(filters)) ||
-        /state|isConnected/.test(sortField);
+      const updateStatusInDb = (filters && /state|isConnected|sync/.test(filters)) ||
+        /state|isConnected|sync/.test(sortField);
       if (updateStatusInDb) {
         // need to update changed statuses from memory to DB
         await statusesInDb.updateDevicesStatuses(orgList);
