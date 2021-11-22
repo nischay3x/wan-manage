@@ -193,11 +193,6 @@ const apply = async (deviceList, user, data) => {
         if (!mLPolicy) {
           throw createError(404, `policy ${id} does not exist`);
         }
-        // Disabled rules should not be sent to the device
-        mLPolicy.rules = mLPolicy.rules.filter(rule => rule.enabled === true);
-        if (mLPolicy.rules.length === 0) {
-          throw createError(400, 'Policy must have at least one enabled rule');
-        }
       }
 
       // Extract the device IDs to operate on
@@ -222,7 +217,7 @@ const apply = async (deviceList, user, data) => {
   } finally {
     session.endSession();
   }
-  return applyPolicy(opDevices, mLPolicy, op, user, org);
+  return applyPolicy(opDevices, mLPolicy.toObject(), op, user, org);
 };
 
 /**
@@ -271,6 +266,8 @@ const applyPolicy = async (opDevices, mLPolicy, op, user, org) => {
   } finally {
     session.endSession();
   }
+  // Disabled rules should not be sent to the device
+  mLPolicy.rules = mLPolicy.rules.filter(rule => rule.enabled === true);
 
   // Queue policy jobs
   const jobs = await queueMlPolicyJob(opDevices, op, requestTime, mLPolicy, user, org);
