@@ -1201,8 +1201,34 @@ class DevicesService {
           throw new Error('Not allowed to assign path labels of a different organization');
         };
         deviceRequest.interfaces = await Promise.all(origDevice.interfaces.map(async origIntf => {
-          const updIntf = deviceRequest.interfaces.find(rif => origIntf._id.toString() === rif._id);
+          const interfaceId = origIntf._id.toString();
+          const updIntf = deviceRequest.interfaces.find(rif => interfaceId === rif._id);
           if (updIntf) {
+            // if the user disabled the STUN for this interface
+            // we release the high rate blockage if exists
+            const isStunDisabledNow = origIntf.useStun === true && updIntf.useStun === false;
+
+            // if the user changed the static IP/port for this interface
+            // we release the high rate blockage if exists
+            let isStaticPublicInfoChanged = false;
+            if (updIntf.useStun === false) {
+              const isPublicPortChanged = origIntf.PublicPort !== updIntf.PublicPort;
+              const isPublicIpChanged = origIntf.PublicIP !== updIntf.PublicIP;
+              if (isPublicPortChanged || isPublicIpChanged) {
+                isStaticPublicInfoChanged = true;
+              }
+            }
+
+            // if the user changed the portForwarding option
+            // we release the high rate blockage if exists
+            const isPortForwardingChanged =
+              origIntf.useFixedPublicPort !== updIntf.useFixedPublicPort;
+
+            if (isStunDisabledNow || isStaticPublicInfoChanged || isPortForwardingChanged) {
+              const deviceId = origDevice._id.toString();
+              await publicAddrInfoLimiter.release(`${deviceId}:${interfaceId}`);
+            }
+
             // Public port and NAT type is assigned by system only
             updIntf.PublicPort = updIntf.useStun ? origIntf.PublicPort : configs.get('tunnelPort');
             updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
