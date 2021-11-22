@@ -58,7 +58,7 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
-const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub, mtu, reasons) => {
+const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub, reasons) => {
   const devicesLen = opDevices.length;
   const tasks = [];
 
@@ -71,12 +71,15 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
     throw new Error('Not supported key exchange method');
   }
 
+  const isHubAndSpoke = (topology === 'hubAndSpoke');
   let hubIdx = -1;
   let aLoopStart = 0;
   let aLoopStop = devicesLen - 1;
-  if (topology === 'hubAndSpoke') {
+  let bLoopStart = 0;
+
+  if (isHubAndSpoke) {
     // Find index of hub
-    hubIdx = opDevices.findIndex((d) => d._id === hub);
+    hubIdx = opDevices.findIndex((d) => d._id.toString() === hub);
     if (hubIdx === -1) {
       logger.error('Tunnel creation failed',
         { params: { reason: 'Hub device not found', hub } }
@@ -88,8 +91,10 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
   }
 
   for (let idxA = aLoopStart; idxA < aLoopStop; idxA++) {
-    // TBD: B loop start / stop + check that idx A != idx B
-    for (let idxB = idxA + 1; idxB < devicesLen; idxB++) {
+    if (!isHubAndSpoke) bLoopStart = idxA + 1; // Full-Mesh
+    for (let idxB = bLoopStart; idxB < devicesLen; idxB++) {
+      if (idxA === idxB) continue; // might happen in hubAndSpoke
+
       const deviceA = opDevices[idxA];
       const deviceB = opDevices[idxB];
 
@@ -418,7 +423,7 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('At least 2 devices must be selected to create tunnels');
   }
 
-  const { topology, hub, mtu } = data;
+  const { topology, hub } = data;
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
     logger.error('Unknown topology when creating tunnels', { params: { topology: topology } });
     throw new Error('Unknown topology when creating tunnels');
@@ -426,10 +431,6 @@ const applyTunnelAdd = async (devices, user, data) => {
   if (topology === 'hubAndSpoke' && (!hub || hub === '')) {
     logger.error('Hub must be specified for hub and spoke topology', { params: { hub: hub } });
     throw new Error('Hub must be specified for hub and spoke topology');
-  }
-  if (mtu !== 'default' && mtu !== '1500') {
-    logger.error('Illegal MTU when creating tunnels', { params: { mtu: mtu } });
-    throw new Error('Illegal MTU when creating tunnels');
   }
 
   let dbTasks = [];
@@ -446,7 +447,7 @@ const applyTunnelAdd = async (devices, user, data) => {
     dbTasks = dbTasks.concat(tasks);
   } else {
     const tasks = await handleTunnels(
-      org, userName, opDevices, data.meta.pathLabels, topology, hub, mtu, reasons);
+      org, userName, opDevices, data.meta.pathLabels, topology, hub, reasons);
     dbTasks = dbTasks.concat(tasks);
   }
 
@@ -1617,9 +1618,6 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
 
-  // no additional header for not encrypted tunnels
-  const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
-
   // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
   paramsDeviceA.dev_id = deviceAIntf.devId;
@@ -1634,7 +1632,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
 
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
-    paramsDeviceA.peer.mtu = (deviceAIntf.mtu || 1500) - packetHeaderSize;
+    paramsDeviceA.peer.mtu = 1500;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
     };
@@ -1649,7 +1647,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
       ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
 
     // mtu
-    const mtu = Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
+    const mtu = 1500;
 
     paramsDeviceA['loopback-iface'] = {
       addr: tunnelParams.ip1 + '/31',
