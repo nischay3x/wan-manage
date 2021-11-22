@@ -318,7 +318,9 @@ class MultiLinkPoliciesService {
         return Service.rejectResponse('Not found', 404);
       }
       // apply on devices
-      const applied = await applyPolicy(opDevices, MLPolicy, 'install', user, orgList[0]);
+      const applied = await applyPolicy(
+        opDevices, MLPolicy.toObject(), 'install', user, orgList[0]
+      );
 
       const populated = await MLPolicy.populate(
         'rules.action.links.pathlabels',
@@ -386,7 +388,7 @@ class MultiLinkPoliciesService {
         org: orgList[0].toString(),
         name: name,
         description: description,
-        rules: rules.filter(rule => rule.enabled)
+        rules: rules
       });
 
       result = await result.populate(
