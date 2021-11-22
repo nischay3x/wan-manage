@@ -701,6 +701,11 @@ class Events {
    * @return {boolean} if need to trigger event of ip restored
   */
   isPublicPortChanged (origIfc, updatedIfc) {
+    // if STUN is disabled for this interface, no need to monitor it
+    if (origIfc.useStun === false) {
+      return false;
+    }
+
     // if not ip, there is no public port, so we can't count it as change
     if (updatedIfc.IPv4 === '' || updatedIfc.public_port === '') {
       return false;
@@ -720,6 +725,11 @@ class Events {
    * @return {boolean} if need to trigger event of ip restored
   */
   isPublicIpChanged (origIfc, updatedIfc) {
+    // if STUN is disabled for this interface, no need to monitor it
+    if (origIfc.useStun === false) {
+      return false;
+    }
+
     // if not ip, there is no public port, so we can't count it as change
     if (updatedIfc.IPv4 === '' || updatedIfc.public_ip === '') {
       return false;
