@@ -90,6 +90,13 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
     aLoopStop = hubIdx + 1;
   }
 
+  // Connecting tunnels done by double loop. The logic per topology is:
+  // Hub and Spoke
+  // - loopA: Hub index only
+  // - loopB: All other selected devices (skipping hub)
+  // Full mesh
+  // - loopA: All indexes from 0 to Len(selected devices)-1
+  // - loopB: From A index +1 to Len(selected devices)
   for (let idxA = aLoopStart; idxA < aLoopStop; idxA++) {
     if (!isHubAndSpoke) bLoopStart = idxA + 1; // Full-Mesh
     for (let idxB = bLoopStart; idxB < devicesLen; idxB++) {
