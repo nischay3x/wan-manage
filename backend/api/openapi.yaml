@@ -3500,10 +3500,10 @@ paths:
           - dhcp
           - vpp
           - ospf
-          - open-vpn
           - hostapd
           - agentui
           - application_ids
+          - com.flexiwan.remotevpn
           type: string
         style: form
       responses:

@@ -57,6 +57,8 @@ const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
+const applications = require('../models/applications');
+const applicationStore = require('../models/applicationStore');
 
 class DevicesService {
   /**
@@ -871,6 +873,27 @@ class DevicesService {
         return Service.rejectResponse('Device not found', 404);
       }
 
+      const isApplication = await applicationStore.findOne({ identifier: filter });
+      if (isApplication) {
+        const installedApp = await applications.aggregate([
+          { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
+          {
+            $lookup: {
+              from: 'applicationStore',
+              localField: 'appStoreApp',
+              foreignField: '_id',
+              as: 'app'
+            }
+          },
+          { $unwind: '$app' },
+          { $match: { 'app.identifier': filter } }
+        ]).allowDiskUse(true);
+
+        if (!installedApp.length) {
+          return Service.rejectResponse('Application is not installed', 404);
+        }
+      }
+
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
           error: null,
@@ -887,7 +910,8 @@ class DevicesService {
           message: 'get-device-logs',
           params: {
             lines: limit || '100',
-            filter: filter || 'all'
+            filter: filter || 'all',
+            'is-application': isApplication
           }
         },
         configs.get('directMessageTimeout', 'number')
