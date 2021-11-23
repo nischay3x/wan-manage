@@ -239,7 +239,7 @@ const complete = async (jobId, res) => {
   const { _id } = res.application.device;
   try {
     const update =
-      op === 'install' || op === 'upgrade' || op === 'config' || op === 'start' || op === 'stop'
+      op === 'install' || op === 'upgrade' || op === 'config'
         ? { $set: { 'applications.$.status': 'installed' } }
         : { $set: { 'applications.$.status': 'uninstalled' } };
 
@@ -386,12 +386,6 @@ const queueApplicationJob = async (
   } else if (op === 'uninstall') {
     jobTitle = `Uninstall ${application.appStoreApp.name} application`;
     message = 'application-uninstall';
-  } else if (op === 'start') {
-    jobTitle = `Start ${application.appStoreApp.name} application`;
-    message = 'application-start';
-  } else if (op === 'stop') {
-    jobTitle = `Stop ${application.appStoreApp.name} application`;
-    message = 'application-stop';
   } else {
     return jobs;
   }
