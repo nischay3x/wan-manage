@@ -58,7 +58,7 @@ const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) 
 
     if (op === 'install') {
       tasks[0][0].params.id = policy._id;
-      tasks[0][0].params.rules = policy.rules.map(rule => {
+      tasks[0][0].params.rules = policy.rules.filter(rule => rule.enabled).map(rule => {
         const { _id, priority, action, classification } = rule;
         return {
           id: _id,
@@ -217,7 +217,7 @@ const apply = async (deviceList, user, data) => {
   } finally {
     session.endSession();
   }
-  return applyPolicy(opDevices, mLPolicy.toObject(), op, user, org);
+  return applyPolicy(opDevices, mLPolicy, op, user, org);
 };
 
 /**
@@ -266,8 +266,6 @@ const applyPolicy = async (opDevices, mLPolicy, op, user, org) => {
   } finally {
     session.endSession();
   }
-  // Disabled rules should not be sent to the device
-  mLPolicy.rules = mLPolicy.rules.filter(rule => rule.enabled === true);
 
   // Queue policy jobs
   const jobs = await queueMlPolicyJob(opDevices, op, requestTime, mLPolicy, user, org);
