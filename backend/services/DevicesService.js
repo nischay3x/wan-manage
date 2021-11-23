@@ -911,7 +911,7 @@ class DevicesService {
           params: {
             lines: limit || '100',
             filter: filter || 'all',
-            'is-application': isApplication
+            'is-application': isApplication !== null
           }
         },
         configs.get('directMessageTimeout', 'number')
