@@ -2469,6 +2469,9 @@ class DevicesService {
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP can be defined only for LAN interfaces');
     }
+    if (interfaceObj.IPv4 === '') {
+      throw new Error(`DHCP cannot be defined for interface (${interfaceObj.name}) without IP`);
+    }
 
     // check that DHCP Range Start/End IP are on the same subnet with interface IP
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
