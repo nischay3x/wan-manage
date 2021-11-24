@@ -27,6 +27,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { apply, reconstructTunnels } = require('./modifyDevice');
 const eventsReasons = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
+const { getMajorVersion } = require('../versioning');
 
 class Events {
   constructor () {
@@ -356,6 +357,12 @@ class Events {
     if (origIfc.type === 'WAN') {
       // set related tunnels as pending
       await this.setPendingStateToTunnels(device, origIfc, reason);
+    }
+
+    // for device version 4 we don't send the IP for bridged interface
+    const deviceVersion = getMajorVersion(device.versions.agent);
+    if (deviceVersion <= 4) {
+      return;
     }
 
     if (origIfc.type === 'LAN') {
