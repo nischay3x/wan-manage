@@ -57,6 +57,7 @@ const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
+const { getMajorVersion } = require('../versioning');
 
 class DevicesService {
   /**
@@ -1432,6 +1433,8 @@ class DevicesService {
         deviceToValidate.interfaces = origDevice.interfaces;
       }
 
+      const ver = getMajorVersion(origDevice.versions.agent);
+
       // Map dhcp config if needed
       if (Array.isArray(deviceRequest.dhcp)) {
         deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
@@ -1440,7 +1443,8 @@ class DevicesService {
           const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
           if (!origIfc) return d;
 
-          if (origIfc.hasIpOnDevice === false) {
+          // don't set to pending for old version since we don't sent the IP for bridged interface
+          if (origIfc.hasIpOnDevice === false && ver >= 5) {
             d.isPending = true;
             d.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
           }
@@ -1496,13 +1500,17 @@ class DevicesService {
             }
           }
 
-          for (const ifc of interfacesWithoutIp) {
-            if (ifc.IPv4 === s.gateway) {
-              s.isPending = true;
-              s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
-              return s;
+          // don't set to pending for old version since we don't sent the IP for bridged interface
+          if (ver >= 5) {
+            for (const ifc of interfacesWithoutIp) {
+              if (ifc.IPv4 === s.gateway) {
+                s.isPending = true;
+                s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+                return s;
+              }
             }
           }
+
           return s;
         });
 
