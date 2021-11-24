@@ -58,7 +58,7 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
-const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub, reasons) => {
+const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hubIdx, reasons) => {
   const devicesLen = opDevices.length;
   const tasks = [];
 
@@ -72,20 +72,10 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
   }
 
   const isHubAndSpoke = (topology === 'hubAndSpoke');
-  let hubIdx = -1;
   let aLoopStart = 0;
   let aLoopStop = devicesLen - 1;
   let bLoopStart = 0;
-
   if (isHubAndSpoke) {
-    // Find index of hub
-    hubIdx = opDevices.findIndex((d) => d._id.toString() === hub);
-    if (hubIdx === -1) {
-      logger.error('Tunnel creation failed',
-        { params: { reason: 'Hub device not found', hub } }
-      );
-      throw new Error('Hub device not found');
-    }
     aLoopStart = hubIdx;
     aLoopStop = hubIdx + 1;
   }
@@ -419,8 +409,10 @@ const applyTunnelAdd = async (devices, user, data) => {
       else return false;
     }) : [];
 
-  const isPeer = data.tunnelType === 'peer';
-  if (isPeer && (!data.peers || !Array.isArray(data.peers) || data.peers.length === 0)) {
+  const isPeer = data.meta.tunnelType === 'peer';
+  if (isPeer &&
+    (!data.meta.peers || !Array.isArray(data.meta.peers) || data.meta.peers.length === 0)
+  ) {
     throw new Error('Peers identifiers were not specified');
   }
 
@@ -430,14 +422,22 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('At least 2 devices must be selected to create tunnels');
   }
 
-  const { topology, hub } = data;
+  const { topology, hub } = data.meta;
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
     logger.error('Unknown topology when creating tunnels', { params: { topology: topology } });
     throw new Error('Unknown topology when creating tunnels');
   }
-  if (topology === 'hubAndSpoke' && (!hub || hub === '')) {
-    logger.error('Hub must be specified for hub and spoke topology', { params: { hub: hub } });
-    throw new Error('Hub must be specified for hub and spoke topology');
+  let hubIdx = -1;
+  if (topology === 'hubAndSpoke') {
+    if (!hub || hub === '') {
+      logger.error('Hub must be specified for hub and spoke topology', { params: { hub: hub } });
+      throw new Error('Hub must be specified for hub and spoke topology');
+    }
+    hubIdx = opDevices.findIndex((d) => d._id.toString() === hub);
+    if (hubIdx === -1) {
+      logger.error('Hub device not found', { params: { hub: hub } });
+      throw new Error('Hub device not found');
+    }
   }
 
   let dbTasks = [];
@@ -450,11 +450,11 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   if (isPeer) {
     const tasks = await handlePeers(
-      org, userName, opDevices, data.meta.pathLabels, data.peers, reasons);
+      org, userName, opDevices, data.meta.pathLabels, data.meta.peers, reasons);
     dbTasks = dbTasks.concat(tasks);
   } else {
     const tasks = await handleTunnels(
-      org, userName, opDevices, data.meta.pathLabels, topology, hub, reasons);
+      org, userName, opDevices, data.meta.pathLabels, topology, hubIdx, reasons);
     dbTasks = dbTasks.concat(tasks);
   }
 
