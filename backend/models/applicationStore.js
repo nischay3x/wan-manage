@@ -31,11 +31,6 @@ const agentComponentSchema = new Schema({
     type: String,
     enum: ['local', 'url'],
     required: true
-  },
-  startOnInstallation: {
-    type: Boolean,
-    required: true,
-    default: false
   }
 }, { _id: false });
 
