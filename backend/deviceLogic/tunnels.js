@@ -1639,6 +1639,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
 
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
+    paramsDeviceA.peer.routing = 'ospf';
     paramsDeviceA.peer.mtu = 1500;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
