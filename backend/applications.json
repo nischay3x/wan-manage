@@ -15,8 +15,7 @@
           "components": {
             "agent": {
               "installationPath": "./applications/remotevpn/install.tar.gz",
-              "installationPathType": "local",
-              "startOnInstallation": false
+              "installationPathType": "local"
             }
           }
         }

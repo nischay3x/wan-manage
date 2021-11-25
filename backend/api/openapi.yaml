@@ -7902,8 +7902,6 @@ components:
                   enum:
                     - local
                     - url
-                startOnInstallation:
-                  type: boolean
             manage:
               type: object
     PurchasedApplication:

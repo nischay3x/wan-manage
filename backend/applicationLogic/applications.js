@@ -96,7 +96,6 @@ const getJobParams = async (device, application, op) => {
   if (op === 'install') {
     params.installationFilePath = version.components.agent.installationPath;
     params.installationPathType = version.components.agent.installationPathType;
-    params.startOnInstallation = version.components.agent.startOnInstallation;
   }
 
   if (isVpn(application.appStoreApp.identifier)) {
