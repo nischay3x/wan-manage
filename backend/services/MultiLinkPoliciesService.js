@@ -312,20 +312,22 @@ class MultiLinkPoliciesService {
           },
           new: true
         }
-      )
-        .lean()
-        .populate(
-          'rules.action.links.pathlabels',
-          '_id name description color type'
-        );
+      );
 
       if (!MLPolicy) {
         return Service.rejectResponse('Not found', 404);
       }
       // apply on devices
-      const applied = await applyPolicy(opDevices, MLPolicy, 'install', user, orgList[0]);
+      const applied = await applyPolicy(
+        opDevices, MLPolicy.toObject(), 'install', user, orgList[0]
+      );
 
-      const converted = JSON.parse(JSON.stringify(MLPolicy));
+      const populated = await MLPolicy.populate(
+        'rules.action.links.pathlabels',
+        '_id name description color type'
+      ).execPopulate();
+
+      const converted = JSON.parse(JSON.stringify(populated));
       return Service.successResponse({ ...converted, ...applied });
     } catch (e) {
       return Service.rejectResponse(

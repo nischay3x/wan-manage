@@ -543,10 +543,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           return false;
         }
 
-        const changed = (
-          modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}` ||
-          modifiedIfc.mtu !== origIfc.mtu
-        );
+        const changed = modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
 
         if (changed || peer) {
           return changed;
@@ -573,9 +570,9 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       const skipLocal = peer
         ? false
         : (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
-          modifiedIfcA.mtu === ifcA.mtu && isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
+          isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
           (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
-          modifiedIfcB.mtu === ifcB.mtu && isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
+          isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
 
       if (skipLocal) {
         continue;

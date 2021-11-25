@@ -58,7 +58,7 @@ const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) 
 
     if (op === 'install') {
       tasks[0][0].params.id = policy._id;
-      tasks[0][0].params.rules = policy.rules.map(rule => {
+      tasks[0][0].params.rules = policy.rules.filter(rule => rule.enabled).map(rule => {
         const { _id, priority, action, classification } = rule;
         return {
           id: _id,
@@ -192,11 +192,6 @@ const apply = async (deviceList, user, data) => {
 
         if (!mLPolicy) {
           throw createError(404, `policy ${id} does not exist`);
-        }
-        // Disabled rules should not be sent to the device
-        mLPolicy.rules = mLPolicy.rules.filter(rule => rule.enabled === true);
-        if (mLPolicy.rules.length === 0) {
-          throw createError(400, 'Policy must have at least one enabled rule');
         }
       }
 

@@ -27,6 +27,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { apply, reconstructTunnels } = require('./modifyDevice');
 const eventsReasons = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
+const { getMajorVersion } = require('../versioning');
 
 class Events {
   constructor () {
@@ -356,6 +357,12 @@ class Events {
     if (origIfc.type === 'WAN') {
       // set related tunnels as pending
       await this.setPendingStateToTunnels(device, origIfc, reason);
+    }
+
+    // for device version 4 we don't send the IP for bridged interface
+    const deviceVersion = getMajorVersion(device.versions.agent);
+    if (deviceVersion <= 4) {
+      return;
     }
 
     if (origIfc.type === 'LAN') {
@@ -701,6 +708,11 @@ class Events {
    * @return {boolean} if need to trigger event of ip restored
   */
   isPublicPortChanged (origIfc, updatedIfc) {
+    // if STUN is disabled for this interface, no need to monitor it
+    if (origIfc.useStun === false) {
+      return false;
+    }
+
     // if not ip, there is no public port, so we can't count it as change
     if (updatedIfc.IPv4 === '' || updatedIfc.public_port === '') {
       return false;
@@ -720,6 +732,11 @@ class Events {
    * @return {boolean} if need to trigger event of ip restored
   */
   isPublicIpChanged (origIfc, updatedIfc) {
+    // if STUN is disabled for this interface, no need to monitor it
+    if (origIfc.useStun === false) {
+      return false;
+    }
+
     // if not ip, there is no public port, so we can't count it as change
     if (updatedIfc.IPv4 === '' || updatedIfc.public_ip === '') {
       return false;
