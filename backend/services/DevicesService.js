@@ -1202,7 +1202,13 @@ class DevicesService {
       })
         .session(session)
         .populate('policies.firewall.policy', '_id name rules')
-        .populate('interfaces.pathlabels', '_id name description color type');
+        .populate('interfaces.pathlabels', '_id name description color type')
+        .populate({
+          path: 'applications.app',
+          populate: {
+            path: 'appStoreApp'
+          }
+        });
 
       if (!origDevice) {
         return Service.rejectResponse('Device not found', 404);
@@ -1605,7 +1611,13 @@ class DevicesService {
         .session(session)
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.firewall.policy', '_id name description rules')
-        .populate('policies.multilink.policy', '_id name description');
+        .populate('policies.multilink.policy', '_id name description')
+        .populate({
+          path: 'applications.app',
+          populate: {
+            path: 'appStoreApp'
+          }
+        });
       await session.commitTransaction();
       session = null;
 

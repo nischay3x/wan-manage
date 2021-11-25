@@ -45,6 +45,12 @@ const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
+const {
+  getJobParams
+} = require('../applicationLogic/applications');
+const {
+  queueApplicationJob
+} = require('./application');
 
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
@@ -1059,7 +1065,12 @@ const apply = async (device, user, data) => {
 
   device[0] = await device[0]
     .populate('interfaces.pathlabels', '_id name type')
-    .execPopulate();
+    .populate({
+      path: 'applications.app',
+      populate: {
+        path: 'appStoreApp'
+      }
+    }).execPopulate();
 
   // Create the default/static routes modification parameters
   const modifyRoutes = prepareModifyRoutes(device[0], data.newDevice);
@@ -1262,12 +1273,34 @@ const apply = async (device, user, data) => {
     modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice.toObject());
   }
 
+  // Check application params
+  // Note: here we don't deal with remove/install application but only with modify.
+  // The assumption here is that same applications array exists
+  // in the origDevice and in the newDevice.
+  for (const deviceApp of origDevice.applications) {
+    const objApplication = deviceApp.app.toObject();
+    // get params for orig
+    const origParams = await getJobParams(origDevice, objApplication, 'config');
+    // get params for new
+    const newParams = await getJobParams(updDevice, objApplication, 'config');
+    // check if they diff
+    if (!isEqual(origParams, newParams)) {
+      // if yes, you have to generate modify application job
+      if (!has(modifyParams, 'modify_applications')) {
+        modifyParams.modify_applications = {};
+      }
+
+      modifyParams.modify_applications[objApplication.appStoreApp.identifier] = objApplication;
+    }
+  }
+
   const modified =
       has(modifyParams, 'modify_routes') ||
       has(modifyParams, 'modify_router') ||
       has(modifyParams, 'modify_interfaces') ||
       has(modifyParams, 'modify_ospf') ||
       has(modifyParams, 'modify_firewall') ||
+      has(modifyParams, 'modify_applications') ||
       has(modifyParams, 'modify_dhcp_config');
 
   // Queue job only if the device has changed
@@ -1307,7 +1340,18 @@ const apply = async (device, user, data) => {
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
     await setJobPendingInDB(device[0]._id, org, true);
     // Queue device modification job
-    const jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
+    let jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
+
+    // run applications modification job
+    if (has(modifyParams, 'modify_applications')) {
+      for (const identifier in modifyParams.modify_applications) {
+        const app = modifyParams.modify_applications[identifier];
+        const device = [data.newDevice];
+        const appJobs = await queueApplicationJob(device, 'config', Date.now(), app, user, org);
+        jobs = jobs.concat(appJobs.map(j => j.value));
+      }
+    }
+
     return {
       ids: jobs.flat().map(job => job.id),
       status: 'completed',

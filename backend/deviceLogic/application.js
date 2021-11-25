@@ -238,10 +238,12 @@ const complete = async (jobId, res) => {
   const { op, org, app } = res.application;
   const { _id } = res.application.device;
   try {
-    const update =
-      op === 'install' || op === 'upgrade' || op === 'config'
-        ? { $set: { 'applications.$.status': 'installed' } }
-        : { $set: { 'applications.$.status': 'uninstalled' } };
+    const update = {};
+    if (op === 'uninstall') {
+      update.$pull = { applications: { app: app._id } };
+    } else { // install, configure, upgrade
+      update.$set = { 'applications.$.status': 'installed' };
+    }
 
     // on complete, update db with updated data
     if (op === 'upgrade') {
@@ -429,7 +431,7 @@ const queueApplicationJob = async (
           data: data
         },
         // Metadata
-        { priority: 'high', attempts: op === 'install' ? 2 : 1, removeOnComplete: false },
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
         // Complete callback
         null
       )
@@ -443,5 +445,6 @@ module.exports = {
   apply: apply,
   complete: complete,
   error: error,
-  remove: remove
+  remove: remove,
+  queueApplicationJob
 };

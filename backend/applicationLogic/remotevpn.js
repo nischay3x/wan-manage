@@ -415,9 +415,7 @@ const getRemoteVpnParams = async (device, applicationId, op) => {
     const [deviceSubnet, status] = getSubnetForDevice(config, _id.toString());
 
     const query = { _id: application._id };
-    const update = {
-      $set: {}
-    };
+    const update = { $set: {} };
 
     if (status === 'update') {
       query['configuration.subnets.subnet'] = deviceSubnet.subnet;
