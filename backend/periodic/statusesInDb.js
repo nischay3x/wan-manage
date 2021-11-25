@@ -213,7 +213,14 @@ class StatusesInDb {
       if (tunnelsStatuses && Object.keys(tunnelsStatuses).length > 0) {
         const tunnelsByStatus = {};
         for (const tunnelNum in tunnelsStatuses) {
-          const status = tunnelsStatuses[tunnelNum];
+          const sides = Object.entries(tunnelsStatuses[tunnelNum]);
+          let status = sides.length > 0 && sides.every(s => s[1] === 'up') ? 'up' : 'down';
+          if (status === 'up') {
+            // check if still connected
+            if (sides.some(s => !connections.isConnected(s[0]))) {
+              status = 'down';
+            }
+          }
           if (!tunnelsByStatus[status]) tunnelsByStatus[status] = [];
           tunnelsByStatus[status].push(+tunnelNum);
         }

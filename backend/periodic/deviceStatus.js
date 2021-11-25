@@ -421,7 +421,7 @@ class DeviceStatus {
         // Update changed tunnel status in memory by org
         if ((firstTunnelUpdate ||
           tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)) {
-          this.setTunnelsStatusByOrg(org, tunnelID, tunnelState.status);
+          this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelState.status);
         }
 
         // Generate a notification if tunnel status has changed since
@@ -525,10 +525,12 @@ class DeviceStatus {
      */
   getTunnelStatus (deviceID, tunnelId) {
     const isConnected = connections.isConnected(deviceID);
-    if (!isConnected || (this.status[deviceID] && this.status[deviceID].state !== 'running')) {
+    if (!isConnected) {
       return null;
     }
-
+    if (this.status[deviceID] && this.status[deviceID].state !== 'running') {
+      return { status: 'down' };
+    }
     if (this.status[deviceID] && this.status[deviceID].tunnelStatus) {
       return this.status[deviceID].tunnelStatus[tunnelId] || null;
     }
@@ -692,12 +694,15 @@ class DeviceStatus {
    * @param  {string} status    status
    * @return {void}
    */
-  setTunnelsStatusByOrg (org, tunnelNum, status) {
+  setTunnelsStatusByOrg (org, tunnelNum, machineId, status) {
     if (org && tunnelNum && status !== undefined) {
       if (!this.tunnelsStatusByOrg.hasOwnProperty(org)) {
         this.tunnelsStatusByOrg[org] = {};
       }
-      this.tunnelsStatusByOrg[org][tunnelNum] = status;
+      if (!this.tunnelsStatusByOrg[org].hasOwnProperty(tunnelNum)) {
+        this.tunnelsStatusByOrg[org][tunnelNum] = {};
+      }
+      this.tunnelsStatusByOrg[org][tunnelNum][machineId] = status;
     }
   }
 
