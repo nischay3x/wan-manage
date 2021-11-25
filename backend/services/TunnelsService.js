@@ -135,7 +135,12 @@ class TunnelsService {
         const retTunnel = TunnelsService.selectTunnelParams(d);
         // get the status from db if it was updated
         if (updateStatusInDb) {
-          retTunnel.tunnelStatus = tunnelStatusInDb;
+          if (retTunnel.tunnelStatus !== tunnelStatusInDb) {
+            // mark the tunnel status is changed, it will be updated in DB on the next call
+            const status = retTunnel.tunnelStatus === 'Connected' ? 'up' : 'down';
+            deviceStatus.setTunnelsStatusByOrg(orgList[0], d.num, d.deviceA.machineId, status);
+            retTunnel.tunnelStatus = tunnelStatusInDb;
+          }
         }
         return retTunnel;
       });
