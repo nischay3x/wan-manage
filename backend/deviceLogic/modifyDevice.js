@@ -173,23 +173,22 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
   // Check against the old configured interfaces.
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
-    if (messageParams.modify_interfaces.interfaces.length) {
-      const modifiedInterfaces = prepareIfcParams(
-        messageParams.modify_interfaces.interfaces, newDevice
-      );
-      if (modifiedInterfaces.length > 0) {
-        requests.push(...modifiedInterfaces.map(item => {
-          return {
-            entity: 'agent',
-            message: 'modify-interface',
-            params: item
-          };
-        }));
-      }
+    const interfaces = messageParams.modify_interfaces.interfaces || [];
+    const lteInterfaces = messageParams.modify_interfaces.lte_enable_disable || [];
+
+    if (interfaces.length) {
+      const modifiedInterfaces = prepareIfcParams(interfaces, newDevice);
+      requests.push(...modifiedInterfaces.map(item => {
+        return {
+          entity: 'agent',
+          message: 'modify-interface',
+          params: item
+        };
+      }));
     }
 
-    if (messageParams.modify_interfaces.lte_enable_disable.length) {
-      requests.push(...messageParams.modify_interfaces.lte_enable_disable.map(item => {
+    if (lteInterfaces.length) {
+      requests.push(...lteInterfaces.map(item => {
         return {
           entity: 'agent',
           message: item.configuration.enable ? 'add-lte' : 'remove-lte',
