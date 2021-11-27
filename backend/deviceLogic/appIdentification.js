@@ -330,7 +330,7 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
       try {
         ret.params = { applications: await compressObj(appRules.appIdentifications) };
       } catch (err) {
-        logger.error('Application compression error', { params: {} });
+        logger.error('Application compression error', { params: { err: err.message } });
         ret.params = { applications: appRules.appIdentifications };
       }
     }
