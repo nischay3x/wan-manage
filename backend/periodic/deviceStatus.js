@@ -532,9 +532,21 @@ class DeviceStatus {
       return { status: 'down' };
     }
     if (this.status[deviceID] && this.status[deviceID].tunnelStatus) {
-      return this.status[deviceID].tunnelStatus[tunnelId] || null;
+      return this.status[deviceID].tunnelStatus[tunnelId] || { status: 'down' };
     }
-    return null;
+    return { status: 'down' };
+  }
+
+  /**
+    * Removes the tunnel status for the specific device
+    * @param {string} deviceID Device Id
+    * @param {number} tunnelId Tunnel Id
+    */
+  clearTunnelStatus (deviceID, tunnelId) {
+    if (this.status[deviceID] && this.status[deviceID].tunnelStatus &&
+      this.status[deviceID].tunnelStatus[tunnelId]) {
+      this.status[deviceID].tunnelStatus[tunnelId] = null;
+    }
   }
 
   /**

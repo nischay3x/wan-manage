@@ -42,11 +42,17 @@ class TunnelsService {
 
     // if no filter or ordering by status then db can be not updated,
     // we get the status directly from memory
-    // if one of devices is disconnected 'N/A' will be returned
-    const { peer, tunnelStatusA, tunnelStatusB } = retTunnel;
-    retTunnel.tunnelStatus = (peer || tunnelStatusB.status === 'up') &&
-      tunnelStatusA.status === 'up' ? 'Connected'
-      : tunnelStatusA.status && (peer || tunnelStatusB.status) ? 'Not Connected' : 'N/A';
+    const { peer, tunnelStatusA, tunnelStatusB, isPending } = retTunnel;
+    if (!tunnelStatusA.status || (!tunnelStatusB.status && !peer)) {
+      // one of devices is disconnected
+      retTunnel.tunnelStatus = 'N/A';
+    } else if (isPending) {
+      retTunnel.tunnelStatus = 'Pending';
+    } else if ((tunnelStatusA.status === 'up') && (peer || tunnelStatusB.status === 'up')) {
+      retTunnel.tunnelStatus = 'Connected';
+    } else {
+      retTunnel.tunnelStatus = 'Not Connected';
+    };
 
     retTunnel._id = retTunnel._id.toString();
 
