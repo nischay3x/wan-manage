@@ -356,6 +356,7 @@ class DevicesService {
             'deviceStatus.state': {
               $cond: [{ $eq: ['$isConnected', true] }, '$status', 'pending']
             },
+            'sync.statePrev': '$sync.state',
             'sync.state': {
               $cond: [{ $eq: ['$isConnected', true] }, '$sync.state', 'unknown']
             }
@@ -515,6 +516,10 @@ class DevicesService {
             d.isConnected = connections.isConnected(d.machineId);
             d.deviceStatus = d.isConnected
               ? deviceStatus.getDeviceStatus(d.machineId) || { state: d.deviceState } : {};
+            if (d.isConnected) {
+              // sync is set to 'unknown' in query for correct filtering if device not connected
+              d.sync.state = d.sync.statePrev;
+            }
           } else {
             d.deviceStatus = { state: d.deviceState };
           }
