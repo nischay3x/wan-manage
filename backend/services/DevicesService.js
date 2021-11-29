@@ -558,6 +558,7 @@ class DevicesService {
         $set: {
           upgradeSchedule: {
             time: devicesUpgradeRequest.date,
+            latestTry: null,
             jobQueued: false
           }
         }
@@ -582,6 +583,7 @@ class DevicesService {
         $set: {
           upgradeSchedule: {
             time: deviceUpgradeRequest.date,
+            latestTry: null,
             jobQueued: false
           }
         }
