@@ -41,7 +41,7 @@ class DeviceSwUpgrade {
       name: 'upgrade_scheduled_devices',
       func: this.periodicDeviceUpgrade,
       handle: null,
-      period: 900000
+      period: 24 * 60 * 60 * 1000 // every 24 hours
     };
   }
 
