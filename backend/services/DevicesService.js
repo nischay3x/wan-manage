@@ -2635,8 +2635,9 @@ class DevicesService {
       const actions = {
         lte: {
           reset: {
-            job: false,
-            message: 'reset-lte'
+            job: true,
+            message: 'reset-lte',
+            title: 'Reset LTE modem'
           },
           pin: {
             job: false,
