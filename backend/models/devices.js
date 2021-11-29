@@ -589,6 +589,11 @@ const versionUpgradeSchema = new Schema({
     type: Date,
     default: null
   },
+  // timestamp
+  latestTry: {
+    type: Date,
+    default: null
+  },
   // queued or not
   jobQueued: {
     type: Boolean,
