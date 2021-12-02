@@ -150,7 +150,8 @@ class DevicesService {
       'labels',
       'upgradeSchedule',
       'sync',
-      'ospf'
+      'ospf',
+      'coords'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -399,6 +400,7 @@ class DevicesService {
             machineId: 1,
             sync: 1,
             versions: 1,
+            coords: 1,
             interfaces: { isAssigned: 1, name: 1, type: 1, IPv4: 1, PublicIP: 1, devId: 1 },
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
@@ -434,7 +436,8 @@ class DevicesService {
           'sync',
           'ospf',
           'isConnected',
-          'deviceState'
+          'deviceState',
+          'coords'
         ];
         // populate pathlabels for every interface
         pipeline.push({
