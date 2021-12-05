@@ -190,29 +190,6 @@ const getTunnelsPipeline = (orgList, filters) => {
       tunnelStatus: {
         $switch: {
           branches: [
-            { case: { $eq: ['$isPending', true] }, then: 'Pending' },
-            {
-              case: {
-                $and: [
-                  { $eq: ['$status', 'up'] },
-                  { $eq: ['$deviceA.status', 'running'] },
-                  { $eq: ['$deviceA.isConnected', true] },
-                  {
-                    $or: [
-                      // in case of peer, there is no deviceB to check connection for
-                      { $ne: ['$peer', null] },
-                      {
-                        $and: [
-                          { $eq: ['$deviceB.status', 'running'] },
-                          { $eq: ['$deviceB.isConnected', true] }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              then: 'Connected'
-            },
             {
               case: {
                 // tunnel status unknown if one of devices is not connected
@@ -222,6 +199,26 @@ const getTunnelsPipeline = (orgList, filters) => {
                 ]
               },
               then: 'N/A'
+            },
+            {
+              case: { $eq: ['$isPending', true] },
+              then: 'Pending'
+            },
+            {
+              case: {
+                $and: [
+                  { $eq: ['$status', 'up'] },
+                  { $eq: ['$deviceA.status', 'running'] },
+                  {
+                    $or: [
+                      // in case of peer, there is no deviceB to check connection for
+                      { $ne: ['$peer', null] },
+                      { $eq: ['$deviceB.status', 'running'] }
+                    ]
+                  }
+                ]
+              },
+              then: 'Connected'
             }
           ],
           default: 'Not Connected'

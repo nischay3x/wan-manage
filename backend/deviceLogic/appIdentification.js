@@ -25,6 +25,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { getMajorVersion } = require('../versioning');
+const compressObj = require('../utils/compression');
 
 /**
  * Queues an add appIdentification or delete appIdentification job to a device.
@@ -238,7 +239,7 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
           { 'appIdentification.clients': { $ne: [] } },
           { 'appIdentification.clients': { $ne: null } }
         ]
-      }, { _id: 1 });
+      }, { _id: 1, 'versions.agent': 1 });
     if (opDevices.length) {
       // get full application list for this organization
       appRules = await getOrgAppIdentifications(org);
@@ -278,7 +279,7 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
               }
             }
           ]
-        }, { _id: 1 });
+        }, { _id: 1, 'versions.agent': 1 });
       const update = { $set: { 'appIdentification.lastRequestTime': updateAt } };
       // if client is set then attach it to all devices in db and send apps to opDevices only
       if (client) {
@@ -301,64 +302,6 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   } else {
     // no need to remove app identifications, they will be stored in device's local db
     opDevices = [];
-    /*
-    opDevices = await devices.find(
-      {
-        _id: { $in: deviceIdList },
-        'appIdentification.lastRequestTime': { $ne: requestTime },
-        $or: [
-          // This client is the only one left, we can remove
-          { 'appIdentification.clients': [client] },
-          // No client exist but last update is not null - apps still installed
-          {
-            $and: [
-              { 'appIdentification.clients': [] },
-              { 'appIdentification.lastUpdateTime': { $ne: null } }
-            ]
-          }
-        ]
-      }, { _id: 1 });
-
-    if (client) {
-      // set lastRequestTime only if no more clients exist
-      updateOps.push({
-        updateMany: {
-          filter: {
-            _id: { $in: deviceIdList },
-            $or: [
-              { 'appIdentification.clients': [client] },
-              { 'appIdentification.clients': [] },
-              { 'appIdentification.clients': null }
-            ]
-          },
-          update: { $set: { 'appIdentification.lastRequestTime': null } }
-        }
-      });
-      // remove the client
-      updateOps.push({
-        updateMany: {
-          filter: {
-            _id: { $in: deviceIdList }
-          },
-          update: { $pull: { 'appIdentification.clients': client } }
-        }
-      });
-    } else {
-      updateOps.push({
-        updateMany: {
-          filter: {
-            _id: { $in: opDevices.map(d => d._id) }
-          },
-          update: {
-            $set: {
-              'appIdentification.clients': null,
-              'appIdentification.lastRequestTime': null
-            }
-          }
-        }
-      });
-    }
-    */
   }
 
   // Update devices in db
@@ -371,9 +314,27 @@ const getDevicesAppIdentificationJobInfo = async (org, client, deviceIdList, isI
   ret.message = (isInstall) ? 'add-application' : 'remove-application';
   const titlePrefix = (isInstall) ? 'Add' : 'Remove';
   ret.title = `${titlePrefix} appIdentifications to device`;
-  ret.installIds = opDevices.reduce((obj, d) => { obj[d._id] = true; return obj; }, {});
-  ret.params = (appRules && appRules.appIdentifications && isInstall)
-    ? { applications: appRules.appIdentifications } : {};
+  const idsAndVersion = opDevices.reduce((obj, d) => {
+    obj.ids[d._id] = true;
+    obj.minVer = (d.versions && d.versions.agent)
+      ? Math.min(obj.minVer, getMajorVersion(d.versions.agent)) : 0;
+    return obj;
+  }, { ids: {}, minVer: Number.MAX_VALUE });
+  ret.installIds = idsAndVersion.ids;
+  if (appRules && appRules.appIdentifications && isInstall) {
+    // If some devices with older version than 5 use old application scheme
+    if (idsAndVersion.minVer < 5) {
+      ret.params = { applications: appRules.appIdentifications };
+    } else {
+      // Add devices support compression, try to compress
+      try {
+        ret.params = { applications: await compressObj(appRules.appIdentifications) };
+      } catch (err) {
+        logger.error('Application compression error', { params: { err: err.message } });
+        ret.params = { applications: appRules.appIdentifications };
+      }
+    }
+  } else ret.params = {};
   ret.deviceJobResp = {
     requestTime: requestTime,
     message: ret.message,

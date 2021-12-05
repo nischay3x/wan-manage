@@ -42,9 +42,17 @@ class TunnelsService {
 
     // if no filter or ordering by status then db can be not updated,
     // we get the status directly from memory
-    retTunnel.tunnelStatus = (retTunnel.peer || retTunnel.tunnelStatusB.status === 'up') &&
-      retTunnel.tunnelStatusA.status === 'up' ? 'Connected'
-      : retTunnel.tunnelStatus ? retTunnel.tunnelStatus : 'Not Connected';
+    const { peer, tunnelStatusA, tunnelStatusB, isPending } = retTunnel;
+    if (!tunnelStatusA.status || (!tunnelStatusB.status && !peer)) {
+      // one of devices is disconnected
+      retTunnel.tunnelStatus = 'N/A';
+    } else if (isPending) {
+      retTunnel.tunnelStatus = 'Pending';
+    } else if ((tunnelStatusA.status === 'up') && (peer || tunnelStatusB.status === 'up')) {
+      retTunnel.tunnelStatus = 'Connected';
+    } else {
+      retTunnel.tunnelStatus = 'Not Connected';
+    };
 
     retTunnel._id = retTunnel._id.toString();
 
@@ -133,7 +141,12 @@ class TunnelsService {
         const retTunnel = TunnelsService.selectTunnelParams(d);
         // get the status from db if it was updated
         if (updateStatusInDb) {
-          retTunnel.tunnelStatus = tunnelStatusInDb;
+          if (retTunnel.tunnelStatus !== tunnelStatusInDb) {
+            // mark the tunnel status is changed, it will be updated in DB on the next call
+            const status = retTunnel.tunnelStatus === 'Connected' ? 'up' : 'down';
+            deviceStatus.setTunnelsStatusByOrg(orgList[0], d.num, d.deviceA.machineId, status);
+            retTunnel.tunnelStatus = tunnelStatusInDb;
+          }
         }
         return retTunnel;
       });

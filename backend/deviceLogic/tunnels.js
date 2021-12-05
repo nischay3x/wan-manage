@@ -1363,11 +1363,19 @@ const oneTunnelDel = async (tunnelID, user, org) => {
       deviceAconf: false,
       deviceBconf: false,
       pendingTunnelModification: false,
+      status: 'down',
       tunnelKeys: null
     },
     // Options
     { upsert: false, new: true }
   );
+
+  // remove the tunnel status from memory
+  const deviceStatus = require('../periodic/deviceStatus')();
+  deviceStatus.clearTunnelStatus(deviceA.machineId, num);
+  if (!peer) {
+    deviceStatus.clearTunnelStatus(deviceB.machineId, num);
+  }
 
   // throw this error after removing from database
   if (tunnelResp.isPending) {
@@ -1639,6 +1647,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
 
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
+    paramsDeviceA.peer.routing = 'ospf';
     paramsDeviceA.peer.mtu = 1500;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
