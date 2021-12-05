@@ -481,7 +481,7 @@ class Connections {
             { machineId },
             { $set: { interfaces } },
             { runValidators: true }
-          ).populate('interfaces.pathlabels', '_id type');
+          );
 
           // We create a new instance of events class
           // to know changedDevice and changedTunnels
