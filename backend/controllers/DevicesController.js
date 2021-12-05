@@ -178,6 +178,10 @@ class DevicesController {
   async devicesIdRoutingOSPFPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdRoutingOSPFPUT);
   };
+
+  async devicesIdCoordsPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdCoordsPUT);
+  };
 }
 
 module.exports = DevicesController;

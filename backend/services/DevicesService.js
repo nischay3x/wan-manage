@@ -2958,27 +2958,27 @@ class DevicesService {
    * coordsConfig Coordinates Configs
    * returns coordinates configuration
    **/
-  static async devicesIdCoordsPUT ({ id, org, coordsConfig }, { user, server }, response) {
+  static async devicesIdCoordsPUT ({ id, org, coordsConfigs }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      if (!coordsConfig.coords ||
-          coordsConfig.coords.length !== 2 ||
-          coordsConfig.coords.some((c) => typeof c !== 'number')) {
+      if (!coordsConfigs.coords ||
+        coordsConfigs.coords.length !== 2 ||
+        coordsConfigs.coords.some((c) => typeof c !== 'number')) {
         throw new Error('Coordinates should contain an array of longitude, latitude numbers');
       }
 
-      const updDevice = await devices.findOneAndUpdate(
+      const updDevice = await devices.updateOne(
         { _id: mongoose.Types.ObjectId(id), org: { $in: orgList } },
-        { $set: { coords: coordsConfig.coords } },
+        { $set: { coords: coordsConfigs.coords } },
         { runValidators: true, upsert: false }
       );
 
-      if (updDevice.nMatched !== 1) {
+      if (updDevice.n !== 1) { // Device not matched
         throw new Error('Device not found');
       }
 
-      return Service.successResponse(coordsConfig, 200);
+      return Service.successResponse(coordsConfigs, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
