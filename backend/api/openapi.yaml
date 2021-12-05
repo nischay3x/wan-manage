@@ -7904,6 +7904,7 @@ components:
                     - url
             manage:
               type: object
+    # //TODO: change the schema// 
     PurchasedApplication:
       example:
         _id: _id
