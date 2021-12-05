@@ -2951,6 +2951,43 @@ class DevicesService {
   }
 
   /**
+   * Modify device coordinates configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by
+   * coordsConfig Coordinates Configs
+   * returns coordinates configuration
+   **/
+  static async devicesIdCoordsPUT ({ id, org, coordsConfig }, { user, server }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      if (!coordsConfig.coords ||
+          coordsConfig.coords.length !== 2 ||
+          coordsConfig.coords.some((c) => typeof c !== 'number')) {
+        throw new Error('Coordinates should contain an array of longitude, latitude numbers');
+      }
+
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: mongoose.Types.ObjectId(id), org: { $in: orgList } },
+        { $set: { coords: coordsConfig.coords } },
+        { runValidators: true, upsert: false }
+      );
+
+      if (updDevice.nMatched !== 1) {
+        throw new Error('Device not found');
+      }
+
+      return Service.successResponse(coordsConfig, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * Sets Location header of the response, used in some integrations
    * @param {Object} response - response to http request
    * @param {Array} jobsIds - array of jobs ids
