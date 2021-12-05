@@ -664,7 +664,7 @@ class Connections {
         { _id: deviceId },
         { $set: { versions: versions } },
         { new: true, runValidators: true }
-      ).populate('interfaces.pathlabels', '_id type');
+      ).populate('interfaces.pathlabels', '_id name type');
       const { expireTime, jobQueued } = origDevice.IKEv2;
 
       const { encryptionMethod } = await orgModel.findOne({ _id: origDevice.org });
