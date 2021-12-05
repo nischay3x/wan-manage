@@ -32,6 +32,7 @@ const url = require('url');
 // billing support
 const flexibilling = require('../flexibilling');
 const { mapLteNames } = require('../utils/deviceUtils');
+const geoip = require('geoip-lite');
 
 const connectRouter = express.Router();
 connectRouter.use(bodyParser.json());
@@ -77,6 +78,30 @@ const checkDeviceVersion = async (req, res, next) => {
   }
   next();
 };
+
+// Try to determine the coordinates for a device
+function getCoordinates (interfaces, sourceIp) {
+  let ll = null;
+  const lookupIp = (ip) => {
+    const geoIpInfo = geoip.lookup(ip);
+    if (geoIpInfo) {
+      ll = geoIpInfo.ll;
+      return true; // Stop the interface loop
+    }
+    return false;
+  };
+  // Try first to find location based on source IP
+  if (!sourceIp || !lookupIp(sourceIp)) {
+    if (interfaces) {
+      interfaces.some((i) => {
+        // Try to match public IP first
+        if (i.PublicIP) return lookupIp(i.PublicIP);
+        if (i.IPv4) return lookupIp(i.IPv4);
+      });
+    }
+  }
+  return ll;
+}
 
 // Register device. When device connects for the first
 // time, it tries to authenticate by accessing this URL
@@ -195,6 +220,10 @@ connectRouter.route('/register')
                     return next(createError(402, 'Maximum number of free devices reached'));
                   }
 
+                  // Get device location
+                  let ll = getCoordinates(ifs, sourceIP);
+                  if (!ll) ll = [40.416775, -3.703790]; // Default coordinate
+
                   // Create the device
                   devices.create([{
                     account: decoded.account,
@@ -210,6 +239,7 @@ connectRouter.route('/register')
                     deviceToken: deviceToken,
                     isApproved: false,
                     isConnected: false,
+                    coords: ll,
                     versions: versions
                   }], { session: session })
                     .then(async (result) => {
