@@ -122,6 +122,13 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
         } else {
           portLow = portHigh = +ports;
         }
+        // implicit inbound edge-access rule for port 4789 on all WAN interfaces
+        if (portLow <= 4789 && portHigh >= 4789) {
+          return {
+            valid: false,
+            err: `Inbound rule destination ports ${ports} overlapped with port 4789`
+          };
+        }
         for (const [usedPortLow, usedPortHigh] of usedInboundPorts) {
           if ((usedPortLow <= portLow && portLow <= usedPortHigh) ||
             (usedPortLow <= portHigh && portHigh <= usedPortHigh) ||
