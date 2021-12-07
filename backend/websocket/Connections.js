@@ -481,7 +481,7 @@ class Connections {
             { machineId },
             { $set: { interfaces } },
             { runValidators: true }
-          ).populate('interfaces.pathlabels', '_id type');
+          );
 
           // We create a new instance of events class
           // to know changedDevice and changedTunnels
@@ -664,7 +664,7 @@ class Connections {
         { _id: deviceId },
         { $set: { versions: versions } },
         { new: true, runValidators: true }
-      ).populate('interfaces.pathlabels', '_id type');
+      ).populate('interfaces.pathlabels', '_id name type');
       const { expireTime, jobQueued } = origDevice.IKEv2;
 
       const { encryptionMethod } = await orgModel.findOne({ _id: origDevice.org });
