@@ -1054,14 +1054,6 @@ const apply = async (device, user, data) => {
   const org = data.org;
   const modifyParams = {};
 
-  device[0] = await device[0]
-    .populate('interfaces.pathlabels', '_id name type')
-    .execPopulate();
-
-  data.newDevice = await data.newDevice
-    .populate('interfaces.pathlabels', '_id name type')
-    .execPopulate();
-
   // Create the default/static routes modification parameters
   const modifyRoutes = prepareModifyRoutes(device[0], data.newDevice);
   if (modifyRoutes.routes.length > 0) modifyParams.modify_routes = modifyRoutes;
@@ -1372,6 +1364,7 @@ const sync = async (deviceId, org) => {
     }
   )
     .lean()
+    // no need to populate pathLabel name here, since we need only the id's
     .populate('interfaces.pathlabels', '_id type');
 
   // Prepare add-interface message
