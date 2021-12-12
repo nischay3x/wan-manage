@@ -685,7 +685,7 @@ class Events {
 
     let updatedDevices = await devices.find({
       _id: { $in: devicesIds }
-    }).populate('interfaces.pathlabels', '_id type');
+    }).populate('interfaces.pathlabels', '_id name type');
 
     updatedDevices = keyBy(updatedDevices, '_id');
 

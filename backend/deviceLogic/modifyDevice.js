@@ -1372,6 +1372,7 @@ const sync = async (deviceId, org) => {
     }
   )
     .lean()
+    // no need to populate pathLabel name here, since we need only the id's
     .populate('interfaces.pathlabels', '_id type');
 
   // Prepare add-interface message
