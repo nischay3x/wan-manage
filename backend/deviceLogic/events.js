@@ -73,24 +73,6 @@ class Events {
   }
 
   /**
-   * Handle event of dhcp become pending
-   * @param  {object} device device object
-   * @param  {object} origIfc interface object
-   * @param  {string} reason  notification reason
-  */
-  async dhcpSetToPending (device, origIfc, reason) {
-    await notificationsMgr.sendNotifications([{
-      org: device.org,
-      title:
-        `DHCP Server for interface ${origIfc.name} in device ${device.name} is in pending state`,
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: reason
-    }]);
-  }
-
-  /**
    * Handle public port/ip rate limited
    * @param  {object} origDevice device object
    * @param  {object} origIfc interface object
@@ -218,20 +200,6 @@ class Events {
       await this.removePendingStateFromTunnels(device, origIfc);
     }
 
-    if (origIfc.type === 'LAN') {
-      // check DHCP server configs
-      for (let i = 0; i < device.dhcp.length; i++) {
-        const d = device.dhcp[i];
-        if (!d.isPending) continue;
-
-        const isSameIfc = d.interface === ifc.devId;
-
-        if (isSameIfc) {
-          await this.setIncompleteDHCPStatus(d, false, '', device, origIfc);
-        }
-      }
-    }
-
     // unset related static routes as pending
     for (let i = 0; i < device.staticroutes.length; i++) {
       const s = device.staticroutes[i];
@@ -293,14 +261,14 @@ class Events {
       // check if should keep it pending due to other reasons
       //
       // check for no ip
-      if (ifcA.hasIpOnDevice === false || (ifcB && ifcB.hasIpOnDevice === false)) {
+      if (ifcA.IPv4 === '' || (ifcB && ifcB.IPv4 === '')) {
         let ifcWithoutIp, deviceWithoutIp;
         if (peer) {
           ifcWithoutIp = ifcA;
           deviceWithoutIp = deviceA;
         } else {
-          ifcWithoutIp = ifcA.hasIpOnDevice ? ifcB : ifcA;
-          deviceWithoutIp = ifcA.hasIpOnDevice ? deviceB : deviceA;
+          ifcWithoutIp = ifcA.IPv4 === '' ? ifcA : ifcB;
+          deviceWithoutIp = ifcA.IPv4 === '' ? deviceA : deviceB;
         }
 
         const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
@@ -354,8 +322,9 @@ class Events {
 
     const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
 
-    if (origIfc.type === 'WAN') {
+    if (origIfc.type === 'WAN' && origIfc.dhcp === 'yes') {
       // set related tunnels as pending
+      // static ip shouldn't set to pending - flexiManage knows how to configure it
       await this.setPendingStateToTunnels(device, origIfc, reason);
     }
 
@@ -363,20 +332,6 @@ class Events {
     const deviceVersion = getMajorVersion(device.versions.agent);
     if (deviceVersion <= 4) {
       return;
-    }
-
-    if (origIfc.type === 'LAN') {
-      // check DHCP server configs
-      for (let i = 0; i < device.dhcp.length; i++) {
-        const d = device.dhcp[i];
-        if (d.isPending) continue;
-
-        const isSameIfc = d.interface === ifc.devId;
-
-        if (isSameIfc) {
-          await this.setIncompleteDHCPStatus(d, true, reason, device, origIfc);
-        }
-      }
     }
 
     // set related static routes as pending
@@ -550,35 +505,6 @@ class Events {
   };
 
   /**
-   * Set incomplete state for DHCP if needed
-   * @param  {object} dhcp  dhcp object
-   * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
-   * @param  {string} reason  incomplete reason
-   * @param  {object} device  device of incomplete dhcp
-   * @param  {object} origIfc  interface object
-  */
-  async setIncompleteDHCPStatus (dhcp, isIncomplete, reason, device, origIfc) {
-    await this.addChangedDevice(device._id);
-
-    await devices.findOneAndUpdate(
-      { _id: mongoose.Types.ObjectId(device._id) },
-      {
-        $set: {
-          'dhcp.$[elem].isPending': isIncomplete,
-          'dhcp.$[elem].pendingReason': isIncomplete ? reason : ''
-        }
-      },
-      {
-        arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(dhcp._id) }]
-      }
-    );
-
-    if (isIncomplete) {
-      await this.dhcpSetToPending(device, origIfc, reason);
-    }
-  };
-
-  /**
    * Send needed tunnels jobs (remove or add)
   */
   async sendTunnelsRemoveJobs () {
@@ -657,17 +583,7 @@ class Events {
   */
   isInterfaceConnectivityChanged (origIfc, updatedIfc) {
     // from device internetAccess type is boolean, in management it is enum yes/no
-    const prevInternetAccess = origIfc.internetAccess === 'yes';
-
-    if (updatedIfc.internetAccess === undefined) {
-      return false;
-    }
-
-    if (!origIfc.monitorInternet) {
-      return false;
-    }
-
-    if (updatedIfc.internetAccess === prevInternetAccess) {
+    if (updatedIfc.internetAccess === origIfc.internetAccess) {
       return false;
     }
 
@@ -714,11 +630,11 @@ class Events {
     }
 
     // if not ip, there is no public port, so we can't count it as change
-    if (updatedIfc.IPv4 === '' || updatedIfc.public_port === '') {
+    if (updatedIfc.IPv4 === '' || updatedIfc.PublicPort === '') {
       return false;
     }
 
-    if (origIfc.PublicPort === updatedIfc.public_port.toString()) {
+    if (origIfc.PublicPort === updatedIfc.PublicPort.toString()) {
       return false;
     }
 
@@ -738,11 +654,11 @@ class Events {
     }
 
     // if not ip, there is no public port, so we can't count it as change
-    if (updatedIfc.IPv4 === '' || updatedIfc.public_ip === '') {
+    if (updatedIfc.IPv4 === '' || updatedIfc.PublicIP === '') {
       return false;
     }
 
-    if (origIfc.PublicIP === updatedIfc.public_ip) {
+    if (origIfc.PublicIP === updatedIfc.PublicIP) {
       return false;
     }
 

@@ -521,7 +521,7 @@ const isIPv4Address = (ip, mask) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateStaticRoute = (device, tunnels, route) => {
-  const { ifname, gateway } = route;
+  const { ifname, gateway, isPending } = route;
   const gatewaySubnet = `${gateway}/32`;
 
   if (ifname) {
@@ -538,7 +538,8 @@ const validateStaticRoute = (device, tunnels, route) => {
         err: `Static routes not allowed on unassigned interfaces '${ifname}'`
       };
     }
-    if (!cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
+    if (!isPending && !cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
+      // A pending rout  may not overlap with an interface
       return {
         valid: false,
         err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
@@ -565,7 +566,7 @@ const validateStaticRoute = (device, tunnels, route) => {
         return cidr.overlap(`${ip1}/31`, gatewaySubnet);
       });
     }
-    if (!valid) {
+    if (!valid && !isPending) { // A pending rout  may not overlap with an interface
       return {
         valid: false,
         err: `Static route gateway ${gateway} not overlapped with any interface or tunnel`

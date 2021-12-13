@@ -203,15 +203,13 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
               // Create a list of path labels that are common to both interfaces.
               const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
               for (const label of labelsIntersection) {
-                isFoundInterfacesWithCommonLabels = true;
                 // Skip tunnel if the label is not included in
                 // the list of labels specified by the user
-                const shouldSkipTunnel =
-                  !createForAllLabels &&
-                  !specifiedLabels.has(label);
+                const shouldSkipTunnel = !createForAllLabels && !specifiedLabels.has(label);
                 if (shouldSkipTunnel) {
-                  reasons.add('Some devices have interfaces without specified Path Labels.');
                   continue;
+                } else {
+                  isFoundInterfacesWithCommonLabels = true;
                 }
                 // If a tunnel already exists, skip the configuration
                 const tunnelFound = await getTunnel(org, label, wanIfcA, wanIfcB);
@@ -297,12 +295,16 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
     // path labels across all WAN interfaces.
     const specifiedLabels = new Set(pathLabels);
     const createForAllLabels = specifiedLabels.has('FFFFFF');
+    let isFoundInterfacesWithSpecifiedLabels = false;
     for (const wanIfc of deviceIntfs) {
       const ifcLabels = wanIfc.labelsSet;
 
       // If no path labels were specified by user,
       // but interface has path labels, we don't create for peer for this interface.
       if (specifiedLabels.size === 0) {
+        // if no pat label specified - mark it as true since we don't search for pathlabels
+        isFoundInterfacesWithSpecifiedLabels = true;
+
         // If the WAN interface has path labels, we skip the creation for this interface
         if (ifcLabels.size > 0) {
           const reason =
@@ -354,8 +356,9 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
         for (const label of ifcLabels) {
           const shouldSkipPeer = !createForAllLabels && !specifiedLabels.has(label);
           if (shouldSkipPeer) {
-            reasons.add('Some devices have interfaces without the specified Path Labels.');
             continue;
+          } else {
+            isFoundInterfacesWithSpecifiedLabels = true;
           }
 
           for (const peer of peers) {
@@ -374,6 +377,9 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
           }
         }
       }
+    }
+    if (!isFoundInterfacesWithSpecifiedLabels) {
+      reasons.add('Some devices have interfaces without specified Path Labels.');
     }
   }
 
@@ -1076,12 +1082,12 @@ const addTunnel = async (
   let isPending = false;
   let pendingReason = '';
 
-  if (deviceAIntf.hasIpOnDevice === false) {
+  if (deviceAIntf.IPv4 === '') {
     isPending = true;
     pendingReason = eventsReasons.interfaceHasNoIp(deviceAIntf.name, deviceA.name);
   }
 
-  if (!peer && deviceBIntf.hasIpOnDevice === false) {
+  if (!peer && deviceBIntf.IPv4 === '') {
     isPending = true;
     pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
   }
@@ -1120,7 +1126,7 @@ const addTunnel = async (
 
   // don't send jobs for pending tunnels
   if (isPending) {
-    throw new Error('Tunnel set to pending');
+    throw new Error(`Tunnel ${tunnelnum} set as pending - ${pendingReason}`);
   }
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
@@ -1748,7 +1754,7 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
 const getInterfacesWithPathLabels = device => {
   const deviceIntfs = [];
   device.interfaces.forEach(intf => {
-    if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
+    if (intf.isAssigned === true && intf.type === 'WAN') {
       const labelsSet = new Set(intf.pathlabels.map(label => {
         // DIA interfaces cannot be used in tunnels
         return label.type !== 'DIA' ? label._id.toString() : null;
