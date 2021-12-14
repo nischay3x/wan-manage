@@ -24,7 +24,7 @@ const diffieHellmans = require('../models/diffieHellmans');
 const {
   validateFQDN
 } = require('../models/validators');
-
+const configs = require('../configs')();
 const {
   getAvailableIps,
   getSubnetMask,
@@ -467,6 +467,7 @@ const getRemoteVpnParams = async (device, applicationId, op) => {
     params.dnsIps = dnsIps;
     params.dnsDomains = dnsDomains;
     params.dhKey = dhKey;
+    params.vpnPortalServer = configs.get('flexiVpnServer');
   }
 
   return params;

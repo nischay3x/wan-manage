@@ -150,8 +150,6 @@ const configEnv = {
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
     // Global applications file locations
     applicationsUrl: './applications.json',
-    // Endpoint in our flexivpn server that create a dh key
-    createDiffieHellmanApi: 'http://localhost:5001/diffieHellman/create',
     // Default port for tunnels
     tunnelPort: '4789',
     // If to allow manager role to delete organizations, devices, tokens, tunnels, appIdentifications,
@@ -177,7 +175,11 @@ const configEnv = {
     // Reconfig block time in seconds.
     reconfigErrorBlockTime: 60 * 60, // one hour
     // Public IP/Port block time in seconds.
-    publicAddrBlockTime: 60 * 60 // one hour
+    publicAddrBlockTime: 60 * 60, // one hour
+    // flexiVpn server portal url
+    flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
+    // Endpoint in our flexivpn server that create a dh key
+    createDiffieHellmanApi: 'https://localvpn.flexiwan.com:5001/diffieHellman/create'
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -275,7 +277,9 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
+    corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
+    flexiVpnServer: 'https://vpn01.flexiwan.com:443',
+    createDiffieHellmanApi: 'https://vpn01.flexiwan.com:5001/diffieHellman/create'
   },
   // Override for appqa02 environment
   appqa02: {
@@ -298,7 +302,9 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80']
+    corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
+    flexiVpnServer: 'https://vpn02.flexiwan.com:443',
+    createDiffieHellmanApi: 'https://vpn02.flexiwan.com:5001/diffieHellman/create'
   }
 };
 
