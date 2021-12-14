@@ -1568,6 +1568,7 @@ class DevicesService {
           return s;
         });
 
+        const staticRoutesUniqueKeys = {};
         for (const route of deviceRequest.staticroutes) {
           const { valid, err } = validateStaticRoute(deviceToValidate, origTunnels, route);
           if (!valid) {
@@ -1577,6 +1578,13 @@ class DevicesService {
               });
             throw new Error(err);
           }
+          const staticRouteKey = `${route.destination} via ${route.gateway}`;
+          if (staticRoutesUniqueKeys.hasOwnProperty(staticRouteKey)) {
+            const errorMsg = `Duplicated static routes detected: ${staticRouteKey}`;
+            logger.warn(errorMsg, { params: { route } });
+            throw new Error(errorMsg);
+          }
+          staticRoutesUniqueKeys[staticRouteKey] = true;
         }
       }
 
