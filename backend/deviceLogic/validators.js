@@ -539,7 +539,7 @@ const validateStaticRoute = (device, tunnels, route) => {
       };
     }
     if (!isPending && !cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
-      // A pending rout  may not overlap with an interface
+      // A pending route may not overlap with an interface
       return {
         valid: false,
         err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
@@ -566,7 +566,7 @@ const validateStaticRoute = (device, tunnels, route) => {
         return cidr.overlap(`${ip1}/31`, gatewaySubnet);
       });
     }
-    if (!valid && !isPending) { // A pending rout  may not overlap with an interface
+    if (!valid && !isPending) { // A pending route may not overlap with an interface
       return {
         valid: false,
         err: `Static route gateway ${gateway} not overlapped with any interface or tunnel`

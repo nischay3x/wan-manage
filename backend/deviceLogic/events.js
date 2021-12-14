@@ -582,7 +582,10 @@ class Events {
    * @return {boolean} if need to trigger event of internet connectivity lost
   */
   isInterfaceConnectivityChanged (origIfc, updatedIfc) {
-    // from device internetAccess type is boolean, in management it is enum yes/no
+    if (!origIfc.monitorInternet) {
+      return false;
+    }
+
     if (updatedIfc.internetAccess === origIfc.internetAccess) {
       return false;
     }
