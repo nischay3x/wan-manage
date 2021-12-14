@@ -326,7 +326,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
           }
 
           const sameSrcAndDst = await getPeersWithSameSrcAndDst(org, wanIfc.IPv4, peer.remoteIP);
-          if (sameSrcAndDst) {
+          if (sameSrcAndDst.length > 0) {
             reasons.add('Some peer tunnels with same source and destination IP already exists. ');
             continue;
           }
@@ -374,7 +374,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
             }
 
             const sameSrcAndDst = await getPeersWithSameSrcAndDst(org, wanIfc.IPv4, peer.remoteIP);
-            if (sameSrcAndDst) {
+            if (sameSrcAndDst.length > 0) {
               reasons.add('Some peer tunnels with same source and destination IP already exists. ');
               continue;
             }
