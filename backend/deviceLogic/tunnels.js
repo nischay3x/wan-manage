@@ -325,6 +325,12 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
             continue;
           }
 
+          const sameSrcAndDst = await getPeersWithSameSrcAndDst(org, wanIfc.IPv4, peer.remoteIP);
+          if (sameSrcAndDst) {
+            reasons.add('Some peer tunnels with same source and destination IP already exists. ');
+            continue;
+          }
+
           // generate peer configuration job
           const promise = generateTunnelPromise(userName, org, null, device,
             null, wanIfc, null, 'ikev2', peer);
@@ -367,6 +373,12 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
               continue;
             }
 
+            const sameSrcAndDst = await getPeersWithSameSrcAndDst(org, wanIfc.IPv4, peer.remoteIP);
+            if (sameSrcAndDst) {
+              reasons.add('Some peer tunnels with same source and destination IP already exists. ');
+              continue;
+            }
+
             // generate peer configuration job
             const promise = generateTunnelPromise(
               userName, org, label, device, null, wanIfc, null, 'ikev2', peer);
@@ -378,6 +390,54 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
   }
 
   return tasks;
+};
+
+/**
+ * Get peer tunnels with the given src ip and destination ip
+ * @async
+ * @param  {string}   org  organization ID
+ * @param  {string}   interfaceIp interface IP, used as source ip of a tunnel
+ * @param  {array}    peerRemoteIp peer remote IP, used as remote ip of a peer tunnel
+ * @return {array}    array of peer tunnels with the given src and destination ip
+ */
+const getPeersWithSameSrcAndDst = async (org, interfaceIp, peerRemoteIp) => {
+  try {
+    const pipeline = [
+      // get active peers for the given organization
+      { $match: { org: mongoose.Types.ObjectId(org), peer: { $ne: null }, isActive: true } },
+      { $project: { deviceA: 1, interfaceA: 1, peer: 1, _id: 0 } },
+      // get interface object used by the tunnel
+      {
+        $lookup: {
+          from: 'devices',
+          let: { deviceId: '$deviceA', ifc_id: '$interfaceA' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$deviceId'] } } },
+            { $project: { interfaces: 1 } },
+            { $unwind: '$interfaces' },
+            { $match: { $expr: { $eq: ['$interfaces._id', '$$ifc_id'] } } },
+            { $project: { _id: 0, src: '$interfaces.IPv4' } }
+          ],
+          as: 'interface'
+        }
+      },
+      // get peer object used by the tunnel
+      { $lookup: { from: 'peers', localField: 'peer', foreignField: '_id', as: 'peer' } },
+      { $unwind: '$peer' },
+      { $unwind: '$interface' },
+      { $project: { _id: 0, src: '$interface.src', dst: '$peer.remoteIP' } },
+      // check if the given src and dst combination is already in use by a peer in this organization
+      { $match: { src: interfaceIp, dst: peerRemoteIp } }
+    ];
+
+    const res = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
+    return res;
+  } catch (err) {
+    logger.error('Failed to check for duplication src and dst ips', {
+      params: { interfaceIp, peerRemoteIp, err: err.message }
+    });
+    throw err;
+  }
 };
 
 /**
