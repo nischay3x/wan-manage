@@ -1709,7 +1709,7 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
 
   const tunnels = await tunnelsModel.find(
     { _id: { $in: tunnelsIds }, isActive: true }
-  ).populate('deviceA').populate('deviceB');
+  ).populate('deviceA').populate('deviceB').populate('peer');
 
   for (const tunnel of tunnels) {
     const ifcA = tunnel.deviceA.interfaces.find(ifc => {
@@ -1738,11 +1738,12 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
       username,
       tunnel.org,
       tunnel.deviceA.machineId,
-      tunnel.deviceB.machineId,
+      tunnel.peer ? null : tunnel.deviceB.machineId,
       tunnel.deviceA._id,
-      tunnel.deviceB._id,
+      tunnel.peer ? null : tunnel.deviceB._id,
       tunnel.num,
-      tunnel.pathlabel
+      tunnel.pathlabel,
+      tunnel.peer
     );
 
     tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
