@@ -175,7 +175,7 @@ class Events {
   */
   async interfaceIpExists (device, origIfc, ifc) {
     // no need to print it every time
-    if (origIfc.hasIpOnDevice === false) {
+    if (origIfc.hasIpOnDevice === false && ifc.hasIpOnDevice) {
       logger.info('Interface IP restored', {
         params: {
           deviceId: device._id,
