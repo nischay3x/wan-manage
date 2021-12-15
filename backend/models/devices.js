@@ -429,8 +429,7 @@ const DHCPSchema = new Schema({
   status: {
     type: String,
     default: 'failed'
-  },
-  ...pendingSchema
+  }
 }, {
   timestamps: true
 });
