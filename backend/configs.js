@@ -303,7 +303,7 @@ const configEnv = {
     logLevel: 'info',
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
-    flexiVpnServer: 'https://vpn02.flexiwan.com:443',
+    flexiVpnServer: 'https://vpnqa02.flexiwan.com:443',
     createDiffieHellmanApi: 'https://vpn02.flexiwan.com:5001/diffieHellman/create'
   }
 };
