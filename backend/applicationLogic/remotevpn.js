@@ -479,6 +479,7 @@ const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
   if (oldConfig.serverPort !== updatedConfig.serverPort) return true;
   if (oldConfig.dnsIps !== updatedConfig.dnsIps) return true;
   if (oldConfig.dnsDomains !== updatedConfig.dnsDomains) return true;
+  if (oldConfig.routeAllTrafficOverVpn !== updatedConfig.routeAllTrafficOverVpn) return true;
   return false;
 };
 
