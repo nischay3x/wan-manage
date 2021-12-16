@@ -435,7 +435,7 @@ const getPeersSrcDst = async (org) => {
       { $lookup: { from: 'peers', localField: 'peer', foreignField: '_id', as: 'peer' } },
       { $unwind: '$peer' },
       { $unwind: '$interface' },
-      { $project: { _id: 0, key: { $concat: ['$interface.src', ':', '$peer.remoteIP'] } } },
+      { $project: { _id: 0, key: { $concat: ['$interface.src', ':', '$peer.remoteIP'] } } }
       // check if the given src and dst combination is already in use by a peer in this organization
       // { $match: { src: interfaceIp, dst: peerRemoteIp } }
     ];
