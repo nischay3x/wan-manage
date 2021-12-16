@@ -444,7 +444,7 @@ const getPeersSrcDst = async (org) => {
     return res;
   } catch (err) {
     logger.error('Failed to check for duplication src and dst ips', {
-      params: { interfaceIp, peerRemoteIp, err: err.message }
+      params: { org, err: err.message }
     });
     throw err;
   }
@@ -547,7 +547,7 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   const desired = dbTasks.flat().map(job => job.id);
   const ids = fulfilled.flat().map(job => job.id);
-  let message = `${isPeer ? 'peer ' : ''}tunnels creation jobs added.`;
+  let message = `${isPeer ? 'peer ' : ''}tunnel creation jobs added.`;
   if (desired.length === 0 || fulfilled.flat().length === 0) {
     message = 'No ' + message;
   } else if (ids.length < desired.length) {
@@ -1190,7 +1190,7 @@ const addTunnel = async (
 
   // don't send jobs for pending tunnels
   if (isPending) {
-    throw new Error(`Tunnel ${tunnelnum} set as pending - ${pendingReason}`);
+    throw new Error(`Tunnel #${tunnelnum} set as pending - ${pendingReason}`);
   }
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
