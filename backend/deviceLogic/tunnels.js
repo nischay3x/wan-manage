@@ -1354,7 +1354,7 @@ const applyTunnelDel = async (devices, user, data) => {
 
     const desired = delPromises.flat().map(job => job.id);
     const ids = fulfilled.flat().map(job => job.id);
-    let message = 'tunnels deletion jobs added.';
+    let message = 'tunnel deletion jobs added.';
     if (desired.length === 0 || fulfilled.flat().length === 0) {
       message = 'No ' + message;
     } else if (ids.length < desired.length) {
