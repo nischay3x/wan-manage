@@ -38,6 +38,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
 const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const keyBy = require('lodash/keyBy');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -291,6 +292,9 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
       continue;
     }
 
+    const peersSrcDst = await getPeersSrcDst(org);
+    const srcDstKeys = keyBy(peersSrcDst, 'key');
+
     // Create a peer for each WAN interface of the device according to the path
     // labels assigned to the interfaces. If the list of path labels
     // IDs contains the ID 'FFFFFF', create peers between all common
@@ -325,8 +329,8 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
             continue;
           }
 
-          const sameSrcAndDst = await getPeersWithSameSrcAndDst(org, wanIfc.IPv4, peer.remoteIP);
-          if (sameSrcAndDst.length > 0) {
+          const srcDst = `${wanIfc.IPv4}:${peer.remoteIP}`;
+          if (srcDst in srcDstKeys) {
             reasons.add('Some peer tunnels with same source and destination IP already exists. ');
             continue;
           }
@@ -373,8 +377,8 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
               continue;
             }
 
-            const sameSrcAndDst = await getPeersWithSameSrcAndDst(org, wanIfc.IPv4, peer.remoteIP);
-            if (sameSrcAndDst.length > 0) {
+            const srcDst = `${wanIfc.IPv4}:${peer.remoteIP}`;
+            if (srcDst in srcDstKeys) {
               reasons.add('Some peer tunnels with same source and destination IP already exists. ');
               continue;
             }
@@ -400,7 +404,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
  * @param  {array}    peerRemoteIp peer remote IP, used as remote ip of a peer tunnel
  * @return {array}    array of peer tunnels with the given src and destination ip
  */
-const getPeersWithSameSrcAndDst = async (org, interfaceIp, peerRemoteIp) => {
+const getPeersSrcDst = async (org) => {
   try {
     const pipeline = [
       // get active peers for the given organization
@@ -425,9 +429,9 @@ const getPeersWithSameSrcAndDst = async (org, interfaceIp, peerRemoteIp) => {
       { $lookup: { from: 'peers', localField: 'peer', foreignField: '_id', as: 'peer' } },
       { $unwind: '$peer' },
       { $unwind: '$interface' },
-      { $project: { _id: 0, src: '$interface.src', dst: '$peer.remoteIP' } },
+      { $project: { _id: 0, key: { $concat: ['$interface.src', ':', '$peer.remoteIP'] } } },
       // check if the given src and dst combination is already in use by a peer in this organization
-      { $match: { src: interfaceIp, dst: peerRemoteIp } }
+      // { $match: { src: interfaceIp, dst: peerRemoteIp } }
     ];
 
     const res = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
