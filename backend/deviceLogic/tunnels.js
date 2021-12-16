@@ -331,7 +331,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
             continue;
           }
 
-          const srcDst = `${wanIfc.IPv4}:${peer.remoteIP}`;
+          const srcDst = `${wanIfc.IPv4}_${peer.remoteIP}`;
           if (srcDst in srcDstKeys) {
             reasons.add('Some peer tunnels with same source and destination IP already exists. ');
             continue;
@@ -380,7 +380,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
               continue;
             }
 
-            const srcDst = `${wanIfc.IPv4}:${peer.remoteIP}`;
+            const srcDst = `${wanIfc.IPv4}_${peer.remoteIP}`;
             if (srcDst in srcDstKeys) {
               reasons.add('Some peer tunnels with same source and destination IP already exists. ');
               continue;
@@ -435,7 +435,7 @@ const getPeersSrcDst = async (org) => {
       { $lookup: { from: 'peers', localField: 'peer', foreignField: '_id', as: 'peer' } },
       { $unwind: '$peer' },
       { $unwind: '$interface' },
-      { $project: { _id: 0, key: { $concat: ['$interface.src', ':', '$peer.remoteIP'] } } }
+      { $project: { _id: 0, key: { $concat: ['$interface.src', '_', '$peer.remoteIP'] } } }
       // check if the given src and dst combination is already in use by a peer in this organization
       // { $match: { src: interfaceIp, dst: peerRemoteIp } }
     ];
