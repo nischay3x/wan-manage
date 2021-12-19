@@ -39,6 +39,8 @@ const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
 const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
+const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
+
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
   ifcLabelsA.forEach(label => {
@@ -1639,6 +1641,9 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
 
+  // no additional header for not encrypted tunnels
+  const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
+
   // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
   paramsDeviceA.dev_id = deviceAIntf.devId;
@@ -1654,7 +1659,8 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
     paramsDeviceA.peer.routing = 'ospf';
-    paramsDeviceA.peer.mtu = 1500;
+    paramsDeviceA.peer.mtu = (globalTunnelMtu > 0) ? globalTunnelMtu
+      : (deviceAIntf.mtu || 1500) - packetHeaderSize;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
     };
@@ -1669,7 +1675,8 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
       ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
 
     // mtu
-    const mtu = 1500;
+    const mtu = (globalTunnelMtu > 0) ? globalTunnelMtu
+      : Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
 
     paramsDeviceA['loopback-iface'] = {
       addr: tunnelParams.ip1 + '/31',

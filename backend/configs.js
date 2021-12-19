@@ -173,7 +173,10 @@ const configEnv = {
     // Reconfig block time in seconds.
     reconfigErrorBlockTime: 60 * 60, // one hour
     // Public IP/Port block time in seconds.
-    publicAddrBlockTime: 60 * 60 // one hour
+    publicAddrBlockTime: 60 * 60, // one hour
+    // Tunnel MTU in bytes. Now provisioned globally per server. Specify number to set specific MTU.
+    // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
+    globalTunnelMtu: 1500
   },
   // Override for development environment, default environment if not specified
   development: {
