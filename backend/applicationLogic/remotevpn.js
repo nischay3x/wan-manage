@@ -72,6 +72,11 @@ const getAuthValidator = () => {
         return helpers.message('domains is not valid');
       };
 
+      const invalid = domainList.some(d => d === 'gmail.com');
+      if (invalid) {
+        return helpers.message('gmail.com domain is not allowed');
+      };
+
       return val;
     }).when('enabled', { is: true, then: Joi.required(), otherwise: Joi.allow('') })
   }).required();
