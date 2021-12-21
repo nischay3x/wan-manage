@@ -179,7 +179,10 @@ const configEnv = {
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
     // Endpoint in our flexivpn server that create a dh key
-    createDiffieHellmanApi: 'https://localvpn.flexiwan.com:5001/diffieHellman/create'
+    createDiffieHellmanApi: 'https://localvpn.flexiwan.com:5001/diffieHellman/create',
+    // Tunnel MTU in bytes. Now provisioned globally per server. Specify number to set specific MTU.
+    // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
+    globalTunnelMtu: 1500
   },
   // Override for development environment, default environment if not specified
   development: {

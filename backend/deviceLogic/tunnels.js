@@ -39,6 +39,8 @@ const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
 const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 
+const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
+
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
   ifcLabelsA.forEach(label => {
@@ -203,15 +205,13 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
               // Create a list of path labels that are common to both interfaces.
               const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
               for (const label of labelsIntersection) {
-                isFoundInterfacesWithCommonLabels = true;
                 // Skip tunnel if the label is not included in
                 // the list of labels specified by the user
-                const shouldSkipTunnel =
-                  !createForAllLabels &&
-                  !specifiedLabels.has(label);
+                const shouldSkipTunnel = !createForAllLabels && !specifiedLabels.has(label);
                 if (shouldSkipTunnel) {
-                  reasons.add('Some devices have interfaces without specified Path Labels.');
                   continue;
+                } else {
+                  isFoundInterfacesWithCommonLabels = true;
                 }
                 // If a tunnel already exists, skip the configuration
                 const tunnelFound = await getTunnel(org, label, wanIfcA, wanIfcB);
@@ -297,12 +297,16 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
     // path labels across all WAN interfaces.
     const specifiedLabels = new Set(pathLabels);
     const createForAllLabels = specifiedLabels.has('FFFFFF');
+    let isFoundInterfacesWithSpecifiedLabels = false;
     for (const wanIfc of deviceIntfs) {
       const ifcLabels = wanIfc.labelsSet;
 
       // If no path labels were specified by user,
       // but interface has path labels, we don't create for peer for this interface.
       if (specifiedLabels.size === 0) {
+        // if no pat label specified - mark it as true since we don't search for pathlabels
+        isFoundInterfacesWithSpecifiedLabels = true;
+
         // If the WAN interface has path labels, we skip the creation for this interface
         if (ifcLabels.size > 0) {
           const reason =
@@ -354,8 +358,9 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
         for (const label of ifcLabels) {
           const shouldSkipPeer = !createForAllLabels && !specifiedLabels.has(label);
           if (shouldSkipPeer) {
-            reasons.add('Some devices have interfaces without the specified Path Labels.');
             continue;
+          } else {
+            isFoundInterfacesWithSpecifiedLabels = true;
           }
 
           for (const peer of peers) {
@@ -374,6 +379,9 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
           }
         }
       }
+    }
+    if (!isFoundInterfacesWithSpecifiedLabels) {
+      reasons.add('Some devices have interfaces without specified Path Labels.');
     }
   }
 
@@ -1076,12 +1084,12 @@ const addTunnel = async (
   let isPending = false;
   let pendingReason = '';
 
-  if (deviceAIntf.hasIpOnDevice === false) {
+  if (deviceAIntf.IPv4 === '') {
     isPending = true;
     pendingReason = eventsReasons.interfaceHasNoIp(deviceAIntf.name, deviceA.name);
   }
 
-  if (!peer && deviceBIntf.hasIpOnDevice === false) {
+  if (!peer && deviceBIntf.IPv4 === '') {
     isPending = true;
     pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
   }
@@ -1120,7 +1128,7 @@ const addTunnel = async (
 
   // don't send jobs for pending tunnels
   if (isPending) {
-    throw new Error('Tunnel set to pending');
+    throw new Error(`Tunnel ${tunnelnum} set as pending - ${pendingReason}`);
   }
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
@@ -1633,6 +1641,9 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
 
+  // no additional header for not encrypted tunnels
+  const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
+
   // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
   paramsDeviceA.dev_id = deviceAIntf.devId;
@@ -1648,7 +1659,8 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
     paramsDeviceA.peer.routing = 'ospf';
-    paramsDeviceA.peer.mtu = 1500;
+    paramsDeviceA.peer.mtu = (globalTunnelMtu > 0) ? globalTunnelMtu
+      : (deviceAIntf.mtu || 1500) - packetHeaderSize;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
     };
@@ -1663,7 +1675,8 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
       ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
 
     // mtu
-    const mtu = 1500;
+    const mtu = (globalTunnelMtu > 0) ? globalTunnelMtu
+      : Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
 
     paramsDeviceA['loopback-iface'] = {
       addr: tunnelParams.ip1 + '/31',
@@ -1703,7 +1716,7 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
 
   const tunnels = await tunnelsModel.find(
     { _id: { $in: tunnelsIds }, isActive: true }
-  ).populate('deviceA').populate('deviceB');
+  ).populate('deviceA').populate('deviceB').populate('peer');
 
   for (const tunnel of tunnels) {
     const ifcA = tunnel.deviceA.interfaces.find(ifc => {
@@ -1732,11 +1745,12 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
       username,
       tunnel.org,
       tunnel.deviceA.machineId,
-      tunnel.deviceB.machineId,
+      tunnel.peer ? null : tunnel.deviceB.machineId,
       tunnel.deviceA._id,
-      tunnel.deviceB._id,
+      tunnel.peer ? null : tunnel.deviceB._id,
       tunnel.num,
-      tunnel.pathlabel
+      tunnel.pathlabel,
+      tunnel.peer
     );
 
     tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
@@ -1748,7 +1762,7 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
 const getInterfacesWithPathLabels = device => {
   const deviceIntfs = [];
   device.interfaces.forEach(intf => {
-    if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
+    if (intf.isAssigned === true && intf.type === 'WAN') {
       const labelsSet = new Set(intf.pathlabels.map(label => {
         // DIA interfaces cannot be used in tunnels
         return label.type !== 'DIA' ? label._id.toString() : null;

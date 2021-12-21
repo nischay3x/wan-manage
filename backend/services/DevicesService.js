@@ -1497,12 +1497,6 @@ class DevicesService {
           const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
           if (!origIfc) return d;
 
-          // don't set to pending for old version since we don't sent the IP for bridged interface
-          if (origIfc.hasIpOnDevice === false && ver >= 5) {
-            d.isPending = true;
-            d.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
-          }
-
           // if the interface is going to be unassigned now but it was assigned
           // and it was in a bridge,
           // we check if we can reassociate the dhcp to another assigned interface in the bridge.
@@ -1542,9 +1536,17 @@ class DevicesService {
       if (Array.isArray(deviceRequest.staticroutes)) {
         // if route is via a pending tunnel, set it as pending
         const incompleteTunnels = origTunnels.filter(t => t.isPending);
-        const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.hasIpOnDevice === false);
+        const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.IPv4 === '');
 
         deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
+          // if _id exists in the orig device object - dont allow to change the pending fields
+          const origRoute = origDevice.staticroutes.find(
+            os => s._id && os._id.toString() === s._id);
+          if (origRoute) {
+            s.isPending = origRoute.isPending;
+            s.pendingReason = origRoute.pendingReason;
+          }
+
           for (const t of incompleteTunnels) {
             const { ip1, ip2 } = generateTunnelParams(t.num);
             if (ip1 === s.gateway || ip2 === s.gateway) {
@@ -1554,7 +1556,7 @@ class DevicesService {
             }
           }
 
-          // don't set to pending for old version since we don't sent the IP for bridged interface
+          // don't set as pending for old version since we don't sent the IP for bridged interface
           if (ver >= 5) {
             for (const ifc of interfacesWithoutIp) {
               if (ifc.IPv4 === s.gateway) {
