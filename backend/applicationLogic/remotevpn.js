@@ -124,7 +124,10 @@ const vpnConfigSchema = Joi.object().keys({
   }).allow('').optional(),
   authentications: Joi.object({
     gsuite: getAuthValidator(),
-    office365: getAuthValidator()
+    office365: getAuthValidator(),
+    flexiManage: Joi.object().keys({
+      enabled: Joi.boolean().required()
+    }).required()
   })
 }).custom((obj, helpers) => {
   const { vpnNetwork, connectionsPerDevice } = obj;

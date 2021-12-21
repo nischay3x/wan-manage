@@ -38,6 +38,7 @@ const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getUiServerUrl } = require('../utils/httpUtils');
 const flexibilling = require('../flexibilling');
+const { getUserOrganizations } = require('../utils/membershipUtils');
 
 router.use(bodyParser.json());
 
@@ -452,6 +453,18 @@ router.route('/login')
     res.setHeader('Refresh-JWT', token);
     res.setHeader('refresh-token', refreshToken);
     res.json({ name: req.user.name, status: 'logged in' });
+  });
+
+// Authentication check is done within passport, if passed, no login error exists
+router.route('/auth')
+  .options(cors.cors, (req, res) => { res.sendStatus(200); })
+  .post(cors.cors, auth.verifyUserLocal, async (req, res) => {
+    const orgs = await getUserOrganizations(req.user);
+    res.status(200).json({
+      email: req.user.email,
+      name: `${req.user.name} ${req.user.lastName}`,
+      orgs: Object.keys(orgs)
+    });
   });
 
 // Passport exposes a function logout() on the req object which removes the req.user
