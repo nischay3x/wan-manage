@@ -416,7 +416,8 @@ class DeviceStatus {
       Object.entries(appStatus).forEach(ent => {
         const [identifer, status] = ent;
         this.status[machineId].applicationStatus[identifer] = {
-          running: status.running
+          running: status.running,
+          monitoring: status.monitoring
         };
       });
     }
