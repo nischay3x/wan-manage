@@ -364,6 +364,34 @@ class DevicesService {
           }
         },
         {
+          $lookup: {
+            from: 'applications',
+            localField: 'applications.app',
+            foreignField: '_id',
+            as: 'applications.app'
+          }
+        },
+        {
+          $unwind: {
+            path: '$applications.app',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'applicationStore',
+            localField: 'applications.app.appStoreApp',
+            foreignField: '_id',
+            as: 'applications.app.appStoreApp'
+          }
+        },
+        {
+          $unwind: {
+            path: '$applications.app.appStoreApp',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
           $addFields: {
             _id: { $toString: '$_id' },
             'deviceStatus.state': {
@@ -416,6 +444,7 @@ class DevicesService {
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            applications: 1,
             deviceState: '$deviceStatus.state'
           }
         });
