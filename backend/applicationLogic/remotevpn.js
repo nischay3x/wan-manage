@@ -87,16 +87,7 @@ const vpnConfigSchema = Joi.object().keys({
   serverPort: Joi.number().port().required(),
   vpnNetwork: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
   routeAllTrafficOverVpn: Joi.boolean().required(),
-  connectionsPerDevice: Joi.number().min(8)
-    .custom((val, helpers) => {
-      const isPowerOfTwo = (Math.log(val) / Math.log(2)) % 1 === 0;
-      if (!isPowerOfTwo) {
-        return helpers.message('connections per device should be a power of 2');
-      };
-
-      return val.toString();
-    })
-    .required(),
+  connectionsPerDevice: Joi.number().min(1).required(),
   dnsIps: Joi.string().custom((val, helpers) => {
     const domainList = val.split(/\s*,\s*/);
 
@@ -204,6 +195,20 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
 };
 
 /**
+ * Get the closest number of IP addresses valid range
+ * @param {string} vpnNetwork
+ * @param {string} connectionsPerDevice
+ * @return {number}  number of splitted subnets
+ */
+const getClosestIpRangeNumber = connectionPerDevice => {
+  // The number of IP addresses in a subnet must be in the power of two.
+  // That's why we need to get the closest number of IP addresses
+  // out of the "connectionPerDevice" value.
+  const addresses = [8, 16, 32, 64, 128, 256].find(n => n >= connectionPerDevice);
+  return addresses;
+};
+
+/**
  * divide network and return the subnets count
  * @param {string} vpnNetwork
  * @param {string} connectionsPerDevice
@@ -212,7 +217,8 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
 const calculateNumberOfSubnets = (vpnNetwork, connectionsPerDevice) => {
   const mask = vpnNetwork.split('/').pop();
 
-  const deviceMask = getSubnetMask(connectionsPerDevice);
+  const addresses = getClosestIpRangeNumber(connectionsPerDevice);
+  const deviceMask = getSubnetMask(addresses);
 
   const subnetsCount = Math.pow(2, deviceMask - parseInt(mask));
 
@@ -241,7 +247,8 @@ const getSubnetForDevice = (config, deviceId = '') => {
 
   // allocate the next subnet
   const [ip, mask] = config.vpnNetwork.split('/');
-  const deviceMask = getSubnetMask(config.connectionsPerDevice);
+  const addresses = getClosestIpRangeNumber(config.connectionsPerDevice);
+  const deviceMask = getSubnetMask(addresses);
   const range = getAvailableIps(deviceMask);
   const deviceNumber = config.subnets ? config.subnets.length : 0;
   const startIp = getStartIp(ip, parseInt(mask), range * deviceNumber);
@@ -330,7 +337,7 @@ const validateVpnApplication = (app, op, deviceIds) => {
     if (isMoreDevicesThenSubnets) {
       return {
         valid: false,
-        err: 'There are no remained subnets. Please check the configurations'
+        err: 'There are no remaining subnets. Please check the configurations'
       };
     }
   }
@@ -409,16 +416,13 @@ const getDeviceKeys = async application => {
 */
 const getRemoteVpnParams = async (device, applicationId, op) => {
   const params = {};
-  const { _id, interfaces } = device;
+  const { _id } = device;
 
   const application = await applications.findOne({ _id: applicationId })
     .populate('appStoreApp').lean();
   const config = application.configuration;
 
   if (op === 'config') {
-    // get the WanIp to be used by remote vpn server to listen
-    const wanIp = interfaces.find(ifc => ifc.type === 'WAN' && ifc.isAssigned).IPv4;
-
     // get new subnet if there is no subnet already assigned to current device
     const [deviceSubnet, status] = getSubnetForDevice(config, _id.toString());
 
@@ -465,8 +469,8 @@ const getRemoteVpnParams = async (device, applicationId, op) => {
 
     params.routeAllTrafficOverVpn = config.routeAllTrafficOverVpn || false;
     params.vpnNetwork = deviceSubnet.subnet;
+    params.maxConnectionPerDevice = config.connectionsPerDevice;
     params.port = config.serverPort ? config.serverPort : '';
-    params.wanIp = wanIp;
     params.caKey = caPrivateKey;
     params.caCrt = caPublicKey;
     params.serverKey = serverKey;

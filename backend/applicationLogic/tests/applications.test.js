@@ -37,7 +37,8 @@ describe('Validate vpn configuration', () => {
   beforeEach(() => {
     app = {
       appStoreApp: {
-        name: 'Remote VPN'
+        name: 'Remote VPN',
+        identifier: 'com.flexiwan.remotevpn'
       },
       configuration: {
         vpnNetwork: '192.168.0.0/24',
@@ -63,7 +64,7 @@ describe('Validate vpn configuration', () => {
       ObjectId('5e65290fbe66a2335718e083')
     ];
     const result = validateApplication(app, 'install', devicesIds);
-    failureObject.err = 'There are no remained subnets. Please check the configurations';
+    failureObject.err = 'There are no remaining subnets. Please check the configurations';
     expect(result).toMatchObject(failureObject);
   });
 
@@ -82,7 +83,7 @@ describe('Validate vpn configuration', () => {
     ];
 
     const result = validateApplication(app, 'install', devicesIds);
-    failureObject.err = 'There are no remained subnets. Please check the configurations';
+    failureObject.err = 'There are no remaining subnets. Please check the configurations';
     expect(result).toMatchObject(failureObject);
   });
 
@@ -207,20 +208,16 @@ describe('Validate vpn configuration', () => {
 
 describe('Validate vpn name', () => {
   it('Should be a valid vpn name', () => {
-    const res = isVpn('Remote VPN');
+    const res = isVpn('com.flexiwan.remotevpn');
     expect(res).toBe(true);
-  });
-
-  it('Should be an invalid vpn name', () => {
-    const res = isVpn('Remote vpn');
-    expect(res).toBe(false);
   });
 });
 
 describe('Validate vpn configuration', () => {
   const app = {
     appStoreApp: {
-      name: 'Remote VPN'
+      name: 'Remote VPN',
+      identifier: 'com.flexiwan.remotevpn'
     }
   };
 
