@@ -722,6 +722,8 @@ class DevicesService {
         return Service.rejectResponse('Device or Interface not found', 404);
       };
 
+      const ifc = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
+
       const supportedMessages = {
         lte: {
           message: 'get-lte-info',
@@ -762,6 +764,10 @@ class DevicesService {
               }
             );
 
+            const devId = ifc.devId;
+            const machineId = deviceObject.machineId;
+            deviceStatus.setDeviceLteStatus(machineId, devId, response);
+
             return {
               ...response,
               defaultSettings: {
@@ -779,12 +785,16 @@ class DevicesService {
           },
           parseResponse: async response => {
             response = mapWifiNames(response);
+
+            const devId = ifc.devId;
+            const machineId = deviceObject.machineId;
+            deviceStatus.setDeviceWifiStatus(machineId, devId, response);
+
             return { ...response, wifiChannels };
           }
         }
       };
 
-      const ifc = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
       const message = supportedMessages[ifc.deviceType];
       if (!message) {
         throw new Error('Unsupported request');
@@ -2821,11 +2831,18 @@ class DevicesService {
         'sync machineId isApproved interfaces.devId interfaces.internetAccess'
       ).lean();
       const isConnected = connections.isConnected(machineId);
+
+      const status = isConnected ? deviceStatus.getDeviceStatus(machineId) || {} : {};
+      const lteStatus = status.lteStatus;
+      const wifiStatus = status.wifiStatus;
+
       return Service.successResponse({
         sync,
         isApproved,
         connection: `${isConnected ? '' : 'dis'}connected`,
-        interfaces
+        interfaces,
+        lteStatus,
+        wifiStatus
       });
     } catch (e) {
       return Service.rejectResponse(

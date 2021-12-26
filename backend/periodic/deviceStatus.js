@@ -25,6 +25,7 @@ const configs = require('../configs')();
 const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
+const { mapLteNames } = require('../utils/deviceUtils');
 
 /***
  * This class gets periodic status from all connected devices
@@ -109,6 +110,8 @@ class DeviceStatus {
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().optional(),
+      lte_stats: Joi.object().optional(),
+      wifi_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
       ikev2: Joi.object({
         certificateExpiration: Joi.string().allow('').optional(),
@@ -385,6 +388,44 @@ class DeviceStatus {
 
   /**
      * @param  {string} machineId  device machine id
+     * @param  {string} devId LTE device devId
+     * @param  {Object} lteStatus   LTE status
+     * @return {void}
+     */
+  setDeviceLteStatus (machineId, devId, lteStatus) {
+    if (!this.status[machineId]) {
+      this.status[machineId] = {};
+    }
+    if (!this.status[machineId].lteStatus) {
+      this.status[machineId].lteStatus = {};
+    }
+    if (!this.status[machineId].lteStatus[devId]) {
+      this.status[machineId].lteStatus[devId] = {};
+    }
+    Object.assign(this.status[machineId].lteStatus[devId], lteStatus);
+  }
+
+  /**
+     * @param  {string} machineId  device machine id
+     * @param  {string} devId WiFi device devId
+     * @param  {Object} wifiStatus   WiFi status
+     * @return {void}
+     */
+  setDeviceWifiStatus (machineId, devId, wifiStatus) {
+    if (!this.status[machineId]) {
+      this.status[machineId] = {};
+    }
+    if (!this.status[machineId].wifiStatus) {
+      this.status[machineId].wifiStatus = {};
+    }
+    if (!this.status[machineId].wifiStatus[devId]) {
+      this.status[machineId].wifiStatus[devId] = {};
+    }
+    Object.assign(this.status[machineId].wifiStatus[devId], wifiStatus);
+  }
+
+  /**
+     * @param  {string} machineId  device machine id
      * @param  {Object} deviceInfo device info entry
      * @param  {Object} rawStats   device stats supplied by the device
      * @return {void}
@@ -405,6 +446,24 @@ class DeviceStatus {
     const timeDelta = rawStats.period;
     const ifStats = rawStats.hasOwnProperty('stats') ? rawStats.stats : {};
     const devStats = {};
+
+    // Set lte status in memory for now
+    const lteStatus = rawStats.lte_stats;
+    if (rawStats.hasOwnProperty('lte_stats') && Object.entries(lteStatus).length !== 0) {
+      if (!this.status[machineId].lteStatus) {
+        this.status[machineId].lteStatus = {};
+      }
+      Object.assign(this.status[machineId].lteStatus, mapLteNames(rawStats.lte_stats));
+    };
+
+    // Set wifi status in memory for now
+    const wifiStatus = rawStats.wifi_stats;
+    if (rawStats.hasOwnProperty('wifi_stats') && Object.entries(wifiStatus).length !== 0) {
+      if (!this.status[machineId].wifiStatus) {
+        this.status[machineId].wifiStatus = {};
+      }
+      Object.assign(this.status[machineId].wifiStatus, mapLteNames(rawStats.wifi_stats));
+    };
 
     // Set tunnel status in memory for now
     const tunnelStatus = rawStats.tunnel_stats;
