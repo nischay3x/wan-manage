@@ -282,7 +282,9 @@ class Events {
       if (!peer) {
         const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
         const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
-        console.log(`=== isABlocked=${isABlocked}. isBBlocked=${isBBlocked}`);
+        logger.debug('is devices blocked',
+          { params: { isABlocked: isABlocked, isBBlocked: isBBlocked } }
+        );
         if (isABlocked || isBBlocked) {
           const reason = isABlocked
             ? eventsReasons.publicPortHighRate(ifcA.name, deviceA.name)
@@ -296,8 +298,9 @@ class Events {
       }
 
       // at this point, set tunnel to active
-      console.log(`===Tunnel set to active. num=${tunnel.num}`);
-      console.trace('Tunnel set to active');
+      logger.debug('tunnel set to pending',
+        { params: { num: tunnel.num, org: tunnel.org, trace: new Error().stack } }
+      );
       await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
     };
   }
@@ -557,8 +560,9 @@ class Events {
           const ifcId = origIfc._id.toString();
           const key = `${deviceId}:${ifcId}`;
           const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(key);
-          console.log(`Public Port changed. key=${key}
-            allowed=${allowed}. blockedNow=${blockedNow}. releasedNow=${releasedNow}`);
+          logger.debug('Public Port changed',
+            { params: { key, allowed, blockedNow, releasedNow } }
+          );
           if (releasedNow) {
             await this.publicInfoRateLimitIsReleased(origDevice, origIfc);
           } else if (!allowed && blockedNow) {
