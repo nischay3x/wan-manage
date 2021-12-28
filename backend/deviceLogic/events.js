@@ -298,7 +298,7 @@ class Events {
       }
 
       // at this point, set tunnel to active
-      logger.debug('tunnel set to pending',
+      logger.debug('tunnel set to active',
         { params: { num: tunnel.num, org: tunnel.org, trace: new Error().stack } }
       );
       await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
