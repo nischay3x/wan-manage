@@ -36,7 +36,7 @@ class FwLimiter {
     try {
       // try to consume a point. If blocked, an error will be thrown.
       const resConsume = await this.limiter.consume(key);
-
+      console.log(`=== use try. key=${key}. resConsume=${resConsume}`);
       // currently, it is not possible to pass a callback that is automatically
       // executed when the key expires.
       // So we call the release function on the next allowed time.
@@ -46,6 +46,7 @@ class FwLimiter {
     } catch (err) {
       // limiter is blocked.
       response.allowed = false;
+      console.log(`=== use catch. key=${key}. err=${err}`);
 
       // check if blocked now or the key is already blocked
       if (err.consumedPoints === this.maxCount + 1) {

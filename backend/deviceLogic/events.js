@@ -282,6 +282,7 @@ class Events {
       if (!peer) {
         const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
         const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
+        console.log(`=== isABlocked=${isABlocked}. isBBlocked=${isBBlocked}`);
         if (isABlocked || isBBlocked) {
           const reason = isABlocked
             ? eventsReasons.publicPortHighRate(ifcA.name, deviceA.name)
@@ -295,6 +296,8 @@ class Events {
       }
 
       // at this point, set tunnel to active
+      console.log(`===Tunnel set to active. num=${tunnel.num}`);
+      console.trace('Tunnel set to active');
       await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
     };
   }
@@ -554,6 +557,8 @@ class Events {
           const ifcId = origIfc._id.toString();
           const key = `${deviceId}:${ifcId}`;
           const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(key);
+          console.log(`Public Port changed. key=${key}
+            allowed=${allowed}. blockedNow=${blockedNow}. releasedNow=${releasedNow}`);
           if (releasedNow) {
             await this.publicInfoRateLimitIsReleased(origDevice, origIfc);
           } else if (!allowed && blockedNow) {
