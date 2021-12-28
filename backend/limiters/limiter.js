@@ -37,7 +37,7 @@ class FwLimiter {
     try {
       // try to consume a point. If blocked, an error will be thrown.
       const resConsume = await this.limiter.consume(key);
-      logger.debug('limiter use',
+      logger.debug('Rate limiter consume before block',
         { params: { key, resConsume } }
       );
       // currently, it is not possible to pass a callback that is automatically
@@ -49,7 +49,7 @@ class FwLimiter {
     } catch (err) {
       // limiter is blocked.
       response.allowed = false;
-      logger.debug('limiter catch',
+      logger.debug('Rate limiter consume after block',
         { params: { key, err } }
       );
 

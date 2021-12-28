@@ -280,10 +280,12 @@ class Events {
 
       // check for rate limit blockage, peer is not blocked by public address limiter
       if (!peer) {
-        const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
-        const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
-        logger.debug('is devices blocked',
-          { params: { isABlocked: isABlocked, isBBlocked: isBBlocked } }
+        const aKey = `${deviceA._id}:${ifcA._id}`;
+        const bKey = `${deviceB._id}:${ifcB._id}`;
+        const isABlocked = await publicAddrInfoLimiter.isBlocked(aKey);
+        const isBBlocked = await publicAddrInfoLimiter.isBlocked(bKey);
+        logger.debug('Validating device rate limit blockage',
+          { params: { aKey, isABlocked, bKey, isBBlocked } }
         );
         if (isABlocked || isBBlocked) {
           const reason = isABlocked
@@ -298,7 +300,7 @@ class Events {
       }
 
       // at this point, set tunnel to active
-      logger.debug('tunnel set to active',
+      logger.debug('Tunnel set to active',
         { params: { num: tunnel.num, org: tunnel.org, trace: new Error().stack } }
       );
       await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
@@ -560,7 +562,7 @@ class Events {
           const ifcId = origIfc._id.toString();
           const key = `${deviceId}:${ifcId}`;
           const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(key);
-          logger.debug('Public Port changed',
+          logger.debug('Public port changed',
             { params: { key, allowed, blockedNow, releasedNow } }
           );
           if (releasedNow) {
