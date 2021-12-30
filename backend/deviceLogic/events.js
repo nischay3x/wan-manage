@@ -280,10 +280,8 @@ class Events {
 
       // check for rate limit blockage, peer is not blocked by public address limiter
       if (!peer) {
-        const aKey = `${deviceA._id}:${ifcA._id}`;
-        const bKey = `${deviceB._id}:${ifcB._id}`;
-        const isABlocked = await publicAddrInfoLimiter.isBlocked(aKey);
-        const isBBlocked = await publicAddrInfoLimiter.isBlocked(bKey);
+        const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
+        const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
         if (isABlocked || isBBlocked) {
           const reason = isABlocked
             ? eventsReasons.publicPortHighRate(ifcA.name, deviceA.name)
