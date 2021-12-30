@@ -284,9 +284,6 @@ class Events {
         const bKey = `${deviceB._id}:${ifcB._id}`;
         const isABlocked = await publicAddrInfoLimiter.isBlocked(aKey);
         const isBBlocked = await publicAddrInfoLimiter.isBlocked(bKey);
-        logger.debug('Validating device rate limit blockage',
-          { params: { aKey, isABlocked, bKey, isBBlocked } }
-        );
         if (isABlocked || isBBlocked) {
           const reason = isABlocked
             ? eventsReasons.publicPortHighRate(ifcA.name, deviceA.name)
@@ -562,9 +559,6 @@ class Events {
           const ifcId = origIfc._id.toString();
           const key = `${deviceId}:${ifcId}`;
           const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(key);
-          logger.debug('Public port changed',
-            { params: { key, allowed, blockedNow, releasedNow } }
-          );
           if (releasedNow) {
             await this.publicInfoRateLimitIsReleased(origDevice, origIfc);
           } else if (!allowed && blockedNow) {
