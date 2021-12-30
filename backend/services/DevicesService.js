@@ -1449,8 +1449,11 @@ class DevicesService {
         deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
           const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
           if (!ifc) return d;
+
           const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
           if (!origIfc) return d;
+
+          if (origIfc.IPv4 === '' || origIfc.IPv4Mask === '') return d;
 
           const origIp = `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
 

@@ -162,7 +162,7 @@ const getBridges = interfaces => {
       continue;
     }
 
-    if (ifc.IPv4 === '' && ifc.IPv4Mask === '') {
+    if (ifc.IPv4 === '' || ifc.IPv4Mask === '') {
       continue;
     }
     const addr = ifc.IPv4 + '/' + ifc.IPv4Mask;
