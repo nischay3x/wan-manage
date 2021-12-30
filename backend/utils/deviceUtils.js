@@ -143,10 +143,53 @@ const renameKeys = (obj, map) => {
   return obj;
 };
 
+/**
+ * Calculation bridges by interfaces list
+ * @param {array}  interfaces LTE data from agent
+ * @return {object} dictionary contains the bridge IP as key with array of devIds
+ */
+const getBridges = interfaces => {
+  const bridges = {};
+
+  for (const ifc of interfaces) {
+    const devId = ifc.devId;
+
+    if (!ifc.isAssigned) {
+      continue;
+    }
+
+    if (ifc.type !== 'LAN') {
+      continue;
+    }
+
+    if (ifc.IPv4 === '' || ifc.IPv4Mask === '') {
+      continue;
+    }
+    const addr = ifc.IPv4 + '/' + ifc.IPv4Mask;
+
+    const needsToBridge = interfaces.some(i => {
+      return devId !== i.devId && addr === i.IPv4 + '/' + i.IPv4Mask;
+    });
+
+    if (!needsToBridge) {
+      continue;
+    }
+
+    if (!bridges.hasOwnProperty(addr)) {
+      bridges[addr] = [];
+    }
+
+    bridges[addr].push(ifc.devId);
+  };
+
+  return bridges;
+};
+
 // Default exports
 module.exports = {
   getAllOrganizationLanSubnets,
   getDefaultGateway,
+  getBridges,
   mapLteNames,
   mapWifiNames
 };
