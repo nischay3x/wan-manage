@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { RateLimiterMemory } = require('rate-limiter-flexible');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 class FwLimiter {
   constructor (name, counts, duration, blockDuration) {
@@ -36,11 +37,13 @@ class FwLimiter {
     try {
       // try to consume a point. If blocked, an error will be thrown.
       const resConsume = await this.limiter.consume(key);
-
       // currently, it is not possible to pass a callback that is automatically
       // executed when the key expires.
       // So we call the release function on the next allowed time.
       if (resConsume.consumedPoints === 1) {
+        logger.debug('Rate limiter consumed the first time for a key',
+          { params: { limiterName: this.name, key, resConsume } }
+        );
         response.releasedNow = true;
       }
     } catch (err) {
@@ -49,6 +52,9 @@ class FwLimiter {
 
       // check if blocked now or the key is already blocked
       if (err.consumedPoints === this.maxCount + 1) {
+        logger.debug('Rate limiter blocked now for a key',
+          { params: { key, err } }
+        );
         response.blockedNow = true;
       }
 
@@ -57,6 +63,9 @@ class FwLimiter {
       // For example, 5 times in 10 minutes. Only at the 6th, 11th, 16th times it will be blocked.
       // that's why we decrement one from the consumed points in the following check
       if ((err.consumedPoints - 1) % this.maxCount === 0) {
+        logger.debug('Rate limiter blocked again the key due to continuous high rate',
+          { params: { key, err } }
+        );
         await this.limiter.block(key, this.blockDuration);
       }
     }

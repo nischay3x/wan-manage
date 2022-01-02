@@ -45,12 +45,9 @@ const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
-const {
-  getJobParams
-} = require('../applicationLogic/applications');
-const {
-  queueApplicationJob
-} = require('./application');
+const { getJobParams } = require('../applicationLogic/applications');
+const { queueApplicationJob } = require('./application');
+const { getBridges } = require('../utils/deviceUtils');
 
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
@@ -1015,35 +1012,6 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
   return { dhcpRemove, dhcpAdd };
 };
 
-const getBridges = interfaces => {
-  const bridges = {};
-
-  for (const ifc of interfaces) {
-    const devId = ifc.devId;
-
-    if (ifc.IPv4 === '' && ifc.IPv4Mask === '') {
-      continue;
-    }
-    const addr = ifc.IPv4 + '/' + ifc.IPv4Mask;
-
-    const needsToBridge = interfaces.some(i => {
-      return devId !== i.devId && addr === i.IPv4 + '/' + i.IPv4Mask;
-    });
-
-    if (!needsToBridge) {
-      continue;
-    }
-
-    if (!bridges.hasOwnProperty(addr)) {
-      bridges[addr] = [];
-    }
-
-    bridges[addr].push(ifc.devId);
-  };
-
-  return bridges;
-};
-
 /**
  * Creates and queues the modify-device job. It compares
  * the current view of the device in the database with
@@ -1091,8 +1059,8 @@ const apply = async (device, user, data) => {
   }
 
   modifyParams.modify_router = {};
-  const oldBridges = getBridges(device[0].interfaces.filter(i => i.isAssigned));
-  const newBridges = getBridges(data.newDevice.interfaces.filter(i => i.isAssigned));
+  const oldBridges = getBridges(device[0].interfaces);
+  const newBridges = getBridges(data.newDevice.interfaces);
 
   const assignBridges = [];
   const unassignBridges = [];
@@ -1423,7 +1391,7 @@ const sync = async (deviceId, org) => {
   const deviceConfRequests = [];
 
   // build bridges
-  const bridges = getBridges(interfaces.filter(i => i.isAssigned));
+  const bridges = getBridges(interfaces);
   Object.keys(bridges).forEach(item => {
     deviceConfRequests.push({
       entity: 'agent',

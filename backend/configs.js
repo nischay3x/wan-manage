@@ -190,14 +190,15 @@ const configEnv = {
     mailerBypassCert: true,
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
-    logLevel: 'info',
+    logLevel: 'debug',
     mailerPort: 1025
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
     agentApiVersion: '5.0.0',
     // Kue prefix
-    kuePrefix: 'testq'
+    kuePrefix: 'testq',
+    logLevel: 'debug'
   },
   // Override for production environment
   production: {
@@ -278,7 +279,7 @@ const configEnv = {
     useFlexiBilling: true,
     billingRedirectOkUrl: 'https://appqa01.flexiwan.com/ok.html',
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
-    logLevel: 'info',
+    logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
     flexiVpnServer: 'https://vpn01.flexiwan.com:443',
@@ -303,7 +304,7 @@ const configEnv = {
     useFlexiBilling: true,
     billingRedirectOkUrl: 'https://appqa02.flexiwan.com/ok.html',
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
-    logLevel: 'info',
+    logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
     flexiVpnServer: 'https://vpnqa02.flexiwan.com:443',
