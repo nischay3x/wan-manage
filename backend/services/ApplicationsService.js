@@ -54,6 +54,9 @@ class ApplicationsService {
       } else {
         item.appStoreApp._id = item.appStoreApp._id.toString();
       }
+      item.appStoreApp.versions = item.appStoreApp.versions.filter(v => {
+        return v.version === item.installedVersion;
+      });
     }
 
     return item;
@@ -124,14 +127,27 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async appstorePurchasedGET ({ org }, { user }) {
+  static async appstorePurchasedGET (requestParams, { user }) {
     try {
-      let orgList = await getAccessTokenOrgList(user, org, true);
+      let orgList = await getAccessTokenOrgList(user, requestParams.org, true);
       orgList = orgList.map(o => mongoose.Types.ObjectId(o));
 
-      const installed = await applications.aggregate([
-        { $match: { org: { $in: orgList } } },
-        {
+      const pipeline = [
+        { $match: { org: { $in: orgList } } }
+      ];
+
+      if (requestParams.response === 'summary') {
+        pipeline.push({
+          $project: {
+            _id: 1,
+            appStoreApp: 1,
+            org: 1,
+            installedVersion: 1,
+            pendingToUpgrade: 1
+          }
+        });
+      } else {
+        pipeline.push({
           $lookup: {
             from: 'devices',
             let: { id: '$_id' },
@@ -144,8 +160,9 @@ class ApplicationsService {
             ],
             as: 'statuses'
           }
-        },
-        {
+        });
+
+        pipeline.push({
           $project: {
             _id: 1,
             appStoreApp: 1,
@@ -154,12 +171,24 @@ class ApplicationsService {
             pendingToUpgrade: 1,
             statuses: 1
           }
-        }
-      ]).allowDiskUse(true);
+        });
+      }
+      const installed = await applications.aggregate(pipeline).allowDiskUse(true);
 
       await applications.populate(installed, { path: 'appStoreApp' });
 
       const response = installed.map(app => {
+        const { ...rest } = app;
+        const response = {
+          ...rest,
+          _id: app._id.toString(),
+          org: app.org.toString()
+        };
+
+        if (requestParams.response === 'summary') {
+          return response;
+        }
+
         const statusesTotal = {
           installed: 0,
           pending: 0,
@@ -177,13 +206,9 @@ class ApplicationsService {
             statusesTotal.deleted += appStatus.count;
           }
         });
-        const { ...rest } = app;
-        return {
-          ...rest,
-          _id: app._id.toString(),
-          org: app.org.toString(),
-          statuses: statusesTotal
-        };
+
+        response.statuses = statusesTotal;
+        return response;
       });
 
       return Service.successResponse(response);

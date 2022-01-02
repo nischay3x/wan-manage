@@ -7382,6 +7382,15 @@ paths:
         required: false
         schema:
           type: string
+      - description: Type of returned data
+        explode: true
+        in: query
+        name: response
+        required: false
+        schema:
+          enum:
+          - summary
+          type: string
       responses:
         "200":
           content:
