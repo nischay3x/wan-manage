@@ -35,7 +35,8 @@ const {
   onJobRemoved,
   onJobFailed,
   validateApplication,
-  getJobParams
+  getJobParams,
+  getAppAdditionsQuery
 } = require('../applicationLogic/applications');
 
 /**
@@ -64,7 +65,7 @@ const apply = async (deviceList, user, data) => {
       }).populate('appStoreApp').lean().session(session);
 
       if (!app) {
-        throw createError(500, `Application ${id} does not purchased`);
+        throw createError(500, 'The requested app was not purchased');
       }
 
       // if the user selected multiple devices, the request goes to devicesApplyPOST function
@@ -92,33 +93,51 @@ const apply = async (deviceList, user, data) => {
 
       let update;
 
-      if (op === 'install') {
+      if (op === 'install' || op === 'uninstall') {
         for (let i = 0; i < deviceList.length; i++) {
           const device = deviceList[i];
           const query = { _id: device._id };
 
-          const appExists = device.applications && device.applications.find(
-            a => a.app && a.app.toString() === app._id.toString());
+          let additions = {};
+          if (op === 'install') {
+            const appExists = device.applications && device.applications.find(
+              a => a.app && a.app.toString() === app._id.toString());
 
-          if (appExists) {
-            if (appExists.status === 'installing') {
-              // TODO: What to do in this case?
-              continue;
+            if (appExists) {
+              query['applications.app'] = id;
+              update = {
+                $set: { 'applications.$.status': 'installing' }
+              };
+            } else {
+              update = {
+                $push: {
+                  applications: {
+                    app: app._id,
+                    status: 'installing',
+                    requestTime: requestTime
+                  }
+                }
+              };
             }
 
+            // check if need to install more things for the application
+            additions = getAppAdditionsQuery(app, device, op);
+          } else {
             query['applications.app'] = id;
             update = {
-              $set: { 'applications.$.status': 'installing' }
+              $set: { 'applications.$.status': 'uninstalling' }
             };
+
+            // check if need to remove more things related the application
+            additions = getAppAdditionsQuery(app, device, op);
+          }
+
+          if (!update.$set) {
+            update.$set = additions;
           } else {
-            update = {
-              $push: {
-                applications: {
-                  app: app._id,
-                  status: 'installing',
-                  requestTime: requestTime
-                }
-              }
+            update.$set = {
+              ...update.$set,
+              ...additions
             };
           }
 
@@ -132,18 +151,6 @@ const apply = async (deviceList, user, data) => {
 
         update = {
           $set: { 'applications.$.status': 'upgrading' }
-        };
-      } else if (op === 'config') {
-        query['applications.app'] = id;
-
-        update = {
-          $set: { 'applications.$.status': 'installing' }
-        };
-      } else if (op === 'uninstall') {
-        query['applications.app'] = id;
-
-        update = {
-          $set: { 'applications.$.status': 'uninstalling' }
         };
       }
 

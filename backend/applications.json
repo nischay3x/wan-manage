@@ -1,6 +1,6 @@
 {
   "meta": {
-    "time": 1636980481687
+    "time": 1636980481703
   },
   "applications": [
     {
@@ -16,6 +16,23 @@
             "agent": {
               "installationPath": "./applications/remotevpn/install.tar.gz",
               "installationPathType": "local"
+            },
+            "manage": {
+              "installWith": {
+                "firewallRules": [
+                  {
+                    "direction": "inbound",
+                    "interfaces": [],
+                    "inbound": "edgeAccess",
+                    "action": "allow",
+                    "description": "Allow VPN inbound traffic",
+                    "destination": {
+                      "ports": "${serverPort}",
+                      "protocols": ["tcp", "udp"]
+                    }
+                  }
+                ]
+              }
             }
           }
         }

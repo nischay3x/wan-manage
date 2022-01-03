@@ -269,7 +269,8 @@ class DevicesService {
           'action',
           'internalIP',
           'internalPortStart',
-          'interfaces'
+          'interfaces',
+          'system'
         ]);
         retRule._id = retRule._id.toString();
         return retRule;
@@ -1666,6 +1667,43 @@ class DevicesService {
           throw new Error(err);
         }
       }
+
+      if ('firewall' in deviceRequest && Array.isArray(deviceRequest.firewall.rules)) {
+        // make sure that system rules not deleted or modified
+        const origSystemRules = origDevice.firewall.rules.filter(r => r.system);
+        for (const origSystemRule of origSystemRules) {
+          const origId = origSystemRule._id.toString();
+          const idx = deviceRequest.firewall.rules.findIndex(r => r._id === origId);
+          if (idx === -1) {
+            // system rule doesn't exist in the incoming rules
+            throw new Error('System rules cannot be deleted');
+          } else {
+            // system rule cannot be modified, set it to the orig rule
+            deviceRequest.firewall.rules[idx] = origSystemRule.toObject();
+          }
+        }
+
+        for (const newRule of deviceRequest.firewall.rules) {
+          // prevent user to set negative value for non system rule
+          if (!newRule.system && newRule.priority < 0) {
+            throw new Error('A user\'s rule cannot have a priority lower than 0');
+          }
+
+          if (!newRule._id) {
+            // don't allow to create new rule as system rule
+            if (newRule.system) {
+              throw new Error('Cannot mark user rule as system rule');
+            }
+          } else {
+            // don't allow to change existing user rule to a system rule
+            const newRuleId = newRule._id.toString();
+            if (newRule.system && !origSystemRules.some(o => newRuleId === o._id.toString())) {
+              throw new Error('Cannot mark user rule as system rule');
+            }
+          }
+        };
+      }
+
       // Need to validate device specific rules combined with global policy rules
       if (deviceToValidate.firewall) {
         deviceToValidate.policies = {

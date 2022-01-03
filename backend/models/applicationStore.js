@@ -22,24 +22,25 @@ const {
   validateApplicationIdentifier
 } = require('./validators');
 
-const agentComponentSchema = new Schema({
-  installationPath: {
-    type: String,
-    required: true
-  },
-  installationPathType: {
-    type: String,
-    enum: ['local', 'url'],
-    required: true
-  }
-}, { _id: false });
-
 const componentsSchema = new Schema({
   agent: {
-    type: agentComponentSchema,
-    required: false
+    installationPath: {
+      type: String,
+      required: true
+    },
+    installationPathType: {
+      type: String,
+      enum: ['local', 'url'],
+      required: true
+    }
   },
-  manage: {}
+  manage: {
+    installWith: {
+      firewallRules: {
+        type: [Object]
+      }
+    }
+  }
 }, { _id: false });
 
 const versionSchema = new Schema({

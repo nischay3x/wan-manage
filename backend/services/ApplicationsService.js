@@ -37,6 +37,15 @@ class ApplicationsService {
    * Select the API fields from application Object
    * @param {Object} item - jobs object
    */
+  static selectApplicationStoreParams (item) {
+    item._id = item._id.toString();
+    return item;
+  }
+
+  /**
+   * Select the API fields from application Object
+   * @param {Object} item - jobs object
+   */
   static selectApplicationParams (item) {
     item._id = item._id.toString();
 
@@ -75,7 +84,7 @@ class ApplicationsService {
       const appsList = await appStore.find().lean();
 
       const mapped = appsList.map(app => {
-        return ApplicationsService.selectApplicationParams(app);
+        return ApplicationsService.selectApplicationStoreParams(app);
       });
 
       return Service.successResponse(mapped);
@@ -143,7 +152,8 @@ class ApplicationsService {
             appStoreApp: 1,
             org: 1,
             installedVersion: 1,
-            pendingToUpgrade: 1
+            pendingToUpgrade: 1,
+            configuration: 1
           }
         });
       } else {
@@ -169,7 +179,8 @@ class ApplicationsService {
             org: 1,
             installedVersion: 1,
             pendingToUpgrade: 1,
-            statuses: 1
+            statuses: 1,
+            configuration: 1
           }
         });
       }

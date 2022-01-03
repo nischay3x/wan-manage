@@ -71,6 +71,81 @@ const onJobRemoved = async (org, app, op, deviceId) => {
   }
 };
 
+const getAppAdditionsQuery = (app, device, op) => {
+  const _getVal = val => {
+    if (typeof val !== 'string') return val;
+    // variable is text within ${}, e.g. ${serverPort}
+    // we are taking this text and replace it with the same key in the app configuration object
+    const matches = val.match(/\${.+?}/g);
+    if (matches) {
+      for (const match of matches) {
+        const confKey = match.match(/(?<=\${).+?(?=})/);
+        val = val.replace(match, app.configuration[confKey]);
+      }
+    }
+    return val;
+  };
+
+  const query = {};
+
+  const version = app.appStoreApp.versions.find(v => {
+    return v.version === app.installedVersion;
+  });
+
+  if (!('components' in version)) return query;
+  if (!('manage' in version.components)) return query;
+  if (!('installWith' in version.components.manage)) return query;
+
+  if ('firewallRules' in version.components.manage.installWith) {
+    const requestedRules = version.components.manage.installWith.firewallRules;
+
+    // take out the related firewall rules
+    const updatedFirewallRules = device.firewall.rules.filter(r => {
+      if (!r.reference) return true; // keep non-referenced rules
+      return r.reference.toString() !== app._id.toString();
+    });
+
+    // in add operation - add the needed firewall rules
+    if (op === 'install') {
+      const lastSysRule = updatedFirewallRules
+        .filter(r => r.system)
+        .sort((a, b) => b.priority - a.priority).pop();
+
+      let initialPriority = -1;
+      if (lastSysRule) {
+        initialPriority = lastSysRule.priority - 1;
+      }
+
+      for (const rule of requestedRules) {
+        updatedFirewallRules.push({
+          system: true,
+          reference: app._id,
+          referenceModel: 'applications',
+          description: _getVal(rule.description),
+          priority: initialPriority,
+          direction: _getVal(rule.direction),
+          interfaces: _getVal(rule.interfaces),
+          inbound: _getVal(rule.inbound),
+          classification: {
+            destination: {
+              ipProtoPort: {
+                ports: _getVal(rule.destination.ports),
+                protocols: _getVal(rule.destination.protocols)
+              }
+            }
+          }
+        });
+
+        initialPriority--;
+      }
+    }
+
+    query['firewall.rules'] = updatedFirewallRules;
+  }
+
+  return query;
+};
+
 /**
  * Creates the job parameters based on application name.
  * @async
@@ -147,5 +222,6 @@ module.exports = {
   onJobRemoved,
   getJobParams,
   saveConfiguration,
-  needToUpdatedDevices
+  needToUpdatedDevices,
+  getAppAdditionsQuery
 };
