@@ -1069,6 +1069,14 @@ class DevicesService {
       await session.commitTransaction();
       session = null;
 
+      logger.info('Delete devices by filter', {
+        params: {
+          ids: devIds,
+          account: delDevices[0].account,
+          org: orgList[0]
+        }
+      });
+
       return Service.successResponse(null, 204);
     } catch (e) {
       if (session) session.abortTransaction();
@@ -1140,6 +1148,15 @@ class DevicesService {
 
       await session.commitTransaction();
       session = null;
+
+      logger.info('Device deleted successfully', {
+        params: {
+          _id: id.toString(),
+          deviceId: delDevice.machine_id,
+          account: delDevice.account,
+          org: orgList[0]
+        }
+      });
 
       return Service.successResponse(null, 204);
     } catch (e) {
