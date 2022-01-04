@@ -7643,9 +7643,9 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
-  /applications/{id}/status:
+  /appstore/purchased/{id}/status:
     get:
-      operationId: applicationStatusGET
+      operationId: appstorePurchasedIdStatusGet
       parameters:
       - description: application id to get status
         explode: true
@@ -7691,9 +7691,9 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
-  /applications/{id}/upgrade:
+  /appstore/purchased/{id}/upgrade:
     post:
-      operationId: applicationsUpgradePOST
+      operationId: appstorePurchasedIdUpgradePost
       parameters:
       - description: application id to upgrade
         explode: true

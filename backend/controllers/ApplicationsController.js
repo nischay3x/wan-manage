@@ -46,12 +46,12 @@ class ApplicationsController {
     await Controller.handleRequest(request, response, this.service.appstorePurchasedIdGET);
   }
 
-  async applicationsUpgradePOST (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationsUpgradePOST);
+  async appstorePurchasedIdUpgradePost (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchasedIdUpgradePost);
   }
 
-  async applicationStatusGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.applicationStatusGET);
+  async appstorePurchasedIdStatusGet (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchasedIdStatusGet);
   }
 }
 

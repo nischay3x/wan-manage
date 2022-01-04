@@ -199,7 +199,7 @@ class ApplicationsUpdateManager {
 
         const set = { $set: { repositoryTime: body.meta.time, ...appList[i] } };
         app = await applicationStore.findOneAndUpdate(
-          { name: appList[i].name },
+          { identifier: appList[i].identifier },
           set,
           options
         );

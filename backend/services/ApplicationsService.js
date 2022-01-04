@@ -31,6 +31,7 @@ const {
   saveConfiguration,
   needToUpdatedDevices
 } = require('../applicationLogic/applications');
+const deviceStatus = require('../periodic/deviceStatus')();
 
 class ApplicationsService {
   /**
@@ -411,7 +412,7 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async applicationsUpgradePOST ({ id, org }, { user }) {
+  static async appstorePurchasedIdUpgradePost ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -421,6 +422,10 @@ class ApplicationsService {
       }
 
       const app = await applications.findOne({ _id: id }).populate('appStoreApp').lean();
+
+      if (!app) {
+        return Service.rejectResponse('Invalid application id', 500);
+      }
 
       const currentVersion = app.installedVersion;
       const newVersion = app.appStoreApp.latestVersion;
@@ -442,6 +447,88 @@ class ApplicationsService {
         user, { org: orgList[0], meta: { op: 'upgrade', id: id, newVersion: newVersion } });
 
       return Service.successResponse({ data: 'ok' });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get application status
+   *
+   * @static
+   * @param {*} { org, id }
+   * @param {*} { user }
+   * @returns
+   * @memberof ApplicationsService
+   */
+  static async appstorePurchasedIdStatusGet ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      // check if user didn't pass request body or if app id is invalid
+      if (!ObjectId.isValid(id)) {
+        return Service.rejectResponse('Invalid request', 500);
+      }
+
+      const app = await applications.findOne({ _id: id }).populate('appStoreApp').lean();
+
+      if (!app) {
+        return Service.rejectResponse('Invalid application id', 500);
+      }
+
+      const identifier = app.appStoreApp.identifier;
+
+      const devicesList = await devices.aggregate([
+        { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
+        { $unwind: '$applications' },
+        { $match: { 'applications.app': ObjectId(id) } },
+        {
+          $lookup: {
+            from: 'applications',
+            let: { appId: '$applications.app', deviceId: '$_id' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$_id', '$$appId'] } } },
+              { $unwind: '$configuration.subnets' },
+              { $match: { $expr: { $eq: ['$configuration.subnets.device', '$$deviceId'] } } },
+              { $project: { subnet: '$configuration.subnets.subnet' } }
+            ],
+            as: 'subnet'
+          }
+        },
+        {
+          $project: {
+            name: 1,
+            subnet: { $arrayElemAt: ['$subnet', 0] },
+            applicationStatus: '$applications.status',
+            isConnected: 1,
+            deviceStatus: '$status',
+            machineId: 1
+          }
+        }
+      ]).allowDiskUse(true);
+
+      for (const device of devicesList) {
+        device.monitoring = {};
+        if (!device.isConnected) {
+          continue;
+        }
+
+        const devStatus = deviceStatus.getDeviceStatus(device.machineId);
+        if (!devStatus) {
+          continue;
+        }
+
+        if (!('applicationStatus' in devStatus)) {
+          continue;
+        }
+
+        device.monitoring = devStatus.applicationStatus[identifier];
+      }
+
+      return Service.successResponse({ data: devicesList });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
