@@ -38,7 +38,7 @@ const {
 } = require('../utils/certificates');
 
 /**
- * Indicate if application is remote vpn
+ * Indicate if application is remote worker vpn
  * @param {string} applicationName
  * @return {boolean}
  */

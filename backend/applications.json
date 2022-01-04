@@ -1,10 +1,10 @@
 {
   "meta": {
-    "time": 1636980481703
+    "time": 1636980481704
   },
   "applications": [
     {
-      "name": "Remote VPN",
+      "name": "Remote Worker VPN",
       "identifier": "com.flexiwan.remotevpn",
       "description": "Allows users to connect to the corporate network remotely",
       "createdDate": 1636980481687,

@@ -37,7 +37,7 @@ describe('Validate vpn configuration', () => {
   beforeEach(() => {
     app = {
       appStoreApp: {
-        name: 'Remote VPN',
+        name: 'Remote Worker VPN',
         identifier: 'com.flexiwan.remotevpn'
       },
       configuration: {
@@ -216,7 +216,7 @@ describe('Validate vpn name', () => {
 describe('Validate vpn configuration', () => {
   const app = {
     appStoreApp: {
-      name: 'Remote VPN',
+      name: 'Remote Worker VPN',
       identifier: 'com.flexiwan.remotevpn'
     }
   };

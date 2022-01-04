@@ -46,7 +46,6 @@ const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
 const { getJobParams } = require('../applicationLogic/applications');
-const { queueApplicationJob } = require('./application');
 const { getBridges } = require('../utils/deviceUtils');
 
 /**
@@ -1039,6 +1038,7 @@ const apply = async (device, user, data) => {
 
   data.newDevice = await data.newDevice
     .populate('interfaces.pathlabels', '_id name type')
+    .populate('policies.firewall.policy', '_id name rules')
     .execPopulate();
 
   // Create the default/static routes modification parameters
@@ -1533,6 +1533,91 @@ const remove = async (job) => {
   }
 };
 
+const queueApplicationJob = async (
+  deviceList,
+  op,
+  requestTime,
+  application,
+  user,
+  org
+) => {
+  const jobs = [];
+
+  // set job title to be shown to the user on Jobs screen
+  // and job message to be handled by the device
+  let jobTitle = '';
+  let message = '';
+  if (op === 'install') {
+    jobTitle = `Install ${application.appStoreApp.name} application`;
+    message = 'application-install';
+  } else if (op === 'upgrade') {
+    jobTitle = `Upgrade ${application.appStoreApp.name} application`;
+    message = 'application-upgrade';
+  } else if (op === 'config') {
+    jobTitle = `Configure ${application.appStoreApp.name} application`;
+    message = 'application-configure';
+  } else if (op === 'uninstall') {
+    jobTitle = `Uninstall ${application.appStoreApp.name} application`;
+    message = 'application-uninstall';
+  } else {
+    return jobs;
+  }
+
+  // generate job for each selected device
+  for (let i = 0; i < deviceList.length; i++) {
+    const dev = deviceList[i];
+
+    const params = await getJobParams(dev, application, op);
+
+    const tasks = [{
+      entity: 'agent',
+      message: message,
+      params: params
+    }];
+
+    // response data
+    const data = {
+      application: {
+        device: { _id: dev._id },
+        app: application,
+        requestTime: requestTime,
+        op: op,
+        org: org
+      }
+    };
+
+    const newDevice = await devices.findOne({ _id: dev._id });
+    await apply([dev], 'system', {
+      org: org,
+      newDevice: newDevice
+    });
+
+    jobs.push(
+      deviceQueues.addJob(
+        dev.machineId,
+        user.username,
+        org,
+        // Data
+        {
+          title: jobTitle,
+          tasks: tasks
+        },
+        // Response data
+        {
+          method: 'application',
+          data: data
+        },
+        // Metadata
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null
+      )
+    );
+  }
+
+  return Promise.allSettled(jobs);
+};
+
 module.exports = {
   apply: apply,
   complete: complete,
@@ -1540,5 +1625,6 @@ module.exports = {
   sync: sync,
   reconstructTunnels,
   error: error,
-  remove: remove
+  remove: remove,
+  queueApplicationJob
 };

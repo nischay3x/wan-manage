@@ -18,16 +18,11 @@
 const createError = require('http-errors');
 const applications = require('../models/applications');
 const mongoConns = require('../mongoConns.js')();
-const configs = require('../configs')();
 const logger = require('../logging/logging')({
   module: module.filename,
   type: 'req'
 });
 const { devices } = require('../models/devices');
-const deviceQueues = require('../utils/deviceQueue')(
-  configs.get('kuePrefix'),
-  configs.get('redisUrl')
-);
 const ObjectId = require('mongoose').Types.ObjectId;
 
 const {
@@ -35,9 +30,10 @@ const {
   onJobRemoved,
   onJobFailed,
   validateApplication,
-  getJobParams,
   getAppAdditionsQuery
 } = require('../applicationLogic/applications');
+
+const { queueApplicationJob } = require('./modifyDevice');
 
 /**
  * Creates and queues applications jobs.
@@ -369,89 +365,9 @@ const remove = async (job) => {
   }
 };
 
-const queueApplicationJob = async (
-  deviceList,
-  op,
-  requestTime,
-  application,
-  user,
-  org
-) => {
-  const jobs = [];
-
-  // set job title to be shown to the user on Jobs screen
-  // and job message to be handled by the device
-  let jobTitle = '';
-  let message = '';
-  if (op === 'install') {
-    jobTitle = `Install ${application.appStoreApp.name} application`;
-    message = 'application-install';
-  } else if (op === 'upgrade') {
-    jobTitle = `Upgrade ${application.appStoreApp.name} application`;
-    message = 'application-upgrade';
-  } else if (op === 'config') {
-    jobTitle = `Configure ${application.appStoreApp.name} application`;
-    message = 'application-configure';
-  } else if (op === 'uninstall') {
-    jobTitle = `Uninstall ${application.appStoreApp.name} application`;
-    message = 'application-uninstall';
-  } else {
-    return jobs;
-  }
-
-  // generate job for each selected device
-  for (let i = 0; i < deviceList.length; i++) {
-    const dev = deviceList[i];
-
-    const params = await getJobParams(dev, application, op);
-
-    const tasks = [{
-      entity: 'agent',
-      message: message,
-      params: params
-    }];
-
-    // response data
-    const data = {
-      application: {
-        device: { _id: dev._id },
-        app: application,
-        requestTime: requestTime,
-        op: op,
-        org: org
-      }
-    };
-
-    jobs.push(
-      deviceQueues.addJob(
-        dev.machineId,
-        user.username,
-        org,
-        // Data
-        {
-          title: jobTitle,
-          tasks: tasks
-        },
-        // Response data
-        {
-          method: 'application',
-          data: data
-        },
-        // Metadata
-        { priority: 'normal', attempts: 1, removeOnComplete: false },
-        // Complete callback
-        null
-      )
-    );
-  }
-
-  return Promise.allSettled(jobs);
-};
-
 module.exports = {
   apply: apply,
   complete: complete,
   error: error,
-  remove: remove,
-  queueApplicationJob
+  remove: remove
 };
