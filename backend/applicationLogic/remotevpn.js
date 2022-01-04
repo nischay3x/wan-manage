@@ -150,6 +150,13 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
     return { valid: false, err: `${result.error.details[0].message}` };
   }
 
+  const maxNumberLimit = configs.get('vpnMaxConnectionsNumber', 'number');
+  if (configurationRequest.connectionsPerDevice > maxNumberLimit) {
+    const err = 'The maximum number of free connections per VPN server is reached. ' +
+    'Need to add more? Please contact us at finance@flexiwan.com';
+    return { valid: false, err: err };
+  }
+
   // check if unique networkId already taken
   const networkId = configurationRequest.networkId;
   const regex = new RegExp(`\\b${networkId}\\b`, 'i');

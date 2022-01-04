@@ -176,13 +176,15 @@ const configEnv = {
     reconfigErrorBlockTime: 60 * 60, // one hour
     // Public IP/Port block time in seconds.
     publicAddrBlockTime: 60 * 60, // one hour
+    // Tunnel MTU in bytes. Now provisioned globally per server. Specify number to set specific MTU.
+    // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
+    globalTunnelMtu: 1500,
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
     // Endpoint in our flexivpn server that create a dh key
     createDiffieHellmanApi: 'https://localvpn.flexiwan.com:5001/diffieHellman/create',
-    // Tunnel MTU in bytes. Now provisioned globally per server. Specify number to set specific MTU.
-    // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
-    globalTunnelMtu: 1500
+    // max connections for a vpn server
+    vpnMaxConnectionsNumber: 8 // minimum value
   },
   // Override for development environment, default environment if not specified
   development: {
