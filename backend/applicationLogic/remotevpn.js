@@ -152,8 +152,9 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
 
   const maxNumberLimit = configs.get('vpnMaxConnectionsNumber', 'number');
   if (configurationRequest.connectionsPerDevice > maxNumberLimit) {
-    const err = 'The maximum number of free connections per VPN server is reached. ' +
-    'Need to add more? Please contact us at finance@flexiwan.com';
+    const err =
+    'You reached the maximum number of connections per VPN server included in your current plan. ' +
+    'Please contact us as yourfriends@flexiwan.com to add more connections';
     return { valid: false, err: err };
   }
 
