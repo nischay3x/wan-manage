@@ -135,7 +135,7 @@ class ApplicationsUpdateManager {
             configs.get('mailerFromAddress'),
             emailAddresses,
             `Upgrade Your ${appStoreApp.name} Application`,
-            `<h2>Your application need to upgrade</h2><br>
+            `<h2>Your application needs to upgrade</h2><br>
             <b>Click below to upgrade your application:</b>
             <p><a href="${configs.get('uiServerUrl')}/applications">
             <button style="color:#fff;background-color:#F99E5B;

@@ -41,15 +41,15 @@ paths:
       tags:
       - Version
       x-swagger-router-controller: Version
-  /configuration/restServers:
+  /configuration:
     get:
-      operationId: configurationRestServersGET
+      operationId: configurationGET
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RestServers'
+                $ref: '#/components/schemas/Configuration'
           description: Successful operation
         "500":
           content:
@@ -66,7 +66,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all flexiManage servers list
+      summary: Get flexiManage configurations
       tags:
       - Configuration
       x-swagger-router-controller: Configuration
@@ -7766,12 +7766,18 @@ components:
             $ref: '#/components/schemas/Error'
       description: Unauthorized
   schemas:
-    RestServers:
-      example: [https://manage.flexiwan.com,https://org.flexiwan.com]
-      # properties:
-      items:
-        type: string
-      type: array
+    Configuration:
+      example:
+       restServerUrl: [https://manage.flexiwan.com, https://org.flexiwan.com]
+       vpnMaxConnectionsNumber: 2
+      properties:
+        restServerUrl:
+          type: array
+          items:
+            type: string
+        vpnMaxConnectionsNumber:
+          type: number
+      type: object
     Version:
       properties:
         version:

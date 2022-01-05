@@ -21,14 +21,21 @@ const configs = require('../configs.js')();
 
 class ConfigurationService {
   /**
-   * Get rest servers list
+   * Get configuration
    *
    * returns List
    **/
-  static async configurationRestServersGET ({ org }, { user }) {
+  static async configurationGET ({ org }, { user }) {
     try {
-      const servers = configs.get('restServerUrl', 'list');
-      return Service.successResponse(servers);
+      const restServerUrl = configs.get('restServerUrl', 'list');
+      const vpnMaxConnectionsNumber = configs.get('vpnMaxConnectionsNumber', 'number');
+
+      const res = {
+        restServerUrl,
+        vpnMaxConnectionsNumber
+      };
+
+      return Service.successResponse(res);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
