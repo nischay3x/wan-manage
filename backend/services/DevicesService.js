@@ -1070,10 +1070,11 @@ class DevicesService {
    **/
   static async devicesDELETE ({ org, devicesDeleteRequest }, { user }) {
     let session;
+    let orgList;
     try {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      orgList = await getAccessTokenOrgList(user, org, true);
       const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
       const { ids, filters } = devicesDeleteRequest;
       if (ids && filters) {
@@ -1140,9 +1141,23 @@ class DevicesService {
       await session.commitTransaction();
       session = null;
 
+      logger.info('Delete devices by filter success', {
+        params: {
+          ids: devIds,
+          account: delDevices[0].account,
+          org: orgList[0]
+        }
+      });
+
       return Service.successResponse(null, 204);
     } catch (e) {
       if (session) session.abortTransaction();
+      logger.error('Delete devices by filter failed', {
+        params: {
+          org: orgList ? orgList[0] : 'unknown',
+          request: devicesDeleteRequest
+        }
+      });
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
@@ -1211,6 +1226,15 @@ class DevicesService {
 
       await session.commitTransaction();
       session = null;
+
+      logger.info('Device by ID deleted successfully', {
+        params: {
+          _id: id.toString(),
+          machineId: delDevice.machine_id,
+          account: delDevice.account,
+          org: orgList[0]
+        }
+      });
 
       return Service.successResponse(null, 204);
     } catch (e) {
