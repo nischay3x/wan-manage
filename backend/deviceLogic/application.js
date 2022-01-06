@@ -34,6 +34,7 @@ const {
 } = require('../applicationLogic/applications');
 
 const { queueApplicationJob } = require('./modifyDevice');
+const { getJobParams } = require('../applicationLogic/applications');
 
 /**
  * Creates and queues applications jobs.
@@ -365,9 +366,61 @@ const remove = async (job) => {
   }
 };
 
+/**
+ * Creates the applications section in the full sync job.
+ * @return Object
+ */
+const sync = async (deviceId, org) => {
+  const device = await devices.findOne(
+    { _id: deviceId },
+    { applications: 1 }
+  ).populate({
+    path: 'applications.app',
+    populate: {
+      path: 'appStoreApp'
+    }
+  }).lean();
+
+  const requests = [];
+  for (const app of device.applications) {
+    if (app.status === 'installed' || app.status === 'installing') {
+      const params = await getJobParams(device, app.app, 'install');
+      requests.push({
+        entity: 'agent',
+        message: 'application-install',
+        params: params
+      });
+    }
+  }
+
+  return {
+    requests,
+    completeCbData: {},
+    callComplete: false
+  };
+};
+
+/**
+ * Complete handler for sync job
+ * @return void
+ */
+const completeSync = async (jobId, jobsData) => {
+  try {
+    for (const data of jobsData) {
+      await complete(jobId, data);
+    }
+  } catch (err) {
+    logger.error('Applications sync complete callback failed', {
+      params: { jobsData, reason: err.message }
+    });
+  }
+};
+
 module.exports = {
   apply: apply,
   complete: complete,
   error: error,
-  remove: remove
+  remove: remove,
+  sync: sync,
+  completeSync: completeSync
 };
