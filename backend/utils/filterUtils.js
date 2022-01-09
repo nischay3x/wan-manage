@@ -67,13 +67,13 @@ const getFilterExpression = ({ key, op, val }) => {
   // all other types
   switch (op) {
     case '==':
-      return { [key]: val };
+      return { [key]: new RegExp('^' + val + '$', 'i') };
     case '!=':
-      return { [key]: { $ne: val } };
+      return { [key]: new RegExp('^(?!' + val + '$)', 'i') };
     case 'contains':
-      return { [key]: { $regex: val } };
+      return { [key]: new RegExp(val, 'i') };
     case '!contains':
-      return { [key]: { $regex: '^((?!' + val + ').)*$' } };
+      return { [key]: new RegExp('^((?!' + val + ').)*$', 'i') };
     case '<':
       return { [key]: { $lt: val } };
     case '>':
@@ -120,9 +120,9 @@ const passFilters = (obj, filters) => {
     }
     switch (op) {
       case '==':
-        return objVal === val;
+        return (new RegExp('^' + val + '$', 'i')).test(objVal);
       case '!=':
-        return objVal !== val;
+        return !(new RegExp('^' + val + '$', 'i')).test(objVal);
       case '<=':
         return objVal <= val;
       case '>=':
@@ -132,9 +132,9 @@ const passFilters = (obj, filters) => {
       case '>':
         return objVal > val;
       case 'contains':
-        return (new RegExp(val, 'g')).test(objVal);
+        return (new RegExp(val, 'i')).test(objVal);
       case '!contains':
-        return (new RegExp('^((?!' + val + ').)*$', 'g')).test(objVal);
+        return (new RegExp('^((?!' + val + ').)*$', 'i')).test(objVal);
       case 'in':
         if (!Array.isArray(val)) val = val.split(',');
         return val.includes(objVal);

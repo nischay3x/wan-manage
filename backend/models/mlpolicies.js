@@ -142,7 +142,7 @@ const multiLinkPolicySchema = new Schema({
   },
   description: {
     type: String,
-    required: true,
+    required: false,
     validate: {
       validator: validateDescription,
       message: 'Multi Link policy description format is invalid'
