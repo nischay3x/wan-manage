@@ -42,7 +42,9 @@ const {
   validateDhcpConfig,
   validateStaticRoute
 } = require('../deviceLogic/validators');
-const { getAllOrganizationLanSubnets, mapLteNames, mapWifiNames } = require('../utils/deviceUtils');
+const {
+  getAllOrganizationLanSubnets, mapLteNames, mapWifiNames, getBridges
+} = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');
@@ -1007,10 +1009,11 @@ class DevicesService {
    **/
   static async devicesDELETE ({ org, devicesDeleteRequest }, { user }) {
     let session;
+    let orgList;
     try {
       session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      orgList = await getAccessTokenOrgList(user, org, true);
       const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
       const { ids, filters } = devicesDeleteRequest;
       if (ids && filters) {
@@ -1077,9 +1080,23 @@ class DevicesService {
       await session.commitTransaction();
       session = null;
 
+      logger.info('Delete devices by filter success', {
+        params: {
+          ids: devIds,
+          account: delDevices[0].account,
+          org: orgList[0]
+        }
+      });
+
       return Service.successResponse(null, 204);
     } catch (e) {
       if (session) session.abortTransaction();
+      logger.error('Delete devices by filter failed', {
+        params: {
+          org: orgList ? orgList[0] : 'unknown',
+          request: devicesDeleteRequest
+        }
+      });
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
@@ -1148,6 +1165,15 @@ class DevicesService {
 
       await session.commitTransaction();
       session = null;
+
+      logger.info('Device by ID deleted successfully', {
+        params: {
+          _id: id.toString(),
+          machineId: delDevice.machine_id,
+          account: delDevice.account,
+          org: orgList[0]
+        }
+      });
 
       return Service.successResponse(null, 204);
     } catch (e) {
@@ -1457,32 +1483,45 @@ class DevicesService {
         deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
           const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
           if (!ifc) return d;
+
           const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
           if (!origIfc) return d;
 
+          if (origIfc.IPv4 === '' || origIfc.IPv4Mask === '') return d;
+
+          const origIp = `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
+
+          const oldBridges = getBridges(origDevice.interfaces);
+          const newBridges = getBridges(deviceRequest.interfaces);
+
+          // ********************************************************* //
+          // The following checks are relate to the bridged interface
+          // if the orig interface wasn't in a bridge, skip the checks
+          // ********************************************************* //
+          if (!(origIp in oldBridges)) {
+            return d;
+          }
+
           // if the interface is going to be unassigned now but it was assigned
-          // and it was in a bridge,
-          // we check if we can reassociate the dhcp to another assigned interface in the bridge.
-          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
-          // now, the user unassigned the eth3. In this case we reassociate the dhcp to the eth4.
-          if (!ifc.isAssigned && origIfc.isAssigned) {
-            const anotherBridgedIfc = deviceRequest.interfaces.find(i =>
-              i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned);
-            if (anotherBridgedIfc) {
-              return { ...d, interface: anotherBridgedIfc.devId };
+          // we check if we can re-associate the dhcp to another assigned interface in the bridge.
+          // For example: eth3, eth4, eth5 was in a bridge and dhcp was configured to eth3.
+          // now, the user unassigned the eth3. In this case we re-associate the dhcp to the eth4.
+          if (!ifc.isAssigned && origIfc.isAssigned && origIp in newBridges) {
+            const reassociatedBridgedIfc = newBridges[origIp][0];
+            if (reassociatedBridgedIfc) {
+              return { ...d, interface: reassociatedBridgedIfc };
             }
           }
 
-          // if the IP of the interface is changed and it was in a bridge,
-          // we check if we can reassociate the dhcp to another assigned
-          // interface which has the orig IP.
-          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
-          // now, the user changed the IP of eth3. In this case we reassociate the dhcp to the eth4.
-          if (ifc.isAssigned && ifc.IPv4 !== origIfc.IPv4) {
-            const anotherAssignWithSameIp = deviceRequest.interfaces.find(i =>
-              i.devId !== ifc.devId && i.IPv4 === origIfc.IPv4 && i.isAssigned);
-            if (anotherAssignWithSameIp) {
-              return { ...d, interface: anotherAssignWithSameIp.devId };
+          // if the IP of the interface is changed and its going to be removed from the bridge,
+          // we check if we can re-associate the dhcp to one of the existing
+          // bridged interfaces.
+          // For example: eth3, eth4 and eth5 was in a bridge and dhcp was configured to eth3.
+          // now, the user changed the eth3 IP. In this case we re-associate the dhcp to the eth4.
+          if (ifc.isAssigned && ifc.IPv4 !== origIfc.IPv4 && origIp in newBridges) {
+            const reassociatedBridgedIfc = newBridges[origIp][0];
+            if (reassociatedBridgedIfc) {
+              return { ...d, interface: reassociatedBridgedIfc };
             }
           }
 
