@@ -176,7 +176,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     const interfaces = messageParams.modify_interfaces.interfaces || [];
     const lteInterfaces = messageParams.modify_interfaces.lte_enable_disable || [];
 
-    if (interfaces.length) {
+    if (interfaces.length > 0) {
       const modifiedInterfaces = prepareIfcParams(interfaces, newDevice);
       requests.push(...modifiedInterfaces.map(item => {
         return {
@@ -187,7 +187,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
       }));
     }
 
-    if (lteInterfaces.length) {
+    if (lteInterfaces.length > 0) {
       requests.push(...lteInterfaces.map(item => {
         return {
           entity: 'agent',
