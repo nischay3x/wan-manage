@@ -387,11 +387,12 @@ class DeviceStatus {
   }
 
   /**
-     * @param  {string} machineId  device machine id
-     * @param  {string} devId LTE device devId
-     * @param  {Object} lteStatus   LTE status
-     * @return {void}
-     */
+    * Store LTE status in memory to improve the response speed of the LTE monitoring requests
+    * @param  {string} machineId  device machine id
+    * @param  {string} devId LTE device devId
+    * @param  {Object} lteStatus   LTE status
+    * @return {void}
+    */
   setDeviceLteStatus (machineId, devId, lteStatus) {
     if (!this.status[machineId]) {
       this.status[machineId] = {};
@@ -406,11 +407,12 @@ class DeviceStatus {
   }
 
   /**
-     * @param  {string} machineId  device machine id
-     * @param  {string} devId WiFi device devId
-     * @param  {Object} wifiStatus   WiFi status
-     * @return {void}
-     */
+    * Store LTE status in memory to improve the response speed of the WiFi monitoring requests
+    * @param  {string} machineId  device machine id
+    * @param  {string} devId WiFi device devId
+    * @param  {Object} wifiStatus   WiFi status
+    * @return {void}
+    */
   setDeviceWifiStatus (machineId, devId, wifiStatus) {
     if (!this.status[machineId]) {
       this.status[machineId] = {};
