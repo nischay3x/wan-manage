@@ -25,7 +25,7 @@ const configs = require('../configs')();
 const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
-const { mapLteNames } = require('../utils/deviceUtils');
+const { mapLteNames, mapWifiNames } = require('../utils/deviceUtils');
 
 /***
  * This class gets periodic status from all connected devices
@@ -403,7 +403,8 @@ class DeviceStatus {
     if (!this.status[machineId].lteStatus[devId]) {
       this.status[machineId].lteStatus[devId] = {};
     }
-    Object.assign(this.status[machineId].lteStatus[devId], lteStatus);
+    const time = new Date().getTime();
+    Object.assign(this.status[machineId].lteStatus[devId], { ...lteStatus, time });
   }
 
   /**
@@ -423,7 +424,8 @@ class DeviceStatus {
     if (!this.status[machineId].wifiStatus[devId]) {
       this.status[machineId].wifiStatus[devId] = {};
     }
-    Object.assign(this.status[machineId].wifiStatus[devId], wifiStatus);
+    const time = new Date().getTime();
+    Object.assign(this.status[machineId].wifiStatus[devId], { ...wifiStatus, time });
   }
 
   /**
@@ -455,7 +457,9 @@ class DeviceStatus {
       if (!this.status[machineId].lteStatus) {
         this.status[machineId].lteStatus = {};
       }
-      Object.assign(this.status[machineId].lteStatus, mapLteNames(rawStats.lte_stats));
+      for (const devId in lteStatus) {
+        this.setDeviceLteStatus(machineId, devId, mapLteNames(lteStatus[devId]));
+      }
     };
 
     // Set wifi status in memory for now
@@ -464,7 +468,9 @@ class DeviceStatus {
       if (!this.status[machineId].wifiStatus) {
         this.status[machineId].wifiStatus = {};
       }
-      Object.assign(this.status[machineId].wifiStatus, mapLteNames(rawStats.wifi_stats));
+      for (const devId in wifiStatus) {
+        this.setDeviceWifiStatus(machineId, devId, mapWifiNames(wifiStatus[devId]));
+      }
     };
 
     // Set tunnel status in memory for now

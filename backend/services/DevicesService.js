@@ -766,10 +766,6 @@ class DevicesService {
               }
             );
 
-            const devId = ifc.devId;
-            const machineId = deviceObject.machineId;
-            deviceStatus.setDeviceLteStatus(machineId, devId, response);
-
             return {
               ...response,
               defaultSettings: {
@@ -787,11 +783,6 @@ class DevicesService {
           },
           parseResponse: async response => {
             response = mapWifiNames(response);
-
-            const devId = ifc.devId;
-            const machineId = deviceObject.machineId;
-            deviceStatus.setDeviceWifiStatus(machineId, devId, response);
-
             return { ...response, wifiChannels };
           }
         }
@@ -2871,7 +2862,7 @@ class DevicesService {
       ).lean();
       const isConnected = connections.isConnected(machineId);
 
-      const status = isConnected ? deviceStatus.getDeviceStatus(machineId) || {} : {};
+      const status = deviceStatus.getDeviceStatus(machineId) || {};
       const lteStatus = status.lteStatus;
       const wifiStatus = status.wifiStatus;
 
