@@ -761,7 +761,7 @@ class DevicesService {
               {
                 $set: {
                   'interfaces.$.deviceParams.initial_pin1_state': status.pinState,
-                  'interfaces.$.deviceParams.default_settings': status.defaultSettings
+                  'interfaces.$.deviceParams.defaultSettings': status.defaultSettings
                 }
               }
             );
