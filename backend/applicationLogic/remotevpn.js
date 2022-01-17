@@ -147,7 +147,8 @@ const vpnConfigSchema = Joi.object().keys({
     }).required(),
     office365: Joi.object().keys({
       enabled: Joi.boolean().required(),
-      domains: getDomainAuthValidator()
+      domains: getDomainAuthValidator(),
+      groupNames: Joi.string().allow('')
     }),
     flexiManage: Joi.object().keys({
       enabled: Joi.boolean().required()
