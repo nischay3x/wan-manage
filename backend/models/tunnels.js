@@ -20,6 +20,9 @@ const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const { pendingSchema } = require('./schemas/pendingSchema');
 
+const configs = require('../configs')();
+const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
+
 // Tunnels params schema
 const tunnelKeysSchema = new Schema({
   _id: false,
@@ -123,6 +126,11 @@ const tunnelSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'peers',
     default: null
+  },
+  // MTU of the tunnel
+  mtu: {
+    type: Number,
+    default: globalTunnelMtu
   },
   ...pendingSchema
 }, {

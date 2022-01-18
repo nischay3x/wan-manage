@@ -57,10 +57,15 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
+ * @param  {Number}   mtu MTU of the tunnel required by client
+ * @param  {String}   topology topology of created tunnels (hubAndSpoke|fullMesh)
+ * @param  {Number}   hubIdx index of the hub in 'Hub and Spoke' topology
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
-const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hubIdx, reasons) => {
+const handleTunnels = async (
+  org, userName, opDevices, pathLabels, mtu, topology, hubIdx, reasons
+) => {
   const devicesLen = opDevices.length;
   const tasks = [];
 
@@ -194,7 +199,7 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
                 } else {
                   tasks.push(generateTunnelPromise(userName, org, null,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
+                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, mtu));
                 }
               } else {
                 reasons.add(
@@ -225,7 +230,7 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
                 // Use a copy of devices objects as promise runs later
                 tasks.push(generateTunnelPromise(userName, org, label,
                   { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
+                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, mtu));
               }
             }
           };
@@ -257,11 +262,12 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
+ * @param  {Number}   mtu MTU of the tunnel required by client
  * @param  {array}    peersIds array of peers ids
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
-const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reasons) => {
+const handlePeers = async (org, userName, opDevices, pathLabels, mtu, peersIds, reasons) => {
   const tasks = [];
 
   // get peers configurations
@@ -331,7 +337,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
 
           // generate peer configuration job
           const promise = generateTunnelPromise(userName, org, null, device,
-            null, wanIfc, null, 'ikev2', peer);
+            null, wanIfc, null, 'ikev2', mtu, peer);
           tasks.push(promise);
         }
       } else {
@@ -374,7 +380,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
 
             // generate peer configuration job
             const promise = generateTunnelPromise(
-              userName, org, label, device, null, wanIfc, null, 'ikev2', peer);
+              userName, org, label, device, null, wanIfc, null, 'ikev2', mtu, peer);
             tasks.push(promise);
           }
         }
@@ -430,7 +436,7 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('At least 2 devices must be selected to create tunnels');
   }
 
-  const { topology, hub } = data.meta;
+  const { pathLabels, mtu, peers, topology, hub } = data.meta;
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
     logger.error('Unknown topology when creating tunnels', { params: { topology: topology } });
     throw new Error('Unknown topology when creating tunnels');
@@ -458,11 +464,11 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   if (isPeer) {
     const tasks = await handlePeers(
-      org, userName, opDevices, data.meta.pathLabels, data.meta.peers, reasons);
+      org, userName, opDevices, pathLabels, mtu, peers, reasons);
     dbTasks = dbTasks.concat(tasks);
   } else {
     const tasks = await handleTunnels(
-      org, userName, opDevices, data.meta.pathLabels, topology, hubIdx, reasons);
+      org, userName, opDevices, pathLabels, mtu, topology, hubIdx, reasons);
     dbTasks = dbTasks.concat(tasks);
   }
 
@@ -597,7 +603,7 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB, peerId = false) => {
  * @param  {boolean}  peer         peer configurations
  */
 const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
-  deviceAIntf, deviceBIntf, encryptionMethod = null, peer = null) => {
+  deviceAIntf, deviceBIntf, encryptionMethod = null, mtu = 0, peer = null) => {
   logger.debug(`Adding tunnel${peer ? '' : ' between devices'}`, {
     params: {
       deviceA: deviceA.hostname,
@@ -847,6 +853,7 @@ const queueTunnel = async (
  * @param  {Object} deviceA details of device A
  * @param  {Object?} deviceB details of device B
  * @param  {Object?}  peer peer configurations
+ * @param  {Number} mtu MTU of the tunnel
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
@@ -856,7 +863,8 @@ const prepareTunnelAddJob = async (
   pathLabel,
   deviceA,
   deviceB,
-  peer = null
+  peer = null,
+  mtu = 0
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -873,7 +881,8 @@ const prepareTunnelAddJob = async (
     deviceAIntf,
     deviceBIntf,
     pathLabel,
-    peer
+    peer,
+    mtu
   );
 
   const validateParams = [paramsDeviceA];
@@ -1053,6 +1062,7 @@ const prepareTunnelAddJob = async (
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
  * @param  {Object?}  peer         peer configurations
+ * @param  {Number}   clientMtu    MTU of the tunnel required by client
  * @return {void}
  */
 const addTunnel = async (
@@ -1065,7 +1075,8 @@ const addTunnel = async (
   deviceAIntf,
   deviceBIntf,
   pathLabel,
-  peer = null
+  peer = null,
+  clientMtu = 0
 ) => {
   const devicesInfo = {
     deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name }
@@ -1079,6 +1090,15 @@ const addTunnel = async (
 
   // Generate IPsec Keys and store them in the database
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
+
+  // no additional header for not encrypted tunnels
+  const packetHeaderSize = encryptionMethod === 'none' ? 0 : 150;
+  // MTU
+  const tunnelMtu = (clientMtu > 0) ? clientMtu : (globalTunnelMtu > 0) ? globalTunnelMtu
+    : Math.min(
+      deviceAIntf.mtu || 1500,
+      deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : 1500
+    ) - packetHeaderSize;
 
   // check if need to create the tunnel as pending
   let isPending = false;
@@ -1120,7 +1140,8 @@ const addTunnel = async (
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,
-      peer: peer ? peer._id : null
+      peer: peer ? peer._id : null,
+      mtu: tunnelMtu
     },
     // Options
     { upsert: true, new: true }
@@ -1138,7 +1159,8 @@ const addTunnel = async (
     pathLabel,
     deviceA,
     deviceB,
-    peer
+    peer,
+    tunnelMtu
   );
 
   let title = '';
@@ -1531,7 +1553,8 @@ const sync = async (deviceId, org) => {
       tunnelKeys: 1,
       encryptionMethod: 1,
       pathlabel: 1,
-      peer: 1
+      peer: 1,
+      mtu: 1
     }
   )
     .populate('deviceA', 'machineId interfaces versions IKEv2')
@@ -1555,7 +1578,8 @@ const sync = async (deviceId, org) => {
       tunnelKeys,
       encryptionMethod,
       pathlabel,
-      peer
+      peer,
+      mtu
     } = tunnel;
 
     const ifcA = deviceA.interfaces.find(
@@ -1582,7 +1606,8 @@ const sync = async (deviceId, org) => {
       pathlabel,
       deviceA,
       deviceB,
-      peer
+      peer,
+      mtu
     );
     // Add the tunnel only for the device that is being synced
     const deviceTasks =
@@ -1633,16 +1658,16 @@ const sync = async (deviceId, org) => {
  * @param  {Object?} deviceBIntf device B tunnel interface
  * @param  {pathLabel?} path label used for this tunnel
  * @param  {Object?}  peer peer configurations. If exists, fill peer configurations
+ * @param  {Number}  mtu MTU of the tunnel
 */
-const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null, peer = null) => {
+const prepareTunnelParams = (
+  tunnel, deviceAIntf, deviceBIntf, pathLabel = null, peer = null, mtu
+) => {
   const paramsDeviceA = {};
   const paramsDeviceB = {};
 
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
-
-  // no additional header for not encrypted tunnels
-  const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
 
   // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
@@ -1659,8 +1684,7 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
     paramsDeviceA.peer.routing = 'ospf';
-    paramsDeviceA.peer.mtu = (globalTunnelMtu > 0) ? globalTunnelMtu
-      : (deviceAIntf.mtu || 1500) - packetHeaderSize;
+    paramsDeviceA.peer.mtu = mtu;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
     };
@@ -1673,10 +1697,6 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
     paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
       ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
-
-    // mtu
-    const mtu = (globalTunnelMtu > 0) ? globalTunnelMtu
-      : Math.min(deviceAIntf.mtu || 1500, deviceBIntf.mtu || 1500) - packetHeaderSize;
 
     paramsDeviceA['loopback-iface'] = {
       addr: tunnelParams.ip1 + '/31',
