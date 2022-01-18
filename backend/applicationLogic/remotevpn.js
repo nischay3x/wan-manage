@@ -61,23 +61,6 @@ const pickOnlyVpnAllowedFields = configurationRequest => {
   return pick(configurationRequest, allowedFields);
 };
 
-const getDomainAuthValidator = () => {
-  return Joi.string().required().custom((val, helpers) => {
-    const domainList = val.split(/\s*,\s*/);
-    const valid = domainList.every(d => validateFQDN(d));
-    if (!valid) {
-      return helpers.message('domains is not valid');
-    };
-
-    const invalid = domainList.some(d => d === 'gmail.com');
-    if (invalid) {
-      return helpers.message('gmail.com domain is not allowed');
-    };
-
-    return val;
-  }).when('enabled', { is: true, then: Joi.required(), otherwise: Joi.allow('') });
-};
-
 const vpnConfigSchema = Joi.object().keys({
   networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
   serverPort: Joi.number().port().required(),
@@ -112,44 +95,33 @@ const vpnConfigSchema = Joi.object().keys({
   authentications: Joi.object({
     gsuite: Joi.object().keys({
       enabled: Joi.boolean().required(),
-      domains: getDomainAuthValidator(),
-      clientEmail: Joi.string()
-        .when('groupNames', {
+      domains: Joi.array().items(Joi.object().keys({
+        domain: Joi.string().required().pattern(/^\S+$/, 'domain without whitespace'),
+        groups: Joi.string().required().allow(''),
+        clientEmail: Joi.string().when('groups', {
           is: '',
           then: Joi.allow(''),
-          otherwise: Joi.when('enabled', {
-            is: true,
-            then: Joi.string().email(),
-            otherwise: Joi.allow('')
-          })
+          otherwise: Joi.string().email()
         }).required(),
-      privateKey: Joi.string()
-        .when('groupNames', {
+        privateKey: Joi.string().when('groups', {
           is: '',
           then: Joi.allow(''),
-          otherwise: Joi.when('enabled', {
-            is: true,
-            then: Joi.string(),
-            otherwise: Joi.allow('')
-          })
+          otherwise: Joi.string()
         }).required(),
-      impersonateEmail: Joi.string()
-        .when('groupNames', {
+        impersonateEmail: Joi.string().when('groups', {
           is: '',
           then: Joi.allow(''),
-          otherwise: Joi.when('enabled', {
-            is: true,
-            then: Joi.string().email(),
-            otherwise: Joi.allow('')
-          })
-        }).required(),
-      groupNames: Joi.string().allow('')
+          otherwise: Joi.string().email()
+        }).required()
+      })).required().when('enabled', { is: true, then: Joi.array().min(1) })
     }).required(),
     office365: Joi.object().keys({
       enabled: Joi.boolean().required(),
-      domains: getDomainAuthValidator(),
-      groupNames: Joi.string().allow('')
-    }),
+      domains: Joi.array().items(Joi.object().keys({
+        domain: Joi.string().required().pattern(/^\S+$/, 'domain without whitespace'),
+        groups: Joi.string().required().allow('')
+      })).required().when('enabled', { is: true, then: Joi.array().min(1) })
+    }).required(),
     flexiManage: Joi.object().keys({
       enabled: Joi.boolean().required()
     }).required()
