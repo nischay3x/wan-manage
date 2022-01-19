@@ -100,6 +100,9 @@ const applicationStoreSchema = new Schema(
     repositoryTime: {
       type: Number
     },
+    cost: {
+      type: Number
+    },
     // who is the creator of this application
     creator: {
       type: String,

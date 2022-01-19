@@ -7892,6 +7892,8 @@ components:
           type: string
         creator:
           type: string
+        cost:
+          type: string
         description:
           type: string
         identifier:

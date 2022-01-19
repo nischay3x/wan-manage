@@ -1,6 +1,6 @@
 {
   "meta": {
-    "time": 1636980481704
+    "time": 1636980481905
   },
   "applications": [
     {
@@ -9,6 +9,7 @@
       "description": "Allows users to connect to the corporate network remotely",
       "createdDate": 1636980481687,
       "creator": "flexiWAN",
+      "cost": 0,
       "versions": [
         {
           "version": "1.0.0",

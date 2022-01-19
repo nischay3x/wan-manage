@@ -205,7 +205,7 @@ class ApplicationsUpdateManager {
         );
 
         // check if devices needs to upgrade
-        await this.checkDevicesUpgrade(app);
+        // await this.checkDevicesUpgrade(app);
       }
 
       if (isUpdated) {
