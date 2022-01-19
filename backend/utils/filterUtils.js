@@ -65,11 +65,12 @@ const getFilterExpression = ({ key, op, val }) => {
     }
   }
   // all other types
+  const isString = typeof val === 'string';
   switch (op) {
     case '==':
-      return { [key]: new RegExp('^' + val + '$', 'i') };
+      return { [key]: isString ? new RegExp('^' + val + '$', 'i') : val };
     case '!=':
-      return { [key]: new RegExp('^(?!' + val + '$)', 'i') };
+      return { [key]: isString ? new RegExp('^(?!' + val + '$)', 'i') : { $ne: val } };
     case 'contains':
       return { [key]: new RegExp(val, 'i') };
     case '!contains':
@@ -114,15 +115,14 @@ const passFilters = (obj, filters) => {
       case 'number':
         val = +val; break;
       case 'boolean':
-        val = val === 'true'; break;
-      case 'object':
-        val = JSON.stringify(val); break;
+        val = val === true || val === 'true'; break;
     }
+    const isString = typeof val === 'string';
     switch (op) {
       case '==':
-        return (new RegExp('^' + val + '$', 'i')).test(objVal);
+        return isString ? (new RegExp('^' + val + '$', 'i')).test(objVal) : val === objVal;
       case '!=':
-        return !(new RegExp('^' + val + '$', 'i')).test(objVal);
+        return isString ? !(new RegExp('^' + val + '$', 'i')).test(objVal) : val !== objVal;
       case '<=':
         return objVal <= val;
       case '>=':
