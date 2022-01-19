@@ -724,6 +724,8 @@ class DevicesService {
         return Service.rejectResponse('Device or Interface not found', 404);
       };
 
+      const ifc = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
+
       const supportedMessages = {
         lte: {
           message: 'get-lte-info',
@@ -759,7 +761,7 @@ class DevicesService {
               {
                 $set: {
                   'interfaces.$.deviceParams.initial_pin1_state': status.pinState,
-                  'interfaces.$.deviceParams.default_settings': status.defaultSettings
+                  'interfaces.$.deviceParams.defaultSettings': status.defaultSettings
                 }
               }
             );
@@ -786,7 +788,6 @@ class DevicesService {
         }
       };
 
-      const ifc = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
       const message = supportedMessages[ifc.deviceType];
       if (!message) {
         throw new Error('Unsupported request');
@@ -2860,11 +2861,18 @@ class DevicesService {
         'sync machineId isApproved interfaces.devId interfaces.internetAccess'
       ).lean();
       const isConnected = connections.isConnected(machineId);
+
+      const status = deviceStatus.getDeviceStatus(machineId) || {};
+      const lteStatus = status.lteStatus;
+      const wifiStatus = status.wifiStatus;
+
       return Service.successResponse({
         sync,
         isApproved,
         connection: `${isConnected ? '' : 'dis'}connected`,
-        interfaces
+        interfaces,
+        lteStatus,
+        wifiStatus
       });
     } catch (e) {
       return Service.rejectResponse(
