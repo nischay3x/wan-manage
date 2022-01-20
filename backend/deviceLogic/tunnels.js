@@ -57,14 +57,14 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
- * @param  {Number}   mtu MTU of the tunnel required by client
+ * @param  {Object}   options advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {String}   topology topology of created tunnels (hubAndSpoke|fullMesh)
  * @param  {Number}   hubIdx index of the hub in 'Hub and Spoke' topology
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
 const handleTunnels = async (
-  org, userName, opDevices, pathLabels, mtu, topology, hubIdx, reasons
+  org, userName, opDevices, pathLabels, options, topology, hubIdx, reasons
 ) => {
   const devicesLen = opDevices.length;
   const tasks = [];
@@ -199,7 +199,7 @@ const handleTunnels = async (
                 } else {
                   tasks.push(generateTunnelPromise(userName, org, null,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, mtu));
+                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, options));
                 }
               } else {
                 reasons.add(
@@ -230,7 +230,7 @@ const handleTunnels = async (
                 // Use a copy of devices objects as promise runs later
                 tasks.push(generateTunnelPromise(userName, org, label,
                   { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, mtu));
+                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, options));
               }
             }
           };
@@ -262,12 +262,12 @@ const handleTunnels = async (
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
- * @param  {Number}   mtu MTU of the tunnel required by client
+ * @param  {Object}   options advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {array}    peersIds array of peers ids
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
-const handlePeers = async (org, userName, opDevices, pathLabels, mtu, peersIds, reasons) => {
+const handlePeers = async (org, userName, opDevices, pathLabels, options, peersIds, reasons) => {
   const tasks = [];
 
   // get peers configurations
@@ -337,7 +337,7 @@ const handlePeers = async (org, userName, opDevices, pathLabels, mtu, peersIds, 
 
           // generate peer configuration job
           const promise = generateTunnelPromise(userName, org, null, device,
-            null, wanIfc, null, 'ikev2', mtu, peer);
+            null, wanIfc, null, 'ikev2', options, peer);
           tasks.push(promise);
         }
       } else {
@@ -380,7 +380,8 @@ const handlePeers = async (org, userName, opDevices, pathLabels, mtu, peersIds, 
 
             // generate peer configuration job
             const promise = generateTunnelPromise(
-              userName, org, label, device, null, wanIfc, null, 'ikev2', mtu, peer);
+              userName, org, label, device, null, wanIfc, null, 'ikev2', options, peer
+            );
             tasks.push(promise);
           }
         }
@@ -436,7 +437,24 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('At least 2 devices must be selected to create tunnels');
   }
 
-  const { pathLabels, mtu, peers, topology, hub } = data.meta;
+  const { pathLabels, mtu, mssClamp, ospfCost, peers, topology, hub } = data.meta;
+  const options = { mtu, mssClamp, ospfCost };
+
+  if (mtu && (isNaN(mtu) || mtu < 500 || mtu > 1500)) {
+    logger.error('Wrong MTU value when creating tunnels', { params: { mtu } });
+    throw new Error('MTU value must be between 500 and 1500');
+  }
+
+  if (mssClamp && ['yes', 'no'].includes(mssClamp)) {
+    logger.error('Wrong MSS Clamping when creating tunnels', { params: { mssClamp } });
+    throw new Error('MSS Clamping must be "yes" or "no"');
+  }
+
+  if (ospfCost && isNaN(ospfCost)) {
+    logger.error('Wrong OSPF cost when creating tunnels', { params: { ospfCost } });
+    throw new Error('OSPF cost must be numeric value or empty');
+  }
+
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
     logger.error('Unknown topology when creating tunnels', { params: { topology: topology } });
     throw new Error('Unknown topology when creating tunnels');
@@ -464,11 +482,11 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   if (isPeer) {
     const tasks = await handlePeers(
-      org, userName, opDevices, pathLabels, mtu, peers, reasons);
+      org, userName, opDevices, pathLabels, options, peers, reasons);
     dbTasks = dbTasks.concat(tasks);
   } else {
     const tasks = await handleTunnels(
-      org, userName, opDevices, pathLabels, mtu, topology, hubIdx, reasons);
+      org, userName, opDevices, pathLabels, options, topology, hubIdx, reasons);
     dbTasks = dbTasks.concat(tasks);
   }
 
@@ -600,10 +618,11 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB, peerId = false) => {
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
  * @param  {string}   encryptionMethod key exchange method [none|ikev2|psk]
+ * @param  {Object}   options      advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {boolean}  peer         peer configurations
  */
 const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
-  deviceAIntf, deviceBIntf, encryptionMethod = null, mtu = 0, peer = null) => {
+  deviceAIntf, deviceBIntf, encryptionMethod, options, peer = null) => {
   logger.debug(`Adding tunnel${peer ? '' : ' between devices'}`, {
     params: {
       deviceA: deviceA.hostname,
@@ -639,7 +658,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
 
           // Configure tunnel using this num
           const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-            deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
+            deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, options, peer);
 
           return resolve(tunnelJobs);
         } else { // No deleted tunnel found, get a new one
@@ -659,7 +678,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
 
             // Configure tunnel using this num
             const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-              deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
+              deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, options, peer);
 
             return resolve(tunnelJobs);
           }, (err) => {
@@ -686,7 +705,7 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
                 logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
                 // Configure tunnel using this num
                 const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-                  deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
+                  deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, options, peer);
 
                 return resolve(tunnelJobs);
               }, (err) => {
@@ -852,8 +871,8 @@ const queueTunnel = async (
  * @param  {pathLabel} path label used for this tunnel
  * @param  {Object} deviceA details of device A
  * @param  {Object?} deviceB details of device B
+ * @param  {Object}  options advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {Object?}  peer peer configurations
- * @param  {Number} mtu MTU of the tunnel
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
@@ -863,8 +882,8 @@ const prepareTunnelAddJob = async (
   pathLabel,
   deviceA,
   deviceB,
-  peer = null,
-  mtu = 0
+  options,
+  peer = null
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -881,8 +900,8 @@ const prepareTunnelAddJob = async (
     deviceAIntf,
     deviceBIntf,
     pathLabel,
-    peer,
-    mtu
+    options,
+    peer
   );
 
   const validateParams = [paramsDeviceA];
@@ -1061,8 +1080,8 @@ const prepareTunnelAddJob = async (
  * @param  {Object?}  deviceB      details of device B
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
+ * @param  {Object}   options      advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {Object?}  peer         peer configurations
- * @param  {Number}   clientMtu    MTU of the tunnel required by client
  * @return {void}
  */
 const addTunnel = async (
@@ -1075,8 +1094,8 @@ const addTunnel = async (
   deviceAIntf,
   deviceBIntf,
   pathLabel,
-  peer = null,
-  clientMtu = 0
+  options,
+  peer = null
 ) => {
   const devicesInfo = {
     deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name }
@@ -1091,14 +1110,19 @@ const addTunnel = async (
   // Generate IPsec Keys and store them in the database
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
-  // no additional header for not encrypted tunnels
-  const packetHeaderSize = encryptionMethod === 'none' ? 0 : 150;
-  // MTU
-  const tunnelMtu = (clientMtu > 0) ? clientMtu : (globalTunnelMtu > 0) ? globalTunnelMtu
-    : Math.min(
-      deviceAIntf.mtu || 1500,
-      deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : 1500
-    ) - packetHeaderSize;
+  if (!options.mtu) {
+    // no additional header for not encrypted tunnels
+    const packetHeaderSize = encryptionMethod === 'none' ? 0 : 150;
+    const minMtu = Math.min(
+      deviceAIntf.mtu || globalTunnelMtu,
+      deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : globalTunnelMtu
+    );
+    options.mtu = minMtu - packetHeaderSize;
+  }
+  options.mtu = Math.min(Math.max(options.mtu, 500), 1500);
+
+  // Advanced tunnel options
+  const { mtu, mssClamp, ospfCost } = options;
 
   // check if need to create the tunnel as pending
   let isPending = false;
@@ -1140,8 +1164,8 @@ const addTunnel = async (
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,
-      peer: peer ? peer._id : null,
-      mtu: tunnelMtu
+      options: { mtu, mssClamp, ospfCost },
+      peer: peer ? peer._id : null
     },
     // Options
     { upsert: true, new: true }
@@ -1159,8 +1183,8 @@ const addTunnel = async (
     pathLabel,
     deviceA,
     deviceB,
-    peer,
-    tunnelMtu
+    options,
+    peer
   );
 
   let title = '';
@@ -1553,8 +1577,8 @@ const sync = async (deviceId, org) => {
       tunnelKeys: 1,
       encryptionMethod: 1,
       pathlabel: 1,
-      peer: 1,
-      mtu: 1
+      options: 1,
+      peer: 1
     }
   )
     .populate('deviceA', 'machineId interfaces versions IKEv2')
@@ -1578,8 +1602,8 @@ const sync = async (deviceId, org) => {
       tunnelKeys,
       encryptionMethod,
       pathlabel,
-      peer,
-      mtu
+      options,
+      peer
     } = tunnel;
 
     const ifcA = deviceA.interfaces.find(
@@ -1606,8 +1630,8 @@ const sync = async (deviceId, org) => {
       pathlabel,
       deviceA,
       deviceB,
-      peer,
-      mtu
+      options,
+      peer
     );
     // Add the tunnel only for the device that is being synced
     const deviceTasks =
@@ -1657,17 +1681,26 @@ const sync = async (deviceId, org) => {
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object?} deviceBIntf device B tunnel interface
  * @param  {pathLabel?} path label used for this tunnel
+ * @param  {Object}  options    advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {Object?}  peer peer configurations. If exists, fill peer configurations
- * @param  {Number}  mtu MTU of the tunnel
 */
 const prepareTunnelParams = (
-  tunnel, deviceAIntf, deviceBIntf, pathLabel = null, peer = null, mtu
+  tunnel, deviceAIntf, deviceBIntf, pathLabel = null, options = {}, peer = null
 ) => {
   const paramsDeviceA = {};
   const paramsDeviceB = {};
 
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
+
+  // no additional header for not encrypted tunnels
+  const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
+  const minMtu = Math.min(
+    deviceAIntf.mtu || globalTunnelMtu,
+    deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : globalTunnelMtu
+  ) - packetHeaderSize;
+  const mtu = Math.min(Math.max(options.mtu ? options.mtu : minMtu, 500), 1500);
+  const mssClamp = options.mssClamp !== 'no' ? minMtu : 0;
 
   // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
@@ -1690,6 +1723,12 @@ const prepareTunnelParams = (
     };
     paramsDeviceA.peer.urls = peer.urls;
     paramsDeviceA.peer.ips = peer.ips;
+    if (mssClamp > 0) {
+      paramsDeviceA.peer['tcp-mss-clamp'] = mssClamp;
+    }
+    if (options.ospfCost && options.ospfCost !== 'default') {
+      paramsDeviceA.peer['ospf-cost'] = options.ospfCost;
+    }
   } else {
     // destination
     const isLocal = (!deviceAIntf.PublicIP || !deviceBIntf.PublicIP ||
@@ -1726,6 +1765,14 @@ const prepareTunnelParams = (
         labels: pathLabel ? [pathLabel] : []
       }
     };
+    if (mssClamp > 0) {
+      paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = mssClamp;
+      paramsDeviceB['loopback-iface']['tcp-mss-clamp'] = mssClamp;
+    }
+    if (options.ospfCost && options.ospfCost !== 'default') {
+      paramsDeviceA['loopback-iface']['ospf-cost'] = options.ospfCost;
+      paramsDeviceB['loopback-iface']['ospf-cost'] = options.ospfCost;
+    }
   }
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
