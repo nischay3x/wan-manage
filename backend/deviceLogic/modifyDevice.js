@@ -52,7 +52,7 @@ const { getBridges } = require('../utils/deviceUtils');
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
  * @return {Array}            the same array after removing unnecessary fields
  */
-const prepareIfcParams = (interfaces, device, newDevice) => {
+const prepareIfcParams = (interfaces, newDevice) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
@@ -174,10 +174,11 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
   // Check against the old configured interfaces.
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
-    const modifiedInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.interfaces, device, newDevice
-    );
-    if (modifiedInterfaces.length > 0) {
+    const interfaces = messageParams.modify_interfaces.interfaces || [];
+    const lteInterfaces = messageParams.modify_interfaces.lte_enable_disable || [];
+
+    if (interfaces.length > 0) {
+      const modifiedInterfaces = prepareIfcParams(interfaces, newDevice);
       requests.push(...modifiedInterfaces.map(item => {
         return {
           entity: 'agent',
@@ -187,33 +188,14 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
       }));
     }
 
-    const oldLteInterfaces = prepareIfcParams(
-      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device, newDevice);
-
-    const newLteInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.lte_enable_disable, device, newDevice
-    );
-
-    // we send lte job if configuration or interface metric was changed
-    const lteDiffInterfaces = differenceWith(
-      newLteInterfaces,
-      oldLteInterfaces,
-      (origIfc, newIfc) => {
-        return isEqual(origIfc.configuration, newIfc.configuration) &&
-          isEqual(origIfc.metric, newIfc.metric);
-      }
-    );
-
-    // don't put these requests as aggregated because
-    // they are don't related to router api in the agent
-    if (lteDiffInterfaces.length > 0) {
-      requests.push(...lteDiffInterfaces.map(item => {
+    if (lteInterfaces.length > 0) {
+      requests.push(...lteInterfaces.map(item => {
         return {
           entity: 'agent',
           message: item.configuration.enable ? 'add-lte' : 'remove-lte',
           params: {
             ...item.configuration,
-            dev_id: item.dev_id,
+            dev_id: item.devId,
             metric: item.metric
           }
         };
@@ -311,7 +293,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
   }
 
   if (has(messageParams, 'modify_router.assign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, device, newDevice);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, newDevice);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -321,7 +303,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     }));
   }
   if (has(messageParams, 'modify_router.unassign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, device, newDevice);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, newDevice);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',

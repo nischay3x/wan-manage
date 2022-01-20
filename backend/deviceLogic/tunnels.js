@@ -38,6 +38,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
 const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const keyBy = require('lodash/keyBy');
 
 const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
 
@@ -297,6 +298,9 @@ const handlePeers = async (org, userName, opDevices, pathLabels, options, peersI
       continue;
     }
 
+    const peersSrcDst = await getPeersSrcDst(org);
+    const srcDstKeys = keyBy(peersSrcDst, 'key');
+
     // Create a peer for each WAN interface of the device according to the path
     // labels assigned to the interfaces. If the list of path labels
     // IDs contains the ID 'FFFFFF', create peers between all common
@@ -332,6 +336,12 @@ const handlePeers = async (org, userName, opDevices, pathLabels, options, peersI
           if (peerFound.length > 0) {
             logger.debug('Found existing peer', { params: { peer: peerFound } });
             reasons.add('Some peers exist already.');
+            continue;
+          }
+
+          const srcDst = `${wanIfc.IPv4}_${peer.remoteIP}`;
+          if (srcDst in srcDstKeys) {
+            reasons.add('Some peer tunnels with same source and destination IP already exists. ');
             continue;
           }
 
@@ -378,6 +388,12 @@ const handlePeers = async (org, userName, opDevices, pathLabels, options, peersI
               continue;
             }
 
+            const srcDst = `${wanIfc.IPv4}_${peer.remoteIP}`;
+            if (srcDst in srcDstKeys) {
+              reasons.add('Some peer tunnels with same source and destination IP already exists. ');
+              continue;
+            }
+
             // generate peer configuration job
             const promise = generateTunnelPromise(
               userName, org, label, device, null, wanIfc, null, 'ikev2', options, peer
@@ -393,6 +409,54 @@ const handlePeers = async (org, userName, opDevices, pathLabels, options, peersI
   }
 
   return tasks;
+};
+
+/**
+ * Get peer tunnels with the given src ip and destination ip
+ * @async
+ * @param  {string}   org  organization ID
+ * @param  {string}   interfaceIp interface IP, used as source ip of a tunnel
+ * @param  {array}    peerRemoteIp peer remote IP, used as remote ip of a peer tunnel
+ * @return {array}    array of peer tunnels with the given src and destination ip
+ */
+const getPeersSrcDst = async (org) => {
+  try {
+    const pipeline = [
+      // get active peers for the given organization
+      { $match: { org: mongoose.Types.ObjectId(org), peer: { $ne: null }, isActive: true } },
+      { $project: { deviceA: 1, interfaceA: 1, peer: 1, _id: 0 } },
+      // get interface object used by the tunnel
+      {
+        $lookup: {
+          from: 'devices',
+          let: { deviceId: '$deviceA', ifc_id: '$interfaceA' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$deviceId'] } } },
+            { $project: { interfaces: 1 } },
+            { $unwind: '$interfaces' },
+            { $match: { $expr: { $eq: ['$interfaces._id', '$$ifc_id'] } } },
+            { $project: { _id: 0, src: '$interfaces.IPv4' } }
+          ],
+          as: 'interface'
+        }
+      },
+      // get peer object used by the tunnel
+      { $lookup: { from: 'peers', localField: 'peer', foreignField: '_id', as: 'peer' } },
+      { $unwind: '$peer' },
+      { $unwind: '$interface' },
+      { $project: { _id: 0, key: { $concat: ['$interface.src', '_', '$peer.remoteIP'] } } }
+      // check if the given src and dst combination is already in use by a peer in this organization
+      // { $match: { src: interfaceIp, dst: peerRemoteIp } }
+    ];
+
+    const res = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
+    return res;
+  } catch (err) {
+    logger.error('Failed to check for duplication src and dst ips', {
+      params: { org, err: err.message }
+    });
+    throw err;
+  }
 };
 
 /**
@@ -509,7 +573,7 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   const desired = dbTasks.flat().map(job => job.id);
   const ids = fulfilled.flat().map(job => job.id);
-  let message = `${isPeer ? 'peer ' : ''}tunnels creation jobs added.`;
+  let message = `${isPeer ? 'peer ' : ''}tunnel creation jobs added.`;
   if (desired.length === 0 || fulfilled.flat().length === 0) {
     message = 'No ' + message;
   } else if (ids.length < desired.length) {
@@ -1173,7 +1237,7 @@ const addTunnel = async (
 
   // don't send jobs for pending tunnels
   if (isPending) {
-    throw new Error(`Tunnel ${tunnelnum} set as pending - ${pendingReason}`);
+    throw new Error(`Tunnel #${tunnelnum} set as pending - ${pendingReason}`);
   }
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
@@ -1338,7 +1402,7 @@ const applyTunnelDel = async (devices, user, data) => {
 
     const desired = delPromises.flat().map(job => job.id);
     const ids = fulfilled.flat().map(job => job.id);
-    let message = 'tunnels deletion jobs added.';
+    let message = 'tunnel deletion jobs added.';
     if (desired.length === 0 || fulfilled.flat().length === 0) {
       message = 'No ' + message;
     } else if (ids.length < desired.length) {
