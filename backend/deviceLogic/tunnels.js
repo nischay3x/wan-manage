@@ -509,7 +509,7 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('MTU value must be between 500 and 1500');
   }
 
-  if (mssClamp && ['yes', 'no'].includes(mssClamp)) {
+  if (mssClamp && !['yes', 'no'].includes(mssClamp)) {
     logger.error('Wrong MSS Clamping when creating tunnels', { params: { mssClamp } });
     throw new Error('MSS Clamping must be "yes" or "no"');
   }
