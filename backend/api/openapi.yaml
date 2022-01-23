@@ -8928,6 +8928,10 @@ components:
           $ref: '#/components/schemas/DeviceConnectionStatus'
         isApproved:
           type: boolean
+        lteStatus:
+          type: object
+        wifiStatus:
+          type: object
       required:
         - sync
         - connection
