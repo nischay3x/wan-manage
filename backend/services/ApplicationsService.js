@@ -24,6 +24,7 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const dispatcher = require('../deviceLogic/dispatcher');
 const ObjectId = require('mongoose').Types.ObjectId;
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const { getMatchFilters } = require('../utils/filterUtils');
 
 const {
   validateConfiguration,
@@ -80,9 +81,26 @@ class ApplicationsService {
    * @returns {Object} object with applications array
    * @memberof ApplicationsService
    */
-  static async appstoreGET ({ user }) {
+  static async appstoreGET ({ filters }, { user }) {
     try {
-      const appsList = await appStore.find().lean();
+      let appsList = [];
+      const pipeline = [];
+
+      if (filters) {
+        const parsedFilters = JSON.parse(filters);
+        const matchFilters = getMatchFilters(parsedFilters);
+        if (matchFilters.length > 0) {
+          pipeline.push({
+            $match: { $and: matchFilters }
+          });
+        }
+      }
+
+      if (pipeline.length > 0) {
+        appsList = await appStore.aggregate(pipeline).allowDiskUse(true);
+      } else {
+        appsList = await appStore.find().lean();
+      }
 
       const mapped = appsList.map(app => {
         return ApplicationsService.selectApplicationStoreParams(app);
@@ -143,10 +161,21 @@ class ApplicationsService {
       orgList = orgList.map(o => mongoose.Types.ObjectId(o));
 
       const pipeline = [
-        { $match: { org: { $in: orgList } } }
+        { $match: { org: { $in: orgList } } },
+        {
+          $lookup: {
+            from: 'applicationStore',
+            localField: 'appStoreApp',
+            foreignField: '_id',
+            as: 'appStoreApp'
+          }
+        },
+        {
+          $unwind: '$appStoreApp'
+        }
       ];
 
-      if (requestParams.response === 'summary') {
+      if (requestParams.responseType === 'summary') {
         pipeline.push({
           $project: {
             _id: 1,
@@ -185,9 +214,20 @@ class ApplicationsService {
           }
         });
       }
+
+      if (requestParams.filters) {
+        const parsedFilters = JSON.parse(requestParams.filters);
+        const matchFilters = getMatchFilters(parsedFilters);
+        if (matchFilters.length > 0) {
+          pipeline.push({
+            $match: { $and: matchFilters }
+          });
+        }
+      }
+
       const installed = await applications.aggregate(pipeline).allowDiskUse(true);
 
-      await applications.populate(installed, { path: 'appStoreApp' });
+      // await applications.populate(installed, { path: 'appStoreApp' });
 
       const response = installed.map(app => {
         const { ...rest } = app;
@@ -197,7 +237,7 @@ class ApplicationsService {
           org: app.org.toString()
         };
 
-        if (requestParams.response === 'summary') {
+        if (requestParams.responseType === 'summary') {
           return response;
         }
 

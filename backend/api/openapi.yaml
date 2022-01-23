@@ -7328,6 +7328,15 @@ paths:
   /appstore:
     get:
       operationId: appstoreGET
+      parameters:
+      - description: Stringified array of filter objects
+        explode: true
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: string
+        style: form
       responses:
         "200":
           content:
@@ -7385,12 +7394,20 @@ paths:
       - description: Type of returned data
         explode: true
         in: query
-        name: response
+        name: responseType
         required: false
         schema:
           enum:
           - summary
           type: string
+      - description: Stringified array of filter objects
+        explode: true
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: string
+        style: form
       responses:
         "200":
           content:
