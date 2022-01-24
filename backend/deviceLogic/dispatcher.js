@@ -29,6 +29,7 @@ const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
 const sync = require('./sync');
 const IKEv2 = require('./IKEv2');
+const replace = require('./replace');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -124,6 +125,11 @@ const methods = {
     complete: IKEv2.complete,
     error: IKEv2.error,
     remove: IKEv2.remove
+  },
+  replace: {
+    apply: replace.apply,
+    complete: errorNOOP,
+    error: errorNOOP
   }
 };
 
