@@ -189,7 +189,7 @@ const getTunnelsPipeline = (orgList, filters) => {
       deviceAconf: 1,
       deviceBconf: 1,
       encryptionMethod: 1,
-      mtu: 1,
+      advancedOptions: 1,
       'pathlabel.name': 1,
       'pathlabel.color': 1,
       isPending: 1,

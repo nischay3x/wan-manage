@@ -20,9 +20,6 @@ const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const { pendingSchema } = require('./schemas/pendingSchema');
 
-const configs = require('../configs')();
-const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
-
 // Tunnels params schema
 const tunnelKeysSchema = new Schema({
   _id: false,
@@ -49,18 +46,18 @@ const tunnelKeysSchema = new Schema({
 });
 
 // Tunnel advanced options schema
-const tunnelOptionsSchema = new Schema({
+const tunnelAdvancedOptionsSchema = new Schema({
   _id: false,
   // MTU of the tunnel
   mtu: {
-    type: Number,
-    default: globalTunnelMtu
+    type: String,
+    default: ''
   },
   // TCP MSS Clamping
   mssClamp: {
     type: String,
-    enum: ['yes', 'no'],
-    default: 'yes'
+    enum: ['', 'yes', 'no'],
+    default: ''
   },
   // OSPF cost
   ospfCost: {
@@ -149,8 +146,8 @@ const tunnelSchema = new Schema({
     default: null
   },
   // Tunnel advanced options
-  options: {
-    type: tunnelOptionsSchema,
+  advancedOptions: {
+    type: tunnelAdvancedOptionsSchema,
     default: null
   },
   ...pendingSchema
