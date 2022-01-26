@@ -18,6 +18,7 @@
 const periodic = require('./periodic')();
 const connections = require('../websocket/Connections')();
 const { deviceStats, deviceAggregateStats } = require('../models/analytics/deviceStats');
+const applicationStats = require('../models/analytics/applicationStats');
 const Joi = require('joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const notificationsMgr = require('../notifications/notifications')();
@@ -50,6 +51,7 @@ class DeviceStatus {
       ['rtt', 'rtt'],
       ['drop_rate', 'drop_rate']
     ]);
+    this.lastApplicationsStatusTime = {};
 
     this.start = this.start.bind(this);
     this.periodicPollDevices = this.periodicPollDevices.bind(this);
@@ -194,6 +196,7 @@ class DeviceStatus {
             }
             this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
+            this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
             this.generateDevStatsNotifications();
             this.updateDeviceSyncStatus(
@@ -271,6 +274,56 @@ class DeviceStatus {
         params: { deviceID: deviceId, err: err.message },
         periodic: { task: this.taskInfo }
       });
+    }
+  }
+
+  /**
+     * Updates the applications stats per device in the database
+     * @param  {string} deviceID   device UUID
+     * @param  {Object} deviceInfo device info stored per connection (org, mongo device id, socket)
+     * @param  {Object} stats      contains the per-application stats
+     * @return {void}
+     */
+  updateAnalyticsApplicationsStats (deviceID, deviceInfo, statsList) {
+    for (const statsEntry of statsList) {
+      // Update the database once per update time configuration (default: 5min)
+      const msgTime = Math.floor(statsEntry.utc / configs.get('analyticsUpdateTime', 'number')) *
+        configs.get('analyticsUpdateTime', 'number');
+
+      if (this.lastApplicationsStatusTime[deviceID] === msgTime) return;
+
+      const appsStats = statsEntry.application_stats;
+      for (const identifier in appsStats) {
+        const appData = appsStats[identifier];
+
+        this.lastApplicationsStatusTime[deviceID] = msgTime;
+
+        // update the db
+        applicationStats.update(
+          // Query
+          { org: deviceInfo.org, device: deviceInfo.deviceObj, app: identifier, time: msgTime },
+          // Update
+          { $set: { stats: appData } },
+          // Options
+          { upsert: true })
+          .then((resp) => {
+            logger.debug('Storing applications statistics in DB', {
+              params: { deviceId: deviceID, identifier, appData },
+              periodic: { task: this.taskInfo }
+            });
+          }, (err) => {
+            logger.warn('Failed to store applications statistics', {
+              params: { deviceId: deviceID, identifier, appData, err: err.message },
+              periodic: { task: this.taskInfo }
+            });
+          })
+          .catch((err) => {
+            logger.warn('Failed to store applications statistics', {
+              params: { deviceId: deviceID, identifier, appData, err: err.message },
+              periodic: { task: this.taskInfo }
+            });
+          });
+      }
     }
   }
 

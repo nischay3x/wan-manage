@@ -190,9 +190,9 @@ const getJobParams = async (device, application, op) => {
   return params;
 };
 
-const saveConfiguration = async (application, updatedConfig) => {
-  if (isVpn(application.appStoreApp.identifier)) {
-    // reset the subnets array
+const saveConfiguration = async (application, updatedConfig, isNeedToUpdatedDevices) => {
+  if (isVpn(application.appStoreApp.identifier) && isNeedToUpdatedDevices) {
+    // reset the subnets array only if reconfiguration jobs will send to the device
     // in the jobs logic, new subnets will be allocated
     updatedConfig.subnets = [];
   }

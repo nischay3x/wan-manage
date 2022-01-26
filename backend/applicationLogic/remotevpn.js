@@ -242,7 +242,7 @@ const calculateNumberOfSubnets = (vpnNetwork, connectionsPerDevice) => {
 /**
  * Get the subnet that will be assigned to the device
  * @param {object} config configuration object
- * @param {ObjectID} deviceId the if of the device to be assigned
+ * @param {ObjectID} deviceId the id of the device to be assigned
  * @return {[{device: ObjectID, subnet: string}, status]} object of subnet to be assigned
  */
 const getSubnetForDevice = (config, deviceId = '') => {

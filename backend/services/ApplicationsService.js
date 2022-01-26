@@ -418,7 +418,7 @@ class ApplicationsService {
 
       const isNeedToUpdatedDevices = needToUpdatedDevices(app, app.configuration, combinedConfig);
 
-      const updated = await saveConfiguration(app, combinedConfig);
+      const updated = await saveConfiguration(app, combinedConfig, isNeedToUpdatedDevices);
 
       // Update devices if needed
       if (isNeedToUpdatedDevices) {
