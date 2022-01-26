@@ -37,9 +37,9 @@ const pickAllowedFieldsOnly = (configurationRequest, app) => {
   }
 };
 
-const validateConfiguration = async (configurationRequest, app, orgList) => {
+const validateConfiguration = async (configurationRequest, app, orgList, account) => {
   if (isVpn(app.appStoreApp.identifier)) {
-    return await validateVpnConfiguration(configurationRequest, app, orgList);
+    return await validateVpnConfiguration(configurationRequest, app, orgList, account);
   } else {
     return { valid: false, err: 'Invalid application' };
   }

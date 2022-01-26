@@ -145,6 +145,10 @@ class FlexiBilling {
   async updateAccountOrganizations (id, organizations) {
     return null;
   }
+
+  async getFeatureData (account, feature, org = null) {
+    return config.billing.subscription[feature];
+  }
 }
 
 // check if flexibilling is required

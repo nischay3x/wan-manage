@@ -1,7 +1,8 @@
 {
   "billing": {
     "subscription": {
-      "max_devices": 999999
+      "max_devices": 999999,
+      "max_vpn_connections": 5
     }
   }
 }

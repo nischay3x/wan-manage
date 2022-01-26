@@ -37,6 +37,8 @@ const {
   generateDhKey
 } = require('../utils/certificates');
 
+const flexibilling = require('../flexibilling');
+
 /**
  * Indicate if application is remote worker vpn
  * @param {string} applicationName
@@ -145,22 +147,40 @@ const vpnConfigSchema = Joi.object().keys({
 /**
  * Validate vpn configurations. called when a user update the configurations
  * @param {object} configurationRequest
- * @param {objectId} applicationId
+ * @param {objectId} application
  * @param {[orgList]} orgList array of organizations
+ * @param {objectId} accountId accountId
  * @return {{valid: boolean, err: string}}  test result + error if message is invalid
  */
-const validateVpnConfiguration = async (configurationRequest, applicationId, orgList) => {
+const validateVpnConfiguration = async (configurationRequest, application, orgList, account) => {
   // validate user inputs
   const result = vpnConfigSchema.validate(configurationRequest);
   if (result.error) {
     return { valid: false, err: `${result.error.details[0].message}` };
   }
 
-  const maxNumberLimit = configs.get('vpnMaxConnectionsNumber', 'number');
-  if (configurationRequest.connectionsPerDevice > maxNumberLimit) {
+  // get connections numbers configured for all organization
+  // inside the account except of the updated one
+  let currentConnections = await applications.aggregate([
+    { $match: { org: { $in: account.organizations }, _id: { $ne: application._id } } },
+    { $project: { connectionsPerDevice: { $toInt: '$configuration.connectionsPerDevice' } } },
+    { $group: { _id: null, count: { $sum: '$connectionsPerDevice' } } }
+  ]).allowDiskUse(true);
+  currentConnections = currentConnections.length > 0 ? currentConnections[0].count : 0;
+
+  // add to the updated value to the count number
+  const updatedConnections =
+    currentConnections + parseInt(configurationRequest.connectionsPerDevice);
+
+  // check if the total is more than the allowed for this account
+  const maxNumberLimit = await flexibilling.getFeatureData(
+    account._id.toString(), 'max_vpn_connections');
+
+  if (updatedConnections > maxNumberLimit) {
     const err =
-    'You reached the maximum number of connections per VPN server included in your current plan. ' +
-    'Please contact us as yourfriends@flexiwan.com to add more connections';
+    `You reached the maximum number of connections per VPN server included
+    in your current plan (${maxNumberLimit}) for the entire account. ` +
+    'Please contact us at yourfriends@flexiwan.com to add more connections';
     return { valid: false, err: err };
   }
 
@@ -169,7 +189,7 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
   const regex = new RegExp(`\\b${networkId}\\b`, 'i');
   const existsNetworkId = await applications.findOne(
     {
-      _id: { $ne: applicationId },
+      _id: { $ne: application._id },
       configuration: { $exists: 1 },
       'configuration.networkId': { $regex: regex, $options: 'i' }
     }
@@ -185,7 +205,7 @@ const validateVpnConfiguration = async (configurationRequest, applicationId, org
   if (configurationRequest.vpnNetwork && configurationRequest.connectionsPerDevice) {
     const installedDevices = await devices.find({
       org: { $in: orgList },
-      'applications.app': applicationId,
+      'applications.app': application._id,
       $or: [
         { 'applications.status': 'installed' },
         { 'applications.status': 'installing' }

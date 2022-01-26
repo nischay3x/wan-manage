@@ -182,9 +182,7 @@ const configEnv = {
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
     // Endpoint in our flexivpn server that create a dh key
-    createDiffieHellmanApi: 'https://localvpn.flexiwan.com:5001/diffieHellman/create',
-    // max connections for a vpn server
-    vpnMaxConnectionsNumber: 2 // minimum value
+    createDiffieHellmanApi: 'https://localvpn.flexiwan.com:5001/diffieHellman/create'
   },
   // Override for development environment, default environment if not specified
   development: {

@@ -18,6 +18,7 @@
 const Service = require('./Service');
 
 const configs = require('../configs.js')();
+const flexibilling = require('../flexibilling');
 
 class ConfigurationService {
   /**
@@ -28,7 +29,10 @@ class ConfigurationService {
   static async configurationGET ({ org }, { user }) {
     try {
       const restServerUrl = configs.get('restServerUrl', 'list');
-      const vpnMaxConnectionsNumber = configs.get('vpnMaxConnectionsNumber', 'number');
+
+      const accountId = user.defaultAccount._id.toString();
+      const vpnMaxConnectionsNumber = await flexibilling.getFeatureData(
+        accountId, 'max_vpn_connections');
 
       const res = {
         restServerUrl,

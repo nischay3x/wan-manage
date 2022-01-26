@@ -403,7 +403,9 @@ class ApplicationsService {
       // we need to pick only allowed fields for given application
       configurationRequest = pickAllowedFieldsOnly(configurationRequest, app);
 
-      const { valid, err } = await validateConfiguration(configurationRequest, app, orgList);
+      const {
+        valid, err
+      } = await validateConfiguration(configurationRequest, app, orgList, user.defaultAccount);
 
       if (!valid) {
         logger.warn('Application update failed',

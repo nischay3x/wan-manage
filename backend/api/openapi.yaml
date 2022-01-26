@@ -7786,7 +7786,7 @@ components:
     Configuration:
       example:
        restServerUrl: [https://manage.flexiwan.com, https://org.flexiwan.com]
-       vpnMaxConnectionsNumber: 2
+       vpnMaxConnectionsNumber: 5
       properties:
         restServerUrl:
           type: array
