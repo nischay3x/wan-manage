@@ -147,7 +147,7 @@ class FlexiBilling {
   }
 
   async getFeatureData (account, feature, org = null) {
-    return config.billing.subscription[feature];
+    return config.billing.features[feature];
   }
 }
 
