@@ -135,7 +135,7 @@ connectRouter.route('/register')
                   intf.dhcp = intf.dhcp || 'no';
                   intf.gateway = req.body.default_route;
                   intf.metric = '0';
-                } else if (intf.gateway || intf.deviceType === 'lte') {
+                } else if (intf.gateway || ['lte', 'pppoe'].includes(intf.deviceType)) {
                   intf.type = 'WAN';
                   intf.dhcp = intf.dhcp || 'no';
                   if (intf.deviceType === 'lte') {
@@ -149,6 +149,10 @@ connectRouter.route('/register')
                   intf.PublicIP = intf.public_ip || (intf.metric === lowestMetric ? sourceIP : '');
                   intf.PublicPort = intf.public_port || '';
                   intf.NatType = intf.nat_type || '';
+                  if (intf.deviceType === 'pppoe') {
+                    intf.dhcp = 'yes';
+                    intf.useStun = false;
+                  }
                 } else {
                   intf.type = 'LAN';
                   intf.dhcp = 'no';
