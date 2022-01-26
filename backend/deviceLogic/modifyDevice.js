@@ -678,7 +678,7 @@ const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) 
       let tasksDeviceA = [];
       let tasksDeviceB = [];
 
-      const { deviceA, deviceB, pathlabel, peer } = tunnel;
+      const { deviceA, deviceB, pathlabel, peer, mtu, mssClamp, ospfCost } = tunnel;
       const ifcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
       });
@@ -705,6 +705,7 @@ const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) 
         pathlabel,
         deviceA,
         deviceB,
+        { mtu, mssClamp, ospfCost },
         peer
       );
       tasksDeviceA = tasksDeviceA.concat(addTasksA);

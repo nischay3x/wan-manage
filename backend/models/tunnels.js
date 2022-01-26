@@ -45,6 +45,27 @@ const tunnelKeysSchema = new Schema({
   }
 });
 
+// Tunnel advanced options schema
+const tunnelAdvancedOptionsSchema = new Schema({
+  _id: false,
+  // MTU of the tunnel
+  mtu: {
+    type: String,
+    default: ''
+  },
+  // TCP MSS Clamping
+  mssClamp: {
+    type: String,
+    enum: ['', 'yes', 'no'],
+    default: ''
+  },
+  // OSPF cost
+  ospfCost: {
+    type: String,
+    default: ''
+  }
+});
+
 /**
  * Tunnels Database Schema
  */
@@ -122,6 +143,11 @@ const tunnelSchema = new Schema({
   peer: {
     type: Schema.Types.ObjectId,
     ref: 'peers',
+    default: null
+  },
+  // Tunnel advanced options
+  advancedOptions: {
+    type: tunnelAdvancedOptionsSchema,
     default: null
   },
   ...pendingSchema
