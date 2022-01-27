@@ -9343,6 +9343,8 @@ components:
         _id: id
         name: name
         description: description
+        applyOnWan: false
+        overrideDefaultRoute: true
         rules: [rule 1, rule 2, ...]
       properties:
         _id:
@@ -9353,6 +9355,10 @@ components:
           type: string
         description:
           type: string
+        applyOnWan:
+          type: boolean
+        overrideDefaultRoute:
+          type: boolean
         rules:
           items:
             $ref: '#/components/schemas/MLRule'
@@ -9425,12 +9431,18 @@ components:
       example:
         name: name
         description: description
+        applyOnWan: false
+        overrideDefaultRoute: true
         rules: [rule 1, rule 2, ...]
       properties:
         name:
           type: string
         description:
           type: string
+        applyOnWan:
+          type: boolean
+        overrideDefaultRoute:
+          type: boolean
         rules:
           items:
             $ref: '#/components/schemas/MLRuleRequest'
