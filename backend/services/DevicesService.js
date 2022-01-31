@@ -43,8 +43,9 @@ const {
   validateStaticRoute
 } = require('../deviceLogic/validators');
 const {
-  getAllOrganizationLanSubnets, mapLteNames, mapWifiNames, getBridges
+  mapLteNames, mapWifiNames, getBridges
 } = require('../utils/deviceUtils');
+const { getAllOrganizationLanSubnets } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');

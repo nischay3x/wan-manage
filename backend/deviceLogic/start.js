@@ -19,7 +19,7 @@
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { validateDevice } = require('./validators');
-const { getAllOrganizationLanSubnets } = require('../utils/deviceUtils');
+const { getAllOrganizationLanSubnets } = require('../utils/orgUtils');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),

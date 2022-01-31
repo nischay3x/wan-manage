@@ -546,6 +546,10 @@ const deviceApplicationSchema = new Schema({
     enum: [...statusEnums, 'upgrading'],
     default: ''
   },
+  configuration: {
+    type: Schema.Types.Mixed,
+    default: {}
+  },
   requestTime: {
     type: Date,
     default: null

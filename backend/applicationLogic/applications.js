@@ -23,10 +23,11 @@ const {
   onVpnJobComplete,
   onVpnJobRemoved,
   onVpnJobFailed,
-  validateVpnApplication,
+  validateVpnDeviceConfigurationRequest,
   getRemoteVpnParams,
   pickOnlyVpnAllowedFields,
-  needToUpdatedVpnServers
+  needToUpdatedVpnServers,
+  getVpnDeviceSpecificConfiguration
 } = require('./remotevpn');
 
 const pickAllowedFieldsOnly = (configurationRequest, app) => {
@@ -45,9 +46,9 @@ const validateConfiguration = async (configurationRequest, app, orgList, account
   }
 };
 
-const validateApplication = (app, op, deviceIds) => {
+const validateDeviceConfigurationRequest = async (app, deviceConfiguration, deviceList) => {
   if (isVpn(app.appStoreApp.identifier)) {
-    return validateVpnApplication(app, op, deviceIds);
+    return validateVpnDeviceConfigurationRequest(app, deviceConfiguration, deviceList);
   };
 
   return { valid: false, err: 'Invalid application' };
@@ -69,6 +70,13 @@ const onJobRemoved = async (org, app, op, deviceId) => {
   if (isVpn(app.appStoreApp.identifier)) {
     await onVpnJobRemoved(org, app, op, deviceId);
   }
+};
+
+const getDeviceSpecificConfiguration = (app, device, deviceConfiguration, idx) => {
+  if (isVpn(app.appStoreApp.identifier)) {
+    return getVpnDeviceSpecificConfiguration(app, device, deviceConfiguration, idx);
+  }
+  return null;
 };
 
 const getAppAdditionsQuery = (app, device, op) => {
@@ -174,12 +182,12 @@ const getJobParams = async (device, application, op) => {
   }
 
   if (isVpn(application.appStoreApp.identifier)) {
-    const vpnParams = await getRemoteVpnParams(device, application._id, op);
+    const vpnParams = await getRemoteVpnParams(device, application, op);
     if (op === 'install') {
       params = { ...params, ...vpnParams };
 
       // for install job, we passed the config parameters as well
-      const vpnConfigParams = await getRemoteVpnParams(device, application._id, 'config');
+      const vpnConfigParams = await getRemoteVpnParams(device, application, 'config');
       vpnConfigParams.identifier = application.appStoreApp.identifier;
       params = { ...params, configParams: vpnConfigParams };
     } else {
@@ -191,12 +199,6 @@ const getJobParams = async (device, application, op) => {
 };
 
 const saveConfiguration = async (application, updatedConfig, isNeedToUpdatedDevices) => {
-  if (isVpn(application.appStoreApp.identifier) && isNeedToUpdatedDevices) {
-    // reset the subnets array only if reconfiguration jobs will send to the device
-    // in the jobs logic, new subnets will be allocated
-    updatedConfig.subnets = [];
-  }
-
   const updatedApp = await applications.findOneAndUpdate(
     { _id: application._id },
     { $set: { configuration: updatedConfig } },
@@ -216,12 +218,13 @@ const needToUpdatedDevices = (application, oldConfig, newConfig) => {
 module.exports = {
   validateConfiguration,
   pickAllowedFieldsOnly,
-  validateApplication,
+  validateDeviceConfigurationRequest,
   onJobComplete,
   onJobFailed,
   onJobRemoved,
   getJobParams,
   saveConfiguration,
   needToUpdatedDevices,
-  getAppAdditionsQuery
+  getAppAdditionsQuery,
+  getDeviceSpecificConfiguration
 };

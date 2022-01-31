@@ -29,12 +29,90 @@ const {
   onJobComplete,
   onJobRemoved,
   onJobFailed,
-  validateApplication,
-  getAppAdditionsQuery
+  validateDeviceConfigurationRequest,
+  getAppAdditionsQuery,
+  getDeviceSpecificConfiguration
 } = require('../applicationLogic/applications');
 
 const { queueApplicationJob } = require('./modifyDevice');
 const { getJobParams } = require('../applicationLogic/applications');
+
+const handleInstallOp = async (app, device, deviceConfiguration, idx, session) => {
+  const appId = app._id.toString();
+
+  const deviceSpecificConfigurations =
+    getDeviceSpecificConfiguration(app, device, deviceConfiguration, idx);
+
+  const query = { _id: device._id, org: device.org };
+  const update = {};
+
+  const appExists =
+    device.applications &&
+    device.applications.length > 0 &&
+    device.applications.some(a => a.app && a.app.toString() === appId);
+
+  if (appExists) {
+    query['applications.app'] = appId;
+    update.$set = {
+      'applications.$.status': 'installing',
+      'applications.$.configuration': deviceSpecificConfigurations
+    };
+  } else {
+    update.$push = {
+      applications: {
+        app: app._id,
+        status: 'installing',
+        requestTime: Date.now(),
+        configuration: deviceSpecificConfigurations
+      }
+    };
+  };
+
+  // check if need to install more things together with the application
+  const additions = getAppAdditionsQuery(app, device, 'install');
+  if (!update.$set) {
+    update.$set = {};
+  }
+
+  update.$set = {
+    ...update.$set,
+    ...additions
+  };
+
+  await devices.updateOne(query, update, { upsert: false }).session(session);
+};
+
+const handleUninstallOp = async (app, device, session) => {
+  const query = {
+    _id: device._id,
+    org: device.org,
+    'applications.app': app._id
+  };
+  const update = {
+    $set: { 'applications.$.status': 'uninstalling' }
+  };
+
+  // check if need to remove more things together with the application
+  const additions = getAppAdditionsQuery(app, device, 'uninstall');
+  update.$set = {
+    ...update.$set,
+    ...additions
+  };
+  await devices.updateOne(query, update, { upsert: false }).session(session);
+};
+
+const handleUpgradeOp = async (app, device, session) => {
+  const query = {
+    _id: device._id,
+    org: device.org,
+    'applications.app': app._id
+  };
+
+  const update = {
+    $set: { 'applications.$.status': 'upgrading' }
+  };
+  await devices.updateOne(query, update, { upsert: false }).session(session);
+};
 
 /**
  * Creates and queues applications jobs.
@@ -46,120 +124,61 @@ const { getJobParams } = require('../applicationLogic/applications');
  */
 const apply = async (deviceList, user, data) => {
   const { org } = data;
-  const { op, id } = data.meta;
+  const { op, id, deviceConfiguration } = data.meta;
 
-  let app, session, deviceIds;
-  const requestTime = Date.now();
+  let session;
+
+  // Get application
+  const app = await applications.findOne({
+    org: org,
+    _id: id
+  }).populate('appStoreApp').lean();
+
+  if (!app) {
+    throw createError(500, 'The requested app was not purchased');
+  }
+
+  // if the user selected multiple devices, the request goes to devicesApplyPOST function
+  // and the deviceList variable here contain *all* the devices even they are not selected.
+  // therefore we need to filter this array by devices array that comes from request body.
+  // if the user select only one device, the data.devices is equals to null
+  // and this device is passed in the url path
+  if (data.devices) {
+    deviceList = deviceList.filter(d => data.devices.hasOwnProperty(d._id));
+  }
+
+  if (op === 'install' && deviceConfiguration) {
+    // validate device configuration
+    const { valid, err } = await validateDeviceConfigurationRequest(
+      app, deviceConfiguration, deviceList);
+    if (!valid) {
+      throw createError(500, err);
+    }
+  }
 
   try {
     session = await mongoConns.getMainDB().startSession();
-
     await session.withTransaction(async () => {
-      // Get application
-      app = await applications.findOne({
-        org: org,
-        _id: id
-      }).populate('appStoreApp').lean().session(session);
-
-      if (!app) {
-        throw createError(500, 'The requested app was not purchased');
-      }
-
-      // if the user selected multiple devices, the request goes to devicesApplyPOST function
-      // and the deviceList variable here contain *all* the devices even they are not selected.
-      // therefore we need to filter this array by devices array that comes from request body.
-      // if the user select only one device, the data.devices is equals to null
-      // and this device is passed in the url path
-      if (data.devices) {
-        deviceList = deviceList.filter(d => data.devices.hasOwnProperty(d._id));
-      }
-
-      // get the devices id by updated device list
-      deviceIds = deviceList.map(d => d._id.toString());
-
-      const { valid, err } = validateApplication(app, op, deviceIds);
-      if (!valid) {
-        throw createError(500, err);
-      }
-
-      // Save status in the devices
-      const query = {
-        _id: { $in: deviceIds },
-        org: org
-      };
-
-      let update;
-
-      if (op === 'install' || op === 'uninstall') {
-        for (let i = 0; i < deviceList.length; i++) {
-          const device = deviceList[i];
-          const query = { _id: device._id };
-
-          let additions = {};
-          if (op === 'install') {
-            const appExists = device.applications && device.applications.find(
-              a => a.app && a.app.toString() === app._id.toString());
-
-            if (appExists) {
-              query['applications.app'] = id;
-              update = {
-                $set: { 'applications.$.status': 'installing' }
-              };
-            } else {
-              update = {
-                $push: {
-                  applications: {
-                    app: app._id,
-                    status: 'installing',
-                    requestTime: requestTime
-                  }
-                }
-              };
-            }
-
-            // check if need to install more things for the application
-            additions = getAppAdditionsQuery(app, device, op);
-          } else {
-            query['applications.app'] = id;
-            update = {
-              $set: { 'applications.$.status': 'uninstalling' }
-            };
-
-            // check if need to remove more things related the application
-            additions = getAppAdditionsQuery(app, device, op);
-          }
-
-          if (!update.$set) {
-            update.$set = additions;
-          } else {
-            update.$set = {
-              ...update.$set,
-              ...additions
-            };
-          }
-
-          await devices.updateOne(query, update, { upsert: false }).session(session);
+      for (let i = 0; i < deviceList.length; i++) {
+        const device = deviceList[i];
+        const idx = i;
+        if (op === 'install') {
+          await handleInstallOp(app, device, deviceConfiguration, idx, session);
+        } else if (op === 'uninstall') {
+          await handleUninstallOp(app, device, session);
+        } else if (op === 'upgrade') {
+          await handleUpgradeOp(app, device, session);
         }
-
-        // set update to null because we are already updated in this case
-        update = null;
-      } else if (op === 'upgrade') {
-        query['applications.app'] = id;
-
-        update = {
-          $set: { 'applications.$.status': 'upgrading' }
-        };
-      }
-
-      if (update) {
-        await devices.updateMany(query, update, { upsert: false }).session(session);
       }
     });
   } catch (error) {
+    if (session) session.abortTransaction();
     throw error.name === 'MongoError' ? new Error() : error;
   } finally {
     session.endSession();
   }
+
+  const requestTime = Date.now();
 
   // Queue applications jobs. Fail the request if
   // there are jobs that failed to be queued
