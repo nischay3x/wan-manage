@@ -151,7 +151,6 @@ connectRouter.route('/register')
                   intf.NatType = intf.nat_type || '';
                   if (intf.deviceType === 'pppoe') {
                     intf.dhcp = 'yes';
-                    intf.useStun = false;
                   }
                 } else {
                   intf.type = 'LAN';
