@@ -148,6 +148,16 @@ const multiLinkPolicySchema = new Schema({
       message: 'Multi Link policy description format is invalid'
     }
   },
+  applyOnWan: {
+    type: Boolean,
+    default: false,
+    required: false
+  },
+  overrideDefaultRoute: {
+    type: Boolean,
+    default: true,
+    required: false
+  },
   version: {
     type: Number,
     min: 0,
