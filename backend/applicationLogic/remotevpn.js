@@ -18,6 +18,7 @@
 const Joi = require('joi');
 const ObjectId = require('mongoose').Types.ObjectId;
 const pick = require('lodash/pick');
+const cidr = require('cidr-tools');
 const applications = require('../models/applications');
 const { devices } = require('../models/devices');
 const diffieHellmans = require('../models/diffieHellmans');
@@ -30,6 +31,10 @@ const {
   getSubnetMask,
   getStartIp
 } = require('../utils/networks');
+
+const {
+  getAllOrganizationSubnets
+} = require('../utils/orgUtils');
 
 const {
   generateRemoteVpnPKI,
@@ -51,8 +56,6 @@ const isVpn = applicationIdentifier => {
 const allowedFields = [
   'networkId',
   'serverPort',
-  'vpnNetwork',
-  'connectionsPerDevice',
   'routeAllTrafficOverVpn',
   'dnsIps',
   'dnsDomains',
@@ -66,9 +69,7 @@ const pickOnlyVpnAllowedFields = configurationRequest => {
 const vpnConfigSchema = Joi.object().keys({
   networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
   serverPort: Joi.number().port().required(),
-  vpnNetwork: Joi.string().ip({ version: ['ipv4'], cidr: 'required' }).required(),
   routeAllTrafficOverVpn: Joi.boolean().required(),
-  connectionsPerDevice: Joi.number().min(1).required(),
   dnsIps: Joi.string().custom((val, helpers) => {
     const domainList = val.split(/\s*,\s*/);
 
@@ -128,20 +129,6 @@ const vpnConfigSchema = Joi.object().keys({
       enabled: Joi.boolean().required()
     }).required()
   })
-}).custom((obj, helpers) => {
-  const { vpnNetwork, connectionsPerDevice } = obj;
-  const mask = vpnNetwork.split('/').pop();
-  const range = getAvailableIps(mask);
-
-  if (typeof helpers.original.connectionsPerDevice === 'number') {
-    return helpers.message('connectionsPerDevice should be a number within a string');
-  }
-
-  if (range < connectionsPerDevice) {
-    return helpers.message('connections per device is larger then network size');
-  }
-
-  return obj;
 });
 
 /**
@@ -157,31 +144,6 @@ const validateVpnConfiguration = async (configurationRequest, application, orgLi
   const result = vpnConfigSchema.validate(configurationRequest);
   if (result.error) {
     return { valid: false, err: `${result.error.details[0].message}` };
-  }
-
-  // get connections numbers configured for all organization
-  // inside the account except of the updated one
-  let currentConnections = await applications.aggregate([
-    { $match: { org: { $in: account.organizations }, _id: { $ne: application._id } } },
-    { $project: { connectionsPerDevice: { $toInt: '$configuration.connectionsPerDevice' } } },
-    { $group: { _id: null, count: { $sum: '$connectionsPerDevice' } } }
-  ]).allowDiskUse(true);
-  currentConnections = currentConnections.length > 0 ? currentConnections[0].count : 0;
-
-  // add to the updated value to the count number
-  const updatedConnections =
-    currentConnections + parseInt(configurationRequest.connectionsPerDevice);
-
-  // check if the total is more than the allowed for this account
-  const maxNumberLimit = await flexibilling.getFeatureData(
-    account._id.toString(), 'max_vpn_connections');
-
-  if (updatedConnections > maxNumberLimit) {
-    const err =
-    `You reached the maximum number of connections per VPN server included
-    in your current plan (${maxNumberLimit}) for the entire account. ` +
-    'Please contact us at yourfriends@flexiwan.com to add more connections';
-    return { valid: false, err: err };
   }
 
   // check if unique networkId already taken
@@ -201,96 +163,34 @@ const validateVpnConfiguration = async (configurationRequest, application, orgLi
     return { valid: false, err: err };
   }
 
-  // validate subnets
-  if (configurationRequest.vpnNetwork && configurationRequest.connectionsPerDevice) {
-    const installedDevices = await devices.find({
-      org: { $in: orgList },
-      'applications.app': application._id,
-      $or: [
-        { 'applications.status': 'installed' },
-        { 'applications.status': 'installing' }
-      ]
-    });
-
-    const updatedSubnetsCount = calculateNumberOfSubnets(
-      configurationRequest.vpnNetwork,
-      configurationRequest.connectionsPerDevice
-    );
-
-    if (installedDevices.length > updatedSubnetsCount) {
-      return {
-        valid: false,
-        err: 'There are more installed devices then subnets. Please increase the number of subnets'
-      };
-    }
-  }
-
   return { valid: true, err: '' };
 };
 
 /**
  * Get the closest number of IP addresses valid range
- * @param {string} vpnNetwork
  * @param {string} connectionsPerDevice
  * @return {number}  number of splitted subnets
  */
-const getClosestIpRangeNumber = connectionPerDevice => {
+const getClosestIpRangeNumber = number => {
   // The number of IP addresses in a subnet must be in the power of two.
   // That's why we need to get the closest number of IP addresses
-  // out of the "connectionPerDevice" value.
-  const addresses = [8, 16, 32, 64, 128, 256].find(n => n >= connectionPerDevice);
-  return addresses;
-};
+  // out of the "connections" value.
+  if (number > 8 && (Math.log(number) / Math.log(2)) % 1 === 0) {
+    return number;
+  }
 
-/**
- * divide network and return the subnets count
- * @param {string} vpnNetwork
- * @param {string} connectionsPerDevice
- * @return {number}  number of splitted subnets
- */
-const calculateNumberOfSubnets = (vpnNetwork, connectionsPerDevice) => {
-  const mask = vpnNetwork.split('/').pop();
+  let p = 2;
+  // eslint-disable-next-line no-cond-assign
+  while (number >>= 1) {
+    p <<= 1;
+  }
 
-  const addresses = getClosestIpRangeNumber(connectionsPerDevice);
-  const deviceMask = getSubnetMask(addresses);
+  // vpn server range should be minimum /29 (8 ips)
+  if (p < 8) {
+    p = 8;
+  }
 
-  const subnetsCount = Math.pow(2, deviceMask - parseInt(mask));
-
-  return subnetsCount;
-};
-
-/**
- * Get the subnet that will be assigned to the device
- * @param {object} config configuration object
- * @param {ObjectID} deviceId the id of the device to be assigned
- * @return {[{device: ObjectID, subnet: string}, status]} object of subnet to be assigned
- */
-const getSubnetForDevice = (config, deviceId = '') => {
-  // if subnet already assigned to this device, return the subnet
-  const assignedSubnets = config.subnets || [];
-  const exists = assignedSubnets.find(
-    s => s.device && (s.device.toString() === deviceId)
-  );
-  if (exists) return [exists, 'exists'];
-
-  // check if there is free subnet on db, return the subnet
-  const freeSubnetOnDb = assignedSubnets.find(s => {
-    return s.device === null;
-  });
-  if (freeSubnetOnDb) return [{ ...freeSubnetOnDb, device: ObjectId(deviceId) }, 'update'];
-
-  // allocate the next subnet
-  const [ip, mask] = config.vpnNetwork.split('/');
-  const addresses = getClosestIpRangeNumber(config.connectionsPerDevice);
-  const deviceMask = getSubnetMask(addresses);
-  const range = getAvailableIps(deviceMask);
-  const deviceNumber = config.subnets ? config.subnets.length : 0;
-  const startIp = getStartIp(ip, parseInt(mask), range * deviceNumber);
-
-  return [{
-    device: ObjectId(deviceId),
-    subnet: `${startIp}/${deviceMask}`
-  }, 'new'];
+  return p;
 };
 
 const onVpnJobComplete = async (org, app, op, deviceId) => {
@@ -327,53 +227,109 @@ const releaseSubnetForDevice = async (org, appId, deviceId) => {
   //   { org: org, _id: appId },
   //   { $pull: { 'configuration.subnets': { device: ObjectId(deviceId) } } }
   // );
-  await applications.updateOne(
-    { org: org, _id: appId, 'configuration.subnets.device': ObjectId(deviceId) },
-    { $set: { 'configuration.subnets.$.device': null } }
-  );
+  // await applications.updateOne(
+  //   { org: org, _id: appId, 'configuration.subnets.device': ObjectId(deviceId) },
+  //   { $set: { 'configuration.subnets.$.device': null } }
+  // );
+};
+
+const vpnDeviceConfigSchema = Joi.object().keys({
+  connectionsNumber: Joi.number().min(1).required(),
+  networkStartIp: Joi.string().ip({ version: ['ipv4'] }).required()
+});
+
+const getVpnDeviceSpecificConfiguration = (app, device, deviceConfiguration, idx) => {
+  const startIp = deviceConfiguration.networkStartIp;
+
+  const addresses = getClosestIpRangeNumber(deviceConfiguration.connectionsNumber);
+  const deviceMask = getSubnetMask(addresses);
+  const range = getAvailableIps(deviceMask);
+
+  const deviceStartIp = getStartIp(startIp, parseInt(deviceMask), range * idx);
+  const subnet = `${deviceStartIp}/${deviceMask}`;
+
+  return { subnet, connections: deviceConfiguration.connectionsNumber };
 };
 
 /**
- * Validate application. called before starting to install application on the devices
+ * Validate device specific configuration request
  * @param {object} app the application will be installed
  * @param {string} op the operation of the job (install, config, etc.)
  * @param {[ObjectID]} deviceIds the devices id, that application should installed on them
  * @return {{valid: boolean, err: string}}  test result + error if message is invalid
  */
-const validateVpnApplication = (app, op, deviceIds) => {
-  if (op === 'install') {
-    // prevent installation if there are missing required configurations
-    if (!app.configuration.vpnNetwork || !app.configuration.connectionsPerDevice) {
-      return {
-        valid: false,
-        err: 'Required configurations is missing. Please check again the configurations'
-      };
+const validateVpnDeviceConfigurationRequest = async (app, deviceConfiguration, deviceList) => {
+  // prevent installation if there are missing required configurations
+  // validate user inputs
+  const result = vpnDeviceConfigSchema.validate(deviceConfiguration);
+  if (result.error) {
+    return { valid: false, err: `${result.error.details[0].message}` };
+  }
+
+  // make sure that requested VPN network is not overlapped with other networks in the org
+  const startIp = deviceConfiguration.networkStartIp;
+  const addresses = getClosestIpRangeNumber(deviceConfiguration.connectionsNumber);
+  const deviceMask = getSubnetMask(addresses);
+  const range = getAvailableIps(deviceMask);
+
+  const vpnServerNetworks = deviceList.map((dev, idx) => {
+    const deviceStartIp = getStartIp(startIp, parseInt(deviceMask), range * idx);
+    return `${deviceStartIp}/${deviceMask}`;
+  });
+
+  const orgSubnets = await getAllOrganizationSubnets(app.org);
+
+  for (const orgSubnet of orgSubnets) {
+    for (const vpnServerNetwork of vpnServerNetworks) {
+      if (cidr.overlap(orgSubnet, vpnServerNetwork)) {
+        return {
+          valid: false,
+          err: `The requested VPN ${vpnServerNetwork} network is
+          overlapped with existing org network ${orgSubnet}`
+        };
+      }
     }
+  }
 
-    // prevent installation if selected more devices then subnets
-    const subnets = app.configuration.subnets;
-    const takenSubnets = subnets ? subnets.filter(s => s.device != null).length : 0;
+  const accountId = deviceList[0].account.toString();
+  // const appId = app._id.toString();
+  // get connections numbers configured for all organization
+  // inside the account except of the updated one
+  let usedConnections = await devices.aggregate([
+    {
+      $match: {
+        _id: { $nin: deviceList.map(d => d._id) },
+        account: deviceList[0].account,
+        'applications.app': app._id
+      }
+    },
+    {
+      $project: {
+        _id: 0,
+        applications: {
+          $filter: { input: '$applications', cond: { $eq: ['$$this.app', app._id] } }
+        }
+      }
+    },
+    { $unwind: { path: '$applications' } },
+    { $project: { connections: { $toInt: '$applications.configuration.connections' } } },
+    { $group: { _id: null, count: { $sum: '$connections' } } }
+  ]).allowDiskUse(true);
+  usedConnections = usedConnections.length > 0 ? usedConnections[0].count : 0;
 
-    const totalNumberOfSubnets = calculateNumberOfSubnets(
-      app.configuration.vpnNetwork,
-      app.configuration.connectionsPerDevice
-    );
+  // add to the updated value to the count number
+  const requestedConnections = parseInt(deviceConfiguration.connectionsNumber) * deviceList.length;
+  const totalConnections = usedConnections + requestedConnections;
 
-    const freeSubnets = totalNumberOfSubnets - takenSubnets;
+  // check if the total is more than the allowed for this account
+  const allowedConnections = await flexibilling.getFeatureData(accountId, 'max_vpn_connections');
 
-    // create a new devicesIds array contains the devices without assigned subnet
-    const devicesWithoutSubnets = takenSubnets ? deviceIds.filter(d => {
-      return subnets.findIndex(s => s.device && s.device.toString() === d.toString()) === -1;
-    }) : [...deviceIds];
-
-    const isMoreDevicesThenSubnets = freeSubnets < devicesWithoutSubnets.length;
-
-    if (isMoreDevicesThenSubnets) {
-      return {
-        valid: false,
-        err: 'There are no remaining subnets. Please check the configurations'
-      };
-    }
+  if (totalConnections > allowedConnections) {
+    const err =
+    `You reached the maximum number of VPN connections included
+    in your current plan (${allowedConnections}) for the entire account. ` +
+    'Please contact us at yourfriends@flexiwan.com to add more connections';
+    return { valid: false, err: err };
   }
 
   return { valid: true, err: '' };
@@ -444,34 +400,15 @@ const getDeviceKeys = async application => {
 /**
  * Generate params object to be sent to the device
  * @param {object} device the device to get params for
- * @param {string} applicationId the application id to be installed
+ * @param {object} application the application to be installed
  * @param {string} op the operation of the job (install, config, etc.)
  * @return {object} params to be sent to device
 */
-const getRemoteVpnParams = async (device, applicationId, op) => {
+const getRemoteVpnParams = async (device, application, op) => {
   const params = {};
-  const { _id } = device;
-
-  const application = await applications.findOne({ _id: applicationId })
-    .populate('appStoreApp').lean();
   const config = application.configuration;
 
   if (op === 'config') {
-    // get new subnet if there is no subnet already assigned to current device
-    const [deviceSubnet, status] = getSubnetForDevice(config, _id.toString());
-
-    const query = { _id: application._id };
-    const update = { $set: {} };
-
-    if (status === 'update') {
-      query['configuration.subnets.subnet'] = deviceSubnet.subnet;
-      update.$set['configuration.subnets.$.device'] = deviceSubnet.device;
-    } else if (status === 'new') {
-      update.$push = {
-        'configuration.subnets': deviceSubnet
-      };
-    }
-
     const {
       isNew, caPrivateKey, caPublicKey,
       serverKey, serverCrt, tlsKey, dhKey
@@ -479,21 +416,19 @@ const getRemoteVpnParams = async (device, applicationId, op) => {
 
     // if is new keys, save them on db
     if (isNew) {
-      update.$set['configuration.keys.caKey'] = caPrivateKey;
-      update.$set['configuration.keys.caCrt'] = caPublicKey;
-      update.$set['configuration.keys.serverKey'] = serverKey;
-      update.$set['configuration.keys.serverCrt'] = serverCrt;
-      update.$set['configuration.keys.tlsKey'] = tlsKey;
-      update.$set['configuration.keys.dhKey'] = dhKey;
+      const query = { _id: application._id };
+      const update = {
+        $set: {
+          'configuration.keys.caKey': caPrivateKey,
+          'configuration.keys.caCrt': caPublicKey,
+          'configuration.keys.serverKey': serverKey,
+          'configuration.keys.serverCrt': serverCrt,
+          'configuration.keys.tlsKey': tlsKey,
+          'configuration.keys.dhKey': dhKey
+        }
+      };
+      await applications.updateOne(query, update);
     }
-
-    // set subnet to device to prevent same subnet on multiple devices
-    await applications.updateOne(query, update);
-
-    // let version = application.installedVersion;
-    // if (op === 'upgrade') {
-    //   version = application.appStoreApp.latestVersion;
-    // }
 
     const dnsIps = config.dnsIps && config.dnsIps !== ''
       ? config.dnsIps.split(/\s*,\s*/) : [];
@@ -502,8 +437,6 @@ const getRemoteVpnParams = async (device, applicationId, op) => {
       ? config.dnsDomains.split(/\s*,\s*/) : [];
 
     params.routeAllTrafficOverVpn = config.routeAllTrafficOverVpn || false;
-    params.vpnNetwork = deviceSubnet.subnet;
-    params.maxConnectionPerDevice = config.connectionsPerDevice;
     params.port = config.serverPort ? config.serverPort : '';
     params.caKey = caPrivateKey;
     params.caCrt = caPublicKey;
@@ -514,14 +447,18 @@ const getRemoteVpnParams = async (device, applicationId, op) => {
     params.dnsDomains = dnsDomains;
     params.dhKey = dhKey;
     params.vpnPortalServer = configs.get('flexiVpnServer');
+
+    // get per device configuration
+    const deviceApplication = device.applications.find(
+      a => a.app._id.toString() === application._id.toString());
+    params.vpnNetwork = deviceApplication.configuration.subnet;
+    params.connections = deviceApplication.configuration.connections;
   }
 
   return params;
 };
 
 const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
-  if (oldConfig.vpnNetwork !== updatedConfig.vpnNetwork) return true;
-  if (oldConfig.connectionsPerDevice !== updatedConfig.connectionsPerDevice) return true;
   if (oldConfig.serverPort !== updatedConfig.serverPort) return true;
   if (oldConfig.dnsIps !== updatedConfig.dnsIps) return true;
   if (oldConfig.dnsDomains !== updatedConfig.dnsDomains) return true;
@@ -532,12 +469,13 @@ const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
 module.exports = {
   isVpn,
   validateVpnConfiguration,
-  getSubnetForDevice,
+  // getSubnetForDevice,
   onVpnJobComplete,
   onVpnJobRemoved,
   onVpnJobFailed,
-  validateVpnApplication,
+  validateVpnDeviceConfigurationRequest,
   pickOnlyVpnAllowedFields,
   getRemoteVpnParams,
-  needToUpdatedVpnServers
+  needToUpdatedVpnServers,
+  getVpnDeviceSpecificConfiguration
 };

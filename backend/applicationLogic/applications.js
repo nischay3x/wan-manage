@@ -114,7 +114,7 @@ const getAppAdditionsQuery = (app, device, op) => {
     });
 
     // in add operation - add the needed firewall rules
-    if (op === 'install') {
+    if (op === 'install' || op === 'config') {
       const lastSysRule = updatedFirewallRules
         .filter(r => r.system)
         .sort((a, b) => b.priority - a.priority).pop();

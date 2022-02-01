@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const createError = require('http-errors');
 const applications = require('../models/applications');
 const mongoConns = require('../mongoConns.js')();
@@ -24,6 +25,12 @@ const logger = require('../logging/logging')({
 });
 const { devices } = require('../models/devices');
 const ObjectId = require('mongoose').Types.ObjectId;
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
+
+const modifyDeviceApply = require('./modifyDevice').apply;
 
 const {
   onJobComplete,
@@ -34,7 +41,6 @@ const {
   getDeviceSpecificConfiguration
 } = require('../applicationLogic/applications');
 
-const { queueApplicationJob } = require('./modifyDevice');
 const { getJobParams } = require('../applicationLogic/applications');
 
 const handleInstallOp = async (app, device, deviceConfiguration, idx, session) => {
@@ -94,6 +100,25 @@ const handleUninstallOp = async (app, device, session) => {
 
   // check if need to remove more things together with the application
   const additions = getAppAdditionsQuery(app, device, 'uninstall');
+  update.$set = {
+    ...update.$set,
+    ...additions
+  };
+  await devices.updateOne(query, update, { upsert: false }).session(session);
+};
+
+const handleConfigOp = async (app, device, session) => {
+  const query = {
+    _id: device._id,
+    org: device.org,
+    'applications.app': app._id
+  };
+  const update = {
+    $set: { 'applications.$.status': 'installing' }
+  };
+
+  // check if need to remove more things together with the application
+  const additions = getAppAdditionsQuery(app, device, 'config');
   update.$set = {
     ...update.$set,
     ...additions
@@ -166,6 +191,8 @@ const apply = async (deviceList, user, data) => {
           await handleInstallOp(app, device, deviceConfiguration, idx, session);
         } else if (op === 'uninstall') {
           await handleUninstallOp(app, device, session);
+        } else if (op === 'config') {
+          await handleConfigOp(app, device, session);
         } else if (op === 'upgrade') {
           await handleUpgradeOp(app, device, session);
         }
@@ -243,6 +270,94 @@ const apply = async (deviceList, user, data) => {
     status,
     message
   };
+};
+
+const queueApplicationJob = async (
+  deviceList,
+  op,
+  requestTime,
+  application,
+  user,
+  org
+) => {
+  const jobs = [];
+
+  // set job title to be shown to the user on Jobs screen
+  // and job message to be handled by the device
+  let jobTitle = '';
+  let message = '';
+  if (op === 'install') {
+    jobTitle = `Install ${application.appStoreApp.name} application`;
+    message = 'application-install';
+  } else if (op === 'upgrade') {
+    jobTitle = `Upgrade ${application.appStoreApp.name} application`;
+    message = 'application-upgrade';
+  } else if (op === 'config') {
+    jobTitle = `Configure ${application.appStoreApp.name} application`;
+    message = 'application-configure';
+  } else if (op === 'uninstall') {
+    jobTitle = `Uninstall ${application.appStoreApp.name} application`;
+    message = 'application-uninstall';
+  } else {
+    return jobs;
+  }
+
+  // generate job for each selected device
+  for (let i = 0; i < deviceList.length; i++) {
+    const dev = deviceList[i];
+
+    const newDevice = await devices.findOne({ _id: dev._id });
+    const params = await getJobParams(newDevice, application, op);
+
+    const tasks = [{
+      entity: 'agent',
+      message: message,
+      params: params
+    }];
+
+    // response data
+    const data = {
+      application: {
+        device: { _id: dev._id },
+        app: application,
+        requestTime: requestTime,
+        op: op,
+        org: org
+      }
+    };
+
+    // during application installation, we can change the device,
+    // e.g. adding firewall rules.
+    // Here we call modifyDevice function to send the needed jobs
+    await modifyDeviceApply([dev], 'system', {
+      org: org,
+      newDevice: newDevice
+    });
+
+    jobs.push(
+      deviceQueues.addJob(
+        dev.machineId,
+        user.username,
+        org,
+        // Data
+        {
+          title: jobTitle,
+          tasks: tasks
+        },
+        // Response data
+        {
+          method: 'application',
+          data: data
+        },
+        // Metadata
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null
+      )
+    );
+  }
+
+  return Promise.allSettled(jobs);
 };
 
 /**

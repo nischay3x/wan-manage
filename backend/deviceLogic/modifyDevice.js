@@ -45,7 +45,6 @@ const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
-const { getJobParams } = require('../applicationLogic/applications');
 const { getBridges } = require('../utils/deviceUtils');
 
 /**
@@ -1225,34 +1224,12 @@ const apply = async (device, user, data) => {
     modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice.toObject());
   }
 
-  // Check application params
-  // Note: here we don't deal with remove/install application but only with modify.
-  // The assumption here is that same applications array exists
-  // in the origDevice and in the newDevice.
-  for (const deviceApp of origDevice.applications) {
-    const objApplication = deviceApp.app.toObject();
-    // get params for orig
-    const origParams = await getJobParams(origDevice, objApplication, 'config');
-    // get params for new
-    const newParams = await getJobParams(updDevice, objApplication, 'config');
-    // check if they diff
-    if (!isEqual(origParams, newParams)) {
-      // if yes, you have to generate modify application job
-      if (!has(modifyParams, 'modify_applications')) {
-        modifyParams.modify_applications = {};
-      }
-
-      modifyParams.modify_applications[objApplication.appStoreApp.identifier] = objApplication;
-    }
-  }
-
   const modified =
       has(modifyParams, 'modify_routes') ||
       has(modifyParams, 'modify_router') ||
       has(modifyParams, 'modify_interfaces') ||
       has(modifyParams, 'modify_ospf') ||
       has(modifyParams, 'modify_firewall') ||
-      has(modifyParams, 'modify_applications') ||
       has(modifyParams, 'modify_dhcp_config');
 
   // Queue job only if the device has changed
@@ -1292,17 +1269,7 @@ const apply = async (device, user, data) => {
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
     await setJobPendingInDB(device[0]._id, org, true);
     // Queue device modification job
-    let jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
-
-    // run applications modification job
-    if (has(modifyParams, 'modify_applications')) {
-      for (const identifier in modifyParams.modify_applications) {
-        const app = modifyParams.modify_applications[identifier];
-        const device = [data.newDevice];
-        const appJobs = await queueApplicationJob(device, 'config', Date.now(), app, user, org);
-        jobs = jobs.concat(appJobs.map(j => j.value));
-      }
-    }
+    const jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
 
     return {
       ids: jobs.flat().map(job => job.id),
@@ -1516,91 +1483,6 @@ const remove = async (job) => {
   }
 };
 
-const queueApplicationJob = async (
-  deviceList,
-  op,
-  requestTime,
-  application,
-  user,
-  org
-) => {
-  const jobs = [];
-
-  // set job title to be shown to the user on Jobs screen
-  // and job message to be handled by the device
-  let jobTitle = '';
-  let message = '';
-  if (op === 'install') {
-    jobTitle = `Install ${application.appStoreApp.name} application`;
-    message = 'application-install';
-  } else if (op === 'upgrade') {
-    jobTitle = `Upgrade ${application.appStoreApp.name} application`;
-    message = 'application-upgrade';
-  } else if (op === 'config') {
-    jobTitle = `Configure ${application.appStoreApp.name} application`;
-    message = 'application-configure';
-  } else if (op === 'uninstall') {
-    jobTitle = `Uninstall ${application.appStoreApp.name} application`;
-    message = 'application-uninstall';
-  } else {
-    return jobs;
-  }
-
-  // generate job for each selected device
-  for (let i = 0; i < deviceList.length; i++) {
-    const dev = deviceList[i];
-
-    const params = await getJobParams(dev, application, op);
-
-    const tasks = [{
-      entity: 'agent',
-      message: message,
-      params: params
-    }];
-
-    // response data
-    const data = {
-      application: {
-        device: { _id: dev._id },
-        app: application,
-        requestTime: requestTime,
-        op: op,
-        org: org
-      }
-    };
-
-    const newDevice = await devices.findOne({ _id: dev._id });
-    await apply([dev], 'system', {
-      org: org,
-      newDevice: newDevice
-    });
-
-    jobs.push(
-      deviceQueues.addJob(
-        dev.machineId,
-        user.username,
-        org,
-        // Data
-        {
-          title: jobTitle,
-          tasks: tasks
-        },
-        // Response data
-        {
-          method: 'application',
-          data: data
-        },
-        // Metadata
-        { priority: 'normal', attempts: 1, removeOnComplete: false },
-        // Complete callback
-        null
-      )
-    );
-  }
-
-  return Promise.allSettled(jobs);
-};
-
 module.exports = {
   apply: apply,
   complete: complete,
@@ -1608,6 +1490,5 @@ module.exports = {
   sync: sync,
   reconstructTunnels,
   error: error,
-  remove: remove,
-  queueApplicationJob
+  remove: remove
 };
