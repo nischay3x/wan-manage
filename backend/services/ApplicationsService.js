@@ -528,22 +528,10 @@ class ApplicationsService {
         { $unwind: '$applications' },
         { $match: { 'applications.app': ObjectId(id) } },
         {
-          $lookup: {
-            from: 'applications',
-            let: { appId: '$applications.app', deviceId: '$_id' },
-            pipeline: [
-              { $match: { $expr: { $eq: ['$_id', '$$appId'] } } },
-              { $unwind: '$configuration.subnets' },
-              { $match: { $expr: { $eq: ['$configuration.subnets.device', '$$deviceId'] } } },
-              { $project: { subnet: '$configuration.subnets.subnet' } }
-            ],
-            as: 'subnet'
-          }
-        },
-        {
           $project: {
             name: 1,
-            subnet: { $arrayElemAt: ['$subnet', 0] },
+            subnet: '$applications.configuration.subnet',
+            connections: '$applications.configuration.connections',
             applicationStatus: '$applications.status',
             isConnected: 1,
             deviceStatus: '$status',
