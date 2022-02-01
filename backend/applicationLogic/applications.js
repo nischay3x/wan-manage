@@ -20,9 +20,6 @@ const applications = require('../models/applications');
 const {
   isVpn,
   validateVpnConfiguration,
-  onVpnJobComplete,
-  onVpnJobRemoved,
-  onVpnJobFailed,
   validateVpnDeviceConfigurationRequest,
   getRemoteVpnParams,
   pickOnlyVpnAllowedFields,
@@ -52,24 +49,6 @@ const validateDeviceConfigurationRequest = async (app, deviceConfiguration, devi
   };
 
   return { valid: false, err: 'Invalid application' };
-};
-
-const onJobComplete = async (org, app, op, deviceId) => {
-  if (isVpn(app.appStoreApp.identifier)) {
-    await onVpnJobComplete(org, app, op, deviceId);
-  }
-};
-
-const onJobFailed = async (org, app, op, deviceId) => {
-  if (isVpn(app.appStoreApp.identifier)) {
-    await onVpnJobFailed(org, app, op, deviceId);
-  }
-};
-
-const onJobRemoved = async (org, app, op, deviceId) => {
-  if (isVpn(app.appStoreApp.identifier)) {
-    await onVpnJobRemoved(org, app, op, deviceId);
-  }
 };
 
 const getDeviceSpecificConfiguration = (app, device, deviceConfiguration, idx) => {
@@ -219,9 +198,6 @@ module.exports = {
   validateConfiguration,
   pickAllowedFieldsOnly,
   validateDeviceConfigurationRequest,
-  onJobComplete,
-  onJobFailed,
-  onJobRemoved,
   getJobParams,
   saveConfiguration,
   needToUpdatedDevices,

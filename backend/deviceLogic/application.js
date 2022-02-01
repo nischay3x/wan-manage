@@ -24,7 +24,6 @@ const logger = require('../logging/logging')({
   type: 'req'
 });
 const { devices } = require('../models/devices');
-const ObjectId = require('mongoose').Types.ObjectId;
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -33,9 +32,6 @@ const deviceQueues = require('../utils/deviceQueue')(
 const modifyDeviceApply = require('./modifyDevice').apply;
 
 const {
-  onJobComplete,
-  onJobRemoved,
-  onJobFailed,
   validateDeviceConfigurationRequest,
   getAppAdditionsQuery,
   getDeviceSpecificConfiguration
@@ -401,9 +397,6 @@ const complete = async (jobId, res) => {
       update,
       { upsert: false }
     );
-
-    // do actions on job complete
-    await onJobComplete(org, app, op, ObjectId(_id));
   } catch (err) {
     logger.error('Device application status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -450,9 +443,6 @@ const error = async (jobId, res) => {
       { $set: { 'applications.$.status': status } },
       { upsert: false }
     );
-
-    // do actions on job failed
-    await onJobFailed(org, app, op, _id);
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -469,7 +459,7 @@ const error = async (jobId, res) => {
  * @return {void}
  */
 const remove = async (job) => {
-  const { org, app, device, op } = job.data.response.data.application;
+  const { org, app, device } = job.data.response.data.application;
   const { _id } = device;
 
   if (['inactive', 'delayed'].includes(job._state)) {
@@ -489,9 +479,6 @@ const remove = async (job) => {
         { $set: { 'applications.$.status': status } },
         { upsert: false }
       );
-
-      // do actions on app removed
-      await onJobRemoved(org, app, op, ObjectId(_id));
     } catch (err) {
       logger.error('Device application status update failed', {
         params: { job: job, status: status, err: err.message }

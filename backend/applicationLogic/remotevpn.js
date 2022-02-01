@@ -16,7 +16,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Joi = require('joi');
-const ObjectId = require('mongoose').Types.ObjectId;
 const pick = require('lodash/pick');
 const cidr = require('cidr-tools');
 const applications = require('../models/applications');
@@ -191,46 +190,6 @@ const getClosestIpRangeNumber = number => {
   }
 
   return p;
-};
-
-const onVpnJobComplete = async (org, app, op, deviceId) => {
-  if (op === 'uninstall') {
-    // release the subnet if install job removed
-    await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
-  }
-};
-
-const onVpnJobRemoved = async (org, app, op, deviceId) => {
-  if (op === 'install') {
-    // release the subnet if install job removed
-    await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
-  }
-};
-
-const onVpnJobFailed = async (org, app, op, deviceId) => {
-  if (op === 'install') {
-    // release the subnet if install job removed
-    await releaseSubnetForDevice(org, app._id, ObjectId(deviceId));
-  }
-};
-
-/**
- * Release subnet assigned to device
- * @async
- * @param  {ObjectId} org org id to filter by
- * @param  {ObjectId} appId app id to filter by
- * @param  {ObjectId} deviceId device to release
- * @return {void}
- */
-const releaseSubnetForDevice = async (org, appId, deviceId) => {
-  // await applications.updateOne(
-  //   { org: org, _id: appId },
-  //   { $pull: { 'configuration.subnets': { device: ObjectId(deviceId) } } }
-  // );
-  // await applications.updateOne(
-  //   { org: org, _id: appId, 'configuration.subnets.device': ObjectId(deviceId) },
-  //   { $set: { 'configuration.subnets.$.device': null } }
-  // );
 };
 
 const vpnDeviceConfigSchema = Joi.object().keys({
@@ -469,10 +428,6 @@ const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
 module.exports = {
   isVpn,
   validateVpnConfiguration,
-  // getSubnetForDevice,
-  onVpnJobComplete,
-  onVpnJobRemoved,
-  onVpnJobFailed,
   validateVpnDeviceConfigurationRequest,
   pickOnlyVpnAllowedFields,
   getRemoteVpnParams,
