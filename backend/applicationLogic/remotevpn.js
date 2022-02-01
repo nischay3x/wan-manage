@@ -43,13 +43,14 @@ const {
 
 const flexibilling = require('../flexibilling');
 
+const vpnIdentifier = 'com.flexiwan.remotevpn';
 /**
  * Indicate if application is remote worker vpn
  * @param {string} applicationName
  * @return {boolean}
  */
 const isVpn = applicationIdentifier => {
-  return applicationIdentifier === 'com.flexiwan.remotevpn';
+  return applicationIdentifier === vpnIdentifier;
 };
 
 const allowedFields = [
@@ -157,8 +158,8 @@ const validateVpnConfiguration = async (configurationRequest, application, orgLi
   );
 
   if (existsNetworkId) {
-    const err = 'This Network ID is already in use by another account. ' +
-    'Please choose another Unique Network ID';
+    const err = 'This workspace name is already in use by another account or organization. ' +
+    'Please choose another workspace name';
     return { valid: false, err: err };
   }
 
@@ -251,37 +252,18 @@ const validateVpnDeviceConfigurationRequest = async (app, deviceConfiguration, d
   }
 
   const accountId = deviceList[0].account.toString();
-  // const appId = app._id.toString();
-  // get connections numbers configured for all organization
-  // inside the account except of the updated one
-  let usedConnections = await devices.aggregate([
-    {
-      $match: {
-        _id: { $nin: deviceList.map(d => d._id) },
-        account: deviceList[0].account,
-        'applications.app': app._id
-      }
-    },
-    {
-      $project: {
-        _id: 0,
-        applications: {
-          $filter: { input: '$applications', cond: { $eq: ['$$this.app', app._id] } }
-        }
-      }
-    },
-    { $unwind: { path: '$applications' } },
-    { $project: { connections: { $toInt: '$applications.configuration.connections' } } },
-    { $group: { _id: null, count: { $sum: '$connections' } } }
-  ]).allowDiskUse(true);
-  usedConnections = usedConnections.length > 0 ? usedConnections[0].count : 0;
+
+  // get connections numbers configured for the entire account
+  // *except* of the requested devices
+  const devicesIds = deviceList.map(d => d._id);
+  const usedConnections = await getUsedConnections(deviceList[0].account, null, devicesIds);
 
   // add to the updated value to the count number
   const requestedConnections = parseInt(deviceConfiguration.connectionsNumber) * deviceList.length;
   const totalConnections = usedConnections + requestedConnections;
 
   // check if the total is more than the allowed for this account
-  const allowedConnections = await flexibilling.getFeatureData(accountId, 'max_vpn_connections');
+  const allowedConnections = await flexibilling.getFeatureMax(accountId, 'vpn_connections');
 
   if (totalConnections > allowedConnections) {
     const err =
@@ -425,6 +407,48 @@ const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
   return false;
 };
 
+const getUsedConnections = async (account, org = null, exclude = null, session = null) => {
+  const match = {
+    account: account,
+    'applications.identifier': vpnIdentifier
+  };
+
+  if (org) match.org = org;
+  if (exclude) match._id = { $nin: exclude };
+
+  const pipeline = [
+    { $match: match },
+    {
+      $project: {
+        _id: 0,
+        applications: {
+          $filter: { input: '$applications', cond: { $eq: ['$$this.identifier', vpnIdentifier] } }
+        }
+      }
+    },
+    { $unwind: { path: '$applications' } },
+    { $project: { connections: { $toInt: '$applications.configuration.connections' } } },
+    { $group: { _id: null, count: { $sum: '$connections' } } }
+  ];
+  let usedConnections;
+  if (session) {
+    usedConnections = await devices.aggregate(pipeline).allowDiskUse(true).session(session);
+  } else {
+    usedConnections = await devices.aggregate(pipeline).allowDiskUse(true);
+  }
+
+  usedConnections = usedConnections.length > 0 ? usedConnections[0].count : 0;
+  return usedConnections;
+};
+
+const updateVpnBilling = async (app, device, session) => {
+  const orgConnections = await getUsedConnections(device.account, app.org, null, session);
+  const accountConnections = await getUsedConnections(device.account, null, null, session);
+
+  await flexibilling.updateFeature(
+    device.account, app.org, 'vpn_connections', accountConnections, orgConnections, session);
+};
+
 module.exports = {
   isVpn,
   validateVpnConfiguration,
@@ -432,5 +456,6 @@ module.exports = {
   pickOnlyVpnAllowedFields,
   getRemoteVpnParams,
   needToUpdatedVpnServers,
-  getVpnDeviceSpecificConfiguration
+  getVpnDeviceSpecificConfiguration,
+  updateVpnBilling
 };

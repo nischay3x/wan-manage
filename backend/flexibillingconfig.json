@@ -4,7 +4,7 @@
       "max_devices": 999999
     },
     "features": {
-      "max_vpn_connections": 5
+      "vpn_connections": 999999
     }
   }
 }

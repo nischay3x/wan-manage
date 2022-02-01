@@ -73,9 +73,23 @@ adminRouter
       const AccountsForProcessing = accountsCopy.splice(0, 500);
       const ids = AccountsForProcessing.map(a => a.account_id);
       const summary = await flexibilling.getMaxDevicesRegisteredSummmaryByAccounts(ids);
-      summary.forEach(s => {
+      const featuresSummary = await flexibilling.getFeaturesSummaryByAccounts(ids);
+      // const features = keyBy(featuresSummary, 'account');
+      for (const s of summary) {
         billing[s.account] = s;
-      });
+      };
+
+      for (const s of featuresSummary) {
+        if (!(s.account in billing)) {
+          continue;
+        }
+
+        if (!('features' in billing[s.account])) {
+          billing[s.account].features = {};
+        }
+
+        billing[s.account].features[s.feature] = s;
+      };
     } while (accountsCopy.length > 0);
 
     try {
@@ -97,8 +111,20 @@ adminRouter
             current: summary ? summary.current : null,
             max: summary ? summary.max : null,
             lastBillingDate: summary ? summary.lastBillingDate : null,
-            lastBillingMax: summary ? summary.lastBillingMax : null
+            lastBillingMax: summary ? summary.lastBillingMax : null,
+            features: {}
           };
+
+          if (summary && summary.features) {
+            for (const f in summary.features) {
+              accountBillingInfo.features[f] = {
+                current: summary.features[f].current,
+                max: summary.features[f].max,
+                lastBillingDate: summary.features[f].lastBillingDate || null,
+                lastBillingMax: summary.features[f].lastBillingMax || null
+              };
+            }
+          }
           account.billingInfo = accountBillingInfo;
 
           if (!summary) {

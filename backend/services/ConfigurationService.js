@@ -31,8 +31,8 @@ class ConfigurationService {
       const restServerUrl = configs.get('restServerUrl', 'list');
 
       const accountId = user.defaultAccount._id.toString();
-      const vpnMaxConnectionsNumber = await flexibilling.getFeatureData(
-        accountId, 'max_vpn_connections');
+      const vpnMaxConnectionsNumber = await flexibilling.getFeatureMax(
+        accountId, 'vpn_connections');
 
       const res = {
         restServerUrl,

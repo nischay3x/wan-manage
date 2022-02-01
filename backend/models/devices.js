@@ -541,6 +541,10 @@ const deviceApplicationSchema = new Schema({
     default: null,
     required: true
   },
+  identifier: {
+    type: String,
+    required: true
+  },
   status: {
     type: String,
     enum: [...statusEnums, 'upgrading'],

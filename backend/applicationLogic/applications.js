@@ -24,7 +24,8 @@ const {
   getRemoteVpnParams,
   pickOnlyVpnAllowedFields,
   needToUpdatedVpnServers,
-  getVpnDeviceSpecificConfiguration
+  getVpnDeviceSpecificConfiguration,
+  updateVpnBilling
 } = require('./remotevpn');
 
 const pickAllowedFieldsOnly = (configurationRequest, app) => {
@@ -54,6 +55,13 @@ const validateDeviceConfigurationRequest = async (app, deviceConfiguration, devi
 const getDeviceSpecificConfiguration = (app, device, deviceConfiguration, idx) => {
   if (isVpn(app.appStoreApp.identifier)) {
     return getVpnDeviceSpecificConfiguration(app, device, deviceConfiguration, idx);
+  }
+  return null;
+};
+
+const updateApplicationBilling = async (app, device, session) => {
+  if (isVpn(app.appStoreApp.identifier)) {
+    return updateVpnBilling(app, device, session);
   }
   return null;
 };
@@ -202,5 +210,6 @@ module.exports = {
   saveConfiguration,
   needToUpdatedDevices,
   getAppAdditionsQuery,
-  getDeviceSpecificConfiguration
+  getDeviceSpecificConfiguration,
+  updateApplicationBilling
 };

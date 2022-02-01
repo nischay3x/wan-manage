@@ -146,8 +146,16 @@ class FlexiBilling {
     return null;
   }
 
-  async getFeatureData (account, feature, org = null) {
+  async getFeatureMax (account, feature, org = null) {
     return config.billing.features[feature];
+  }
+
+  async updateFeature (account, org, feature, count, orgCount, session) {
+    return true;
+  }
+
+  async getFeaturesSummaryByAccounts (accounts) {
+    return [];
   }
 }
 
