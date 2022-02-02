@@ -1459,6 +1459,22 @@ class DevicesService {
                 );
               }
             };
+            // Not allowed to modify parameters of PPPoE interfaces
+            if (updIntf.deviceType === 'pppoe') {
+              if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
+                (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
+                (updIntf.hasOwnProperty('dhcp') && updIntf.dhcp !== 'yes') ||
+                (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
+                throw new Error(
+                  `Not allowed to modify parameters of PPPoE interfaces (${origIntf.name})`
+                );
+              }
+              // For PPPoE interfaces we use linux network parameters
+              updIntf.IPv4 = origIntf.IPv4;
+              updIntf.IPv4Mask = origIntf.IPv4Mask;
+              updIntf.gateway = origIntf.gateway;
+              updIntf.dhcp = 'yes';
+            };
             // For unasigned and non static interfaces we use linux network parameters
             if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
               updIntf.IPv4 = origIntf.IPv4;

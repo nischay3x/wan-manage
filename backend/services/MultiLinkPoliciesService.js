@@ -145,10 +145,11 @@ class MultiLinkPoliciesService {
         {
           name: 1,
           description: 1,
+          applyOnWan: 1,
+          overrideDefaultRoute: 1,
           rules: 1
         }
       )
-        .lean()
         .skip(offset)
         .limit(limit)
         .populate(
@@ -237,10 +238,11 @@ class MultiLinkPoliciesService {
         {
           name: 1,
           description: 1,
+          applyOnWan: 1,
+          overrideDefaultRoute: 1,
           rules: 1
         }
       )
-        .lean()
         .populate(
           'rules.action.links.pathlabels',
           '_id name description color type'
@@ -269,7 +271,7 @@ class MultiLinkPoliciesService {
    **/
   static async mlpoliciesIdPUT ({ id, org, mLPolicyRequest }, { user }) {
     try {
-      const { name, description, rules } = mLPolicyRequest;
+      const { name, description, applyOnWan, overrideDefaultRoute, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       const opDevices = await devices.find(
@@ -302,12 +304,16 @@ class MultiLinkPoliciesService {
           org: orgList[0].toString(),
           name: name,
           description: description,
+          applyOnWan: applyOnWan,
+          overrideDefaultRoute: overrideDefaultRoute,
           rules: rules
         },
         {
           fields: {
             name: 1,
             description: 1,
+            applyOnWan: 1,
+            overrideDefaultRoute: 1,
             rules: 1
           },
           new: true
@@ -373,7 +379,7 @@ class MultiLinkPoliciesService {
    **/
   static async mlpoliciesPOST ({ mLPolicyRequest, org }, { user }) {
     try {
-      const { name, description, rules } = mLPolicyRequest;
+      const { name, description, applyOnWan, overrideDefaultRoute, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // Verify request schema
@@ -388,6 +394,8 @@ class MultiLinkPoliciesService {
         org: orgList[0].toString(),
         name: name,
         description: description,
+        applyOnWan: applyOnWan,
+        overrideDefaultRoute: overrideDefaultRoute,
         rules: rules
       });
 
@@ -396,10 +404,12 @@ class MultiLinkPoliciesService {
         '_id name description color type'
       ).execPopulate();
 
-      const MLPolicy = (({ _id, name, description, rules }) => ({
+      const MLPolicy = (({ _id, name, description, applyOnWan, overrideDefaultRoute, rules }) => ({
         _id,
         name,
         description,
+        applyOnWan,
+        overrideDefaultRoute,
         rules
       }))(result);
 

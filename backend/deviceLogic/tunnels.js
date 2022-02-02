@@ -504,7 +504,7 @@ const applyTunnelAdd = async (devices, user, data) => {
   }
 
   const { pathLabels, advancedOptions, peers, topology, hub } = data.meta;
-  const { mtu, mssClamp, ospfCost } = advancedOptions;
+  const { mtu, mssClamp, ospfCost } = advancedOptions || {};
 
   if (mtu !== undefined && mtu !== '' && (isNaN(mtu) || mtu < 500 || mtu > 1500)) {
     logger.error('Wrong MTU value when creating tunnels', { params: { mtu } });

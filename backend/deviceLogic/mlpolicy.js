@@ -64,6 +64,8 @@ const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) 
           id: _id,
           priority: priority,
           classification: classification,
+          'apply-on-wan-rx': policy.applyOnWan,
+          'override-default-route': policy.overrideDefaultRoute,
           action: action
         };
       });
@@ -186,6 +188,8 @@ const apply = async (deviceList, user, data) => {
           },
           {
             rules: 1,
+            applyOnWan: 1,
+            overrideDefaultRoute: 1,
             name: 1
           }
         ).session(session);
@@ -482,6 +486,8 @@ const sync = async (deviceId, org) => {
       },
       {
         rules: 1,
+        applyOnWan: 1,
+        overrideDefaultRoute: 1,
         name: 1
       }
     );
@@ -500,6 +506,8 @@ const sync = async (deviceId, org) => {
             id: _id,
             priority: priority,
             classification: classification,
+            'apply-on-wan-rx': mLPolicy.applyOnWan,
+            'override-default-route': mLPolicy.overrideDefaultRoute,
             action: action
           });
         }
