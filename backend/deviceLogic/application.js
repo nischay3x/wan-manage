@@ -472,7 +472,7 @@ const error = async (jobId, res) => {
  * @return {void}
  */
 const remove = async (job) => {
-  const { org, app, device } = job.data.response.data.application;
+  const { org, app, device, op } = job.data.response.data.application;
   const { _id } = device;
 
   if (['inactive', 'delayed'].includes(job._state)) {
@@ -482,16 +482,30 @@ const remove = async (job) => {
     // Set the status to "job deleted" only
     // for the last policy related job.
     const status = 'job deleted';
+    const query = {
+      _id: _id,
+      org: org,
+      'applications.app': app._id
+    };
     try {
-      await devices.updateOne(
-        {
-          _id: _id,
-          org: org,
-          'applications.app': app._id
-        },
+      const newDevice = await devices.findOneAndUpdate(
+        query,
         { $set: { 'applications.$.status': status } },
-        { upsert: false }
+        { upsert: false, new: true }
       );
+
+      if (op === 'install') {
+        // Additional items may have been installed during the installation process,
+        // such as firewall rules. If we delete only the installation job,
+        // they may remain in flexiManage DB. Therefore we also delete the additions from the DB.
+        // The future sync process will know how to handle sending the appropriate JOBS.
+        const additions = getAppAdditionsQuery(app, newDevice, 'uninstall');
+        await devices.findOneAndUpdate(
+          query,
+          { $set: { ...additions } },
+          { upsert: false, new: true }
+        );
+      }
     } catch (err) {
       logger.error('Device application status update failed', {
         params: { job: job, status: status, err: err.message }
