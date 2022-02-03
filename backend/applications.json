@@ -20,6 +20,9 @@
             },
             "manage": {
               "installWith": {
+                "linuxApplications": [
+                  "openvpn"
+                ],
                 "firewallRules": [
                   {
                     "direction": "inbound",

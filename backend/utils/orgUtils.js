@@ -70,7 +70,7 @@ const getTunnelsSubnets = async org => {
 
   for (const tunnel of tunnels) {
     const { ip1 } = generateTunnelParams(tunnel.num);
-    subnets.push(`${ip1}/31}`);
+    subnets.push({ _id: tunnel._id, num: tunnel.num, subnet: `${ip1}/31` });
   }
 
   return subnets;
@@ -80,7 +80,7 @@ const getAllOrganizationSubnets = async orgId => {
   // FIXME: do we need to check for WAN?
   const lanSubnets = await getAllOrganizationLanSubnets(orgId);
   const tunnelSubnets = await getTunnelsSubnets(orgId);
-  return [...lanSubnets.map(s => s.subnet), ...tunnelSubnets];
+  return [...lanSubnets, ...tunnelSubnets];
 };
 
 // Default exports

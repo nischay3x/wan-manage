@@ -36,6 +36,9 @@ const componentsSchema = new Schema({
   },
   manage: {
     installWith: {
+      linuxApplications: {
+        type: [String]
+      },
       firewallRules: {
         type: [Object]
       }

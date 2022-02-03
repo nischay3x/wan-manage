@@ -241,11 +241,13 @@ const validateVpnDeviceConfigurationRequest = async (app, deviceConfiguration, d
 
   for (const orgSubnet of orgSubnets) {
     for (const vpnServerNetwork of vpnServerNetworks) {
-      if (cidr.overlap(orgSubnet, vpnServerNetwork)) {
+      if (cidr.overlap(orgSubnet.subnet, vpnServerNetwork)) {
+        const isDevice = 'name' in orgSubnet;
+        const overlapsWith = isDevice ? `device ${orgSubnet.name}` : `tunnel #${orgSubnet.num}`;
         return {
           valid: false,
-          err: `The requested VPN ${vpnServerNetwork} network is
-          overlapped with existing org network ${orgSubnet}`
+          err: `VPN network ${vpnServerNetwork} overlaps
+          with ${orgSubnet.subnet} defined on ${overlapsWith}`
         };
       }
     }
