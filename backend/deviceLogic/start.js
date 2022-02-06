@@ -19,7 +19,7 @@
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { validateDevice } = require('./validators');
-const { getAllOrganizationLanSubnets } = require('../utils/orgUtils');
+const { getAllOrganizationSubnets } = require('../utils/orgUtils');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -47,16 +47,16 @@ const apply = async (devices, user, data) => {
   ));
 
   const errors = [];
-  let organizationLanSubnets = [];
+  let orgSubnets = [];
   if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-    organizationLanSubnets = await getAllOrganizationLanSubnets(org);
+    orgSubnets = await getAllOrganizationSubnets(mongoose.Types.ObjectId(org));
   }
   const applyPromises = [];
   for (const device of opDevices) {
     const { machineId } = device;
     logger.info('Starting device:', { params: { machineId, user, data } });
 
-    const { valid, err } = validateDevice(device.toObject(), true, organizationLanSubnets);
+    const { valid, err } = validateDevice(device.toObject(), true, orgSubnets);
     if (!valid) {
       logger.warn('Start command validation failed', { params: { device, err } });
       if (!errors.includes(err)) {
@@ -116,7 +116,7 @@ const apply = async (devices, user, data) => {
     ? 'partially completed' : 'completed';
   const message = fulfilled.length < opDevices.length
     ? `Warning: ${fulfilled.length} of ${opDevices.length} start device jobs added.` +
-      `Some devices have following errors: ${reasons.join('. ')}`
+      ` Some devices have following errors: ${reasons.join('. ')}`
     : `Start device job${opDevices.length > 1 ? 's' : ''} added successfully`;
   return { ids: fulfilled, status, message };
 };

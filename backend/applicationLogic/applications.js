@@ -25,7 +25,8 @@ const {
   pickOnlyVpnAllowedFields,
   needToUpdatedVpnServers,
   getVpnDeviceSpecificConfiguration,
-  updateVpnBilling
+  updateVpnBilling,
+  getVpnSubnets
 } = require('./remotevpn');
 
 const pickAllowedFieldsOnly = (configurationRequest, app) => {
@@ -194,12 +195,42 @@ const saveConfiguration = async (application, updatedConfig, isNeedToUpdatedDevi
 
   return updatedApp;
 };
+
 const needToUpdatedDevices = (application, oldConfig, newConfig) => {
   if (isVpn(application.appStoreApp.identifier)) {
     return needToUpdatedVpnServers(oldConfig, newConfig);
   } else {
     return true;
   };
+};
+
+const getApplicationSubnet = async application => {
+  if (isVpn(application.appStoreApp.identifier)) {
+    return getVpnSubnets(application);
+  } else {
+    return true;
+  };
+};
+
+const getApplicationSubnets = async orgId => {
+  const apps = await applications.find({ org: orgId }).populate('appStoreApp').lean();
+  const subnets = [];
+  for (const app of apps) {
+    const appSubnet = await getApplicationSubnet(app);
+    const parsed = appSubnet.map(s => {
+      return {
+        _id: app._id,
+        deviceId: s.deviceId,
+        type: 'application',
+        deviceName: s.deviceName,
+        name: app.appStoreApp.name,
+        subnet: s.subnet
+      };
+    });
+    subnets.push(...parsed);
+  }
+
+  return subnets;
 };
 
 module.exports = {
@@ -211,5 +242,6 @@ module.exports = {
   needToUpdatedDevices,
   getAppAdditionsQuery,
   getDeviceSpecificConfiguration,
-  updateApplicationBilling
+  updateApplicationBilling,
+  getApplicationSubnets
 };

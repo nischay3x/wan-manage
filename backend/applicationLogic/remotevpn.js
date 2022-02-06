@@ -239,17 +239,47 @@ const validateVpnDeviceConfigurationRequest = async (app, deviceConfiguration, d
 
   const orgSubnets = await getAllOrganizationSubnets(app.org);
 
-  for (const orgSubnet of orgSubnets) {
+  // we don't need to check of network is overlapping with the vpn networks of the selected device
+  const orgToCheck = orgSubnets.filter(o => {
+    if (o.type !== 'application') return true;
+    if (o._id.toString() !== app._id.toString()) return true;
+
+    const isSelectedDevice = deviceList.find(d => d._id.toString() === o.deviceId.toString());
+    if (!isSelectedDevice) return true;
+
+    return false;
+  });
+
+  for (const orgSubnet of orgToCheck) {
     for (const vpnServerNetwork of vpnServerNetworks) {
       if (cidr.overlap(orgSubnet.subnet, vpnServerNetwork)) {
-        const isDevice = 'name' in orgSubnet;
-        const overlapsWith = isDevice ? `device ${orgSubnet.name}` : `tunnel #${orgSubnet.num}`;
+        let overlapsWith = 'some network in your organization';
+        if (orgSubnet.type === 'interface') {
+          overlapsWith = `device ${orgSubnet.name}`;
+        } else if (orgSubnet.type === 'tunnel') {
+          overlapsWith = `tunnel #${orgSubnet.num}`;
+        } else if (orgSubnet.type === 'application') {
+          overlapsWith = `application ${orgSubnet.name} in device ${orgSubnet.deviceName}`;
+        }
+
         return {
           valid: false,
           err: `VPN network ${vpnServerNetwork} overlaps
           with ${orgSubnet.subnet} defined on ${overlapsWith}`
         };
       }
+    }
+  }
+
+  // Prevent setting LAN network that overlaps the network we are using for tunnels.
+  for (const vpnServerNetwork of vpnServerNetworks) {
+    if (cidr.overlap(vpnServerNetwork, '10.100.0.0/16')) {
+      return {
+        valid: false,
+        err:
+        `The subnet ${vpnServerNetwork} overlaps
+        with the flexiWAN tunnel loopback range (10.100.0.0/16)`
+      };
     }
   }
 
@@ -409,6 +439,31 @@ const needToUpdatedVpnServers = (oldConfig, updatedConfig) => {
   return false;
 };
 
+const getVpnSubnets = async app => {
+  const apps = await devices.aggregate([
+    { $match: { org: app.org, 'applications.app': app._id } },
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        applications: {
+          $filter: { input: '$applications', cond: { $eq: ['$$this.app', app._id] } }
+        }
+      }
+    },
+    { $unwind: { path: '$applications' } },
+    {
+      $project: {
+        subnet: '$applications.configuration.subnet',
+        deviceName: '$name',
+        deviceId: '$_id'
+      }
+    }
+  ]).allowDiskUse(true);
+
+  return apps;
+};
+
 const getUsedConnections = async (account, org = null, exclude = null, session = null) => {
   const match = {
     account: account,
@@ -459,5 +514,6 @@ module.exports = {
   getRemoteVpnParams,
   needToUpdatedVpnServers,
   getVpnDeviceSpecificConfiguration,
-  updateVpnBilling
+  updateVpnBilling,
+  getVpnSubnets
 };

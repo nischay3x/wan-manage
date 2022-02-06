@@ -45,7 +45,7 @@ const {
 const {
   mapLteNames, mapWifiNames, getBridges
 } = require('../utils/deviceUtils');
-const { getAllOrganizationLanSubnets } = require('../utils/orgUtils');
+const { getAllOrganizationSubnets } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');
@@ -1289,10 +1289,9 @@ class DevicesService {
       const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
       const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
-      let orgLanSubnets = [];
-
+      let orgSubnets = [];
       if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-        orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
+        orgSubnets = await getAllOrganizationSubnets(origDevice.org);
       }
 
       const origTunnels = await tunnelsModel.find({
@@ -1752,7 +1751,7 @@ class DevicesService {
           firewall: origDevice.policies.firewall.toObject()
         };
       }
-      const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
+      const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets);
 
       if (!valid) {
         logger.warn('Device update failed',

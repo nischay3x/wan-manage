@@ -50,6 +50,7 @@ const getAllOrganizationLanSubnets = async orgId => {
       $project: {
         _id: 1,
         name: 1,
+        type: 'interface', // type of subnet
         subnet: {
           $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
         }
@@ -70,17 +71,21 @@ const getTunnelsSubnets = async org => {
 
   for (const tunnel of tunnels) {
     const { ip1 } = generateTunnelParams(tunnel.num);
-    subnets.push({ _id: tunnel._id, num: tunnel.num, subnet: `${ip1}/31` });
+    subnets.push({ _id: tunnel._id, num: tunnel.num, subnet: `${ip1}/31`, type: 'tunnel' });
   }
 
   return subnets;
 };
 
 const getAllOrganizationSubnets = async orgId => {
+  // import inside in order to prevent cycle dependencies
+  const { getApplicationSubnets } = require('../applicationLogic/applications');
+
   // FIXME: do we need to check for WAN?
   const lanSubnets = await getAllOrganizationLanSubnets(orgId);
   const tunnelSubnets = await getTunnelsSubnets(orgId);
-  return [...lanSubnets, ...tunnelSubnets];
+  const applicationSubnets = await getApplicationSubnets(orgId);
+  return [...lanSubnets, ...tunnelSubnets, ...applicationSubnets];
 };
 
 // Default exports
