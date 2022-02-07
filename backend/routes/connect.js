@@ -126,6 +126,7 @@ connectRouter.route('/register')
                 intf.useFixedPublicPort = false;
                 intf.internetAccess = intf.internetAccess === undefined ? ''
                   : intf.internetAccess ? 'yes' : 'no';
+                intf.mtu = !isNaN(intf.mtu) ? +intf.mtu : 1500;
                 if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent
                   intf.PublicIP = intf.public_ip || sourceIP;

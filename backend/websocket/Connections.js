@@ -458,11 +458,14 @@ class Connections {
             hasIpOnDevice: updatedConfig.IPv4 !== ''
           };
 
-          if (!i.isAssigned) {
+          if (!i.isAssigned || i.deviceType === 'pppoe') {
             updInterface.metric = updatedConfig.metric;
+            if (updatedConfig.mtu) {
+              updInterface.mtu = updatedConfig.mtu;
+            }
           };
 
-          if (i.dhcp === 'yes' || !i.isAssigned) {
+          if (i.dhcp === 'yes' || !i.isAssigned || i.deviceType === 'pppoe') {
             updInterface.IPv4 = updatedConfig.IPv4;
             updInterface.IPv4Mask = updatedConfig.IPv4Mask;
             updInterface.IPv6 = updatedConfig.IPv6;
