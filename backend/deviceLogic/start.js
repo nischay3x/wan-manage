@@ -116,7 +116,7 @@ const apply = async (devices, user, data) => {
     ? 'partially completed' : 'completed';
   const message = fulfilled.length < opDevices.length
     ? `Warning: ${fulfilled.length} of ${opDevices.length} start device jobs added.` +
-      `Some devices have following errors: ${reasons.join('. ')}`
+      ` Some devices have following errors: ${reasons.join('. ')}`
     : `Start device job${opDevices.length > 1 ? 's' : ''} added successfully`;
   return { ids: fulfilled, status, message };
 };
