@@ -1386,6 +1386,8 @@ class DevicesService {
               if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
                 (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
                 (updIntf.hasOwnProperty('dhcp') && updIntf.dhcp !== 'yes') ||
+                (updIntf.hasOwnProperty('metric') && updIntf.metric !== origIntf.metric) ||
+                (updIntf.hasOwnProperty('mtu') && updIntf.mtu !== origIntf.mtu) ||
                 (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
                 throw new Error(
                   `Not allowed to modify parameters of PPPoE interfaces (${origIntf.name})`
@@ -1396,6 +1398,8 @@ class DevicesService {
               updIntf.IPv4Mask = origIntf.IPv4Mask;
               updIntf.gateway = origIntf.gateway;
               updIntf.dhcp = 'yes';
+              updIntf.metric = origIntf.metric;
+              updIntf.mtu = origIntf.mtu;
             };
             // For unasigned and non static interfaces we use linux network parameters
             if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
