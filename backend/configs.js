@@ -180,9 +180,7 @@ const configEnv = {
     // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
     globalTunnelMtu: 1500,
     // flexiVpn server portal url
-    flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
-    // Endpoint in our flexivpn server that create a dh key
-    createDiffieHellmanApi: 'https://localvpn.flexiwan.com:5001/diffieHellman/create'
+    flexiVpnServer: 'https://localvpn.flexiwan.com:4443'
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -282,8 +280,7 @@ const configEnv = {
     logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
-    flexiVpnServer: 'https://vpn01.flexiwan.com:443',
-    createDiffieHellmanApi: 'https://vpn01.flexiwan.com:5001/diffieHellman/create'
+    flexiVpnServer: 'https://vpn01.flexiwan.com:443'
   },
   // Override for appqa02 environment
   appqa02: {
@@ -307,8 +304,7 @@ const configEnv = {
     logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
-    flexiVpnServer: 'https://vpnqa02.flexiwan.com:443',
-    createDiffieHellmanApi: 'https://vpn02.flexiwan.com:5001/diffieHellman/create'
+    flexiVpnServer: 'https://vpnqa02.flexiwan.com:443'
   }
 };
 

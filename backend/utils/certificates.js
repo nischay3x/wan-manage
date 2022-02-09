@@ -1,78 +1,65 @@
+// flexiWAN SD-WAN software - flexiEdge, flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2022  flexiWAN Ltd.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+const EasyRSA = require('easyrsa').default;
+const forge = require('node-forge');
+const fs = require('fs');
 const { randomBytes } = require('crypto');
-const configs = require('../configs')();
-// const forge = require('node-forge');
-const axios = require('axios');
-// const pki = forge.pki;
-const selfsigned = require('selfsigned');
 
-const generateRemoteVpnPKI = () => {
-  var attrs = [{ name: 'commonName', value: 'contoso.com' }];
-  var pems = selfsigned.generate(attrs, { days: 365, clientCertificate: true });
-  // var keys = pki.rsa.generateKeyPair(2048);
-  // var cert = pki.createCertificate();
-  // cert.publicKey = keys.publicKey;
-  // cert.serialNumber = '01';
-  // cert.validity.notBefore = new Date();
-  // cert.validity.notAfter = new Date();
-  // cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
-  // cert.validity.notBefore.setDate(cert.validity.notBefore.getDate() - 1);
+const generateRemoteVpnPKI = async (orgName) => {
+  const res = {
+    caCert: null,
+    caKey: null,
+    serverCert: null,
+    serverKey: null,
+    clientCert: null,
+    clientKey: null
+  };
 
-  // var attrs = [{
-  //   name: 'commonName',
-  //   value: 'ChangeMe'
-  // }];
+  return new Promise((resolve, reject) => {
+    const easyrsa = new EasyRSA({ pkiDir: `tmp/openvpn_pki/${orgName}` });
+    easyrsa.initPKI()
+      .then(t => {
+        return easyrsa.buildCA();
+      })
+      .then(data => {
+        res.caCert = forge.pki.certificateToPem(data.cert);
+        res.caKey = forge.pki.privateKeyToPem(data.privateKey);
 
-  // cert.setSubject(attrs);
+        const commonName = 'server';
+        return easyrsa.createServer({ commonName, nopass: true });
+      }).then((data) => {
+        res.serverCert = forge.pki.certificateToPem(data.cert);
+        res.serverKey = forge.pki.privateKeyToPem(data.privateKey);
 
-  // cert.setIssuer(attrs);
-
-  // cert.setExtensions([{
-  //   name: 'subjectKeyIdentifier'
-  // }, {
-  //   name: 'authorityKeyIdentifier',
-  //   keyIdentifier: true,
-  //   authorityCertIssuer: true,
-  //   serialNumber: true
-  // }, {
-  //   name: 'basicConstraints',
-  //   cA: true
-  // }]);
-
-  // cert.sign(keys.privateKey, forge.md.sha256.create());
-
-  // var certificate = pki.certificateToPem(cert);
-  // var privateKey = pki.privateKeyToPem(keys.privateKey);
-
-  return pems;
+        const commonName = 'client';
+        return easyrsa.createClient({ commonName, nopass: true });
+      })
+      .then((data) => {
+        res.clientCert = forge.pki.certificateToPem(data.cert);
+        res.clientKey = forge.pki.privateKeyToPem(data.privateKey);
+        return true;
+      })
+      .finally(() => {
+        fs.rmdirSync(easyrsa.dir, { recursive: true });
+        resolve(res);
+      });
+  });
 };
-
-// const generateKeys = (caKay) => {
-//   var keys = pki.rsa.generateKeyPair(2048);
-//   var cert = pki.createCertificate();
-//   cert.publicKey = keys.publicKey;
-//   cert.serialNumber = '02';
-//   cert.validity.notBefore = new Date();
-//   cert.validity.notAfter = new Date();
-//   cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 1);
-
-//   var attrs = [{
-//     name: 'commonName',
-//     value: 'ChangeMe'
-//   }];
-
-//   cert.setSubject(attrs);
-
-//   cert.setIssuer(attrs);
-
-//   // Sign with CA private key
-//   var caPrivateKey = pki.privateKeyFromPem(caKay);
-//   cert.sign(caPrivateKey, forge.md.sha256.create());
-
-//   var certificate = pki.certificateToPem(cert);
-//   var privateKey = pki.privateKeyToPem(keys.privateKey);
-
-//   return { publicKey: certificate, privateKey: privateKey };
-// };
 
 const generateTlsKey = () => {
   const buf = randomBytes(256);
@@ -100,21 +87,7 @@ const splitLineEveryNChars = (str, regex) => {
   return finalString;
 };
 
-const generateDhKey = () => {
-  return new Promise((resolve, reject) => {
-    axios.get(configs.get('createDiffieHellmanApi'))
-      .then(res => {
-        resolve(res.data);
-      })
-      .catch(err => {
-        resolve(null);
-      });
-  });
-};
-
 module.exports = {
-  // generateKeys,
   generateRemoteVpnPKI,
-  generateDhKey,
   generateTlsKey
 };

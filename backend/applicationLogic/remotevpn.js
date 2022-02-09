@@ -37,8 +37,7 @@ const {
 
 const {
   generateRemoteVpnPKI,
-  generateTlsKey,
-  generateDhKey
+  generateTlsKey
 } = require('../utils/certificates');
 
 const flexibilling = require('../flexibilling');
@@ -313,58 +312,68 @@ const validateVpnDeviceConfigurationRequest = async (app, deviceConfiguration, d
  * @param {object} application the application to generate for
  * @return {{
     isNew: boolean
-    caPrivateKey: string
-    caPublicKey: string
+    caKey: string
+    caCrt: string
     serverKey: string
     serverCrt: string
+    clientKey: string
+    clientCrt: string
     tlsKey: string
     dhKey: string
   }}  the keys to send to device
  */
 const getDeviceKeys = async application => {
   let isNew = false;
-  let caPrivateKey;
-  let caPublicKey;
+  let caKey;
+  let caCrt;
   let serverKey;
   let serverCrt;
+  let clientKey;
+  let clientCrt;
   let tlsKey;
   let dhKey;
 
   if (!application.configuration.keys) {
     isNew = true;
-    const pems = generateRemoteVpnPKI();
+    const pems = await generateRemoteVpnPKI(application.org.toString());
 
-    caPrivateKey = pems.private;
-    caPublicKey = pems.cert;
-    serverKey = pems.clientprivate;
-    serverCrt = pems.clientcert;
+    caKey = pems.caKey;
+    caCrt = pems.caCert;
+    serverKey = pems.serverKey;
+    serverCrt = pems.serverCert;
+    clientKey = pems.clientKey;
+    clientCrt = pems.clientCert;
 
     tlsKey = generateTlsKey();
 
-    // check if there is DH key on stack
     const dhKeyDoc = await diffieHellmans.findOne();
-
     if (!dhKeyDoc) {
-      dhKey = await generateDhKey();
-    } else {
-      dhKey = dhKeyDoc.key;
-      await diffieHellmans.remove({ _id: dhKeyDoc._id });
+      // DH stack should be fulfilled automatically in vpn portal server
+      throw new Error(
+        'An error occurred while creating a DH key for your organization. Please try again later');
     }
+
+    dhKey = dhKeyDoc.key;
+    await diffieHellmans.remove({ _id: dhKeyDoc._id });
   } else {
-    caPrivateKey = application.configuration.keys.caKey;
-    caPublicKey = application.configuration.keys.caCrt;
+    caKey = application.configuration.keys.caKey;
+    caCrt = application.configuration.keys.caCrt;
     serverKey = application.configuration.keys.serverKey;
     serverCrt = application.configuration.keys.serverCrt;
+    clientKey = application.configuration.keys.clientKey;
+    clientCrt = application.configuration.keys.clientCrt;
     tlsKey = application.configuration.keys.tlsKey;
     dhKey = application.configuration.keys.dhKey;
   }
 
   return {
     isNew: isNew,
-    caPrivateKey,
-    caPublicKey,
+    caKey,
+    caCrt,
     serverKey,
     serverCrt,
+    clientKey,
+    clientCrt,
     tlsKey,
     dhKey
   };
@@ -383,8 +392,8 @@ const getRemoteVpnParams = async (device, application, op) => {
 
   if (op === 'config') {
     const {
-      isNew, caPrivateKey, caPublicKey,
-      serverKey, serverCrt, tlsKey, dhKey
+      isNew, caKey, caCrt,
+      serverKey, serverCrt, clientKey, clientCrt, tlsKey, dhKey
     } = await getDeviceKeys(application);
 
     // if is new keys, save them on db
@@ -392,10 +401,12 @@ const getRemoteVpnParams = async (device, application, op) => {
       const query = { _id: application._id };
       const update = {
         $set: {
-          'configuration.keys.caKey': caPrivateKey,
-          'configuration.keys.caCrt': caPublicKey,
+          'configuration.keys.caKey': caKey,
+          'configuration.keys.caCrt': caCrt,
           'configuration.keys.serverKey': serverKey,
           'configuration.keys.serverCrt': serverCrt,
+          'configuration.keys.clientKey': clientKey,
+          'configuration.keys.clientCrt': clientCrt,
           'configuration.keys.tlsKey': tlsKey,
           'configuration.keys.dhKey': dhKey
         }
@@ -411,8 +422,8 @@ const getRemoteVpnParams = async (device, application, op) => {
 
     params.routeAllTrafficOverVpn = config.routeAllTrafficOverVpn || false;
     params.port = config.serverPort ? config.serverPort : '';
-    params.caKey = caPrivateKey;
-    params.caCrt = caPublicKey;
+    params.caKey = caKey;
+    params.caCrt = caCrt;
     params.serverKey = serverKey;
     params.serverCrt = serverCrt;
     params.tlsKey = tlsKey;
