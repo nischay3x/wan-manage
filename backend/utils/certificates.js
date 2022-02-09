@@ -19,6 +19,7 @@ const EasyRSA = require('easyrsa').default;
 const forge = require('node-forge');
 const fs = require('fs');
 const { randomBytes } = require('crypto');
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 const generateRemoteVpnPKI = async (orgName) => {
   const res = {
@@ -52,11 +53,17 @@ const generateRemoteVpnPKI = async (orgName) => {
       .then((data) => {
         res.clientCert = forge.pki.certificateToPem(data.cert);
         res.clientKey = forge.pki.privateKeyToPem(data.privateKey);
-        return true;
+        return resolve(res);
+      })
+      .catch(err => {
+        logger.error('failed to create certificates', { params: { orgName, err } });
+        const errMsg =
+          new Error('An error occurred while creating the keys key for your organization');
+        return reject(errMsg);
       })
       .finally(() => {
+        // on any case, remove the pki dir
         fs.rmdirSync(easyrsa.dir, { recursive: true });
-        resolve(res);
       });
   });
 };
