@@ -17,6 +17,7 @@
 
 const Joi = require('joi');
 const pick = require('lodash/pick');
+const omit = require('lodash/omit');
 const cidr = require('cidr-tools');
 const applications = require('../models/applications');
 const { devices } = require('../models/devices');
@@ -59,6 +60,11 @@ const allowedFields = [
   'dnsIps',
   'dnsDomains',
   'authentications'
+];
+
+const secretFields = [
+  'keys'
+  // TODO: what about private key of gsuite service account?
 ];
 
 const pickOnlyVpnAllowedFields = configurationRequest => {
@@ -539,6 +545,11 @@ const updateVpnBilling = async (app, device, session) => {
     device.account, app.org, 'vpn_connections', accountConnections, orgConnections, session);
 };
 
+const selectVpnConfigurationParams = configuration => {
+  const res = omit(configuration, secretFields);
+  return res;
+};
+
 module.exports = {
   isVpn,
   validateVpnConfiguration,
@@ -549,5 +560,6 @@ module.exports = {
   needToUpdatedVpnServers,
   getVpnDeviceSpecificConfiguration,
   updateVpnBilling,
-  getVpnSubnets
+  getVpnSubnets,
+  selectVpnConfigurationParams
 };

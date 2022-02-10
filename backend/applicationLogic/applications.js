@@ -27,7 +27,8 @@ const {
   needToUpdatedVpnServers,
   getVpnDeviceSpecificConfiguration,
   updateVpnBilling,
-  getVpnSubnets
+  getVpnSubnets,
+  selectVpnConfigurationParams
 } = require('./remotevpn');
 
 const pickAllowedFieldsOnly = (configurationRequest, app) => {
@@ -242,6 +243,14 @@ const getApplicationSubnets = async orgId => {
   return subnets;
 };
 
+const selectConfigurationParams = (identifier, configuration) => {
+  if (isVpn(identifier)) {
+    return selectVpnConfigurationParams(configuration);
+  } else {
+    return true;
+  };
+};
+
 module.exports = {
   validateConfiguration,
   pickAllowedFieldsOnly,
@@ -253,5 +262,6 @@ module.exports = {
   getAppAdditionsQuery,
   getDeviceSpecificConfiguration,
   updateApplicationBilling,
-  getApplicationSubnets
+  getApplicationSubnets,
+  selectConfigurationParams
 };

@@ -30,7 +30,8 @@ const {
   validateConfiguration,
   pickAllowedFieldsOnly,
   saveConfiguration,
-  needToUpdatedDevices
+  needToUpdatedDevices,
+  selectConfigurationParams
 } = require('../applicationLogic/applications');
 const deviceStatus = require('../periodic/deviceStatus')();
 
@@ -69,6 +70,8 @@ class ApplicationsService {
         return v.version === item.installedVersion;
       });
     }
+
+    item.configuration = selectConfigurationParams(item.appStoreApp.identifier, item.configuration);
 
     return item;
   }
@@ -263,7 +266,8 @@ class ApplicationsService {
         return response;
       });
 
-      return Service.successResponse(response);
+      return Service.successResponse(response.map(r =>
+        ApplicationsService.selectApplicationParams(r)));
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
