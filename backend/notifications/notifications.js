@@ -97,7 +97,14 @@ class NotificationsManager {
     // support the 'lookup' command across different databases:
     // 1. Get the list of account IDs with pending notifications.
     // 2. Go over the list, populate the users and send them emails.
-    const accountIDs = await notificationsDb.distinct('account', { status: 'unread' });
+    let accountIDs = [];
+    try {
+      accountIDs = await notificationsDb.distinct('account', { status: 'unread' });
+    } catch (err) {
+      logger.warn('Failed to get account IDs with pending notifications', {
+        params: { err: err.message }
+      });
+    }
     // Notify users only if there are unread notifications
     for (const accountID of accountIDs) {
       try {
