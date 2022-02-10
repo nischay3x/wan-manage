@@ -210,6 +210,28 @@ const getVpnDeviceSpecificConfiguration = (app, device, deviceConfiguration, idx
   return { subnet, connections: deviceConfiguration.connectionsNumber };
 };
 
+const validateVPNUninstallRequest = async (app, deviceList) => {
+  // check if firewall rules applied on the application interface
+  for (const dev of deviceList) {
+    if (!dev.firewall) continue;
+    if (!dev.firewall.rules) continue;
+    const outbound = dev.firewall.rules.some(r => {
+      return r.direction === 'outbound' &&
+        r.interfaces.some(ri => `app_${app.appStoreApp.identifier}`);
+    });
+
+    if (outbound) {
+      return {
+        valid: false,
+        err: `An outbound rule is configured for the application.
+          Please remove it before uninstalling the application`
+      };
+    }
+  }
+
+  return { valid: true, err: '' };
+};
+
 /**
  * Validate device specific configuration request
  * @param {object} app the application will be installed
@@ -521,6 +543,7 @@ module.exports = {
   isVpn,
   validateVpnConfiguration,
   validateVpnDeviceConfigurationRequest,
+  validateVPNUninstallRequest,
   pickOnlyVpnAllowedFields,
   getRemoteVpnParams,
   needToUpdatedVpnServers,

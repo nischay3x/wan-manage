@@ -21,6 +21,7 @@ const {
   isVpn,
   validateVpnConfiguration,
   validateVpnDeviceConfigurationRequest,
+  validateVPNUninstallRequest,
   getRemoteVpnParams,
   pickOnlyVpnAllowedFields,
   needToUpdatedVpnServers,
@@ -48,6 +49,14 @@ const validateConfiguration = async (configurationRequest, app, orgList, account
 const validateDeviceConfigurationRequest = async (app, deviceConfiguration, deviceList) => {
   if (isVpn(app.appStoreApp.identifier)) {
     return validateVpnDeviceConfigurationRequest(app, deviceConfiguration, deviceList);
+  };
+
+  return { valid: false, err: 'Invalid application' };
+};
+
+const validateUninstallRequest = async (app, deviceList) => {
+  if (isVpn(app.appStoreApp.identifier)) {
+    return validateVPNUninstallRequest(app, deviceList);
   };
 
   return { valid: false, err: 'Invalid application' };
@@ -237,6 +246,7 @@ module.exports = {
   validateConfiguration,
   pickAllowedFieldsOnly,
   validateDeviceConfigurationRequest,
+  validateUninstallRequest,
   getJobParams,
   saveConfiguration,
   needToUpdatedDevices,

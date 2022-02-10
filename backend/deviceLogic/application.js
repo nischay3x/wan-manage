@@ -33,6 +33,7 @@ const modifyDeviceApply = require('./modifyDevice').apply;
 
 const {
   validateDeviceConfigurationRequest,
+  validateUninstallRequest,
   getAppAdditionsQuery,
   getDeviceSpecificConfiguration,
   updateApplicationBilling
@@ -181,6 +182,14 @@ const apply = async (deviceList, user, data) => {
     // validate device configuration
     const { valid, err } = await validateDeviceConfigurationRequest(
       app, deviceConfiguration, deviceList);
+    if (!valid) {
+      throw createError(500, err);
+    }
+  }
+
+  if (op === 'uninstall') {
+    // validate uninstall request
+    const { valid, err } = await validateUninstallRequest(app, deviceList);
     if (!valid) {
       throw createError(500, err);
     }
