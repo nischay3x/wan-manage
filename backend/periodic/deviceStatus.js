@@ -236,6 +236,11 @@ class DeviceStatus {
               if (!isBlocked) {
                 // Call get-device-info and reconfig
                 connections.sendDeviceInfoMsg(deviceID, deviceInfo.deviceObj);
+              } else {
+                logger.warn('Failed to send get-device-info due to reconfig errors limiter', {
+                  params: { deviceID, reconfig, needNewIKEv2Certificate },
+                  periodic: { task: this.taskInfo }
+                });
               }
             }
           } else {
