@@ -32,7 +32,7 @@ class ConfigurationService {
 
       const accountId = user.defaultAccount._id.toString();
       const vpnMaxConnectionsNumber = await flexibilling.getFeatureMax(
-        accountId, 'vpn_connections');
+        accountId, 'vpn_portal_users');
 
       const res = {
         restServerUrl,

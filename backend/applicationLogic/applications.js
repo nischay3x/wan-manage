@@ -28,7 +28,8 @@ const {
   getVpnDeviceSpecificConfiguration,
   updateVpnBilling,
   getVpnSubnets,
-  selectVpnConfigurationParams
+  selectVpnConfigurationParams,
+  getVpnStatus
 } = require('./remotevpn');
 
 const pickAllowedFieldsOnly = (configurationRequest, app) => {
@@ -70,9 +71,9 @@ const getDeviceSpecificConfiguration = (app, device, deviceConfiguration, idx) =
   return null;
 };
 
-const updateApplicationBilling = async (app, device, session) => {
+const updateApplicationBilling = async (app) => {
   if (isVpn(app.appStoreApp.identifier)) {
-    return updateVpnBilling(app, device, session);
+    return updateVpnBilling(app);
   }
   return null;
 };
@@ -203,6 +204,8 @@ const saveConfiguration = async (application, updatedConfig, isNeedToUpdatedDevi
     { new: true, upsert: false, runValidators: true }
   ).populate('appStoreApp').lean();
 
+  await updateApplicationBilling(updatedApp);
+
   return updatedApp;
 };
 
@@ -251,6 +254,14 @@ const selectConfigurationParams = (identifier, configuration) => {
   };
 };
 
+const getApplicationStatus = (identifier, account, org) => {
+  if (isVpn(identifier)) {
+    return getVpnStatus(account, org);
+  } else {
+    return {};
+  };
+};
+
 module.exports = {
   validateConfiguration,
   pickAllowedFieldsOnly,
@@ -261,7 +272,8 @@ module.exports = {
   needToUpdatedDevices,
   getAppAdditionsQuery,
   getDeviceSpecificConfiguration,
-  updateApplicationBilling,
   getApplicationSubnets,
-  selectConfigurationParams
+  selectConfigurationParams,
+  updateApplicationBilling,
+  getApplicationStatus
 };

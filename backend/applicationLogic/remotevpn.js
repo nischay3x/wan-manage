@@ -20,6 +20,8 @@ const pick = require('lodash/pick');
 const omit = require('lodash/omit');
 const cidr = require('cidr-tools');
 const applications = require('../models/applications');
+const vpnUniqueUsers = require('../models/vpnUniqueUsers');
+const organizations = require('../models/organizations');
 const { devices } = require('../models/devices');
 const diffieHellmans = require('../models/diffieHellmans');
 const {
@@ -59,7 +61,8 @@ const allowedFields = [
   'routeAllTrafficOverVpn',
   'dnsIps',
   'dnsDomains',
-  'authentications'
+  'authentications',
+  'allowedPortalUsers'
 ];
 
 const secretFields = [
@@ -75,6 +78,7 @@ const vpnConfigSchema = Joi.object().keys({
   networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
   serverPort: Joi.number().port().required(),
   routeAllTrafficOverVpn: Joi.boolean().required(),
+  allowedPortalUsers: Joi.number().min(1).required(),
   dnsIps: Joi.string().custom((val, helpers) => {
     const domainList = val.split(/\s*,\s*/);
 
@@ -165,6 +169,26 @@ const validateVpnConfiguration = async (configurationRequest, application, orgLi
   if (existsNetworkId) {
     const err = 'This workspace name is already in use by another account or organization. ' +
     'Please choose another workspace name';
+    return { valid: false, err: err };
+  }
+
+  // get users portal numbers configured for the entire account
+  // *except* of the requested application
+  const usedPortalUsers = await getConfiguredPortalUsers(account._id, null, [application.org]);
+
+  // add to the updated value to the count number
+  const requestedPortalUsers = parseInt(configurationRequest.allowedPortalUsers);
+  const totalPortalUsers = usedPortalUsers + requestedPortalUsers;
+
+  // check if the total is more than the allowed for this account
+  const accountId = account._id.toString();
+  const allowedPortalUsers = await flexibilling.getFeatureMax(accountId, 'vpn_portal_users');
+
+  if (totalPortalUsers > allowedPortalUsers) {
+    const err =
+    `You reached the maximum number of allowed portal users included
+    in your current plan for the entire account. ` +
+    `Please contact us at ${configs.get('contactUsEmail')} to add more connections`;
     return { valid: false, err: err };
   }
 
@@ -308,28 +332,6 @@ const validateVpnDeviceConfigurationRequest = async (app, deviceConfiguration, d
         with the flexiWAN tunnel loopback range (10.100.0.0/16)`
       };
     }
-  }
-
-  const accountId = deviceList[0].account.toString();
-
-  // get connections numbers configured for the entire account
-  // *except* of the requested devices
-  const devicesIds = deviceList.map(d => d._id);
-  const usedConnections = await getUsedConnections(deviceList[0].account, null, devicesIds);
-
-  // add to the updated value to the count number
-  const requestedConnections = parseInt(deviceConfiguration.connectionsNumber) * deviceList.length;
-  const totalConnections = usedConnections + requestedConnections;
-
-  // check if the total is more than the allowed for this account
-  const allowedConnections = await flexibilling.getFeatureMax(accountId, 'vpn_connections');
-
-  if (totalConnections > allowedConnections) {
-    const err =
-    `You reached the maximum number of VPN connections included
-    in your current plan (${allowedConnections}) for the entire account. ` +
-    'Please contact us at yourfriends@flexiwan.com to add more connections';
-    return { valid: false, err: err };
   }
 
   return { valid: true, err: '' };
@@ -503,51 +505,75 @@ const getVpnSubnets = async app => {
   return apps;
 };
 
-const getUsedConnections = async (account, org = null, exclude = null, session = null) => {
+const getConfiguredPortalUsers = async (account, org = null, exclude = null) => {
   const match = {
-    account: account,
-    'applications.identifier': vpnIdentifier
+    account: account
   };
 
-  if (org) match.org = org;
+  if (org) match._id = org;
   if (exclude) match._id = { $nin: exclude };
 
   const pipeline = [
     { $match: match },
+    { $project: { _id: 1 } },
     {
-      $project: {
-        _id: 0,
-        applications: {
-          $filter: { input: '$applications', cond: { $eq: ['$$this.identifier', vpnIdentifier] } }
-        }
+      $lookup: {
+        from: 'applications',
+        localField: '_id',
+        foreignField: 'org',
+        as: 'applications'
       }
     },
     { $unwind: { path: '$applications' } },
-    { $project: { connections: { $toInt: '$applications.configuration.connections' } } },
-    { $group: { _id: null, count: { $sum: '$connections' } } }
+    {
+      $lookup: {
+        from: 'applicationStore',
+        localField: 'applications.appStoreApp',
+        foreignField: '_id',
+        as: 'appStoreApp'
+      }
+    },
+    { $unwind: { path: '$appStoreApp' } },
+    { $match: { 'appStoreApp.identifier': vpnIdentifier } },
+    { $project: { users: { $toInt: '$applications.configuration.allowedPortalUsers' } } },
+    { $group: { _id: null, count: { $sum: '$users' } } }
   ];
-  let usedConnections;
-  if (session) {
-    usedConnections = await devices.aggregate(pipeline).allowDiskUse(true).session(session);
-  } else {
-    usedConnections = await devices.aggregate(pipeline).allowDiskUse(true);
-  }
 
-  usedConnections = usedConnections.length > 0 ? usedConnections[0].count : 0;
-  return usedConnections;
+  let portalUsers = await organizations.aggregate(pipeline).allowDiskUse(true);
+  portalUsers = portalUsers.length > 0 ? portalUsers[0].count : 0;
+  return portalUsers;
 };
 
-const updateVpnBilling = async (app, device, session) => {
-  const orgConnections = await getUsedConnections(device.account, app.org, null, session);
-  const accountConnections = await getUsedConnections(device.account, null, null, session);
+const updateVpnBilling = async (app) => {
+  const org = await organizations.findOne({ _id: app.org }, 'account').lean();
+
+  const { orgConnections, accountConnections } = await getVpnBillingData(org.account, app.org);
 
   await flexibilling.updateFeature(
-    device.account, app.org, 'vpn_connections', accountConnections, orgConnections, session);
+    org.account, app.org, 'vpn_portal_users', accountConnections, orgConnections);
 };
 
 const selectVpnConfigurationParams = configuration => {
   const res = omit(configuration, secretFields);
   return res;
+};
+
+const getVpnBillingData = async (account, org) => {
+  const orgConnections = await getConfiguredPortalUsers(account, org, null);
+  const accountConnections = await getConfiguredPortalUsers(account, null, null);
+  return { orgConnections, accountConnections };
+};
+
+const getVpnStatus = async (account, org) => {
+  const status = {};
+  const { orgConnections, accountConnections } = await getVpnBillingData(account, org);
+  status.orgConnections = orgConnections;
+  status.accountConnections = accountConnections;
+
+  const uniqueUsers = await vpnUniqueUsers.findOne({ organizationId: org });
+  status.actualConnections = uniqueUsers ? uniqueUsers.uniqueUsers : [];
+
+  return status;
 };
 
 module.exports = {
@@ -561,5 +587,6 @@ module.exports = {
   getVpnDeviceSpecificConfiguration,
   updateVpnBilling,
   getVpnSubnets,
-  selectVpnConfigurationParams
+  selectVpnConfigurationParams,
+  getVpnStatus
 };

@@ -150,7 +150,7 @@ class FlexiBilling {
     return config.billing.features[feature];
   }
 
-  async updateFeature (account, org, feature, count, orgCount, session) {
+  async updateFeature (account, org, feature, count, orgCount) {
     return true;
   }
 

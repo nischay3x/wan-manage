@@ -31,7 +31,9 @@ const {
   pickAllowedFieldsOnly,
   saveConfiguration,
   needToUpdatedDevices,
-  selectConfigurationParams
+  selectConfigurationParams,
+  updateApplicationBilling,
+  getApplicationStatus
 } = require('../applicationLogic/applications');
 const deviceStatus = require('../periodic/deviceStatus')();
 
@@ -348,6 +350,14 @@ class ApplicationsService {
         return Service.rejectResponse('Invalid request', 500);
       }
 
+      const app = await applications
+        .findOne({ org: { $in: orgList }, _id: id })
+        .populate('appStoreApp').lean();
+
+      if (!app) {
+        return Service.rejectResponse('Invalid application id', 500);
+      }
+
       // send jobs to device that installed or installing this app
       const opDevices = await devices.find({
         org: { $in: orgList },
@@ -367,6 +377,8 @@ class ApplicationsService {
       await applications.deleteOne(
         { _id: id, org: { $in: orgList } }
       );
+
+      await updateApplicationBilling(app);
 
       return Service.successResponse(null, 204);
     } catch (e) {
@@ -519,7 +531,8 @@ class ApplicationsService {
         return Service.rejectResponse('Invalid request', 500);
       }
 
-      const app = await applications.findOne({ _id: id }).populate('appStoreApp').lean();
+      const app = await applications.findOne({ _id: id })
+        .populate('appStoreApp').populate('org').lean();
 
       if (!app) {
         return Service.rejectResponse('Invalid application id', 500);
@@ -534,15 +547,15 @@ class ApplicationsService {
         {
           $project: {
             name: 1,
-            subnet: '$applications.configuration.subnet',
-            connections: '$applications.configuration.connections',
-            applicationStatus: '$applications.status',
+            applications: 1,
             isConnected: 1,
             deviceStatus: '$status',
             machineId: 1
           }
         }
       ]).allowDiskUse(true);
+
+      const appStatus = await getApplicationStatus(identifier, app.org.account, app.org._id);
 
       for (const device of devicesList) {
         device.monitoring = {};
@@ -562,7 +575,10 @@ class ApplicationsService {
         device.monitoring = devStatus.applicationStatus[identifier];
       }
 
-      return Service.successResponse({ data: devicesList });
+      return Service.successResponse({
+        devices: devicesList,
+        ...appStatus
+      });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

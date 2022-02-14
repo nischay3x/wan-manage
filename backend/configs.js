@@ -180,7 +180,8 @@ const configEnv = {
     // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
     globalTunnelMtu: 1500,
     // flexiVpn server portal url
-    flexiVpnServer: 'https://localvpn.flexiwan.com:4443'
+    flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
+    contactUsEmail: 'yourfriends@flexiwan.com'
   },
   // Override for development environment, default environment if not specified
   development: {

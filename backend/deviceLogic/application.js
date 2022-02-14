@@ -35,8 +35,7 @@ const {
   validateDeviceConfigurationRequest,
   validateUninstallRequest,
   getAppAdditionsQuery,
-  getDeviceSpecificConfiguration,
-  updateApplicationBilling
+  getDeviceSpecificConfiguration
 } = require('../applicationLogic/applications');
 
 const { getJobParams } = require('../applicationLogic/applications');
@@ -84,13 +83,11 @@ const handleInstallOp = async (app, device, deviceConfiguration, idx, session) =
     ...additions
   };
 
-  const newDevice = await devices.findOneAndUpdate(
+  await devices.findOneAndUpdate(
     query,
     update,
-    { upsert: false, new: true, session: session }
+    { upsert: false, session: session }
   );
-
-  await updateApplicationBilling(app, newDevice, session);
 };
 
 const handleUninstallOp = async (app, device, session) => {
@@ -388,7 +385,6 @@ const complete = async (jobId, res) => {
   });
 
   const { op, org, app } = res.application;
-  const { _id } = res.application.device;
   try {
     const update = {};
     if (op === 'uninstall') {
@@ -404,20 +400,6 @@ const complete = async (jobId, res) => {
         { org: org, _id: app._id },
         { $set: { installedVersion: app.appStoreApp.latestVersion, pendingToUpgrade: false } }
       );
-    }
-
-    const newDevice = await devices.findOneAndUpdate(
-      {
-        _id: _id,
-        org: org,
-        'applications.app': app._id
-      },
-      update,
-      { upsert: false, new: true }
-    );
-
-    if (op === 'uninstall') {
-      await updateApplicationBilling(app, newDevice);
     }
   } catch (err) {
     logger.error('Device application status update failed', {
