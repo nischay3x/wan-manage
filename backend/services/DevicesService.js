@@ -1463,6 +1463,8 @@ class DevicesService {
               if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
                 (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
                 (updIntf.hasOwnProperty('dhcp') && updIntf.dhcp !== 'yes') ||
+                (updIntf.hasOwnProperty('metric') && updIntf.metric !== origIntf.metric) ||
+                (updIntf.hasOwnProperty('mtu') && updIntf.mtu !== origIntf.mtu) ||
                 (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
                 throw new Error(
                   `Not allowed to modify parameters of PPPoE interfaces (${origIntf.name})`
@@ -1473,6 +1475,8 @@ class DevicesService {
               updIntf.IPv4Mask = origIntf.IPv4Mask;
               updIntf.gateway = origIntf.gateway;
               updIntf.dhcp = 'yes';
+              updIntf.metric = origIntf.metric;
+              updIntf.mtu = origIntf.mtu;
             };
             // For unasigned and non static interfaces we use linux network parameters
             if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
@@ -2992,10 +2996,14 @@ class DevicesService {
   static async devicesIdStatusGET ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const { sync, machineId, isApproved, interfaces } = await devices.findOne(
+      const device = await devices.findOne(
         { _id: id, org: { $in: orgList } },
         'sync machineId isApproved interfaces.devId interfaces.internetAccess'
       ).lean();
+      if (!device) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+      const { sync, machineId, isApproved, interfaces } = device;
       const isConnected = connections.isConnected(machineId);
 
       const status = deviceStatus.getDeviceStatus(machineId) || {};

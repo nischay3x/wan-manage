@@ -369,12 +369,19 @@ const updateSyncStatusBasedOnJobResult = async (org, deviceId, machineId, isJobS
 const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
   try {
     // Get current device sync status
-    const { sync, hostname, versions } = await devices.findOne(
+    const device = await devices.findOne(
       { org, _id: deviceId },
       { sync: 1, hostname: 1, versions: 1 }
     )
       .lean();
 
+    if (!device) {
+      logger.error('Sync state update failed, device not found', {
+        params: { deviceId }
+      });
+      return;
+    }
+    const { sync, hostname, versions } = device;
     // Calculate the new sync state based on the hash
     // value received from the agent and the current state
     const { state, hash, autoSync, trials } = sync;
