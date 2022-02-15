@@ -101,7 +101,7 @@ class MultiLinkPoliciesService {
 
     // Duplicate names are not allowed in the same organization
     const hasDuplicateName = await MultiLinkPolicies.findOne(
-      { org, name: { $regex: name, $options: 'i' }, _id: { $ne: ObjectId(_id) } }
+      { org, name: { $regex: new RegExp(`^${name}$`, 'i') }, _id: { $ne: ObjectId(_id) } }
     );
     if (hasDuplicateName) {
       return {
