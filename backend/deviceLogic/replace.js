@@ -39,9 +39,9 @@ const apply = async (opDevices, user, data) => {
   if (!newDevice) {
     throw new Error('Wrong new device id specified');
   }
-  // check if hardware equal
-  const oldInterfaces = oldDevice.interfaces.map(i => i.devId).sort();
-  const newInterfaces = newDevice.interfaces.map(i => i.devId).sort();
+  // check if hardware equal (compare interfaces devId and deviceType)
+  const oldInterfaces = oldDevice.interfaces.map(i => `${i.devId}${i.deviceType}`).sort();
+  const newInterfaces = newDevice.interfaces.map(i => `${i.devId}${i.deviceType}`).sort();
   if (!isEqual(oldInterfaces, newInterfaces)) {
     throw new Error('The hardware of the devices must be equal');
   }

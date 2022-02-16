@@ -667,6 +667,15 @@ class Connections {
         { $set: { versions: versions } },
         { new: true, runValidators: true }
       ).populate('interfaces.pathlabels', '_id name type');
+
+      if (!origDevice) {
+        logger.warn('Device not found in DB', {
+          params: { device: machineId }
+        });
+        this.deviceDisconnect(machineId);
+        return;
+      }
+
       const { expireTime, jobQueued } = origDevice.IKEv2;
 
       const { encryptionMethod } = await orgModel.findOne({ _id: origDevice.org });
@@ -703,14 +712,6 @@ class Connections {
             params: { job: jobResults[0] }
           });
         });
-      }
-
-      if (!origDevice) {
-        logger.warn('Device not found in DB', {
-          params: { device: machineId }
-        });
-        this.deviceDisconnect(machineId);
-        return;
       }
 
       const { tunnels } = deviceInfo.message;
