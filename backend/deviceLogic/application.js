@@ -384,7 +384,7 @@ const complete = async (jobId, res) => {
     params: { result: res, jobId: jobId }
   });
 
-  const { op, org, app } = res.application;
+  const { op, org, app, device } = res.application;
   try {
     const update = {};
     if (op === 'uninstall') {
@@ -401,6 +401,16 @@ const complete = async (jobId, res) => {
         { $set: { installedVersion: app.appStoreApp.latestVersion, pendingToUpgrade: false } }
       );
     }
+
+    await devices.findOneAndUpdate(
+      {
+        _id: device._id,
+        org: org,
+        'applications.app': app._id
+      },
+      update,
+      { upsert: false }
+    );
   } catch (err) {
     logger.error('Device application status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
