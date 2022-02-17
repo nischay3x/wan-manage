@@ -117,6 +117,14 @@ class TokensService {
   static async tokensIdPUT ({ id, org, tokenRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
+      const servers = configs.get('restServerUrl', 'list');
+      // Verify request schema
+      const { valid, message } = await TokensService.verifyRequestSchema(
+        tokenRequest, orgList[0], servers
+      );
+      if (!valid) {
+        throw new Error(message);
+      }
       const result = await Tokens.findOneAndUpdate(
         { _id: id, org: { $in: orgList } },
         { $set: tokenRequest },
@@ -154,17 +162,18 @@ class TokensService {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       const servers = configs.get('restServerUrl', 'list');
+      // Verify request schema
+      const { valid, message } = await TokensService.verifyRequestSchema(
+        tokenRequest, orgList[0], servers
+      );
+      if (!valid) {
+        throw new Error(message);
+      }
       let server = tokenRequest.server;
 
       // If no server specified by user, use the first one in the list
-      // If specified by user, check if it exists in the configs list
       if (!server || server === '') {
         server = servers[0];
-      } else {
-        const known = servers.find(ser => ser === server);
-        if (!known) {
-          throw new Error('Token error: Server is not allowed');
-        }
       }
 
       const tokenData = {
@@ -209,6 +218,29 @@ class TokensService {
         e.status || 500
       );
     }
+  }
+
+  static async verifyRequestSchema (tokenRequest, org, allowedServers) {
+    const { _id, name, server } = tokenRequest;
+
+    // Duplicate names are not allowed in the same organization
+    const hasDuplicateName = await Tokens.findOne(
+      { org, name: { $regex: new RegExp(`^${name}$`, 'i') }, _id: { $ne: _id } }
+    );
+    if (hasDuplicateName) {
+      return {
+        valid: false,
+        message: 'Duplicate names are not allowed in the same organization'
+      };
+    };
+    // If server specified by user, check if it exists in the configs list
+    if (server && !allowedServers.includes(server)) {
+      return {
+        valid: false,
+        message: 'Token error: Server is not allowed'
+      };
+    }
+    return { valid: true, message: '' };
   }
 }
 
