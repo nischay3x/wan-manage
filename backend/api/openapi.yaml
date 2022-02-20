@@ -7727,54 +7727,54 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
-  /appstore/purchased/{id}/upgrade:
-    post:
-      operationId: appstorePurchasedIdUpgradePost
-      parameters:
-      - description: application id to upgrade
-        explode: true
-        in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        style: simple
-      responses:
-        "200":
-          description: Successful operation
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server errorS
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary: Upgrade application
-      tags:
-      - Applications
-      x-swagger-router-controller: Applications
-      x-openapi-router-controller: ApplicationsController
-      x-openapi-router-service: ApplicationsService
+  # /appstore/purchased/{id}/upgrade:
+  #   post:
+  #     operationId: appstorePurchasedIdUpgradePost
+  #     parameters:
+  #     - description: application id to upgrade
+  #       explode: true
+  #       in: path
+  #       name: id
+  #       required: true
+  #       schema:
+  #         type: string
+  #       style: simple
+  #     responses:
+  #       "200":
+  #         description: Successful operation
+  #       "401":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/Error'
+  #         description: Unauthorized
+  #       "403":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/Error'
+  #         description: Forbidden
+  #       "500":
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/Error'
+  #         description: Internal server errorS
+  #       default:
+  #         content:
+  #           application/json:
+  #             schema:
+  #               $ref: '#/components/schemas/Error'
+  #         description: Unexpected error
+  #     security:
+  #     - apiKey: []
+  #     - bearerAuth: []
+  #     summary: Upgrade application
+  #     tags:
+  #     - Applications
+  #     x-swagger-router-controller: Applications
+  #     x-openapi-router-controller: ApplicationsController
+  #     x-openapi-router-service: ApplicationsService
 components:
   responses:
     NotFoundError:
