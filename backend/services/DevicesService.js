@@ -31,7 +31,8 @@ const mongoose = require('mongoose');
 const validator = require('validator');
 const net = require('net');
 const pick = require('lodash/pick');
-const path = require('path');
+const isEqual = require('lodash/isEqual');
+
 const uniqBy = require('lodash/uniqBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
@@ -43,12 +44,11 @@ const {
   validateStaticRoute
 } = require('../deviceLogic/validators');
 const {
-  getAllOrganizationLanSubnets, mapLteNames, mapWifiNames, getBridges
+  getAllOrganizationLanSubnets, mapLteNames, mapWifiNames, getBridges, parseLteStatus
 } = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');
-const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -743,36 +743,27 @@ class DevicesService {
             registrationNetworkState: {}
           },
           parseResponse: async response => {
-            response = mapLteNames(response);
-            let defaultApn = response.defaultSettings ? response.defaultSettings.apn : null;
-            const mcc = response.systemInfo.mcc;
-            const mnc = response.systemInfo.mnc;
+            response = parseLteStatus(response);
 
-            if (mcc && mnc) {
-              const key = mcc + '-' + mnc;
-              if (apnsJson[key]) {
-                defaultApn = apnsJson[key];
-              }
+            const apnIsDiff = !isEqual(ifc.deviceParams.defaultSettings, response.defaultSettings);
+            const pinStateIsDiff = !isEqual(ifc.deviceParams.initial_pin1_state, response.pinState);
+
+            const update = {};
+            if (apnIsDiff) {
+              update['interfaces.$.deviceParams.defaultSettings'] = response.defaultSettings;
+            }
+            if (pinStateIsDiff) {
+              update['interfaces.$.deviceParams.initial_pin1_state'] = response.pinState;
             }
 
-            // update pin state
-            await devices.updateOne(
-              { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-              {
-                $set: {
-                  'interfaces.$.deviceParams.initial_pin1_state': status.pinState,
-                  'interfaces.$.deviceParams.defaultSettings': status.defaultSettings
-                }
-              }
-            );
+            if (Object.keys(update).length > 0) {
+              await devices.updateOne(
+                { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+                { $set: update }
+              );
+            }
 
-            return {
-              ...response,
-              defaultSettings: {
-                ...response.defaultSettings,
-                apn: defaultApn
-              }
-            };
+            return response;
           }
         },
         wifi: {
