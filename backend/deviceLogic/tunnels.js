@@ -79,6 +79,25 @@ const handleTunnels = async (
     throw new Error('Not supported key exchange method');
   }
 
+  const devicesIds = opDevices.map(d => d._id);
+  const existingTunnels = await tunnelsModel.find(
+    {
+      isActive: true,
+      org: org,
+      pathlabel: pathLabels.length > 0 ? { $ne: null } : { $eq: null },
+      $or: [
+        { deviceA: { $in: devicesIds } },
+        { deviceB: { $in: devicesIds } }
+      ]
+    },
+    {
+      num: 1,
+      interfaceB: 1,
+      interfaceA: 1,
+      pathlabel: 1
+    }
+  );
+
   const isHubAndSpoke = (topology === 'hubAndSpoke');
   let aLoopStart = 0;
   let aLoopStop = devicesLen - 1;
@@ -191,8 +210,13 @@ const handleTunnels = async (
 
               if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
                 // If a tunnel already exists, skip the configuration
-                const tunnelFound = await getTunnel(org, null, wanIfcA, wanIfcB);
-                if (tunnelFound.length > 0) {
+                const tunnelFound = existingTunnels.find(t => {
+                  return t.pathlabel === null && (
+                    (wanIfcA._id.equals(t.interfaceA) && wanIfcB._id.equals(t.interfaceB)) ||
+                    (wanIfcB._id.equals(t.interfaceA) && wanIfcA._id.equals(t.interfaceB))
+                  );
+                });
+                if (tunnelFound) {
                   logger.debug('Found tunnel', {
                     params: { tunnel: tunnelFound }
                   });
@@ -220,8 +244,13 @@ const handleTunnels = async (
                   isFoundInterfacesWithCommonLabels = true;
                 }
                 // If a tunnel already exists, skip the configuration
-                const tunnelFound = await getTunnel(org, label, wanIfcA, wanIfcB);
-                if (tunnelFound.length > 0) {
+                const tunnelFound = existingTunnels.find(t => {
+                  return t.pathlabel && label === t.pathlabel.toString() && (
+                    (wanIfcA._id.equals(t.interfaceA) && wanIfcB._id.equals(t.interfaceB)) ||
+                    (wanIfcB._id.equals(t.interfaceA) && wanIfcA._id.equals(t.interfaceB))
+                  );
+                });
+                if (tunnelFound) {
                   logger.debug('Found tunnel', {
                     params: { tunnel: tunnelFound }
                   });
@@ -687,7 +716,7 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB, peerId = false) => {
  * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {boolean}  peer         peer configurations
  */
-const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
+const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
   deviceAIntf, deviceBIntf, encryptionMethod, advancedOptions, peer = null) => {
   logger.debug(`Adding tunnel${peer ? '' : ' between devices'}`, {
     params: {
@@ -702,33 +731,47 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
       peer
     }
   });
-
-  var tPromise = new Promise(function (resolve, reject) {
+  let tunnelnum = null;
+  try {
     // Check if tunnel can be created
     // Get a unique tunnel number
     // Search first in deleted tunnels
-    tunnelsModel.findOneAndUpdate(
+    const tunnelResp = await tunnelsModel.findOneAndUpdate(
       // Query
       { isActive: false, org: org },
       // Update, make sure other query doesn't find the same number
       { isActive: true },
       // Options
       { upsert: false }
-    )
-      .then(async (tunnelResp) => {
-        logger.debug('Found a tunnel', { params: { tunnel: tunnelResp } });
-
-        if (tunnelResp !== null) { // deleted tunnel found, use it
-          const tunnelnum = tunnelResp.num;
-          logger.info('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
-
-          // Configure tunnel using this num
-          const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-            deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, advancedOptions, peer);
-
-          return resolve(tunnelJobs);
-        } else { // No deleted tunnel found, get a new one
-          tunnelIDsModel.findOneAndUpdate(
+    );
+    if (tunnelResp !== null) { // deleted tunnel found, use it
+      tunnelnum = tunnelResp.num;
+      logger.info('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
+    } else {
+      try {
+        const idResp = await tunnelIDsModel.findOneAndUpdate(
+          // Query, allow only 15000 tunnels per organization
+          {
+            org: org,
+            nextAvailID: { $gte: 0, $lt: 15000 }
+          },
+          // Update
+          { $inc: { nextAvailID: 1 } },
+          // Options
+          { new: true, upsert: true }
+        );
+        tunnelnum = idResp.nextAvailID;
+        logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
+      } catch (err) {
+        // org is a key value in the collection, upsert sometimes creates a new doc
+        // (if two upserts done at once)
+        // In this case we need to check the error and try again if such occurred
+        // See more info in:
+        // eslint-disable-next-line max-len
+        // https://stackoverflow.com/questions/37295648/mongoose-duplicate-key-error-with-upsert
+        if (err.code === 11000) {
+          logger.debug('2nd try to find tunnel ID', { params: {} });
+          const idResp = tunnelIDsModel.findOneAndUpdate(
             // Query, allow only 15000 tunnels per organization
             {
               org: org,
@@ -738,75 +781,39 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
             { $inc: { nextAvailID: 1 } },
             // Options
             { new: true, upsert: true }
-          ).then(async (idResp) => {
-            const tunnelnum = idResp.nextAvailID;
-            logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
-
-            // Configure tunnel using this num
-            const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-              deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, advancedOptions, peer);
-
-            return resolve(tunnelJobs);
-          }, (err) => {
-            // org is a key value in the collection, upsert sometimes creates a new doc
-            // (if two upserts done at once)
-            // In this case we need to check the error and try again if such occurred
-            // See more info in:
-            // eslint-disable-next-line max-len
-            // https://stackoverflow.com/questions/37295648/mongoose-duplicate-key-error-with-upsert
-            if (err.code === 11000) {
-              logger.debug('2nd try to find tunnel ID', { params: {} });
-              tunnelIDsModel.findOneAndUpdate(
-                // Query, allow only 15000 tunnels per organization
-                {
-                  org: org,
-                  nextAvailID: { $gte: 0, $lt: 15000 }
-                },
-                // Update
-                { $inc: { nextAvailID: 1 } },
-                // Options
-                { new: true, upsert: true }
-              ).then(async (idResp) => {
-                const tunnelnum = idResp.nextAvailID;
-                logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
-                // Configure tunnel using this num
-                const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-                  deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, advancedOptions, peer);
-
-                return resolve(tunnelJobs);
-              }, (err) => {
-                logger.error('Tunnel ID not found (not found twice)', {
-                  params: { reason: err.message }
-                });
-                reject(new Error('Tunnel ID not found'));
-              });
-            } else {
-              // Another error
-              logger.error('Tunnel ID not found (other error)', {
-                params: { reason: err.message }
-              });
-              reject(new Error('Tunnel ID not found'));
-            }
-          })
-            .catch((err) => {
-              logger.error('Tunnel ID not found (general error)', {
-                params: { reason: err.message }
-              });
-              reject(new Error('Tunnel ID not found'));
-            });
+          );
+          tunnelnum = idResp.nextAvailID;
+          logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
         }
-      }, (err) => {
-        logger.error('Tunnels search error', { params: { reason: err.message } });
-        reject(new Error('Tunnels search error'));
-      })
-      .catch((err) => {
-        logger.error('Tunnels search error (general error)', {
-          params: { reason: err.message }
+      }
+    }
+    if (tunnelnum === null) {
+      throw new Error('Failed to get a new tunnel number');
+    }
+    const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
+      deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, advancedOptions, peer);
+    return tunnelJobs;
+  } catch (err) {
+    // there can be an exception in the addTunnel function
+    // we need to set tunnel as inactive in case of not pending
+    if (tunnelnum !== null && !err.message.includes('pending')) {
+      try {
+        await tunnelsModel.findOneAndUpdate(
+          { num: tunnelnum, isActive: true, org: org },
+          { isActive: false },
+          { upsert: false }
+        );
+      } catch (error) {
+        logger.error('Failed to deactivate tunnel', {
+          params: { tunnelnum, error: error.message }
         });
-        reject(err);
-      });
-  });
-  return tPromise;
+      }
+    }
+    logger.error('Failed to add tunnel', {
+      params: { tunnelnum, error: err.message }
+    });
+    throw new Error(err.message);
+  }
 };
 
 /**
@@ -1177,7 +1184,7 @@ const addTunnel = async (
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
   // Advanced tunnel options
-  const { mtu, mssClamp, ospfCost } = advancedOptions;
+  const { mtu, mssClamp, ospfCost } = advancedOptions || {};
 
   // check if need to create the tunnel as pending
   let isPending = false;
