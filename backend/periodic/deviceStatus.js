@@ -26,7 +26,7 @@ const configs = require('../configs')();
 const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
-const { mapLteNames, mapWifiNames } = require('../utils/deviceUtils');
+const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 
 /***
  * This class gets periodic status from all connected devices
@@ -532,7 +532,8 @@ class DeviceStatus {
         this.status[machineId].lteStatus = {};
       }
       for (const devId in lteStatus) {
-        this.setDeviceLteStatus(machineId, devId, mapLteNames(lteStatus[devId]));
+        const mappedLteStatus = parseLteStatus(lteStatus[devId]);
+        this.setDeviceLteStatus(machineId, devId, mappedLteStatus);
       }
     };
 
