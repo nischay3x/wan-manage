@@ -7947,14 +7947,6 @@ components:
           properties:
             agent:
               type: object
-              properties:
-                installationPath:
-                  type: string
-                installationPathType:
-                  type: string
-                  enum:
-                    - local
-                    - url
             manage:
               type: object
     # //TODO: change the schema// 

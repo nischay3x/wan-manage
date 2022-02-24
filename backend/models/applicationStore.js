@@ -24,15 +24,7 @@ const {
 
 const componentsSchema = new Schema({
   agent: {
-    installationPath: {
-      type: String,
-      required: true
-    },
-    installationPathType: {
-      type: String,
-      enum: ['local', 'url'],
-      required: true
-    }
+    type: Object
   },
   manage: {
     installWith: {

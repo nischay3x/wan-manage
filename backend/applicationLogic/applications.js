@@ -175,11 +175,6 @@ const getJobParams = async (device, application, op) => {
     throw new Error('Invalid installed version');
   }
 
-  if (op === 'install') {
-    params.installationFilePath = version.components.agent.installationPath;
-    params.installationPathType = version.components.agent.installationPathType;
-  }
-
   if (isVpn(application.appStoreApp.identifier)) {
     const vpnParams = await getRemoteVpnParams(device, application, op);
     if (op === 'install') {
