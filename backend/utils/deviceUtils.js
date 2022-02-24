@@ -15,7 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const path = require('path');
 const { devices } = require('../models/devices');
+const apnsJson = require(path.join(__dirname, 'mcc_mnc_apn.json'));
 
 /**
  * Get all LAN subnets in the same organization
@@ -131,6 +133,24 @@ const mapLteNames = agentData => {
   return renameKeys(agentData, map);
 };
 
+const parseLteStatus = lteStatus => {
+  lteStatus = mapLteNames(lteStatus);
+
+  // calc default apn
+  const defaultApn = lteStatus.defaultSettings ? lteStatus.defaultSettings.apn : '';
+  const mcc = lteStatus.systemInfo.mcc;
+  const mnc = lteStatus.systemInfo.mnc;
+
+  if (defaultApn === '' && mcc && mnc) {
+    const key = mcc + '-' + mnc;
+    if (apnsJson[key]) {
+      lteStatus.defaultSettings.apn = apnsJson[key];
+    }
+  }
+
+  return lteStatus;
+};
+
 const renameKeys = (obj, map) => {
   Object.keys(obj).forEach(key => {
     const newKey = map[key];
@@ -198,5 +218,6 @@ module.exports = {
   getDefaultGateway,
   getBridges,
   mapLteNames,
+  parseLteStatus,
   mapWifiNames
 };
