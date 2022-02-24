@@ -30,8 +30,8 @@ class ApplicationsController {
     await Controller.handleRequest(request, response, this.service.appstorePurchasedGET);
   }
 
-  async appstorePurchasedIdPOST (request, response) {
-    await Controller.handleRequest(request, response, this.service.appstorePurchasedIdPOST);
+  async appstorePurchaseIdPOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchaseIdPOST);
   }
 
   async appstorePurchasedIdDELETE (request, response) {

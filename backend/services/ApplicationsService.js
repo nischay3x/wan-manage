@@ -287,7 +287,7 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async appstorePurchasedIdPOST ({ org, id }, { user }) {
+  static async appstorePurchaseIdPOST ({ org, id }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -421,7 +421,7 @@ class ApplicationsService {
 
       const {
         valid, err
-      } = await validateConfiguration(configurationRequest, app, orgList, user.defaultAccount);
+      } = await validateConfiguration(configurationRequest, app, user.defaultAccount);
 
       if (!valid) {
         logger.warn('Application update failed',

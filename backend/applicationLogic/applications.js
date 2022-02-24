@@ -32,6 +32,17 @@ const {
   getVpnStatus
 } = require('./remotevpn');
 
+/**
+ * Pick the allowed fields only from client request.
+ *
+ * Since the configuration in our database is a mixed object,
+ * We give the app developer the option to choose which data he wants to save.
+ * If this function is not implemented,
+ * all information sent from the user will be stored in the database.
+ * @param  {object}  configurationRequest  user configuration request
+ * @param  {object}  app application object
+ * @return {object}  object with allowed fields only.
+ */
 const pickAllowedFieldsOnly = (configurationRequest, app) => {
   if (isVpn(app.appStoreApp.identifier)) {
     return pickOnlyVpnAllowedFields(configurationRequest, app);
@@ -40,14 +51,30 @@ const pickAllowedFieldsOnly = (configurationRequest, app) => {
   }
 };
 
-const validateConfiguration = async (configurationRequest, app, orgList, account) => {
+/**
+ * Validate the global application configuration request sent by the user.
+ *
+ * @param  {object} configurationRequest  user request for global configuration
+ * @param  {object} app application object
+ * @param  {object} account account object
+ * @return {{valid: boolean, err: string}}  test result + error if message is invalid
+ */
+const validateConfiguration = async (configurationRequest, app, account) => {
   if (isVpn(app.appStoreApp.identifier)) {
-    return await validateVpnConfiguration(configurationRequest, app, orgList, account);
+    return await validateVpnConfiguration(configurationRequest, app, account);
   } else {
     return { valid: false, err: 'Invalid application' };
   }
 };
 
+/**
+ * Validate the device specific application configuration request that sent by the user.
+ *
+ * @param  {object}     app application object
+ * @param  {object}     deviceConfiguration  user request for device configuration
+ * @param  {[objectId]} deviceList the devices ids list, that application should installed on them
+ * @return {{valid: boolean, err: string}}  test result + error if message is invalid
+ */
 const validateDeviceConfigurationRequest = async (app, deviceConfiguration, deviceList) => {
   if (isVpn(app.appStoreApp.identifier)) {
     return validateVpnDeviceConfigurationRequest(app, deviceConfiguration, deviceList);
@@ -56,6 +83,13 @@ const validateDeviceConfigurationRequest = async (app, deviceConfiguration, devi
   return { valid: false, err: 'Invalid application' };
 };
 
+/**
+ * Validate uninstall request.
+ *
+ * @param  {object}   app application object
+ * @param  {[objectId]} deviceList the devices ids list, that application should installed on them
+ * @return {{valid: boolean, err: string}}  test result + error if message is invalid
+ */
 const validateUninstallRequest = async (app, deviceList) => {
   if (isVpn(app.appStoreApp.identifier)) {
     return validateVPNUninstallRequest(app, deviceList);
@@ -216,7 +250,7 @@ const getApplicationSubnet = async application => {
   if (isVpn(application.appStoreApp.identifier)) {
     return getVpnSubnets(application);
   } else {
-    return true;
+    return [];
   };
 };
 

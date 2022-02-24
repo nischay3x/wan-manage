@@ -144,11 +144,10 @@ const vpnConfigSchema = Joi.object().keys({
  * Validate vpn configurations. called when a user update the configurations
  * @param {object} configurationRequest
  * @param {objectId} application
- * @param {[orgList]} orgList array of organizations
  * @param {objectId} accountId accountId
  * @return {{valid: boolean, err: string}}  test result + error if message is invalid
  */
-const validateVpnConfiguration = async (configurationRequest, application, orgList, account) => {
+const validateVpnConfiguration = async (configurationRequest, application, account) => {
   // validate user inputs
   const result = vpnConfigSchema.validate(configurationRequest);
   if (result.error) {
