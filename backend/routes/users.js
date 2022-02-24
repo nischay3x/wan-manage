@@ -165,6 +165,7 @@ router.route('/register')
       .then(() => {
         const uiServerUrl = getUiServerUrl(req);
         const p = mailer.sendMailHTML(
+          configs.get('mailerEnvelopeFromAddress'),
           configs.get('mailerFromAddress'),
           req.body.email,
           `Verify Your ${configs.get('companyName')} Account`,
@@ -259,6 +260,7 @@ router.route('/reverify-account')
         // Send email if user found
         if (resp) {
           const p = mailer.sendMailHTML(
+            configs.get('mailerEnvelopeFromAddress'),
             configs.get('mailerFromAddress'),
             req.body.email,
             `Re-Verify Your ${configs.get('companyName')} Account`,
@@ -344,6 +346,7 @@ const resetPassword = (req, res, next) => {
       if (resp) {
         const uiServerUrl = getUiServerUrl(req);
         const p = mailer.sendMailHTML(
+          configs.get('mailerEnvelopeFromAddress'),
           configs.get('mailerFromAddress'),
           req.body.email,
           `Reset Password for Your ${configs.get('companyName')} Account`,

@@ -129,6 +129,8 @@ const configEnv = {
     mailerBypassCert: false,
     // From address used when sending emails
     mailerFromAddress: 'noreply@flexiwan.com',
+    // Mail envelop from address
+    mailerEnvelopeFromAddress: 'flexiWAN <noreply@flexiwan.com>',
     // Name of the company, is used in email templates
     companyName: 'flexiWAN',
     // Allow users registration, otherwise by invitation only

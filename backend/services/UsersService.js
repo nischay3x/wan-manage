@@ -77,6 +77,7 @@ class UsersService {
       // Send email if user found
       if (resp) {
         await mailer.sendMailHTML(
+          configs.get('mailerEnvelopeFromAddress'),
           configs.get('mailerFromAddress'),
           resetPasswordRequest.email,
           `Reset Password for Your ${configs.get('companyName')} Account`,
