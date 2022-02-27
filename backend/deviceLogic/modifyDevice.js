@@ -1229,7 +1229,7 @@ const apply = async (device, user, data) => {
   // Queue job only if the device has changed
   // Return empty jobs array if the device did not change
   if (!modified) {
-    logger.warn('The device was not modified, nothing to apply', {
+    logger.debug('The device was not modified, nothing to apply', {
       params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
     });
     return {
