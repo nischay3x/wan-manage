@@ -157,6 +157,7 @@ class NotificationsManager {
 
           const uiServerUrl = configs.get('uiServerUrl', 'list');
           await mailer.sendMailHTML(
+            configs.get('mailerEnvelopeFromAddress'),
             configs.get('mailerFromAddress'),
             emailAddresses,
             'Pending unread notifications',

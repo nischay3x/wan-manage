@@ -142,7 +142,11 @@ class SwVersionUpdateManager {
           // Send a reminder email to all email addresses that belong to the account
           const emailAddresses = memberships.map(doc => { return doc.user.email; });
           await mailer.sendMailHTML(
-            configs.get('mailerFromAddress'), emailAddresses, subject, body);
+            configs.get('mailerEnvelopeFromAddress'),
+            configs.get('mailerFromAddress'),
+            emailAddresses,
+            subject,
+            body);
           logger.info('Version update email sent', {
             params: { emailAddresses: emailAddresses },
             periodic: { task: this.taskInfo }
