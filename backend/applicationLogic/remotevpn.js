@@ -460,6 +460,7 @@ const getRemoteVpnParams = async (device, application, op) => {
     params.dnsDomains = dnsDomains;
     params.dhKey = dhKey;
     params.vpnPortalServer = configs.get('flexiVpnServer');
+    params.vpnTmpTokenTime = configs.get('vpnTmpTokenTime');
 
     // get per device configuration
     const deviceApplication = device.applications.find(

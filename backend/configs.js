@@ -183,6 +183,9 @@ const configEnv = {
     globalTunnelMtu: 1500,
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
+    // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
+    // On the following renegotiations, the OpenVPN client will pass this token instead of the users password
+    vpnTmpTokenTime: 43200,
     contactUsEmail: 'yourfriends@flexiwan.com'
   },
   // Override for development environment, default environment if not specified
@@ -192,7 +195,8 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
     logLevel: 'debug',
-    mailerPort: 1025
+    mailerPort: 1025,
+    vpnTmpTokenTime: 60
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
