@@ -256,7 +256,7 @@ class DeviceQueues {
      * @return {void}
      */
   pauseQueue (deviceId) {
-    logger.info('Pausing queue request',
+    logger.debug('Pausing queue request',
       { params: { deviceId: deviceId, queue: this.deviceQueues[deviceId] } });
     return new Promise((resolve, reject) => {
       if (!this.deviceQueues[deviceId]) {
@@ -265,7 +265,7 @@ class DeviceQueues {
         );
       }
       if (this.deviceQueues[deviceId].paused) {
-        logger.info('Queue already paused, succeeded',
+        logger.debug('Queue already paused, succeeded',
           { params: { deviceId: deviceId, queue: this.deviceQueues[deviceId] } });
         return resolve(); // Already paused
       }
@@ -281,7 +281,7 @@ class DeviceQueues {
         }
       });
 
-      logger.info('Queue paused, succeeded',
+      logger.debug('Queue paused, succeeded',
         { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
       this.deviceQueues[deviceId].paused = true;
       return resolve();
@@ -294,7 +294,7 @@ class DeviceQueues {
      * @return {void}
      */
   resumeQueue (deviceId) {
-    logger.info('Resuming device queue',
+    logger.debug('Resuming device queue',
       { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
     if (!this.deviceQueues[deviceId]) {
       throw new Error('DeviceQueues: Trying to resume an undefined queue, deviceID=' + deviceId);
