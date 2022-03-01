@@ -133,12 +133,10 @@ const getAppAdditionsQuery = (app, device, op) => {
     return v.version === app.installedVersion;
   });
 
-  if (!('components' in version)) return query;
-  if (!('manage' in version.components)) return query;
-  if (!('installWith' in version.components.manage)) return query;
+  if (!('installWith' in version)) return query;
 
-  if ('firewallRules' in version.components.manage.installWith) {
-    const requestedRules = version.components.manage.installWith.firewallRules;
+  if ('firewallRules' in version.installWith) {
+    const requestedRules = version.installWith.firewallRules;
 
     // take out the related firewall rules
     const updatedFirewallRules = device.firewall.rules.filter(r => {

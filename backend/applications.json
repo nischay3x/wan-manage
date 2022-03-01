@@ -15,26 +15,26 @@
           "version": "1.0.0",
           "components": {
             "agent": {},
-            "manage": {
-              "installWith": {
-                "linuxApplications": [
-                  "openvpn"
-                ],
-                "firewallRules": [
-                  {
-                    "direction": "inbound",
-                    "interfaces": [],
-                    "inbound": "edgeAccess",
-                    "action": "allow",
-                    "description": "Allow VPN inbound traffic",
-                    "destination": {
-                      "ports": "${serverPort}",
-                      "protocols": ["tcp", "udp"]
-                    }
-                  }
-                ]
+            "manage": {},
+            "portal": {}
+          },
+          "installWith": {
+            "linuxApplications": [
+              "openvpn"
+            ],
+            "firewallRules": [
+              {
+                "direction": "inbound",
+                "interfaces": [],
+                "inbound": "edgeAccess",
+                "action": "allow",
+                "description": "Allow VPN inbound traffic",
+                "destination": {
+                  "ports": "${serverPort}",
+                  "protocols": ["tcp", "udp"]
+                }
               }
-            }
+            ]
           }
         }
       ]

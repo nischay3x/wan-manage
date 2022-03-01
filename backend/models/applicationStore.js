@@ -27,14 +27,7 @@ const componentsSchema = new Schema({
     type: Object
   },
   manage: {
-    installWith: {
-      linuxApplications: {
-        type: [String]
-      },
-      firewallRules: {
-        type: [Object]
-      }
-    }
+    type: Object
   }
 }, { _id: false });
 
@@ -50,6 +43,14 @@ const versionSchema = new Schema({
   components: {
     type: componentsSchema,
     required: true
+  },
+  installWith: {
+    linuxApplications: {
+      type: [String]
+    },
+    firewallRules: {
+      type: [Object]
+    }
   }
 }, { _id: false });
 

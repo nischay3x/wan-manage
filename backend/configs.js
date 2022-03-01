@@ -195,8 +195,7 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
     logLevel: 'debug',
-    mailerPort: 1025,
-    vpnTmpTokenTime: 60
+    mailerPort: 1025
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
