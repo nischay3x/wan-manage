@@ -28,8 +28,17 @@ const componentsSchema = new Schema({
   },
   manage: {
     type: Object
+  },
+  portal: {
+    type: Object
   }
-}, { _id: false });
+},
+{
+  _id: false,
+  // set minimize to false to allow mongoose to save empty objects.
+  // this because we want to save an empty object on initialization
+  minimize: false
+});
 
 const versionSchema = new Schema({
   version: {
@@ -52,7 +61,12 @@ const versionSchema = new Schema({
       type: [Object]
     }
   }
-}, { _id: false });
+}, {
+  _id: false,
+  // set minimize to false to allow mongoose to save empty objects.
+  // this because we want to save an empty object on initialization
+  minimize: false
+});
 
 /**
  * App store Database Schema
