@@ -18,6 +18,7 @@
 // Logic to replace a device
 const tunnelsModel = require('../models/tunnels');
 const devicesModel = require('../models/devices').devices;
+const connections = require('../websocket/Connections')();
 const isEqual = require('lodash/isEqual');
 
 /**
@@ -54,6 +55,11 @@ const apply = async (opDevices, user, data) => {
   if (tunnelCount > 0) {
     throw new Error('All device tunnels must be deleted on the new device');
   }
+
+  // disconnect both devices and clear info in memory
+  connections.deviceDisconnect(oldDevice.machineId);
+  connections.deviceDisconnect(newDevice.machineId);
+
   // replace devices in DB
   await devicesModel.remove(
     { _id: newId, org: org }
