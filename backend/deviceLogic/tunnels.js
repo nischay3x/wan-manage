@@ -746,7 +746,7 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
     );
     if (tunnelResp !== null) { // deleted tunnel found, use it
       tunnelnum = tunnelResp.num;
-      logger.info('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
+      logger.debug('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
     } else {
       try {
         const idResp = await tunnelIDsModel.findOneAndUpdate(
@@ -760,6 +760,9 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
           // Options
           { new: true, upsert: true }
         );
+        if (!idResp || !idResp.nextAvailID) {
+          throw new Error('Failed to get a new tunnel number');
+        }
         tunnelnum = idResp.nextAvailID;
         logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
       } catch (err) {
@@ -782,8 +785,13 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
             // Options
             { new: true, upsert: true }
           );
+          if (!idResp || !idResp.nextAvailID) {
+            throw new Error('Failed to get a new tunnel number');
+          }
           tunnelnum = idResp.nextAvailID;
-          logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
+          logger.debug('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
+        } else {
+          throw new Error('Failed to get a new tunnel number: ' + err.message);
         }
       }
     }
