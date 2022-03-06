@@ -517,12 +517,18 @@ class DeviceStatus {
       }
       // Generate tunnel notifications
       Object.entries(appStatus).forEach(ent => {
-        const [identifer, status] = ent;
-        this.status[machineId].applicationStatus[identifer] = {
+        const [identifier, status] = ent;
+        this.status[machineId].applicationStatus[identifier] = {
           running: status.running,
           monitoring: status.monitoring
         };
       });
+    } else {
+      if (this.status[machineId].applicationStatus) {
+        for (const identifier in this.status[machineId].applicationStatus) {
+          delete this.status[machineId].applicationStatus[identifier];
+        }
+      }
     }
 
     // Set lte status in memory for now

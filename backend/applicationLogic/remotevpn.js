@@ -451,7 +451,7 @@ const getRemoteVpnParams = async (device, application, op) => {
 
     params.routeAllTrafficOverVpn = config.routeAllTrafficOverVpn || false;
     params.port = config.serverPort ? config.serverPort : '';
-    params.caKey = caKey;
+    // params.caKey = caKey; // no need to sent it
     params.caCrt = caCrt;
     params.serverKey = serverKey;
     params.serverCrt = serverCrt;
