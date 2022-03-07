@@ -49,15 +49,20 @@ class MongoConns {
 
   async mainDBwithTransaction (func, times = 3) {
     let execNum = 0;
-    const session = await this.mainDB.startSession();
-    await session.withTransaction(async () => {
-      // Prevent infinite loop, if more than 'times' transient errors (writeConflict), exit
-      execNum += 1;
-      if (execNum > times) {
-        throw new Error(`Error writing to database, too many attempts (${times})`);
-      }
-      await func(session);
-    });
+    let session;
+    try {
+      session = await this.mainDB.startSession();
+      await session.withTransaction(async () => {
+        // Prevent infinite loop, if more than 'times' transient errors (writeConflict), exit
+        execNum += 1;
+        if (execNum > times) {
+          throw new Error(`Error writing to database, too many attempts (${times})`);
+        }
+        await func(session);
+      });
+    } finally {
+      session.endSession();
+    }
   }
 
   getAnalyticsDB () {
