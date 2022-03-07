@@ -1809,6 +1809,8 @@ class DevicesService {
     } catch (e) {
       if (session) session.abortTransaction();
 
+      logger.error('error', { params: { message: e.message, stack: e.stack } });
+
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
