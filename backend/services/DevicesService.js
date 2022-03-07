@@ -1809,7 +1809,7 @@ class DevicesService {
     } catch (e) {
       if (session) session.abortTransaction();
 
-      logger.error('error', { params: { message: e.message, stack: e.stack } });
+      logger.error('update device failed', { params: { message: e.message, stack: e.stack } });
 
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
