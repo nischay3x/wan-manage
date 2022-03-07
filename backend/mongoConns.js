@@ -61,7 +61,7 @@ class MongoConns {
         await func(session);
       });
     } finally {
-      session.endSession();
+      if (session) session.endSession();
     }
   }
 
