@@ -1202,6 +1202,11 @@ class DevicesService {
         throw new Error('Device must be first approved');
       }
 
+      // Don't allow empty device name
+      if ((!origDevice.name || deviceRequest.hasOwnProperty('name')) && !deviceRequest.name) {
+        throw new Error('Device name must be set');
+      }
+
       // check LAN subnet overlap if updated device is running
       const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
       const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
