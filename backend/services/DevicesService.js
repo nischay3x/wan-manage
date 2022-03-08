@@ -2528,45 +2528,54 @@ class DevicesService {
    */
   static validateDhcpRequest (device, dhcpRequest) {
     if (!dhcpRequest.interface || dhcpRequest.interface === '') {
-      throw new Error('Interface is required to define DHCP');
+      throw new Error('Interface is required to define DHCP Server');
     };
     const interfaceObj = device.interfaces.find(i => {
       return i.devId === dhcpRequest.interface;
     });
     if (!interfaceObj) {
-      throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
+      throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP Server parameters`);
     }
     if (!interfaceObj.isAssigned) {
-      throw new Error('DHCP can be defined only for assigned interfaces');
+      throw new Error('DHCP Server can be defined only for assigned interfaces');
     }
     if (interfaceObj.type !== 'LAN') {
-      throw new Error('DHCP can be defined only for LAN interfaces');
+      throw new Error('DHCP Server can be defined only for LAN interfaces');
     }
     if (interfaceObj.IPv4 === '') {
-      throw new Error(`DHCP cannot be defined for interface (${interfaceObj.name}) without IP`);
+      // eslint-disable-next-line max-len
+      throw new Error(`DHCP Server cannot be defined for interface ${interfaceObj.name} without IP`);
     }
 
     // check that DHCP Range Start/End IP are on the same subnet with interface IP
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
-      throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
+      // eslint-disable-next-line max-len
+      throw new Error('DHCP Server Range Start IP address is not on the same subnet with interface IP');
     }
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeEnd)) {
-      throw new Error('DHCP Range End IP address is not on the same subnet with interface IP');
+      // eslint-disable-next-line max-len
+      throw new Error('DHCP Server Range End IP address is not on the same subnet with interface IP');
     }
     // check that DHCP range End address IP is greater than Start IP address
     const ip2int = IP => IP.split('.')
       .reduce((res, val, idx) => res + (+val) * 256 ** (3 - idx), 0);
     if (ip2int(dhcpRequest.rangeStart) > ip2int(dhcpRequest.rangeEnd)) {
-      throw new Error('DHCP Range End IP address must be greater than Start IP address');
+      throw new Error('DHCP Server Range End IP address must be greater than Start IP address');
     }
     // Check that no repeated mac, host or IP
     const macLen = dhcpRequest.macAssign.length;
     const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
     const uniqHosts = uniqBy(dhcpRequest.macAssign, 'host');
     const uniqIPs = uniqBy(dhcpRequest.macAssign, 'ipv4');
-    if (uniqMacs.length !== macLen) throw new Error('MAC bindings MACs are not unique');
-    if (uniqHosts.length !== macLen) throw new Error('MAC bindings hosts are not unique');
-    if (uniqIPs.length !== macLen) throw new Error('MAC bindings IPs are not unique');
+    if (uniqMacs.length !== macLen) {
+      throw new Error('DHCP Server MAC bindings MACs are not unique');
+    }
+    if (uniqHosts.length !== macLen) {
+      throw new Error('DHCP Server MAC bindings hosts are not unique');
+    }
+    if (uniqIPs.length !== macLen) {
+      throw new Error('DHCP Server MAC bindings IPs are not unique');
+    }
   }
 
   /**
