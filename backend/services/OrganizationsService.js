@@ -164,81 +164,81 @@ class OrganizationsService {
    * no response value expected for this operation
    **/
   static async organizationsIdDELETE ({ id }, { user }, response) {
-    let session;
+    let orgDevices;
+    let deviceCount;
+    let deviceOrgCount;
 
     try {
-      session = await mongoConns.getMainDB().startSession();
-      await session.startTransaction();
+      await mongoConns.mainDBwithTransaction(async (session) => {
+        // Find and remove organization from account
+        // Only allow to delete current default org,
+        // this is required to make sure the API permissions
+        // are set properly for updating this organization
+        const orgList = await getAccessTokenOrgList(user, undefined, false);
+        if (!orgList.includes(id)) {
+          throw new Error('Please select an organization to delete it');
+        }
 
-      // Find and remove organization from account
-      // Only allow to delete current default org, this is required to make sure the API permissions
-      // are set properly for updating this organization
-      const orgList = await getAccessTokenOrgList(user, undefined, false);
-      if (!orgList.includes(id)) {
-        throw new Error('Please select an organization to delete it');
-      }
+        const account = await Accounts.findOneAndUpdate(
+          { _id: user.defaultAccount },
+          { $pull: { organizations: id } },
+          { upsert: false, new: true, session }
+        );
 
-      const account = await Accounts.findOneAndUpdate(
-        { _id: user.defaultAccount },
-        { $pull: { organizations: id } },
-        { upsert: false, new: true, session }
-      );
+        if (!account) {
+          throw new Error('Cannot delete organization');
+        }
 
-      if (!account) {
-        throw new Error('Cannot delete organization');
-      }
+        // Since the selected org is deleted, need to select another organization available
+        user.defaultOrg = null;
+        await orgUpdateFromNull({ user }, response);
 
-      // Since the selected org is deleted, need to select another organization available
-      user.defaultOrg = null;
-      await orgUpdateFromNull({ user }, response);
+        // Remove organization
+        await Organizations.findOneAndRemove(
+          { _id: id, account: user.defaultAccount },
+          { session: session });
 
-      // Remove organization
-      await Organizations.findOneAndRemove(
-        { _id: id, account: user.defaultAccount },
-        { session: session });
+        // Remove all memberships that belong to the organization, but keep group even if empty
+        await membership.deleteMany({ organization: id }, { session: session });
 
-      // Remove all memberships that belong to the organization, but keep group even if empty
-      await membership.deleteMany({ organization: id }, { session: session });
+        // Remove organization inventory (devices, tokens, tunnelIds, tunnels, etc.)
+        await Tunnels.deleteMany({ org: id }, { session: session });
+        await TunnelIds.deleteMany({ org: id }, { session: session });
+        await Tokens.deleteMany({ org: id }, { session: session });
+        await AccessTokens.deleteMany({ organization: id }, { session: session });
+        await MultiLinkPolicies.deleteMany({ org: id }, { session: session });
+        await PathLabels.deleteMany({ org: id }, { session: session });
 
-      // Remove organization inventory (devices, tokens, tunnelIds, tunnels, etc.)
-      await Tunnels.deleteMany({ org: id }, { session: session });
-      await TunnelIds.deleteMany({ org: id }, { session: session });
-      await Tokens.deleteMany({ org: id }, { session: session });
-      await AccessTokens.deleteMany({ organization: id }, { session: session });
-      await MultiLinkPolicies.deleteMany({ org: id }, { session: session });
-      await PathLabels.deleteMany({ org: id }, { session: session });
+        // Find all devices for organization
+        orgDevices = await Devices.devices.find({ org: id },
+          { machineId: 1, _id: 0 },
+          { session: session });
 
-      // Find all devices for organization
-      const orgDevices = await Devices.devices.find({ org: id },
-        { machineId: 1, _id: 0 },
-        { session: session });
+        // Get the account total device count
+        deviceCount = await Devices.devices.countDocuments({ account: user.defaultAccount._id })
+          .session(session);
 
-      // Get the account total device count
-      const deviceCount = await Devices.devices.countDocuments({ account: user.defaultAccount._id })
-        .session(session);
+        deviceOrgCount = await Devices.devices.countDocuments(
+          { account: user.defaultAccount._id, org: id }
+        ).session(session);
 
-      const deviceOrgCount = await Devices.devices.countDocuments(
-        { account: user.defaultAccount._id, org: id }
-      ).session(session);
+        // Delete all devices
+        await Devices.devices.deleteMany({ org: id }, { session: session });
+        // Unregister a device (by removing the removed org number)
+        await Flexibilling.registerDevice({
+          account: user.defaultAccount._id,
+          org: id,
+          count: deviceCount,
+          orgCount: deviceOrgCount,
+          increment: -orgDevices.length
+        }, session);
+      });
 
-      // Delete all devices
-      await Devices.devices.deleteMany({ org: id }, { session: session });
-      // Unregister a device (by removing the removed org number)
-      await Flexibilling.registerDevice({
-        account: user.defaultAccount._id,
-        org: id,
-        count: deviceCount,
-        orgCount: deviceOrgCount,
-        increment: -orgDevices.length
-      }, session);
-
-      // Disconnect all devices
+      // If successful, Disconnect all devices
       orgDevices.forEach((device) => Connections.deviceDisconnect(device.machineId));
 
-      await session.commitTransaction();
       return Service.successResponse(null, 204);
     } catch (e) {
-      if (session) session.abortTransaction();
       logger.error('Error deleting organization', { params: { reason: e.message } });
 
       return Service.rejectResponse(
