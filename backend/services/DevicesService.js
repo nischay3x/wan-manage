@@ -1191,6 +1191,12 @@ class DevicesService {
           throw createError(404, 'Device not found');
         }
 
+        // Don't allow empty device name
+        // if the 'name' parameter skipped in the request we use the original value
+        if ((!origDevice.name || deviceRequest.hasOwnProperty('name')) && !deviceRequest.name) {
+          throw new Error('Device name must be set');
+        }
+
         // Don't allow any changes if the device is not approved
         if (!origDevice.isApproved && !deviceRequest.isApproved) {
           throw createError(400, 'Device must be first approved');
