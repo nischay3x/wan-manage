@@ -1192,6 +1192,7 @@ class DevicesService {
         }
 
         // Don't allow empty device name
+        // if the 'name' parameter skipped in the request we use the original value
         if ((!origDevice.name || deviceRequest.hasOwnProperty('name')) && !deviceRequest.name) {
           throw new Error('Device name must be set');
         }
