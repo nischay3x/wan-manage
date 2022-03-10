@@ -61,7 +61,8 @@ class MongoConns {
         await func(session);
       });
     } finally {
-      if (session) session.endSession();
+      // This creates an issue with some updates, need to understand why
+      // if (session) session.endSession();
     }
   }
 
