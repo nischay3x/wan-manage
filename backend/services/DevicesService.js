@@ -940,17 +940,23 @@ class DevicesService {
         });
       }
 
+      const params = { lines: limit || '100' };
+
+      if (isApplication) {
+        params.application = {
+          identifier: filter
+        };
+      } else {
+        params.filter = filter || 'all';
+      }
+
       const deviceLogs = await connections.deviceSendMessage(
         null,
         device[0].machineId,
         {
           entity: 'agent',
           message: 'get-device-logs',
-          params: {
-            lines: limit || '100',
-            filter: filter || 'all',
-            'is-application': isApplication !== null
-          }
+          params: params
         },
         configs.get('directMessageTimeout', 'number')
       );

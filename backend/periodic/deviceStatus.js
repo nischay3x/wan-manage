@@ -520,7 +520,7 @@ class DeviceStatus {
         const [identifier, status] = ent;
         this.status[machineId].applicationStatus[identifier] = {
           running: status.running,
-          monitoring: status.monitoring
+          monitoring: status.statistics
         };
       });
     } else {
