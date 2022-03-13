@@ -18,7 +18,9 @@
 // Logic to replace a device
 const tunnelsModel = require('../models/tunnels');
 const devicesModel = require('../models/devices').devices;
+const connections = require('../websocket/Connections')();
 const isEqual = require('lodash/isEqual');
+const { getMajorVersion } = require('../versioning');
 
 /**
  * Replaces two devices
@@ -39,6 +41,11 @@ const apply = async (opDevices, user, data) => {
   if (!newDevice) {
     throw new Error('Wrong new device id specified');
   }
+  const oldAgentVersion = getMajorVersion(oldDevice.versions.agent);
+  const newAgentVersion = getMajorVersion(newDevice.versions.agent);
+  if (oldAgentVersion > newAgentVersion) {
+    throw new Error('Not supported version of the new device, please upgrade it first');
+  }
   // check if hardware equal (compare interfaces devId and deviceType)
   const oldInterfaces = oldDevice.interfaces.map(i => `${i.devId}${i.deviceType}`).sort();
   const newInterfaces = newDevice.interfaces.map(i => `${i.devId}${i.deviceType}`).sort();
@@ -54,6 +61,11 @@ const apply = async (opDevices, user, data) => {
   if (tunnelCount > 0) {
     throw new Error('All device tunnels must be deleted on the new device');
   }
+
+  // disconnect both devices and clear info in memory
+  connections.deviceDisconnect(oldDevice.machineId);
+  connections.deviceDisconnect(newDevice.machineId);
+
   // replace devices in DB
   await devicesModel.remove(
     { _id: newId, org: org }
