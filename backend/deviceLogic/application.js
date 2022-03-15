@@ -34,7 +34,7 @@ const modifyDeviceApply = require('./modifyDevice').apply;
 const {
   validateDeviceConfigurationRequest,
   validateUninstallRequest,
-  getAppAdditionsQuery,
+  getAppInstallWithAsQuery,
   getDeviceSpecificConfiguration
 } = require('../applicationLogic/applications');
 
@@ -72,15 +72,15 @@ const handleInstallOp = async (app, device, deviceConfiguration, idx, session) =
     };
   };
 
-  // check if need to install more things together with the application
-  const additions = getAppAdditionsQuery(app, device, 'install');
+  // check if need to install more things along with the application (firewall rules, etc.)
+  const installWithQuery = getAppInstallWithAsQuery(app, device, 'install');
   if (!update.$set) {
     update.$set = {};
   }
 
   update.$set = {
     ...update.$set,
-    ...additions
+    ...installWithQuery
   };
 
   await devices.findOneAndUpdate(
@@ -101,10 +101,10 @@ const handleUninstallOp = async (app, device, session) => {
   };
 
   // check if need to remove more things together with the application
-  const additions = getAppAdditionsQuery(app, device, 'uninstall');
+  const installWithQuery = getAppInstallWithAsQuery(app, device, 'uninstall');
   update.$set = {
     ...update.$set,
-    ...additions
+    ...installWithQuery
   };
 
   await devices.updateOne(query, update, { upsert: false }).session(session);
@@ -121,10 +121,10 @@ const handleConfigOp = async (app, device, session) => {
   };
 
   // check if need to remove more things together with the application
-  const additions = getAppAdditionsQuery(app, device, 'config');
+  const installWithQuery = getAppInstallWithAsQuery(app, device, 'config');
   update.$set = {
     ...update.$set,
-    ...additions
+    ...installWithQuery
   };
   await devices.updateOne(query, update, { upsert: false }).session(session);
 };
@@ -489,23 +489,33 @@ const remove = async (job) => {
       'applications.app': app._id
     };
     try {
-      const newDevice = await devices.findOneAndUpdate(
+      const devObj = await devices.findOneAndUpdate(
         query,
         { $set: { 'applications.$.status': status } },
         { upsert: false, new: true }
       );
 
       if (op === 'install') {
-        // Additional items may have been installed during the installation process,
-        // such as firewall rules. If we delete only the installation job,
-        // they may remain in flexiManage DB. Therefore we also delete the additions from the DB.
+        // More configurations may have been installed during the application
+        // installation process (see "installWith") such as firewall rules.
+        // When flexiManage sends these configurations, it generates two jobs"
+        // 1. application-install.
+        // 2. modify-device.
+        // If a user deletes only the application-install job,
+        // The second job is remains and will be send to the device.
+        // Therefore in this case, we need to delete the additions from the DB.
         // The future sync process will know how to handle sending the appropriate JOBS.
-        const additions = getAppAdditionsQuery(app, newDevice, 'uninstall');
-        await devices.findOneAndUpdate(
+        const installWithQuery = getAppInstallWithAsQuery(app, devObj, 'uninstall');
+        const updated = await devices.findOneAndUpdate(
           query,
-          { $set: { ...additions } },
+          { $set: { ...installWithQuery } },
           { upsert: false, new: true }
         );
+
+        await modifyDeviceApply([devObj], 'system', {
+          org: org,
+          newDevice: updated
+        });
       }
     } catch (err) {
       logger.error('Device application status update failed', {

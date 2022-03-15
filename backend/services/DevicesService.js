@@ -318,14 +318,6 @@ class DevicesService {
         await statusesInDb.updateDevicesStatuses(orgList);
       }
 
-      // FIXME:
-      // .populate({
-      //   path: 'applications.app',
-      //   populate: {
-      //     path: 'applicationStore'
-      //   }
-      // });
-
       const pipeline = [
         {
           $match: {
@@ -1719,8 +1711,8 @@ class DevicesService {
           }
         }
 
+        // make sure that system rules not deleted or modified
         if ('firewall' in deviceRequest && Array.isArray(deviceRequest.firewall.rules)) {
-          // make sure that system rules not deleted or modified
           const origSystemRules = origDevice.firewall.rules.filter(r => r.system);
           for (const origSystemRule of origSystemRules) {
             const origId = origSystemRule._id.toString();
