@@ -194,7 +194,7 @@ const getAppAdditionsQuery = (app, device, op) => {
  * @return {Object}               parameters object
  */
 const getJobParams = async (device, application, op) => {
-  let params = {
+  const params = {
     name: application.appStoreApp.name,
     identifier: application.appStoreApp.identifier
   };
@@ -209,15 +209,13 @@ const getJobParams = async (device, application, op) => {
 
   if (isVpn(application.appStoreApp.identifier)) {
     const vpnParams = await getRemoteVpnParams(device, application, op);
-    if (op === 'install') {
-      params = { ...params, ...vpnParams };
+    params.applicationParams = vpnParams;
 
+    if (op === 'install') {
       // for install job, we passed the config parameters as well
       const vpnConfigParams = await getRemoteVpnParams(device, application, 'config');
       vpnConfigParams.identifier = application.appStoreApp.identifier;
-      params = { ...params, configParams: vpnConfigParams };
-    } else {
-      params = { ...params, ...vpnParams };
+      params.applicationParams = { ...params.applicationParams, configParams: vpnConfigParams };
     }
   }
 

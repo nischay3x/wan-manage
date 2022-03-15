@@ -531,21 +531,33 @@ const sync = async (deviceId, org) => {
   }).lean();
 
   const requests = [];
+  const completeCbData = [];
   for (const app of device.applications) {
-    if (app.status === 'installed' || app.status === 'installing') {
+    const syncStatuses = ['installed', 'installing', 'installation failed', 'configuration failed'];
+    if (syncStatuses.includes(app.status)) {
       const params = await getJobParams(device, app.app, 'install');
       requests.push({
         entity: 'agent',
         message: 'application-install',
         params: params
       });
+
+      completeCbData.push({
+        username: 'system',
+        application: {
+          op: 'install',
+          app: app.app,
+          org,
+          device
+        }
+      });
     }
   }
 
   return {
     requests,
-    completeCbData: {},
-    callComplete: false
+    completeCbData,
+    callComplete: true
   };
 };
 

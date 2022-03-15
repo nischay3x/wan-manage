@@ -941,14 +941,16 @@ class DevicesService {
         });
       }
 
-      const params = { lines: limit || '100' };
+      const params = {
+        lines: limit || '100',
+        filter: filter || 'all'
+      };
 
       if (isApplication) {
         params.application = {
           identifier: filter
         };
-      } else {
-        params.filter = filter || 'all';
+        params.filter = 'application';
       }
 
       const deviceLogs = await connections.deviceSendMessage(
