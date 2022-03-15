@@ -398,8 +398,11 @@ class ApplicationsService {
    * @returns
    * @memberof ApplicationsService
    */
-  static async appstorePurchasedIdPUT ({ id, configurationRequest, org }, { user }) {
+  static async appstorePurchasedIdPUT (request, { user }) {
     try {
+      const { id, purchasedApplicationConfigurationRequest, org } = request;
+      let configurationRequest = purchasedApplicationConfigurationRequest;
+
       const orgList = await getAccessTokenOrgList(user, org, true);
 
       // check if user didn't pass request body or if app id is invalid

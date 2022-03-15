@@ -98,6 +98,13 @@ const validateUninstallRequest = async (app, deviceList) => {
   return { valid: false, err: 'Invalid application' };
 };
 
+/**
+ * Get application configuration for specific device
+ *
+ * @param  {object} app application object
+ * @param  {object} device the device object to be configured
+ * @return {object} object of device configurations
+ */
 const getDeviceSpecificConfiguration = (app, device, deviceConfiguration, idx) => {
   if (isVpn(app.appStoreApp.identifier)) {
     return getVpnDeviceSpecificConfiguration(app, device, deviceConfiguration, idx);
@@ -105,6 +112,12 @@ const getDeviceSpecificConfiguration = (app, device, deviceConfiguration, idx) =
   return null;
 };
 
+/**
+ * Update billing stuff for application
+ *
+ * @param  {object} app application object
+ * @return void
+ */
 const updateApplicationBilling = async (app) => {
   if (isVpn(app.appStoreApp.identifier)) {
     return updateVpnBilling(app);
@@ -112,7 +125,18 @@ const updateApplicationBilling = async (app) => {
   return null;
 };
 
-const getAppAdditionsQuery = (app, device, op) => {
+/**
+ * Returns database query of application's "installWith" parameter.
+ *
+ * This function takes the "installWith" value (see applications.json)
+ * and parses it into mongo query. This query will be run on the device.
+ *
+ * @param  {object} app     application object
+ * @param  {object} device  the device object to be configured
+ * @param  {string} op      operation type
+ * @return void
+ */
+const getAppInstallWithAsQuery = (app, device, op) => {
   const _getVal = val => {
     if (typeof val !== 'string') return val;
     // variable is text within ${}, e.g. ${serverPort}
@@ -188,10 +212,10 @@ const getAppAdditionsQuery = (app, device, op) => {
 /**
  * Creates the job parameters based on application name.
  * @async
- * @param  {Object}   device      device to be modified
- * @param  {Object}   application application object
- * @param  {String}   op          operation type
- * @return {Object}               parameters object
+ * @param  {object}   device      device to be modified
+ * @param  {object}   application application object
+ * @param  {string}   op          operation type
+ * @return {object}               parameters object
  */
 const getJobParams = async (device, application, op) => {
   const params = {
@@ -208,15 +232,7 @@ const getJobParams = async (device, application, op) => {
   }
 
   if (isVpn(application.appStoreApp.identifier)) {
-    const vpnParams = await getRemoteVpnParams(device, application, op);
-    params.applicationParams = vpnParams;
-
-    if (op === 'install') {
-      // for install job, we passed the config parameters as well
-      const vpnConfigParams = await getRemoteVpnParams(device, application, 'config');
-      vpnConfigParams.identifier = application.appStoreApp.identifier;
-      params.applicationParams = { ...params.applicationParams, configParams: vpnConfigParams };
-    }
+    params.applicationParams = await getRemoteVpnParams(device, application, op);
   }
 
   return params;
@@ -295,7 +311,7 @@ module.exports = {
   getJobParams,
   saveConfiguration,
   needToUpdatedDevices,
-  getAppAdditionsQuery,
+  getAppInstallWithAsQuery,
   getDeviceSpecificConfiguration,
   getApplicationSubnets,
   selectConfigurationParams,

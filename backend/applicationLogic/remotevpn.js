@@ -416,10 +416,11 @@ const getDeviceKeys = async application => {
  * @return {object} params to be sent to device
 */
 const getRemoteVpnParams = async (device, application, op) => {
-  const params = {};
+  let params = {};
   const config = application.configuration;
 
-  if (op === 'config') {
+  if (op === 'config' || op === 'install') {
+    const configParams = {};
     const {
       isNew, caKey, caCrt,
       serverKey, serverCrt, clientKey, clientCrt, tlsKey, dhKey
@@ -449,24 +450,29 @@ const getRemoteVpnParams = async (device, application, op) => {
     const dnsDomains = config.dnsDomains && config.dnsDomains !== ''
       ? config.dnsDomains.split(/\s*,\s*/) : [];
 
-    params.routeAllTrafficOverVpn = config.routeAllTrafficOverVpn || false;
-    params.port = config.serverPort ? config.serverPort : '';
-    // params.caKey = caKey; // no need to sent it
-    params.caCrt = caCrt;
-    params.serverKey = serverKey;
-    params.serverCrt = serverCrt;
-    params.tlsKey = tlsKey;
-    params.dnsIps = dnsIps;
-    params.dnsDomains = dnsDomains;
-    params.dhKey = dhKey;
-    params.vpnPortalServer = configs.get('flexiVpnServer');
-    params.vpnTmpTokenTime = configs.get('vpnTmpTokenTime');
+    configParams.routeAllTrafficOverVpn = config.routeAllTrafficOverVpn || false;
+    configParams.port = config.serverPort ? config.serverPort : '';
+    configParams.caCrt = caCrt;
+    configParams.serverKey = serverKey;
+    configParams.serverCrt = serverCrt;
+    configParams.tlsKey = tlsKey;
+    configParams.dnsIps = dnsIps;
+    configParams.dnsDomains = dnsDomains;
+    configParams.dhKey = dhKey;
+    configParams.vpnPortalServer = configs.get('flexiVpnServer');
+    configParams.vpnTmpTokenTime = configs.get('vpnTmpTokenTime');
 
     // get per device configuration
     const deviceApplication = device.applications.find(
       a => a.app._id.toString() === application._id.toString());
-    params.vpnNetwork = deviceApplication.configuration.subnet;
-    params.connections = deviceApplication.configuration.connections;
+    configParams.vpnNetwork = deviceApplication.configuration.subnet;
+    configParams.connections = deviceApplication.configuration.connections;
+
+    if (op === 'install') {
+      params.configParams = { ...configParams };
+    } else {
+      params = { ...configParams };
+    }
   }
 
   return params;

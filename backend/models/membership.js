@@ -120,9 +120,9 @@ const preDefinedPermissions = {
     peers: setPermission(1, 1, 1, managerDelPermission()),
     accesstokens: setPermission(0, 0, 0, 0),
     notifications: setPermission(1, 1, 1, 1),
-    pathlabels: setPermission(1, 1, 1, 1),
-    mlpolicies: setPermission(1, 1, 1, 1),
-    applications: setPermission(1, 1, 1, 1),
+    pathlabels: setPermission(1, 1, 1, managerDelPermission()),
+    mlpolicies: setPermission(1, 1, 1, managerDelPermission()),
+    applications: setPermission(1, 1, 1, managerDelPermission()),
     firewallpolicies: setPermission(1, 1, 1, managerDelPermission())
   },
   account_viewer: {
