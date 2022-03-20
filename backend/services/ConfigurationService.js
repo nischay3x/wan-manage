@@ -21,15 +21,14 @@ const configs = require('../configs.js')();
 
 class ConfigurationService {
   /**
-   * Get configuration
+   * Get rest servers list
    *
    * returns List
    **/
-  static async configurationGET ({ org }, { user }) {
+  static async configurationRestServersGET ({ org }, { user }) {
     try {
-      const restServerUrl = configs.get('restServerUrl', 'list');
-      const res = { restServerUrl };
-      return Service.successResponse(res);
+      const servers = configs.get('restServerUrl', 'list');
+      return Service.successResponse(servers);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

@@ -313,7 +313,7 @@ exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
     case 'accountsSelectPOST':
     case 'accountsGET':
     case 'organizationsSelectPOST':
-    case 'configurationGET':
+    case 'configurationRestServersGET':
       return true;
   }
 

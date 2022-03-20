@@ -22,8 +22,8 @@ class ConfigurationController {
     this.service = Service;
   }
 
-  async configurationGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.configurationGET);
+  async configurationRestServersGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.configurationRestServersGET);
   }
 }
 

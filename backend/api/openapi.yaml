@@ -41,15 +41,15 @@ paths:
       tags:
       - Version
       x-swagger-router-controller: Version
-  /configuration:
+  /configuration/restServers:
     get:
-      operationId: configurationGET
+      operationId: configurationRestServersGET
       responses:
         "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Configuration'
+                $ref: '#/components/schemas/RestServers'
           description: Successful operation
         "500":
           content:
@@ -7755,15 +7755,12 @@ components:
             $ref: '#/components/schemas/Error'
       description: Unauthorized
   schemas:
-    Configuration:
-      example:
-       restServerUrl: [https://manage.flexiwan.com, https://org.flexiwan.com]
-      properties:
-        restServerUrl:
-          type: array
-          items:
-            type: string
-      type: object
+    RestServers:
+      example: [https://manage.flexiwan.com,https://org.flexiwan.com]
+      # properties:
+      items:
+        type: string
+      type: array
     Version:
       properties:
         version:
@@ -7899,7 +7896,6 @@ components:
               type: object
             manage:
               type: object
-    # //TODO: change the schema// 
     PurchasedApplication:
       example:
         _id: _id
