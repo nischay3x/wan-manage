@@ -1246,11 +1246,16 @@ class DevicesService {
    * returns Device
    **/
   static async devicesIdPUT ({ id, org, deviceRequest }, { user, server }, response) {
+    let sessionCopy;
+
     try {
       let orgList;
       let origDevice;
       let updDevice;
-      await mongoConns.mainDBwithTransaction(async (session) => {
+
+      // We set closeSession to false since apply uses documents with the session
+      // The session is closed at the end of the API
+      sessionCopy = await mongoConns.mainDBwithTransaction(async (session) => {
         orgList = await getAccessTokenOrgList(user, org, true);
         origDevice = await devices.findOne({
           _id: id,
@@ -1788,7 +1793,7 @@ class DevicesService {
           .populate('interfaces.pathlabels', '_id name description color type')
           .populate('policies.firewall.policy', '_id name description rules')
           .populate('policies.multilink.policy', '_id name description');
-      });
+      }, false);
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
@@ -1807,6 +1812,8 @@ class DevicesService {
         e.message || 'Internal Server Error',
         e.status || 500
       );
+    } finally {
+      if (sessionCopy) sessionCopy.endSession();
     }
   }
 
