@@ -23,6 +23,7 @@ const {
   validateVpnDeviceConfigurationRequest,
   validateVPNUninstallRequest,
   getRemoteVpnParams,
+  getRemoteVpnTasks,
   pickOnlyVpnAllowedFields,
   needToUpdatedVpnServers,
   getVpnDeviceSpecificConfiguration,
@@ -238,6 +239,26 @@ const getJobParams = async (device, application, op) => {
   return params;
 };
 
+/**
+ * Creates the application tasks ta based on application name.
+ * @async
+ * @param  {object}   device      device to be modified
+ * @param  {object}   application application object
+ * @param  {string}   op          operation type
+ * @return {array}               parameters object
+ */
+const getTasks = async (device, application, op) => {
+  const params = {
+    name: application.appStoreApp.name,
+    identifier: application.appStoreApp.identifier
+  };
+
+  if (isVpn(application.appStoreApp.identifier)) {
+    return getRemoteVpnTasks(device, application, op, params);
+  }
+  return [];
+};
+
 const saveConfiguration = async (application, updatedConfig, isNeedToUpdatedDevices) => {
   const updatedApp = await applications.findOneAndUpdate(
     { _id: application._id },
@@ -309,6 +330,7 @@ module.exports = {
   validateDeviceConfigurationRequest,
   validateUninstallRequest,
   getJobParams,
+  getTasks,
   saveConfiguration,
   needToUpdatedDevices,
   getAppInstallWithAsQuery,

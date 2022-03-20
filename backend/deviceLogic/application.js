@@ -37,7 +37,7 @@ const {
   getDeviceSpecificConfiguration
 } = require('../applicationLogic/applications');
 
-const { getJobParams } = require('../applicationLogic/applications');
+const { getTasks } = require('../applicationLogic/applications');
 
 const handleInstallOp = async (app, device, deviceConfiguration, idx) => {
   const appId = app._id.toString();
@@ -290,19 +290,14 @@ const queueApplicationJob = async (
   // set job title to be shown to the user on Jobs screen
   // and job message to be handled by the device
   let jobTitle = '';
-  let message = '';
   if (op === 'install') {
     jobTitle = `Install ${application.appStoreApp.name} application`;
-    message = 'application-install';
   } else if (op === 'upgrade') {
     jobTitle = `Upgrade ${application.appStoreApp.name} application`;
-    message = 'application-upgrade';
   } else if (op === 'config') {
     jobTitle = `Configure ${application.appStoreApp.name} application`;
-    message = 'application-configure';
   } else if (op === 'uninstall') {
     jobTitle = `Uninstall ${application.appStoreApp.name} application`;
-    message = 'application-uninstall';
   } else {
     return jobs;
   }
@@ -312,13 +307,17 @@ const queueApplicationJob = async (
     const dev = deviceList[i];
 
     const newDevice = await devices.findOne({ _id: dev._id });
-    const params = await getJobParams(newDevice, application, op);
+    let tasks = await getTasks(newDevice, application, op);
 
-    const tasks = [{
-      entity: 'agent',
-      message: message,
-      params: params
-    }];
+    if (tasks.length > 1) {
+      tasks = [{
+        entity: 'agent',
+        message: 'aggregated',
+        params: {
+          requests: tasks
+        }
+      }];
+    }
 
     // response data
     const data = {
@@ -339,27 +338,29 @@ const queueApplicationJob = async (
       newDevice: newDevice
     });
 
-    jobs.push(
-      deviceQueues.addJob(
-        dev.machineId,
-        user.username,
-        org,
-        // Data
-        {
-          title: jobTitle,
-          tasks: tasks
-        },
-        // Response data
-        {
-          method: 'application',
-          data: data
-        },
-        // Metadata
-        { priority: 'normal', attempts: 1, removeOnComplete: false },
-        // Complete callback
-        null
-      )
-    );
+    tasks.forEach(t => {
+      jobs.push(
+        deviceQueues.addJob(
+          dev.machineId,
+          user.username,
+          org,
+          // Data
+          {
+            title: jobTitle,
+            tasks: [t]
+          },
+          // Response data
+          {
+            method: 'application',
+            data: data
+          },
+          // Metadata
+          { priority: 'normal', attempts: 1, removeOnComplete: false },
+          // Complete callback
+          null
+        )
+      );
+    });
   }
 
   return Promise.allSettled(jobs);
@@ -534,17 +535,13 @@ const sync = async (deviceId, org) => {
     }
   }).lean();
 
-  const requests = [];
+  let requests = [];
   const completeCbData = [];
   for (const app of device.applications) {
     const syncStatuses = ['installed', 'installing', 'installation failed', 'configuration failed'];
     if (syncStatuses.includes(app.status)) {
-      const params = await getJobParams(device, app.app, 'install');
-      requests.push({
-        entity: 'agent',
-        message: 'application-install',
-        params: params
-      });
+      const tasks = await getTasks(device, app.app, 'install');
+      requests = requests.concat(tasks);
 
       completeCbData.push({
         username: 'system',
