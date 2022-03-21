@@ -423,7 +423,7 @@ const getRemoteVpnTasks = async (device, application, op, params) => {
     const configParams = await getRemoteVpnParams(device, application, 'config');
     tasks.push({
       entity: 'agent',
-      message: 'application-install',
+      message: 'add-app-install',
       params: {
         ...params,
         ...installParams
@@ -431,7 +431,7 @@ const getRemoteVpnTasks = async (device, application, op, params) => {
     });
     tasks.push({
       entity: 'agent',
-      message: 'application-configure',
+      message: 'add-app-config',
       params: {
         ...params,
         ...configParams
@@ -441,7 +441,7 @@ const getRemoteVpnTasks = async (device, application, op, params) => {
     const configParams = await getRemoteVpnParams(device, application, op);
     tasks.push({
       entity: 'agent',
-      message: 'application-configure',
+      message: 'add-app-config',
       params: {
         ...params,
         ...configParams
@@ -451,7 +451,7 @@ const getRemoteVpnTasks = async (device, application, op, params) => {
     const uninstallParams = await getRemoteVpnParams(device, application, op);
     tasks.push({
       entity: 'agent',
-      message: 'application-uninstall',
+      message: 'remove-app-install',
       params: {
         ...params,
         ...uninstallParams
