@@ -493,6 +493,7 @@ class MembersService {
 
       // Send email
       await mailer.sendMailHTML(
+        configs.get('mailerEnvelopeFromAddress'),
         configs.get('mailerFromAddress'),
         memberRequest.email,
         `You are invited to a ${configs.get('companyName')} Account`,

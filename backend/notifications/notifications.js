@@ -97,10 +97,17 @@ class NotificationsManager {
     // support the 'lookup' command across different databases:
     // 1. Get the list of account IDs with pending notifications.
     // 2. Go over the list, populate the users and send them emails.
+    let accountIDs = [];
     try {
-      const accountIDs = await notificationsDb.distinct('account', { status: 'unread' });
-      // Notify users only if there are unread notifications
-      for (const accountID of accountIDs) {
+      accountIDs = await notificationsDb.distinct('account', { status: 'unread' });
+    } catch (err) {
+      logger.warn('Failed to get account IDs with pending notifications', {
+        params: { err: err.message }
+      });
+    }
+    // Notify users only if there are unread notifications
+    for (const accountID of accountIDs) {
+      try {
         const res = await membership.aggregate([
           {
             $match: {
@@ -150,19 +157,20 @@ class NotificationsManager {
 
           const uiServerUrl = configs.get('uiServerUrl', 'list');
           await mailer.sendMailHTML(
+            configs.get('mailerEnvelopeFromAddress'),
             configs.get('mailerFromAddress'),
             emailAddresses,
             'Pending unread notifications',
             `<h2>${configs.get('companyName')} Notification Reminder</h2>
             <p style="font-size:16px">This email was sent to you since you have pending
              unread notifications in account
-             "${account.name} : ${account._id.toString().substring(0, 13)}".</p>
+             "${account ? account.name : 'Deleted'} : ${accountID.toString().substring(0, 13)}".</p>
              <i><small>
              <ul>
               ${messages.map(message => `
               <li>
                 ${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}
-                device ${message.device.name}
+                device ${message.device ? message.device.name : 'Deleted'}
                 (ID: ${message.machineId})
                 - ${message.details}
               </li>
@@ -196,14 +204,20 @@ class NotificationsManager {
             params: { emailAddresses: emailAddresses }
           });
         }
+      } catch (err) {
+        logger.warn('Failed to notify users about pending notifications', {
+          params: { err: err.message, account: accountID }
+        });
       }
+    }
+    try {
       // Set status 'read' to all notifications
       await notificationsDb.updateMany(
         { status: 'unread' },
         { $set: { status: 'read' } }
       );
     } catch (err) {
-      logger.warn('Failed to notify users about pending notifications', {
+      logger.warn('Failed to set status read to all notifications', {
         params: { err: err.message }
       });
     }

@@ -47,13 +47,14 @@ class Mailer {
 
   /**
      * Sends email with html body.
-     * @param  {string}  from    From user
-     * @param  {string}  to      To users
-     * @param  {string}  subject Subject of email
-     * @param  {string}  html    HTML to embed in the mail
+     * @param  {string}  envelopeFrom    Envelope from user
+     * @param  {string}  from            From user
+     * @param  {string}  to              To users
+     * @param  {string}  subject         Subject of email
+     * @param  {string}  html            HTML to embed in the mail
      * @return {Promise}
      */
-  sendMailHTML (from, to, subject, html) {
+  sendMailHTML (envelopeFrom, from, to, subject, html) {
     const mailOptions = {
       // Envelop is needed for adding the sender in the mail envelop
       // This fix the SPF failure as the sender is from flexiwan.com
@@ -62,7 +63,7 @@ class Mailer {
       // To remove the via, we need to add SPF record to the customer email and
       // use the <from> address in the envelop
       envelope: {
-        from: 'flexiWAN <noreply@flexiwan.com>',
+        from: envelopeFrom,
         to: to
       },
       from: from,

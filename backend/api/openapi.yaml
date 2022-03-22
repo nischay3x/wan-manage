@@ -613,6 +613,7 @@ paths:
         schema:
           type: integer
         style: form
+        example: 10
       - description: Type of returned data
         explode: true
         in: query
@@ -624,7 +625,8 @@ paths:
           - summary
           - ids
           type: string
-      - description: The numbers of items to return
+        example: summary
+      - description: The number of items to return, total records count added to the 'records-total' header of the response
         explode: true
         in: query
         name: limit
@@ -632,6 +634,7 @@ paths:
         schema:
           type: integer
         style: form
+        example: 10
       - description: The field by which the data will be ordered
         explode: true
         in: query
@@ -640,6 +643,7 @@ paths:
         schema:
           type: string
         style: form
+        example: name
       - description: Sorting order
         explode: true
         in: query
@@ -648,6 +652,7 @@ paths:
         schema:
           type: string
         style: form
+        example: asc
       - description: Stringified array of filter objects
         explode: true
         in: query
@@ -656,6 +661,7 @@ paths:
         schema:
           type: string
         style: form
+        example: '[{"key":"name","op":"contains","val":"hub"}]'
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -1741,7 +1747,8 @@ paths:
         schema:
           type: integer
         style: form
-      - description: The numbers of items to return
+        example: 10
+      - description: The number of items to return, total records count added to the 'records-total' header of the response
         explode: true
         in: query
         name: limit
@@ -1749,6 +1756,7 @@ paths:
         schema:
           type: integer
         style: form
+        example: 10
       - description: The field by which the data will be ordered
         explode: true
         in: query
@@ -1757,6 +1765,7 @@ paths:
         schema:
           type: string
         style: form
+        example: tunnelStatus
       - description: Sorting order
         explode: true
         in: query
@@ -1765,6 +1774,7 @@ paths:
         schema:
           type: string
         style: form
+        example: desc
       - description: Stringified array of filter objects
         explode: true
         in: query
@@ -1773,6 +1783,7 @@ paths:
         schema:
           type: string
         style: form
+        example: '[{"key":"peer.name","op":"contains","val":"my"}]'
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -3871,6 +3882,7 @@ paths:
         schema:
           type: integer
         style: form
+        example: 10
       - description: The numbers of items to return
         explode: true
         in: query
@@ -3879,6 +3891,7 @@ paths:
         schema:
           type: integer
         style: form
+        example: 10
       - description: Stringified array of filter objects
         explode: true
         in: query
@@ -3887,6 +3900,7 @@ paths:
         schema:
           type: string
         style: form
+        example: '[{"key":"data.message.title","op":"contains","val":"upgrade"}]'
       - description: A filter on specific job ids (comma separated)
         explode: true
         in: query
@@ -4147,7 +4161,8 @@ paths:
         schema:
           type: integer
         style: form
-      - description: The numbers of items to return
+        example: 10
+      - description: The number of items to return, total records count added to the 'records-total' header of the response
         explode: true
         in: query
         name: limit
@@ -4155,6 +4170,7 @@ paths:
         schema:
           type: integer
         style: form
+        example: 10
       - description: The field by which the data will be ordered
         explode: true
         in: query
@@ -4163,6 +4179,7 @@ paths:
         schema:
           type: string
         style: form
+        example: time
       - description: Sorting order
         explode: true
         in: query
@@ -4171,6 +4188,7 @@ paths:
         schema:
           type: string
         style: form
+        example: desc
       - description: Stringified array of filter objects
         explode: true
         in: query
@@ -4179,6 +4197,7 @@ paths:
         schema:
           type: string
         style: form
+        example: '[{"key":"time","op":"<","val":"2022-01-26"}]'
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -8528,6 +8547,10 @@ components:
           $ref: '#/components/schemas/DeviceConnectionStatus'
         isApproved:
           type: boolean
+        lteStatus:
+          type: object
+        wifiStatus:
+          type: object
       required:
         - sync
         - connection
@@ -9433,6 +9456,8 @@ components:
         _id: id
         name: name
         description: description
+        applyOnWan: false
+        overrideDefaultRoute: true
         rules: [rule 1, rule 2, ...]
       properties:
         _id:
@@ -9443,6 +9468,10 @@ components:
           type: string
         description:
           type: string
+        applyOnWan:
+          type: boolean
+        overrideDefaultRoute:
+          type: boolean
         rules:
           items:
             $ref: '#/components/schemas/MLRule'
@@ -9515,12 +9544,18 @@ components:
       example:
         name: name
         description: description
+        applyOnWan: false
+        overrideDefaultRoute: true
         rules: [rule 1, rule 2, ...]
       properties:
         name:
           type: string
         description:
           type: string
+        applyOnWan:
+          type: boolean
+        overrideDefaultRoute:
+          type: boolean
         rules:
           items:
             $ref: '#/components/schemas/MLRuleRequest'
@@ -10273,11 +10308,9 @@ components:
             type: string
           type: array
         filters:
-          oneOf:
-            - type: array
-              items:
-                $ref: '#/components/schemas/Filter'
-            - type: string
+          items:
+            $ref: '#/components/schemas/Filter'
+          type: array
     Filter:
       example:
         key: name

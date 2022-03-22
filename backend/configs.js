@@ -31,6 +31,22 @@ const configEnv = {
     restServerUrl: ['https://local.flexiwan.com:3443'],
     // URL of the UI server
     uiServerUrl: ['https://local.flexiwan.com:3000'],
+    // Name of the company, is used in email templates
+    companyName: 'flexiWAN',
+    // URL that appears in contact us link in the UI,
+    contactUsUrl: 'mailto:yourfriends@flexiwan.com',
+    // Repository setup URL
+    agentRepositoryUrl: 'https://deb.flexiwan.com/setup',
+    // Captcha client key for flexiwan domain
+    captchaSiteKey: '6LfkP8IUAAAAABt2dxrb9U2WzxonxJlhs0_2Hadi',
+    // HTML content of the UI about page
+    aboutContent: '',
+    // UI URL for feedback
+    feedbackUrl: '',
+    // If to show device limit alert banner
+    showDeviceLimitAlert: true,
+    // Whether to remove branding, e.g. powered by...
+    removeBranding: false,
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
     userTokenSecretKey: 'abcdefg1234567',
     // Whether to validate open API response. True for testing and dev, False for production,
@@ -129,8 +145,8 @@ const configEnv = {
     mailerBypassCert: false,
     // From address used when sending emails
     mailerFromAddress: 'noreply@flexiwan.com',
-    // Name of the company, is used in email templates
-    companyName: 'flexiWAN',
+    // Mail envelop from address
+    mailerEnvelopeFromAddress: 'flexiWAN <noreply@flexiwan.com>',
     // Allow users registration, otherwise by invitation only
     allowUsersRegistration: true,
     // Software version query link
@@ -173,7 +189,10 @@ const configEnv = {
     // Reconfig block time in seconds.
     reconfigErrorBlockTime: 60 * 60, // one hour
     // Public IP/Port block time in seconds.
-    publicAddrBlockTime: 60 * 60 // one hour
+    publicAddrBlockTime: 60 * 60, // one hour
+    // Tunnel MTU in bytes. Now provisioned globally per server. Specify number to set specific MTU.
+    // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
+    globalTunnelMtu: 1500
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -181,14 +200,15 @@ const configEnv = {
     mailerBypassCert: true,
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     userTokenExpiration: 604800,
-    logLevel: 'info',
+    logLevel: 'debug',
     mailerPort: 1025
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
     agentApiVersion: '5.0.0',
     // Kue prefix
-    kuePrefix: 'testq'
+    kuePrefix: 'testq',
+    logLevel: 'debug'
   },
   // Override for production environment
   production: {
@@ -269,7 +289,7 @@ const configEnv = {
     useFlexiBilling: true,
     billingRedirectOkUrl: 'https://appqa01.flexiwan.com/ok.html',
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
-    logLevel: 'info',
+    logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
   },
@@ -292,7 +312,7 @@ const configEnv = {
     useFlexiBilling: true,
     billingRedirectOkUrl: 'https://appqa02.flexiwan.com/ok.html',
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
-    logLevel: 'info',
+    logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80']
   }
@@ -365,6 +385,25 @@ class Configs {
 
   getAll () {
     return this.config_values;
+  }
+
+  // The info returned by this function will be shared with the client
+  // Add fields that needs to be known by the client
+  // Pay attention not to expose confidential fields
+  // When adding a new variable add also in client/public/index.html
+  getClientConfig () {
+    return {
+      baseUrl: this.get('restServerUrl', 'list')[0] + '/api/',
+      companyName: this.get('companyName'),
+      allowUsersRegistration: this.get('allowUsersRegistration', 'boolean'),
+      contactUsUrl: this.get('contactUsUrl'),
+      agentRepositoryUrl: this.get('agentRepositoryUrl'),
+      captchaSiteKey: this.get('captchaKey'),
+      aboutContent: this.get('aboutContent'),
+      feedbackUrl: this.get('feedbackUrl'),
+      showDeviceLimitAlert: this.get('showDeviceLimitAlert', 'boolean'),
+      removeBranding: this.get('removeBranding', 'boolean')
+    };
   }
 }
 

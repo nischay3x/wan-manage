@@ -268,13 +268,24 @@ class Connections {
         }
       )
       .catch(err => {
-        logger.warn('Device connection failed', {
-          params: {
-            deviceId: connectionURL.pathname,
-            err: err.message,
-            status: err.status
-          }
-        });
+        // Log unapproved devices in debug level only
+        if (err.status !== 403) {
+          logger.warn('Device connection failed', {
+            params: {
+              deviceId: connectionURL.pathname,
+              err: err.message,
+              status: err.status
+            }
+          });
+        } else {
+          logger.debug('Device connection failed', {
+            params: {
+              deviceId: connectionURL.pathname,
+              err: err.message,
+              status: err.status
+            }
+          });
+        }
         return done(false, err.status);
       });
   }
@@ -351,7 +362,7 @@ class Connections {
     // device version, network information, tunnel keys, etc.)
     // Only after getting the device's response and updating
     // the information, the device can be considered ready.
-    this.sendDeviceInfoMsg(device, info.deviceObj);
+    this.sendDeviceInfoMsg(device, info.deviceObj, true);
   }
 
   /**
@@ -458,11 +469,14 @@ class Connections {
             hasIpOnDevice: updatedConfig.IPv4 !== ''
           };
 
-          if (!i.isAssigned) {
+          if (!i.isAssigned || i.deviceType === 'pppoe') {
             updInterface.metric = updatedConfig.metric;
+            if (updatedConfig.mtu) {
+              updInterface.mtu = updatedConfig.mtu;
+            }
           };
 
-          if (i.dhcp === 'yes' || !i.isAssigned) {
+          if (i.dhcp === 'yes' || !i.isAssigned || i.deviceType === 'pppoe') {
             updInterface.IPv4 = updatedConfig.IPv4;
             updInterface.IPv4Mask = updatedConfig.IPv4Mask;
             updInterface.IPv6 = updatedConfig.IPv6;
@@ -492,8 +506,7 @@ class Connections {
           // add current device to changed devices in order to run modify process for it
           await events.addChangedDevice(origDevice._id, origDevice);
 
-          const newInterfaces = deviceInfo.message.network.interfaces;
-          await events.checkIfToTriggerEvent(plainJsDevice, newInterfaces);
+          await events.checkIfToTriggerEvent(plainJsDevice, interfaces);
 
           // Update the reconfig hash before applying to prevent infinite loop
           this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
@@ -561,7 +574,7 @@ class Connections {
    * @param  {string} deviceId the device mongodb id
    * @return {void}
    */
-  async sendDeviceInfoMsg (machineId, deviceId) {
+  async sendDeviceInfoMsg (machineId, deviceId, isNewConnection = false) {
     const validateDevInfoMessage = msg => {
       const devInfoMsgObj = Joi.extend(joi => ({
         base: joi.object().keys({
@@ -648,7 +661,7 @@ class Connections {
         validateDevInfoMessage
       );
 
-      logger.info('Device info message sent', { params: { deviceId: deviceId } });
+      logger.debug('Device info message sent', { params: { deviceId: deviceId } });
       if (!deviceInfo.ok) {
         throw new Error(`device reply: ${deviceInfo.message}`);
       }
@@ -665,6 +678,15 @@ class Connections {
         { $set: { versions: versions } },
         { new: true, runValidators: true }
       ).populate('interfaces.pathlabels', '_id name type');
+
+      if (!origDevice) {
+        logger.warn('Device not found in DB', {
+          params: { device: machineId }
+        });
+        this.deviceDisconnect(machineId);
+        return;
+      }
+
       const { expireTime, jobQueued } = origDevice.IKEv2;
 
       const { encryptionMethod } = await orgModel.findOne({ _id: origDevice.org });
@@ -703,14 +725,6 @@ class Connections {
         });
       }
 
-      if (!origDevice) {
-        logger.warn('Device not found in DB', {
-          params: { device: machineId }
-        });
-        this.deviceDisconnect(machineId);
-        return;
-      }
-
       const { tunnels } = deviceInfo.message;
       if (Array.isArray(tunnels) && tunnels.length > 0) {
         await this.updateTunnelKeys(origDevice.org, tunnels);
@@ -723,11 +737,13 @@ class Connections {
         params: { deviceId: deviceId, message: deviceInfo }
       });
 
-      this.devices.updateDeviceInfo(machineId, 'ready', true);
-      this.callRegisteredCallbacks(this.connectCallbacks, machineId);
-
-      // Set websocket traffic handler role for this instance
-      roleSelector.selectorSetActive('websocketHandler');
+      if (isNewConnection) {
+        // This part should only be done on a new connection
+        this.devices.updateDeviceInfo(machineId, 'ready', true);
+        this.callRegisteredCallbacks(this.connectCallbacks, machineId);
+        // Set websocket traffic handler role for this instance
+        roleSelector.selectorSetActive('websocketHandler');
+      }
     } catch (err) {
       logger.error('Failed to receive info from device', {
         params: { device: machineId, err: err.message }

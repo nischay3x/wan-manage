@@ -38,6 +38,9 @@ const deviceQueues = require('../utils/deviceQueue')(
 const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
 const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const keyBy = require('lodash/keyBy');
+
+const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -55,10 +58,15 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {String}   topology topology of created tunnels (hubAndSpoke|fullMesh)
+ * @param  {Number}   hubIdx index of the hub in 'Hub and Spoke' topology
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
-const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hubIdx, reasons) => {
+const handleTunnels = async (
+  org, userName, opDevices, pathLabels, advancedOptions, topology, hubIdx, reasons
+) => {
   const devicesLen = opDevices.length;
   const tasks = [];
 
@@ -70,6 +78,25 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
     );
     throw new Error('Not supported key exchange method');
   }
+
+  const devicesIds = opDevices.map(d => d._id);
+  const existingTunnels = await tunnelsModel.find(
+    {
+      isActive: true,
+      org: org,
+      pathlabel: pathLabels.length > 0 ? { $ne: null } : { $eq: null },
+      $or: [
+        { deviceA: { $in: devicesIds } },
+        { deviceB: { $in: devicesIds } }
+      ]
+    },
+    {
+      num: 1,
+      interfaceB: 1,
+      interfaceA: 1,
+      pathlabel: 1
+    }
+  );
 
   const isHubAndSpoke = (topology === 'hubAndSpoke');
   let aLoopStart = 0;
@@ -183,8 +210,13 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
 
               if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
                 // If a tunnel already exists, skip the configuration
-                const tunnelFound = await getTunnel(org, null, wanIfcA, wanIfcB);
-                if (tunnelFound.length > 0) {
+                const tunnelFound = existingTunnels.find(t => {
+                  return t.pathlabel === null && (
+                    (wanIfcA._id.equals(t.interfaceA) && wanIfcB._id.equals(t.interfaceB)) ||
+                    (wanIfcB._id.equals(t.interfaceA) && wanIfcA._id.equals(t.interfaceB))
+                  );
+                });
+                if (tunnelFound) {
                   logger.debug('Found tunnel', {
                     params: { tunnel: tunnelFound }
                   });
@@ -192,7 +224,7 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
                 } else {
                   tasks.push(generateTunnelPromise(userName, org, null,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
+                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, advancedOptions));
                 }
               } else {
                 reasons.add(
@@ -203,19 +235,22 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
               // Create a list of path labels that are common to both interfaces.
               const labelsIntersection = intersectIfcLabels(ifcALabels, ifcBLabels);
               for (const label of labelsIntersection) {
-                isFoundInterfacesWithCommonLabels = true;
                 // Skip tunnel if the label is not included in
                 // the list of labels specified by the user
-                const shouldSkipTunnel =
-                  !createForAllLabels &&
-                  !specifiedLabels.has(label);
+                const shouldSkipTunnel = !createForAllLabels && !specifiedLabels.has(label);
                 if (shouldSkipTunnel) {
-                  reasons.add('Some devices have interfaces without specified Path Labels.');
                   continue;
+                } else {
+                  isFoundInterfacesWithCommonLabels = true;
                 }
                 // If a tunnel already exists, skip the configuration
-                const tunnelFound = await getTunnel(org, label, wanIfcA, wanIfcB);
-                if (tunnelFound.length > 0) {
+                const tunnelFound = existingTunnels.find(t => {
+                  return t.pathlabel && label === t.pathlabel.toString() && (
+                    (wanIfcA._id.equals(t.interfaceA) && wanIfcB._id.equals(t.interfaceB)) ||
+                    (wanIfcB._id.equals(t.interfaceA) && wanIfcA._id.equals(t.interfaceB))
+                  );
+                });
+                if (tunnelFound) {
                   logger.debug('Found tunnel', {
                     params: { tunnel: tunnelFound }
                   });
@@ -225,7 +260,7 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
                 // Use a copy of devices objects as promise runs later
                 tasks.push(generateTunnelPromise(userName, org, label,
                   { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod));
+                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, advancedOptions));
               }
             }
           };
@@ -257,11 +292,14 @@ const handleTunnels = async (org, userName, opDevices, pathLabels, topology, hub
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {array}    peersIds array of peers ids
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
  */
-const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reasons) => {
+const handlePeers = async (
+  org, userName, opDevices, pathLabels, advancedOptions, peersIds, reasons
+) => {
   const tasks = [];
 
   // get peers configurations
@@ -291,18 +329,25 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
       continue;
     }
 
+    const peersSrcDst = await getPeersSrcDst(org);
+    const srcDstKeys = keyBy(peersSrcDst, 'key');
+
     // Create a peer for each WAN interface of the device according to the path
     // labels assigned to the interfaces. If the list of path labels
     // IDs contains the ID 'FFFFFF', create peers between all common
     // path labels across all WAN interfaces.
     const specifiedLabels = new Set(pathLabels);
     const createForAllLabels = specifiedLabels.has('FFFFFF');
+    let isFoundInterfacesWithSpecifiedLabels = false;
     for (const wanIfc of deviceIntfs) {
       const ifcLabels = wanIfc.labelsSet;
 
       // If no path labels were specified by user,
       // but interface has path labels, we don't create for peer for this interface.
       if (specifiedLabels.size === 0) {
+        // if no pat label specified - mark it as true since we don't search for pathlabels
+        isFoundInterfacesWithSpecifiedLabels = true;
+
         // If the WAN interface has path labels, we skip the creation for this interface
         if (ifcLabels.size > 0) {
           const reason =
@@ -325,9 +370,15 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
             continue;
           }
 
+          const srcDst = `${wanIfc.IPv4}_${peer.remoteIP}`;
+          if (srcDst in srcDstKeys) {
+            reasons.add('Some peer tunnels with same source and destination IP already exists. ');
+            continue;
+          }
+
           // generate peer configuration job
           const promise = generateTunnelPromise(userName, org, null, device,
-            null, wanIfc, null, 'ikev2', peer);
+            null, wanIfc, null, 'ikev2', advancedOptions, peer);
           tasks.push(promise);
         }
       } else {
@@ -354,8 +405,9 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
         for (const label of ifcLabels) {
           const shouldSkipPeer = !createForAllLabels && !specifiedLabels.has(label);
           if (shouldSkipPeer) {
-            reasons.add('Some devices have interfaces without the specified Path Labels.');
             continue;
+          } else {
+            isFoundInterfacesWithSpecifiedLabels = true;
           }
 
           for (const peer of peers) {
@@ -367,17 +419,75 @@ const handlePeers = async (org, userName, opDevices, pathLabels, peersIds, reaso
               continue;
             }
 
+            const srcDst = `${wanIfc.IPv4}_${peer.remoteIP}`;
+            if (srcDst in srcDstKeys) {
+              reasons.add('Some peer tunnels with same source and destination IP already exists. ');
+              continue;
+            }
+
             // generate peer configuration job
             const promise = generateTunnelPromise(
-              userName, org, label, device, null, wanIfc, null, 'ikev2', peer);
+              userName, org, label, device, null, wanIfc, null, 'ikev2', advancedOptions, peer
+            );
             tasks.push(promise);
           }
         }
       }
     }
+    if (!isFoundInterfacesWithSpecifiedLabels) {
+      reasons.add('Some devices have interfaces without specified Path Labels.');
+    }
   }
 
   return tasks;
+};
+
+/**
+ * Get peer tunnels with the given src ip and destination ip
+ * @async
+ * @param  {string}   org  organization ID
+ * @param  {string}   interfaceIp interface IP, used as source ip of a tunnel
+ * @param  {array}    peerRemoteIp peer remote IP, used as remote ip of a peer tunnel
+ * @return {array}    array of peer tunnels with the given src and destination ip
+ */
+const getPeersSrcDst = async (org) => {
+  try {
+    const pipeline = [
+      // get active peers for the given organization
+      { $match: { org: mongoose.Types.ObjectId(org), peer: { $ne: null }, isActive: true } },
+      { $project: { deviceA: 1, interfaceA: 1, peer: 1, _id: 0 } },
+      // get interface object used by the tunnel
+      {
+        $lookup: {
+          from: 'devices',
+          let: { deviceId: '$deviceA', ifc_id: '$interfaceA' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$_id', '$$deviceId'] } } },
+            { $project: { interfaces: 1 } },
+            { $unwind: '$interfaces' },
+            { $match: { $expr: { $eq: ['$interfaces._id', '$$ifc_id'] } } },
+            { $project: { _id: 0, src: '$interfaces.IPv4' } }
+          ],
+          as: 'interface'
+        }
+      },
+      // get peer object used by the tunnel
+      { $lookup: { from: 'peers', localField: 'peer', foreignField: '_id', as: 'peer' } },
+      { $unwind: '$peer' },
+      { $unwind: '$interface' },
+      { $project: { _id: 0, key: { $concat: ['$interface.src', '_', '$peer.remoteIP'] } } }
+      // check if the given src and dst combination is already in use by a peer in this organization
+      // { $match: { src: interfaceIp, dst: peerRemoteIp } }
+    ];
+
+    const res = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
+    return res;
+  } catch (err) {
+    logger.error('Failed to check for duplication src and dst ips', {
+      params: { org, err: err.message }
+    });
+    throw err;
+  }
 };
 
 /**
@@ -422,7 +532,24 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('At least 2 devices must be selected to create tunnels');
   }
 
-  const { topology, hub } = data.meta;
+  const { pathLabels, advancedOptions, peers, topology, hub } = data.meta;
+  const { mtu, mssClamp, ospfCost } = advancedOptions || {};
+
+  if (mtu !== undefined && mtu !== '' && (isNaN(mtu) || mtu < 500 || mtu > 1500)) {
+    logger.error('Wrong MTU value when creating tunnels', { params: { mtu } });
+    throw new Error('MTU value must be between 500 and 1500');
+  }
+
+  if (mssClamp && !['yes', 'no'].includes(mssClamp)) {
+    logger.error('Wrong MSS Clamping when creating tunnels', { params: { mssClamp } });
+    throw new Error('MSS Clamping must be "yes" or "no"');
+  }
+
+  if (ospfCost !== undefined && ospfCost !== '' && isNaN(ospfCost)) {
+    logger.error('Wrong OSPF cost when creating tunnels', { params: { ospfCost } });
+    throw new Error('OSPF cost must be numeric value or empty');
+  }
+
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
     logger.error('Unknown topology when creating tunnels', { params: { topology: topology } });
     throw new Error('Unknown topology when creating tunnels');
@@ -450,11 +577,11 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   if (isPeer) {
     const tasks = await handlePeers(
-      org, userName, opDevices, data.meta.pathLabels, data.meta.peers, reasons);
+      org, userName, opDevices, pathLabels, advancedOptions, peers, reasons);
     dbTasks = dbTasks.concat(tasks);
   } else {
     const tasks = await handleTunnels(
-      org, userName, opDevices, data.meta.pathLabels, topology, hubIdx, reasons);
+      org, userName, opDevices, pathLabels, advancedOptions, topology, hubIdx, reasons);
     dbTasks = dbTasks.concat(tasks);
   }
 
@@ -477,7 +604,7 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   const desired = dbTasks.flat().map(job => job.id);
   const ids = fulfilled.flat().map(job => job.id);
-  let message = `${isPeer ? 'peer ' : ''}tunnels creation jobs added.`;
+  let message = `${isPeer ? 'peer ' : ''}tunnel creation jobs added.`;
   if (desired.length === 0 || fulfilled.flat().length === 0) {
     message = 'No ' + message;
   } else if (ids.length < desired.length) {
@@ -586,10 +713,11 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB, peerId = false) => {
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
  * @param  {string}   encryptionMethod key exchange method [none|ikev2|psk]
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {boolean}  peer         peer configurations
  */
-const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
-  deviceAIntf, deviceBIntf, encryptionMethod = null, peer = null) => {
+const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
+  deviceAIntf, deviceBIntf, encryptionMethod, advancedOptions, peer = null) => {
   logger.debug(`Adding tunnel${peer ? '' : ' between devices'}`, {
     params: {
       deviceA: deviceA.hostname,
@@ -603,33 +731,50 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
       peer
     }
   });
-
-  var tPromise = new Promise(function (resolve, reject) {
+  let tunnelnum = null;
+  try {
     // Check if tunnel can be created
     // Get a unique tunnel number
     // Search first in deleted tunnels
-    tunnelsModel.findOneAndUpdate(
+    const tunnelResp = await tunnelsModel.findOneAndUpdate(
       // Query
       { isActive: false, org: org },
       // Update, make sure other query doesn't find the same number
       { isActive: true },
       // Options
       { upsert: false }
-    )
-      .then(async (tunnelResp) => {
-        logger.debug('Found a tunnel', { params: { tunnel: tunnelResp } });
-
-        if (tunnelResp !== null) { // deleted tunnel found, use it
-          const tunnelnum = tunnelResp.num;
-          logger.info('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
-
-          // Configure tunnel using this num
-          const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-            deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
-
-          return resolve(tunnelJobs);
-        } else { // No deleted tunnel found, get a new one
-          tunnelIDsModel.findOneAndUpdate(
+    );
+    if (tunnelResp !== null) { // deleted tunnel found, use it
+      tunnelnum = tunnelResp.num;
+      logger.debug('Adding tunnel from deleted tunnel', { params: { tunnel: tunnelnum } });
+    } else {
+      try {
+        const idResp = await tunnelIDsModel.findOneAndUpdate(
+          // Query, allow only 15000 tunnels per organization
+          {
+            org: org,
+            nextAvailID: { $gte: 0, $lt: 15000 }
+          },
+          // Update
+          { $inc: { nextAvailID: 1 } },
+          // Options
+          { new: true, upsert: true }
+        );
+        if (!idResp || !idResp.nextAvailID) {
+          throw new Error('Failed to get a new tunnel number');
+        }
+        tunnelnum = idResp.nextAvailID;
+        logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
+      } catch (err) {
+        // org is a key value in the collection, upsert sometimes creates a new doc
+        // (if two upserts done at once)
+        // In this case we need to check the error and try again if such occurred
+        // See more info in:
+        // eslint-disable-next-line max-len
+        // https://stackoverflow.com/questions/37295648/mongoose-duplicate-key-error-with-upsert
+        if (err.code === 11000) {
+          logger.debug('2nd try to find tunnel ID', { params: {} });
+          const idResp = tunnelIDsModel.findOneAndUpdate(
             // Query, allow only 15000 tunnels per organization
             {
               org: org,
@@ -639,75 +784,44 @@ const generateTunnelPromise = (user, org, pathLabel, deviceA, deviceB,
             { $inc: { nextAvailID: 1 } },
             // Options
             { new: true, upsert: true }
-          ).then(async (idResp) => {
-            const tunnelnum = idResp.nextAvailID;
-            logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
-
-            // Configure tunnel using this num
-            const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-              deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
-
-            return resolve(tunnelJobs);
-          }, (err) => {
-            // org is a key value in the collection, upsert sometimes creates a new doc
-            // (if two upserts done at once)
-            // In this case we need to check the error and try again if such occurred
-            // See more info in:
-            // eslint-disable-next-line max-len
-            // https://stackoverflow.com/questions/37295648/mongoose-duplicate-key-error-with-upsert
-            if (err.code === 11000) {
-              logger.debug('2nd try to find tunnel ID', { params: {} });
-              tunnelIDsModel.findOneAndUpdate(
-                // Query, allow only 15000 tunnels per organization
-                {
-                  org: org,
-                  nextAvailID: { $gte: 0, $lt: 15000 }
-                },
-                // Update
-                { $inc: { nextAvailID: 1 } },
-                // Options
-                { new: true, upsert: true }
-              ).then(async (idResp) => {
-                const tunnelnum = idResp.nextAvailID;
-                logger.info('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
-                // Configure tunnel using this num
-                const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-                  deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, peer);
-
-                return resolve(tunnelJobs);
-              }, (err) => {
-                logger.error('Tunnel ID not found (not found twice)', {
-                  params: { reason: err.message }
-                });
-                reject(new Error('Tunnel ID not found'));
-              });
-            } else {
-              // Another error
-              logger.error('Tunnel ID not found (other error)', {
-                params: { reason: err.message }
-              });
-              reject(new Error('Tunnel ID not found'));
-            }
-          })
-            .catch((err) => {
-              logger.error('Tunnel ID not found (general error)', {
-                params: { reason: err.message }
-              });
-              reject(new Error('Tunnel ID not found'));
-            });
+          );
+          if (!idResp || !idResp.nextAvailID) {
+            throw new Error('Failed to get a new tunnel number');
+          }
+          tunnelnum = idResp.nextAvailID;
+          logger.debug('Adding tunnel with new ID', { params: { tunnel: tunnelnum } });
+        } else {
+          throw new Error('Failed to get a new tunnel number: ' + err.message);
         }
-      }, (err) => {
-        logger.error('Tunnels search error', { params: { reason: err.message } });
-        reject(new Error('Tunnels search error'));
-      })
-      .catch((err) => {
-        logger.error('Tunnels search error (general error)', {
-          params: { reason: err.message }
+      }
+    }
+    if (tunnelnum === null) {
+      throw new Error('Failed to get a new tunnel number');
+    }
+    const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
+      deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, advancedOptions, peer);
+    return tunnelJobs;
+  } catch (err) {
+    // there can be an exception in the addTunnel function
+    // we need to set tunnel as inactive in case of not pending
+    if (tunnelnum !== null && !err.message.includes('pending')) {
+      try {
+        await tunnelsModel.findOneAndUpdate(
+          { num: tunnelnum, isActive: true, org: org },
+          { isActive: false },
+          { upsert: false }
+        );
+      } catch (error) {
+        logger.error('Failed to deactivate tunnel', {
+          params: { tunnelnum, error: error.message }
         });
-        reject(err);
-      });
-  });
-  return tPromise;
+      }
+    }
+    logger.error('Failed to add tunnel', {
+      params: { tunnelnum, error: err.message }
+    });
+    throw new Error(err.message);
+  }
 };
 
 /**
@@ -838,6 +952,7 @@ const queueTunnel = async (
  * @param  {pathLabel} path label used for this tunnel
  * @param  {Object} deviceA details of device A
  * @param  {Object?} deviceB details of device B
+ * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {Object?}  peer peer configurations
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
@@ -848,6 +963,7 @@ const prepareTunnelAddJob = async (
   pathLabel,
   deviceA,
   deviceB,
+  advancedOptions,
   peer = null
 ) => {
   // Extract tunnel keys from the database
@@ -865,6 +981,7 @@ const prepareTunnelAddJob = async (
     deviceAIntf,
     deviceBIntf,
     pathLabel,
+    advancedOptions,
     peer
   );
 
@@ -1044,6 +1161,7 @@ const prepareTunnelAddJob = async (
  * @param  {Object?}  deviceB      details of device B
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {Object?}  peer         peer configurations
  * @return {void}
  */
@@ -1057,6 +1175,7 @@ const addTunnel = async (
   deviceAIntf,
   deviceBIntf,
   pathLabel,
+  advancedOptions,
   peer = null
 ) => {
   const devicesInfo = {
@@ -1072,16 +1191,19 @@ const addTunnel = async (
   // Generate IPsec Keys and store them in the database
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
+  // Advanced tunnel options
+  const { mtu, mssClamp, ospfCost } = advancedOptions || {};
+
   // check if need to create the tunnel as pending
   let isPending = false;
   let pendingReason = '';
 
-  if (deviceAIntf.hasIpOnDevice === false) {
+  if (deviceAIntf.IPv4 === '') {
     isPending = true;
     pendingReason = eventsReasons.interfaceHasNoIp(deviceAIntf.name, deviceA.name);
   }
 
-  if (!peer && deviceBIntf.hasIpOnDevice === false) {
+  if (!peer && deviceBIntf.IPv4 === '') {
     isPending = true;
     pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
   }
@@ -1112,6 +1234,7 @@ const addTunnel = async (
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,
+      advancedOptions: { mtu, mssClamp, ospfCost },
       peer: peer ? peer._id : null
     },
     // Options
@@ -1120,7 +1243,7 @@ const addTunnel = async (
 
   // don't send jobs for pending tunnels
   if (isPending) {
-    throw new Error('Tunnel set to pending');
+    throw new Error(`Tunnel #${tunnelnum} set as pending - ${pendingReason}`);
   }
 
   const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
@@ -1130,6 +1253,7 @@ const addTunnel = async (
     pathLabel,
     deviceA,
     deviceB,
+    advancedOptions,
     peer
   );
 
@@ -1284,7 +1408,7 @@ const applyTunnelDel = async (devices, user, data) => {
 
     const desired = delPromises.flat().map(job => job.id);
     const ids = fulfilled.flat().map(job => job.id);
-    let message = 'tunnels deletion jobs added.';
+    let message = 'tunnel deletion jobs added.';
     if (desired.length === 0 || fulfilled.flat().length === 0) {
       message = 'No ' + message;
     } else if (ids.length < desired.length) {
@@ -1523,6 +1647,7 @@ const sync = async (deviceId, org) => {
       tunnelKeys: 1,
       encryptionMethod: 1,
       pathlabel: 1,
+      advancedOptions: 1,
       peer: 1
     }
   )
@@ -1547,6 +1672,7 @@ const sync = async (deviceId, org) => {
       tunnelKeys,
       encryptionMethod,
       pathlabel,
+      advancedOptions,
       peer
     } = tunnel;
 
@@ -1574,6 +1700,7 @@ const sync = async (deviceId, org) => {
       pathlabel,
       deviceA,
       deviceB,
+      advancedOptions,
       peer
     );
     // Add the tunnel only for the device that is being synced
@@ -1624,14 +1751,30 @@ const sync = async (deviceId, org) => {
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object?} deviceBIntf device B tunnel interface
  * @param  {pathLabel?} path label used for this tunnel
+ * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
  * @param  {Object?}  peer peer configurations. If exists, fill peer configurations
 */
-const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null, peer = null) => {
+const prepareTunnelParams = (
+  tunnel, deviceAIntf, deviceBIntf, pathLabel = null, advancedOptions = {}, peer = null
+) => {
   const paramsDeviceA = {};
   const paramsDeviceB = {};
 
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
+
+  // no additional header for not encrypted tunnels
+  const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
+  const minMtu = Math.min(
+    deviceAIntf.mtu || 1500,
+    deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : 1500
+  ) - packetHeaderSize;
+
+  let { mtu, ospfCost, mssClamp } = advancedOptions;
+  if (!mtu) {
+    mtu = (globalTunnelMtu > 0) ? globalTunnelMtu : minMtu;
+  }
+  mtu = Math.min(Math.max(mtu, 500), 1500);
 
   // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
@@ -1648,12 +1791,18 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
     paramsDeviceA.peer.routing = 'ospf';
-    paramsDeviceA.peer.mtu = 1500;
+    paramsDeviceA.peer.mtu = mtu;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
     };
     paramsDeviceA.peer.urls = peer.urls;
     paramsDeviceA.peer.ips = peer.ips;
+    if (mssClamp !== 'no') {
+      paramsDeviceA.peer['tcp-mss-clamp'] = minMtu;
+    }
+    if (ospfCost) {
+      paramsDeviceA.peer['ospf-cost'] = ospfCost;
+    }
   } else {
     // destination
     const isLocal = (!deviceAIntf.PublicIP || !deviceBIntf.PublicIP ||
@@ -1661,9 +1810,6 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
     paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
     paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
       ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
-
-    // mtu
-    const mtu = 1500;
 
     paramsDeviceA['loopback-iface'] = {
       addr: tunnelParams.ip1 + '/31',
@@ -1693,6 +1839,14 @@ const prepareTunnelParams = (tunnel, deviceAIntf, deviceBIntf, pathLabel = null,
         labels: pathLabel ? [pathLabel] : []
       }
     };
+    if (mssClamp !== 'no') {
+      paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = minMtu;
+      paramsDeviceB['loopback-iface']['tcp-mss-clamp'] = minMtu;
+    }
+    if (ospfCost) {
+      paramsDeviceA['loopback-iface']['ospf-cost'] = ospfCost;
+      paramsDeviceB['loopback-iface']['ospf-cost'] = ospfCost;
+    }
   }
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
@@ -1703,7 +1857,7 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
 
   const tunnels = await tunnelsModel.find(
     { _id: { $in: tunnelsIds }, isActive: true }
-  ).populate('deviceA').populate('deviceB');
+  ).populate('deviceA').populate('deviceB').populate('peer');
 
   for (const tunnel of tunnels) {
     const ifcA = tunnel.deviceA.interfaces.find(ifc => {
@@ -1732,11 +1886,12 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
       username,
       tunnel.org,
       tunnel.deviceA.machineId,
-      tunnel.deviceB.machineId,
+      tunnel.peer ? null : tunnel.deviceB.machineId,
       tunnel.deviceA._id,
-      tunnel.deviceB._id,
+      tunnel.peer ? null : tunnel.deviceB._id,
       tunnel.num,
-      tunnel.pathlabel
+      tunnel.pathlabel,
+      tunnel.peer
     );
 
     tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
@@ -1748,7 +1903,7 @@ const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
 const getInterfacesWithPathLabels = device => {
   const deviceIntfs = [];
   device.interfaces.forEach(intf => {
-    if (intf.isAssigned === true && intf.type === 'WAN' && intf.gateway) {
+    if (intf.isAssigned === true && intf.type === 'WAN') {
       const labelsSet = new Set(intf.pathlabels.map(label => {
         // DIA interfaces cannot be used in tunnels
         return label.type !== 'DIA' ? label._id.toString() : null;

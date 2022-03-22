@@ -25,6 +25,7 @@ const configs = require('../configs')();
 const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
+const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 
 /***
  * This class gets periodic status from all connected devices
@@ -109,6 +110,8 @@ class DeviceStatus {
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().optional(),
+      lte_stats: Joi.object().optional(),
+      wifi_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
       ikev2: Joi.object({
         certificateExpiration: Joi.string().allow('').optional(),
@@ -233,6 +236,11 @@ class DeviceStatus {
               if (!isBlocked) {
                 // Call get-device-info and reconfig
                 connections.sendDeviceInfoMsg(deviceID, deviceInfo.deviceObj);
+              } else {
+                logger.warn('Failed to send get-device-info due to reconfig errors limiter', {
+                  params: { deviceID, reconfig, needNewIKEv2Certificate },
+                  periodic: { task: this.taskInfo }
+                });
               }
             }
           } else {
@@ -384,6 +392,48 @@ class DeviceStatus {
   }
 
   /**
+    * Store LTE status in memory to improve the response speed of the LTE monitoring requests
+    * @param  {string} machineId  device machine id
+    * @param  {string} devId LTE device devId
+    * @param  {Object} lteStatus   LTE status
+    * @return {void}
+    */
+  setDeviceLteStatus (machineId, devId, lteStatus) {
+    if (!this.status[machineId]) {
+      this.status[machineId] = {};
+    }
+    if (!this.status[machineId].lteStatus) {
+      this.status[machineId].lteStatus = {};
+    }
+    if (!this.status[machineId].lteStatus[devId]) {
+      this.status[machineId].lteStatus[devId] = {};
+    }
+    const time = new Date().getTime();
+    Object.assign(this.status[machineId].lteStatus[devId], { ...lteStatus, time });
+  }
+
+  /**
+    * Store LTE status in memory to improve the response speed of the WiFi monitoring requests
+    * @param  {string} machineId  device machine id
+    * @param  {string} devId WiFi device devId
+    * @param  {Object} wifiStatus   WiFi status
+    * @return {void}
+    */
+  setDeviceWifiStatus (machineId, devId, wifiStatus) {
+    if (!this.status[machineId]) {
+      this.status[machineId] = {};
+    }
+    if (!this.status[machineId].wifiStatus) {
+      this.status[machineId].wifiStatus = {};
+    }
+    if (!this.status[machineId].wifiStatus[devId]) {
+      this.status[machineId].wifiStatus[devId] = {};
+    }
+    const time = new Date().getTime();
+    Object.assign(this.status[machineId].wifiStatus[devId], { ...wifiStatus, time });
+  }
+
+  /**
      * @param  {string} machineId  device machine id
      * @param  {Object} deviceInfo device info entry
      * @param  {Object} rawStats   device stats supplied by the device
@@ -405,6 +455,29 @@ class DeviceStatus {
     const timeDelta = rawStats.period;
     const ifStats = rawStats.hasOwnProperty('stats') ? rawStats.stats : {};
     const devStats = {};
+
+    // Set lte status in memory for now
+    const lteStatus = rawStats.lte_stats;
+    if (rawStats.hasOwnProperty('lte_stats') && Object.entries(lteStatus).length !== 0) {
+      if (!this.status[machineId].lteStatus) {
+        this.status[machineId].lteStatus = {};
+      }
+      for (const devId in lteStatus) {
+        const mappedLteStatus = parseLteStatus(lteStatus[devId]);
+        this.setDeviceLteStatus(machineId, devId, mappedLteStatus);
+      }
+    };
+
+    // Set wifi status in memory for now
+    const wifiStatus = rawStats.wifi_stats;
+    if (rawStats.hasOwnProperty('wifi_stats') && Object.entries(wifiStatus).length !== 0) {
+      if (!this.status[machineId].wifiStatus) {
+        this.status[machineId].wifiStatus = {};
+      }
+      for (const devId in wifiStatus) {
+        this.setDeviceWifiStatus(machineId, devId, mapWifiNames(wifiStatus[devId]));
+      }
+    };
 
     // Set tunnel status in memory for now
     const tunnelStatus = rawStats.tunnel_stats;

@@ -15,7 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const path = require('path');
 const { devices } = require('../models/devices');
+const apnsJson = require(path.join(__dirname, 'mcc_mnc_apn.json'));
 
 /**
  * Get all LAN subnets in the same organization
@@ -96,32 +98,57 @@ const mapLteNames = agentData => {
     pin_state: 'pinState',
     connection_state: 'connectionState',
     registration_network: 'registrationNetworkState',
+    network_error: 'networkError',
+    register_state: 'registrationState',
+    PIN1_RETRIES: 'pin1Retries',
+    PIN1_STATUS: 'pin1Status',
+    PUK1_RETRIES: 'puk1Retries',
+    pin1_retries: 'pin1Retries',
+    pin1_status: 'pin1Status',
+    puk1_retries: 'puk1Retries',
+    cell_id: 'cellId',
+    Cell_Id: 'cellId',
+    Operator_Name: 'operatorName',
+    operator_name: 'operatorName',
+    Vendor: 'vendor',
+    Model: 'model',
+    Imei: 'imei',
+    Uplink_speed: 'uplinkSpeed',
+    uplink_speed: 'uplinkSpeed',
+    Downlink_speed: 'downlinkSpeed',
+    downlink_speed: 'downlinkSpeed',
     APN: 'apn',
     UserName: 'userName',
     Password: 'password',
     Auth: 'auth',
-    Vendor: 'vendor',
-    Model: 'model',
-    Imei: 'imei',
-    Downlink_speed: 'downlinkSpeed',
-    Uplink_speed: 'uplinkSpeed',
-    PIN1_RETRIES: 'pin1Retries',
-    PIN1_STATUS: 'pin1Status',
-    PUK1_RETRIES: 'puk1Retries',
-    network_error: 'networkError',
-    register_state: 'registrationState',
     RSRP: 'rsrp',
     RSRQ: 'rsrq',
     RSSI: 'rssi',
     SINR: 'sinr',
     SNR: 'snr',
-    Cell_Id: 'cellId',
     MCC: 'mcc',
-    MNC: 'mnc',
-    Operator_Name: 'operatorName'
+    MNC: 'mnc'
   };
 
   return renameKeys(agentData, map);
+};
+
+const parseLteStatus = lteStatus => {
+  lteStatus = mapLteNames(lteStatus);
+
+  // calc default apn
+  const defaultApn = lteStatus.defaultSettings ? lteStatus.defaultSettings.apn : '';
+  const mcc = lteStatus.systemInfo.mcc;
+  const mnc = lteStatus.systemInfo.mnc;
+
+  if (defaultApn === '' && mcc && mnc) {
+    const key = mcc + '-' + mnc;
+    if (apnsJson[key]) {
+      lteStatus.defaultSettings.apn = apnsJson[key];
+    }
+  }
+
+  return lteStatus;
 };
 
 const renameKeys = (obj, map) => {
@@ -143,10 +170,54 @@ const renameKeys = (obj, map) => {
   return obj;
 };
 
+/**
+ * Calculation bridges by interfaces list
+ * @param {array}  interfaces LTE data from agent
+ * @return {object} dictionary contains the bridge IP as key with array of devIds
+ */
+const getBridges = interfaces => {
+  const bridges = {};
+
+  for (const ifc of interfaces) {
+    const devId = ifc.devId;
+
+    if (!ifc.isAssigned) {
+      continue;
+    }
+
+    if (ifc.type !== 'LAN') {
+      continue;
+    }
+
+    if (ifc.IPv4 === '' || ifc.IPv4Mask === '') {
+      continue;
+    }
+    const addr = ifc.IPv4 + '/' + ifc.IPv4Mask;
+
+    const needsToBridge = interfaces.some(i => {
+      return devId !== i.devId && addr === i.IPv4 + '/' + i.IPv4Mask;
+    });
+
+    if (!needsToBridge) {
+      continue;
+    }
+
+    if (!bridges.hasOwnProperty(addr)) {
+      bridges[addr] = [];
+    }
+
+    bridges[addr].push(ifc.devId);
+  };
+
+  return bridges;
+};
+
 // Default exports
 module.exports = {
   getAllOrganizationLanSubnets,
   getDefaultGateway,
+  getBridges,
   mapLteNames,
+  parseLteStatus,
   mapWifiNames
 };

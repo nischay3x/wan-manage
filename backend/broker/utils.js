@@ -35,7 +35,7 @@ const sendMsg = (org, machineID, msg, job, curTask, tasksLength) => (inp, done) 
   connections.deviceSendMessage(org, machineID, msg, undefined, job.id)
     .then((rmsg) => {
       if (rmsg !== null && rmsg.ok === 1) {
-        logger.debug('Finished task', { params: { message: msg, reply: rmsg }, job: job.id });
+        logger.debug('Finished task', { params: { reply: rmsg, jobId: job.id } });
         job.progress(curTask, tasksLength);
         done(null, rmsg);
       } else {

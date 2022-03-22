@@ -64,6 +64,8 @@ const queueMlPolicyJob = async (deviceList, op, requestTime, policy, user, org) 
           id: _id,
           priority: priority,
           classification: classification,
+          'apply-on-wan-rx': policy.applyOnWan,
+          'override-default-route': policy.overrideDefaultRoute,
           action: action
         };
       });
@@ -172,51 +174,45 @@ const apply = async (deviceList, user, data) => {
   const { org } = data;
   const { op, id } = data.meta;
 
-  let mLPolicy, session, deviceIds, opDevices;
+  let mLPolicy, deviceIds, opDevices;
 
-  try {
-    session = await mongoConns.getMainDB().startSession();
-    await session.withTransaction(async () => {
-      if (op === 'install') {
-        // Retrieve policy from database
-        mLPolicy = await MultiLinkPolicies.findOne(
-          {
-            org: org,
-            _id: id
-          },
-          {
-            rules: 1,
-            name: 1
-          }
-        ).session(session);
-
-        if (!mLPolicy) {
-          throw createError(404, `policy ${id} does not exist`);
+  await mongoConns.mainDBwithTransaction(async (session) => {
+    if (op === 'install') {
+      // Retrieve policy from database
+      mLPolicy = await MultiLinkPolicies.findOne(
+        {
+          org: org,
+          _id: id
+        },
+        {
+          rules: 1,
+          applyOnWan: 1,
+          overrideDefaultRoute: 1,
+          name: 1
         }
+      ).session(session);
+
+      if (!mLPolicy) {
+        throw createError(404, `policy ${id} does not exist`);
       }
+    }
 
-      // Extract the device IDs to operate on
-      deviceIds = data.devices
-        ? await getOpDevices(data.devices, org, mLPolicy)
-        : [deviceList[0]._id];
+    // Extract the device IDs to operate on
+    deviceIds = data.devices
+      ? await getOpDevices(data.devices, org, mLPolicy)
+      : [deviceList[0]._id];
 
-      const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
-      opDevices = filterDevices(deviceList, deviceIdsSet, op);
+    const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
+    opDevices = filterDevices(deviceList, deviceIdsSet, op);
 
-      if (op === 'install') {
-        // Devices specific validation
-        const { valid, err } = validateMultilinkPolicy(mLPolicy, opDevices);
-        if (!valid) {
-          throw createError(400, err);
-        }
+    if (op === 'install') {
+      // Devices specific validation
+      const { valid, err } = validateMultilinkPolicy(mLPolicy, opDevices);
+      if (!valid) {
+        throw createError(400, err);
       }
-    });
-  } catch (err) {
-    throw err.name === 'MongoError'
-      ? new Error() : err;
-  } finally {
-    session.endSession();
-  }
+    }
+  });
   return applyPolicy(opDevices, mLPolicy, op, user, org);
 };
 
@@ -230,42 +226,34 @@ const apply = async (deviceList, user, data) => {
  * @param  {String}   org           Org ID
  */
 const applyPolicy = async (opDevices, mLPolicy, op, user, org) => {
-  let session;
   const deviceIds = opDevices.map(device => device._id);
   const requestTime = Date.now();
-  try {
-    session = await mongoConns.getMainDB().startSession();
-    await session.withTransaction(async () => {
-      // Update devices policy in the database
-      const update = op === 'install'
-        ? {
-          $set: {
-            'policies.multilink': {
-              policy: mLPolicy._id,
-              status: 'installing',
-              requestTime: requestTime
-            }
+
+  await mongoConns.mainDBwithTransaction(async (session) => {
+    // Update devices policy in the database
+    const update = op === 'install'
+      ? {
+        $set: {
+          'policies.multilink': {
+            policy: mLPolicy._id,
+            status: 'installing',
+            requestTime: requestTime
           }
         }
-        : {
-          $set: {
-            'policies.multilink.status': 'uninstalling',
-            'policies.multilink.requestTime': requestTime
-          }
-        };
+      }
+      : {
+        $set: {
+          'policies.multilink.status': 'uninstalling',
+          'policies.multilink.requestTime': requestTime
+        }
+      };
 
-      await devices.updateMany(
-        { _id: { $in: deviceIds }, org: org },
-        update,
-        { upsert: false }
-      ).session(session);
-    });
-  } catch (err) {
-    throw err.name === 'MongoError'
-      ? new Error() : err;
-  } finally {
-    session.endSession();
-  }
+    await devices.updateMany(
+      { _id: { $in: deviceIds }, org: org },
+      update,
+      { upsert: false }
+    ).session(session);
+  });
 
   // Queue policy jobs
   const jobs = await queueMlPolicyJob(opDevices, op, requestTime, mLPolicy, user, org);
@@ -482,6 +470,8 @@ const sync = async (deviceId, org) => {
       },
       {
         rules: 1,
+        applyOnWan: 1,
+        overrideDefaultRoute: 1,
         name: 1
       }
     );
@@ -500,6 +490,8 @@ const sync = async (deviceId, org) => {
             id: _id,
             priority: priority,
             classification: classification,
+            'apply-on-wan-rx': mLPolicy.applyOnWan,
+            'override-default-route': mLPolicy.overrideDefaultRoute,
             action: action
           });
         }

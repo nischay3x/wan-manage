@@ -36,7 +36,7 @@ const connections = require('../websocket/Connections')();
  * @return {void}
  */
 exports.deviceConnectionOpened = async (deviceId) => {
-  logger.info('Broker: device connection opened', { params: { deviceID: deviceId } });
+  logger.debug('Broker: device connection opened', { params: { deviceID: deviceId } });
   try {
     await deviceQueues.startQueue(deviceId, deviceProcessor);
   } catch (err) {
@@ -51,7 +51,7 @@ exports.deviceConnectionOpened = async (deviceId) => {
  * @return {void}
  */
 exports.deviceConnectionClosed = async (deviceId) => {
-  logger.info('Broker: device connection closed', { params: { deviceID: deviceId } });
+  logger.debug('Broker: device connection closed', { params: { deviceID: deviceId } });
   try {
     await deviceQueues.pauseQueue(deviceId);
   } catch (err) {
@@ -128,7 +128,6 @@ const deviceProcessor = async (job) => {
       } else {
         logger.info('Job completed', {
           params: {
-            job: job,
             results: results.message,
             deviceHash: results['router-cfg-hash'] || 'n/a'
           },

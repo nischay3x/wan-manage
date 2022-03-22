@@ -31,7 +31,8 @@ const mongoose = require('mongoose');
 const validator = require('validator');
 const net = require('net');
 const pick = require('lodash/pick');
-const path = require('path');
+const isEqual = require('lodash/isEqual');
+
 const uniqBy = require('lodash/uniqBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
@@ -42,11 +43,12 @@ const {
   validateDhcpConfig,
   validateStaticRoute
 } = require('../deviceLogic/validators');
-const { getAllOrganizationLanSubnets, mapLteNames, mapWifiNames } = require('../utils/deviceUtils');
+const {
+  getAllOrganizationLanSubnets, mapLteNames, mapWifiNames, getBridges, parseLteStatus
+} = require('../utils/deviceUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');
-const apnsJson = require(path.join(__dirname, '..', 'utils', 'mcc_mnc_apn.json'));
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -58,6 +60,7 @@ const TunnelsService = require('./TunnelsService');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const { getMajorVersion } = require('../versioning');
+const createError = require('http-errors');
 
 class DevicesService {
   /**
@@ -641,6 +644,10 @@ class DevicesService {
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description');
+
+      if (!result) {
+        return Service.rejectResponse('Device not found', 404);
+      }
       const device = await DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
@@ -725,6 +732,8 @@ class DevicesService {
         return Service.rejectResponse('Device or Interface not found', 404);
       };
 
+      const ifc = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
+
       const supportedMessages = {
         lte: {
           message: 'get-lte-info',
@@ -742,36 +751,27 @@ class DevicesService {
             registrationNetworkState: {}
           },
           parseResponse: async response => {
-            response = mapLteNames(response);
-            let defaultApn = response.defaultSettings ? response.defaultSettings.apn : null;
-            const mcc = response.systemInfo.mcc;
-            const mnc = response.systemInfo.mnc;
+            response = parseLteStatus(response);
 
-            if (mcc && mnc) {
-              const key = mcc + '-' + mnc;
-              if (apnsJson[key]) {
-                defaultApn = apnsJson[key];
-              }
+            const apnIsDiff = !isEqual(ifc.deviceParams.defaultSettings, response.defaultSettings);
+            const pinStateIsDiff = !isEqual(ifc.deviceParams.initial_pin1_state, response.pinState);
+
+            const update = {};
+            if (apnIsDiff) {
+              update['interfaces.$.deviceParams.defaultSettings'] = response.defaultSettings;
+            }
+            if (pinStateIsDiff) {
+              update['interfaces.$.deviceParams.initial_pin1_state'] = response.pinState;
             }
 
-            // update pin state
-            await devices.updateOne(
-              { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-              {
-                $set: {
-                  'interfaces.$.deviceParams.initial_pin1_state': status.pinState,
-                  'interfaces.$.deviceParams.default_settings': status.defaultSettings
-                }
-              }
-            );
+            if (Object.keys(update).length > 0) {
+              await devices.updateOne(
+                { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
+                { $set: update }
+              );
+            }
 
-            return {
-              ...response,
-              defaultSettings: {
-                ...response.defaultSettings,
-                apn: defaultApn
-              }
-            };
+            return response;
           }
         },
         wifi: {
@@ -787,7 +787,6 @@ class DevicesService {
         }
       };
 
-      const ifc = deviceObject.interfaces.find(i => i._id.toString() === interfaceId);
       const message = supportedMessages[ifc.deviceType];
       if (!message) {
         throw new Error('Unsupported request');
@@ -999,80 +998,91 @@ class DevicesService {
    * no response value expected for this operation
    **/
   static async devicesDELETE ({ org, devicesDeleteRequest }, { user }) {
-    let session;
+    let orgList;
     try {
-      session = await mongoConns.getMainDB().startSession();
-      await session.startTransaction();
-      const orgList = await getAccessTokenOrgList(user, org, true);
-      const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
-      const { ids, filters } = devicesDeleteRequest;
-      if (ids && filters) {
-        return Service.rejectResponse('Only ids or filters can be specified as a parameter', 400);
-      } else if (filters === 'all') {
-        // Delete all devices request protection
-        logger.debug('Delete All devices request received');
-      } else if (filters && (!Array.isArray(filters) || filters.length === 0)) {
-        return Service.rejectResponse(
-          'To delete ALL devices please add filters=\'all\' parameter', 400
-        );
-      } else if (filters) {
-        const matchFilters = getMatchFilters(filters);
-        if (matchFilters.length > 0) {
-          query.$and = matchFilters;
+      let delDevices;
+      let devIds;
+      await mongoConns.mainDBwithTransaction(async (session) => {
+        orgList = await getAccessTokenOrgList(user, org, true);
+        const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
+        const { ids, filters } = devicesDeleteRequest;
+        if (ids && filters) {
+          throw createError(400, 'Only ids or filters can be specified as a parameter');
+        } else if (filters === 'all') {
+          // Delete all devices request protection
+          logger.debug('Delete All devices request received');
+        } else if (filters && (!Array.isArray(filters) || filters.length === 0)) {
+          throw createError(400, 'To delete ALL devices please add filters=\'all\' parameter');
+        } else if (filters) {
+          const matchFilters = getMatchFilters(filters);
+          if (matchFilters.length > 0) {
+            query.$and = matchFilters;
+          } else {
+            throw createError(400, 'There is an error in specified filters');
+          }
+        } else if (ids) {
+          query._id = { $in: ids.map(id => mongoose.Types.ObjectId(id)) };
         } else {
-          return Service.rejectResponse('There is an error in specified filters', 400);
+          throw createError(400, 'Ids or filters must be specified as a parameter');
         }
-      } else if (ids) {
-        query._id = { $in: ids.map(id => mongoose.Types.ObjectId(id)) };
-      } else {
-        return Service.rejectResponse('Ids or filters must be specified as a parameter', 400);
-      }
-      const delDevices = await devices.find(query).session(session);
-      if (delDevices.length === 0) {
-        session.abortTransaction();
-        return Service.rejectResponse('Devices for deletion not found', 404);
-      }
-      const devIds = delDevices.map(d => d._id);
-      const tunnelCount = await tunnelsModel.countDocuments({
-        $or: [{ deviceA: { $in: devIds } }, { deviceB: { $in: devIds } }],
-        isActive: true,
-        org: { $in: orgList }
-      }).session(session);
+        delDevices = await devices.find(query).session(session);
+        if (delDevices.length === 0) {
+          throw createError(400, 'Devices for deletion not found');
+        }
+        devIds = delDevices.map(d => d._id);
+        const tunnelCount = await tunnelsModel.countDocuments({
+          $or: [{ deviceA: { $in: devIds } }, { deviceB: { $in: devIds } }],
+          isActive: true,
+          org: { $in: orgList }
+        }).session(session);
 
-      if (tunnelCount > 0) {
-        logger.debug('Tunnels found when deleting device',
-          { params: { filters }, user: user });
-        throw new Error('All devices tunnels must be deleted before deleting devices');
-      }
+        if (tunnelCount > 0) {
+          logger.debug('Tunnels found when deleting device',
+            { params: { filters }, user: user });
+          throw createError(400, 'All devices tunnels must be deleted before deleting devices');
+        }
+
+        const deviceCount = await devices.countDocuments({
+          account: delDevices[0].account
+        }).session(session);
+
+        const orgCount = await devices.countDocuments({
+          account: delDevices[0].account, org: orgList[0]
+        }).session(session);
+
+        // Unregister a device (by adding - count)
+        await flexibilling.registerDevice({
+          account: delDevices[0].account,
+          org: orgList[0],
+          count: deviceCount,
+          orgCount: orgCount,
+          increment: -delDevices.length
+        }, session);
+
+        // Now we can remove the device
+        await devices.deleteMany(query).session(session);
+      });
+
       for (const dev of delDevices) {
         connections.deviceDisconnect(dev.machineId);
       }
-      const deviceCount = await devices.countDocuments({
-        account: delDevices[0].account
-      }).session(session);
 
-      const orgCount = await devices.countDocuments({
-        account: delDevices[0].account, org: orgList[0]
-      }).session(session);
-
-      // Unregister a device (by adding - count)
-      await flexibilling.registerDevice({
-        account: delDevices[0].account,
-        org: orgList[0],
-        count: deviceCount,
-        orgCount: orgCount,
-        increment: -delDevices.length
-      }, session);
-
-      // Now we can remove the device
-      await devices.deleteMany(query).session(session);
-
-      await session.commitTransaction();
-      session = null;
+      logger.info('Delete devices by filter success', {
+        params: {
+          ids: devIds,
+          account: delDevices[0].account,
+          org: orgList[0]
+        }
+      });
 
       return Service.successResponse(null, 204);
     } catch (e) {
-      if (session) session.abortTransaction();
+      logger.error('Delete devices by filter failed', {
+        params: {
+          org: orgList ? orgList[0] : 'unknown',
+          request: devicesDeleteRequest
+        }
+      });
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
@@ -1087,64 +1097,70 @@ class DevicesService {
    * no response value expected for this operation
    **/
   static async devicesIdDELETE ({ id, org }, { user }) {
-    let session;
+    let orgList;
+    let delDevice;
     try {
-      session = await mongoConns.getMainDB().startSession();
-      await session.startTransaction();
-      const orgList = await getAccessTokenOrgList(user, org, true);
+      await mongoConns.mainDBwithTransaction(async (session) => {
+        orgList = await getAccessTokenOrgList(user, org, true);
 
-      const delDevice = await devices.findOne({
-        _id: mongoose.Types.ObjectId(id),
-        org: { $in: orgList }
-      }).session(session);
+        delDevice = await devices.findOne({
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }).session(session);
 
-      if (!delDevice) {
-        session.abortTransaction();
-        return Service.rejectResponse('Device for deletion not found', 404);
-      }
+        if (!delDevice) {
+          throw createError(404, 'Device for deletion not found');
+        }
 
-      const tunnelCount = await tunnelsModel.countDocuments({
-        $or: [{ deviceA: id }, { deviceB: id }],
-        isActive: true,
-        org: { $in: orgList }
-      }).session(session);
+        const tunnelCount = await tunnelsModel.countDocuments({
+          $or: [{ deviceA: id }, { deviceB: id }],
+          isActive: true,
+          org: { $in: orgList }
+        }).session(session);
 
-      if (tunnelCount > 0) {
-        logger.debug('Tunnels found when deleting device',
-          { params: { deviceId: id }, user: user });
-        throw new Error('All device tunnels must be deleted before deleting a device');
-      }
+        if (tunnelCount > 0) {
+          logger.debug('Tunnels found when deleting device',
+            { params: { deviceId: id }, user: user });
+          throw createError(400, 'All device tunnels must be deleted before deleting a device');
+        }
+
+        const deviceCount = await devices.countDocuments({
+          account: delDevice.account
+        }).session(session);
+
+        const orgCount = await devices.countDocuments({
+          account: delDevice.account, org: orgList[0]
+        }).session(session);
+
+        // Unregister a device (by adding -1)
+        await flexibilling.registerDevice({
+          account: delDevice.account,
+          org: orgList[0],
+          count: deviceCount,
+          orgCount: orgCount,
+          increment: -1
+        }, session);
+
+        // Now we can remove the device
+        await devices.remove({
+          _id: id,
+          org: { $in: orgList }
+        }).session(session);
+      });
 
       connections.deviceDisconnect(delDevice.machineId);
-      const deviceCount = await devices.countDocuments({
-        account: delDevice.account
-      }).session(session);
 
-      const orgCount = await devices.countDocuments({
-        account: delDevice.account, org: orgList[0]
-      }).session(session);
-
-      // Unregister a device (by adding -1)
-      await flexibilling.registerDevice({
-        account: delDevice.account,
-        org: orgList[0],
-        count: deviceCount,
-        orgCount: orgCount,
-        increment: -1
-      }, session);
-
-      // Now we can remove the device
-      await devices.remove({
-        _id: id,
-        org: { $in: orgList }
-      }).session(session);
-
-      await session.commitTransaction();
-      session = null;
+      logger.info('Device by ID deleted successfully', {
+        params: {
+          _id: id.toString(),
+          machineId: delDevice.machineId,
+          account: delDevice.account,
+          org: orgList[0]
+        }
+      });
 
       return Service.successResponse(null, 204);
     } catch (e) {
-      if (session) session.abortTransaction();
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
@@ -1160,465 +1176,512 @@ class DevicesService {
    * returns Device
    **/
   static async devicesIdPUT ({ id, org, deviceRequest }, { user, server }, response) {
-    let session;
+    let sessionCopy;
+
     try {
-      session = await mongoConns.getMainDB().startSession();
-      await session.startTransaction();
+      let orgList;
+      let origDevice;
+      let updDevice;
 
-      const orgList = await getAccessTokenOrgList(user, org, true);
-      const origDevice = await devices.findOne({
-        _id: id,
-        org: { $in: orgList }
-      })
-        .session(session)
-        .populate('policies.firewall.policy', '_id name rules')
-        .populate('interfaces.pathlabels', '_id name description color type');
+      // We set closeSession to false since apply uses documents with the session
+      // The session is closed at the end of the API
+      sessionCopy = await mongoConns.mainDBwithTransaction(async (session) => {
+        orgList = await getAccessTokenOrgList(user, org, true);
+        origDevice = await devices.findOne({
+          _id: id,
+          org: { $in: orgList }
+        })
+          .session(session)
+          .populate('policies.firewall.policy', '_id name rules')
+          .populate('interfaces.pathlabels', '_id name description color type');
 
-      if (!origDevice) {
-        return Service.rejectResponse('Device not found', 404);
-      }
+        if (!origDevice) {
+          throw createError(404, 'Device not found');
+        }
 
-      // Don't allow any changes if the device is not approved
-      if (!origDevice.isApproved && !deviceRequest.isApproved) {
-        throw new Error('Device must be first approved');
-      }
+        // Don't allow empty device name
+        // if the 'name' parameter skipped in the request we use the original value
+        if ((!origDevice.name || deviceRequest.hasOwnProperty('name')) && !deviceRequest.name) {
+          throw new Error('Device name must be set');
+        }
 
-      // check LAN subnet overlap if updated device is running
-      const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
-      const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
+        // Don't allow any changes if the device is not approved
+        if (!origDevice.isApproved && !deviceRequest.isApproved) {
+          throw createError(400, 'Device must be first approved');
+        }
 
-      let orgLanSubnets = [];
+        // check LAN subnet overlap if updated device is running
+        const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
+        const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
-      if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-        orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
-      }
+        let orgLanSubnets = [];
 
-      const origTunnels = await tunnelsModel.find({
-        isActive: true,
-        $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
-      }).lean();
+        if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
+          orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
+        }
 
-      // Make sure interfaces are not deleted, only modified
-      if (Array.isArray(deviceRequest.interfaces)) {
-        // not allowed to assign path labels of a different organization
-        let orgPathLabels = await pathLabelsModel.find({ org: origDevice.org }, '_id').lean();
-        orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
-        const notAllowedPathLabels = deviceRequest.interfaces.map(intf =>
-          !Array.isArray(intf.pathlabels) ? []
-            : intf.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
-        ).flat();
-        if (notAllowedPathLabels.length) {
-          logger.error('Not allowed path labels', { params: { notAllowedPathLabels } });
-          throw new Error('Not allowed to assign path labels of a different organization');
-        };
-        deviceRequest.interfaces = await Promise.all(origDevice.interfaces.map(async origIntf => {
-          const interfaceId = origIntf._id.toString();
-          const updIntf = deviceRequest.interfaces.find(rif => interfaceId === rif._id);
-          if (updIntf) {
-            // if the user disabled the STUN for this interface
-            // we release the high rate blockage if exists
-            const isStunDisabledNow = origIntf.useStun === true && updIntf.useStun === false;
+        const origTunnels = await tunnelsModel.find({
+          isActive: true,
+          $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
+        }).session(session).lean();
 
-            // if the user changed the static IP/port for this interface
-            // we release the high rate blockage if exists
-            let isStaticPublicInfoChanged = false;
-            if (updIntf.useStun === false) {
-              const isPublicPortChanged = origIntf.PublicPort !== updIntf.PublicPort;
-              const isPublicIpChanged = origIntf.PublicIP !== updIntf.PublicIP;
-              if (isPublicPortChanged || isPublicIpChanged) {
-                isStaticPublicInfoChanged = true;
-              }
-            }
+        // Make sure interfaces are not deleted, only modified
+        if (Array.isArray(deviceRequest.interfaces)) {
+          // not allowed to assign path labels of a different organization
+          let orgPathLabels = await pathLabelsModel.find({ org: origDevice.org }, '_id')
+            .session(session).lean();
+          orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
+          const notAllowedPathLabels = deviceRequest.interfaces.map(intf =>
+            !Array.isArray(intf.pathlabels) ? []
+              : intf.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
+          ).flat();
+          if (notAllowedPathLabels.length) {
+            logger.error('Not allowed path labels', { params: { notAllowedPathLabels } });
+            throw createError(400, 'Not allowed to assign path labels of a different organization');
+          };
+          deviceRequest.interfaces = await Promise.all(origDevice.interfaces.map(async origIntf => {
+            const interfaceId = origIntf._id.toString();
+            const updIntf = deviceRequest.interfaces.find(rif => interfaceId === rif._id);
+            if (updIntf) {
+              // if the user disabled the STUN for this interface
+              // we release the high rate blockage if exists
+              const isStunDisabledNow = origIntf.useStun === true && updIntf.useStun === false;
 
-            // if the user changed the portForwarding option
-            // we release the high rate blockage if exists
-            const isPortForwardingChanged =
-              origIntf.useFixedPublicPort !== updIntf.useFixedPublicPort;
-
-            if (isStunDisabledNow || isStaticPublicInfoChanged || isPortForwardingChanged) {
-              const deviceId = origDevice._id.toString();
-              await publicAddrInfoLimiter.release(`${deviceId}:${interfaceId}`);
-            }
-
-            // Public port and NAT type is assigned by system only
-            updIntf.PublicPort = updIntf.useStun ? origIntf.PublicPort : configs.get('tunnelPort');
-            updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
-            updIntf.internetAccess = origIntf.internetAccess;
-            // Device type is assigned by system only
-            updIntf.deviceType = origIntf.deviceType;
-
-            // This field is set by changed to true by events logic only
-            updIntf.hasIpOnDevice = origIntf.hasIpOnDevice;
-
-            // Check tunnels connectivity
-            if (origIntf.isAssigned) {
-              // if interface unassigned make sure it's not used by any tunnel
-              if (!updIntf.isAssigned) {
-                const numTunnels = await tunnelsModel
-                  .countDocuments({
-                    isActive: true,
-                    $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }]
-                  });
-                if (numTunnels > 0) {
-                  // eslint-disable-next-line max-len
-                  throw new Error('Unassigned interface used by existing tunnels, please delete related tunnels before');
+              // if the user changed the static IP/port for this interface
+              // we release the high rate blockage if exists
+              let isStaticPublicInfoChanged = false;
+              if (updIntf.useStun === false) {
+                const isPublicPortChanged = origIntf.PublicPort !== updIntf.PublicPort;
+                const isPublicIpChanged = origIntf.PublicIP !== updIntf.PublicIP;
+                if (isPublicPortChanged || isPublicIpChanged) {
+                  isStaticPublicInfoChanged = true;
                 }
-              } else {
-                // interface still assigned, check if removed path labels not used by any tunnel
-                const pathlabels = (Array.isArray(updIntf.pathlabels))
-                  ? updIntf.pathlabels.map(p => p._id.toString()) : [];
-                const remLabels = (Array.isArray(origIntf.pathlabels))
-                  ? origIntf.pathlabels.filter(
-                    p => !pathlabels.includes(p._id.toString())
-                  ) : [];
-                if (remLabels.length > 0) {
-                  const remLabelsArray = remLabels.map(p => p._id);
+              }
+
+              // if the user changed the portForwarding option
+              // we release the high rate blockage if exists
+              const isPortForwardingChanged =
+                origIntf.useFixedPublicPort !== updIntf.useFixedPublicPort;
+
+              if (isStunDisabledNow || isStaticPublicInfoChanged || isPortForwardingChanged) {
+                const deviceId = origDevice._id.toString();
+                await publicAddrInfoLimiter.release(`${deviceId}:${interfaceId}`);
+              }
+
+              // Public port and NAT type is assigned by system only
+              updIntf.PublicPort = updIntf.useStun
+                ? origIntf.PublicPort : configs.get('tunnelPort');
+              updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
+              updIntf.internetAccess = origIntf.internetAccess;
+              // Device type is assigned by system only
+              updIntf.deviceType = origIntf.deviceType;
+
+              // This field is set by changed to true by events logic only
+              updIntf.hasIpOnDevice = origIntf.hasIpOnDevice;
+
+              // Check tunnels connectivity
+              if (origIntf.isAssigned) {
+                // if interface unassigned make sure it's not used by any tunnel
+                if (!updIntf.isAssigned) {
                   const numTunnels = await tunnelsModel
                     .countDocuments({
                       isActive: true,
-                      $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }],
-                      pathlabel: { $in: remLabelsArray }
-                    });
+                      $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }]
+                    }).session(session);
                   if (numTunnels > 0) {
-                  // eslint-disable-next-line max-len
-                    throw new Error('Removed label used by existing tunnels, please delete related tunnels before');
+                    // eslint-disable-next-line max-len
+                    throw new Error('Unassigned interface used by existing tunnels, please delete related tunnels before');
+                  }
+                } else {
+                  // interface still assigned, check if removed path labels not used by any tunnel
+                  const pathlabels = (Array.isArray(updIntf.pathlabels))
+                    ? updIntf.pathlabels.map(p => p._id.toString()) : [];
+                  const remLabels = (Array.isArray(origIntf.pathlabels))
+                    ? origIntf.pathlabels.filter(
+                      p => !pathlabels.includes(p._id.toString())
+                    ) : [];
+                  if (remLabels.length > 0) {
+                    const remLabelsArray = remLabels.map(p => p._id);
+                    const numTunnels = await tunnelsModel
+                      .countDocuments({
+                        isActive: true,
+                        $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }],
+                        pathlabel: { $in: remLabelsArray }
+                      }).session(session);
+                    if (numTunnels > 0) {
+                    // eslint-disable-next-line max-len
+                      throw createError(400, 'Removed label used by existing tunnels, please delete related tunnels before');
+                    }
                   }
                 }
               }
-            }
-            // check firewall rules
-            if (deviceRequest.firewall) {
-              let hadInbound = false;
-              let hadOutbound = false;
-              let hasInbound = false;
-              let hasOutbound = false;
-              for (const rule of deviceRequest.firewall.rules) {
-                if (rule.direction === 'inbound') {
-                  if (rule.classification.destination.ipProtoPort.interface === origIntf.devId) {
-                    hadInbound = true;
+              // check firewall rules
+              if (deviceRequest.firewall) {
+                let hadInbound = false;
+                let hadOutbound = false;
+                let hasInbound = false;
+                let hasOutbound = false;
+                for (const rule of deviceRequest.firewall.rules) {
+                  if (rule.direction === 'inbound') {
+                    if (rule.classification.destination.ipProtoPort.interface === origIntf.devId) {
+                      hadInbound = true;
+                    }
+                    if (rule.classification.destination.ipProtoPort.interface === updIntf.devId) {
+                      hasInbound = true;
+                    }
                   }
-                  if (rule.classification.destination.ipProtoPort.interface === updIntf.devId) {
-                    hasInbound = true;
+                  if (rule.direction === 'outbound') {
+                    if (rule.interfaces.includes(origIntf.devId)) {
+                      hadOutbound = true;
+                    }
+                    if (rule.interfaces.includes(updIntf.devId)) {
+                      hasOutbound = true;
+                    }
                   }
                 }
-                if (rule.direction === 'outbound') {
-                  if (rule.interfaces.includes(origIntf.devId)) {
-                    hadOutbound = true;
+                if (origIntf.type !== updIntf.type) {
+                  if (hadInbound && updIntf.type !== 'WAN') {
+                    throw createError(400,
+                      `WAN interface ${origIntf.name} \
+                      has firewall rules. Please remove rules before modifying.`
+                    );
                   }
-                  if (rule.interfaces.includes(updIntf.devId)) {
-                    hasOutbound = true;
+                  if (hadOutbound && updIntf.type !== 'LAN') {
+                    throw createError(400,
+                      `LAN Interface ${origIntf.name} \
+                      has firewall rules. Please remove rules before modifying.`
+                    );
                   }
                 }
-              }
-              if (origIntf.type !== updIntf.type) {
-                if (hadInbound && updIntf.type !== 'WAN') {
-                  throw new Error(
-                    `WAN interface ${origIntf.name} \
-                    has firewall rules. Please remove rules before modifying.`
+                if ((hasOutbound || hasInbound) && !updIntf.isAssigned) {
+                  throw createError(400,
+                    `Installing firewall on unassigned interface ${origIntf.name} is not allowed`
                   );
                 }
-                if (hadOutbound && updIntf.type !== 'LAN') {
-                  throw new Error(
-                    `LAN Interface ${origIntf.name} \
-                    has firewall rules. Please remove rules before modifying.`
+                if (hasOutbound && updIntf.type !== 'LAN') {
+                  throw createError(400,
+                    `${updIntf.type} Interface ${origIntf.name} configured with outbound rules. \
+                    Outbound rules are allowed on LAN only.`
+                  );
+                }
+                if (hasInbound && updIntf.type !== 'WAN') {
+                  throw createError(400,
+                    `${updIntf.type} Interface ${origIntf.name} configured with inbound rules. \
+                    Inbound rules are allowed on WAN only.`
                   );
                 }
               }
-              if ((hasOutbound || hasInbound) && !updIntf.isAssigned) {
-                throw new Error(
-                  `Installing firewall on unassigned interface ${origIntf.name} is not allowed`
+
+              // Unassigned interfaces are not controlled from manage
+              // we only get these parameters from the device itself.
+              // It might be that the IP of the LTE interface is changed when a user
+              // changes the unassigned LTE configuration.
+              // In this case, we don't want to throw the below error
+              if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
+                if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
+                  (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
+                  (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
+                  throw createError(400,
+                    `Not allowed to modify parameters of unassigned interfaces (${origIntf.name})`
+                  );
+                }
+              };
+              // Not allowed to modify parameters of PPPoE interfaces
+              if (updIntf.deviceType === 'pppoe') {
+                if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
+                  (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
+                  (updIntf.hasOwnProperty('dhcp') && updIntf.dhcp !== 'yes') ||
+                  (updIntf.hasOwnProperty('metric') && updIntf.metric !== origIntf.metric) ||
+                  (updIntf.hasOwnProperty('mtu') && updIntf.mtu !== origIntf.mtu) ||
+                  (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
+                  throw createError(400,
+                    `Not allowed to modify parameters of PPPoE interfaces (${origIntf.name})`
+                  );
+                }
+                // For PPPoE interfaces we use linux network parameters
+                updIntf.IPv4 = origIntf.IPv4;
+                updIntf.IPv4Mask = origIntf.IPv4Mask;
+                updIntf.gateway = origIntf.gateway;
+                updIntf.dhcp = 'yes';
+                updIntf.metric = origIntf.metric;
+                updIntf.mtu = origIntf.mtu;
+              };
+              // For unasigned and non static interfaces we use linux network parameters
+              if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
+                updIntf.IPv4 = origIntf.IPv4;
+                updIntf.IPv4Mask = origIntf.IPv4Mask;
+                updIntf.gateway = origIntf.gateway;
+              };
+              // don't update metric on an unassigned interface,
+              // except lte interface because we enable lte connection on it,
+              // hence we need the metric fo it
+              if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
+                if (updIntf.metric && updIntf.metric !== origIntf.metric) {
+                  throw createError(400,
+                    `Changing metric of unassigned interfaces (${origIntf.name}) is not allowed`
+                  );
+                }
+                updIntf.metric = origIntf.metric;
+              };
+              // don't update MTU on an unassigned interface,
+              if (!updIntf.isAssigned && updIntf.mtu && updIntf.mtu !== origIntf.mtu) {
+                throw createError(400,
+                  `Changing MTU of unassigned interfaces (${origIntf.name}) is not allowed`
                 );
               }
-              if (hasOutbound && updIntf.type !== 'LAN') {
-                throw new Error(
-                  `${updIntf.type} Interface ${origIntf.name} configured with outbound rules. \
-                  Outbound rules are allowed on LAN only.`
+
+              // don't allow set OSPF keyID without key and vise versa
+              const keyId = updIntf.ospf.keyId;
+              const key = updIntf.ospf.key;
+              if ((keyId && !key) || (!keyId && key)) {
+                throw createError(400,
+                  `(${origIntf.name}) Not allowed to save OSPF key ID without key and vice versa`
                 );
               }
-              if (hasInbound && updIntf.type !== 'WAN') {
-                throw new Error(
-                  `${updIntf.type} Interface ${origIntf.name} configured with inbound rules. \
-                  Inbound rules are allowed on WAN only.`
-                );
-              }
-            }
 
-            // Unassigned interfaces are not controlled from manage
-            // we only get these parameters from the device itself.
-            // It might be that the IP of the LTE interface is changed when a user
-            // changes the unassigned LTE configuration.
-            // In this case, we don't want to throw the below error
-            if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
-              if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
-                (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
-                (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
-                throw new Error(
-                  `Not allowed to modify parameters of unassigned interfaces (${origIntf.name})`
-                );
-              }
-            };
-            // For unasigned and non static interfaces we use linux network parameters
-            if (!updIntf.isAssigned || updIntf.dhcp === 'yes') {
-              updIntf.IPv4 = origIntf.IPv4;
-              updIntf.IPv4Mask = origIntf.IPv4Mask;
-              updIntf.gateway = origIntf.gateway;
-            };
-            // don't update metric on an unassigned interface,
-            // except lte interface because we enable lte connection on it,
-            // hence we need the metric fo it
-            if (!updIntf.isAssigned && updIntf.deviceType !== 'lte') {
-              if (updIntf.metric && updIntf.metric !== origIntf.metric) {
-                throw new Error(
-                  `Changing metric of unassigned interfaces (${origIntf.name}) is not allowed`
-                );
-              }
-              updIntf.metric = origIntf.metric;
-            };
-            // don't update MTU on an unassigned interface,
-            if (!updIntf.isAssigned && updIntf.mtu && updIntf.mtu !== origIntf.mtu) {
-              throw new Error(
-                `Changing MTU of unassigned interfaces (${origIntf.name}) is not allowed`
-              );
-            }
+              if (updIntf.isAssigned && updIntf.type === 'WAN') {
+                const dhcp = updIntf.dhcp;
+                const servers = updIntf.dnsServers;
+                const domains = updIntf.dnsDomains;
 
-            // don't allow set OSPF keyID without key and vise versa
-            const keyId = updIntf.ospf.keyId;
-            const key = updIntf.ospf.key;
-            if ((keyId && !key) || (!keyId && key)) {
-              throw new Error(
-                `(${origIntf.name}) Not allowed to save OSPF key ID without key and vice versa`
-              );
-            }
+                // Prevent static IP without dns servers
+                if (dhcp === 'no' && servers.length === 0) {
+                  throw createError(400, `DNS ip address is required for ${origIntf.name}`);
+                }
 
-            if (updIntf.isAssigned && updIntf.type === 'WAN') {
-              const dhcp = updIntf.dhcp;
-              const servers = updIntf.dnsServers;
-              const domains = updIntf.dnsDomains;
+                // Prevent override dhcp DNS info without dns servers
+                if (dhcp === 'yes' && !updIntf.useDhcpDnsServers && servers.length === 0) {
+                  throw createError(400, `DNS ip address is required for ${origIntf.name}`);
+                }
 
-              // Prevent static IP without dns servers
-              if (dhcp === 'no' && servers.length === 0) {
-                throw new Error(`DNS ip address is required for ${origIntf.name}`);
+                const isValidIpList = servers.every(ip => net.isIPv4(ip));
+                if (!isValidIpList) {
+                  throw createError(400, `DNS ip addresses are not valid for (${origIntf.name})`);
+                }
+
+                const isValidDomainList = domains.every(domain => {
+                  return validator.isFQDN(domain, { require_tld: false });
+                });
+                if (!isValidDomainList) {
+                  throw createError(400, `DNS domain list is not valid for (${origIntf.name})`);
+                }
               }
 
-              // Prevent override dhcp DNS info without dns servers
-              if (dhcp === 'yes' && !updIntf.useDhcpDnsServers && servers.length === 0) {
-                throw new Error(`DNS ip address is required for ${origIntf.name}`);
+              if (updIntf.isAssigned !== origIntf.isAssigned ||
+                updIntf.type !== origIntf.type ||
+                updIntf.dhcp !== origIntf.dhcp ||
+                updIntf.IPv4 !== origIntf.IPv4 ||
+                updIntf.IPv4Mask !== origIntf.IPv4Mask ||
+                updIntf.gateway !== origIntf.gateway
+              ) {
+                updIntf.modified = true;
               }
-
-              const isValidIpList = servers.every(ip => net.isIPv4(ip));
-              if (!isValidIpList) {
-                throw new Error(`DNS ip addresses are not valid for (${origIntf.name})`);
-              }
-
-              const isValidDomainList = domains.every(domain => {
-                return validator.isFQDN(domain, { require_tld: false });
-              });
-              if (!isValidDomainList) {
-                throw new Error(`DNS domain list is not valid for (${origIntf.name})`);
-              }
+              return updIntf;
             }
+            return origIntf;
+          }));
+        };
 
-            if (updIntf.isAssigned !== origIntf.isAssigned ||
-              updIntf.type !== origIntf.type ||
-              updIntf.dhcp !== origIntf.dhcp ||
-              updIntf.IPv4 !== origIntf.IPv4 ||
-              updIntf.IPv4Mask !== origIntf.IPv4Mask ||
-              updIntf.gateway !== origIntf.gateway
-            ) {
-              updIntf.modified = true;
-            }
-            return updIntf;
-          }
-          return origIntf;
-        }));
-      };
-
-      // add device id to device request
-      const deviceToValidate = {
-        ...deviceRequest,
-        _id: origDevice._id
-      };
-      // unspecified 'interfaces' are allowed for backward compatibility of some integrations
-      if (typeof deviceToValidate.interfaces === 'undefined') {
-        deviceToValidate.interfaces = origDevice.interfaces;
-      }
-
-      const ver = getMajorVersion(origDevice.versions.agent);
-
-      // Map dhcp config if needed
-      if (Array.isArray(deviceRequest.dhcp)) {
-        deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
-          const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
-          if (!ifc) return d;
-          const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
-          if (!origIfc) return d;
-
-          // don't set to pending for old version since we don't sent the IP for bridged interface
-          if (origIfc.hasIpOnDevice === false && ver >= 5) {
-            d.isPending = true;
-            d.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
-          }
-
-          // if the interface is going to be unassigned now but it was assigned
-          // and it was in a bridge,
-          // we check if we can reassociate the dhcp to another assigned interface in the bridge.
-          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
-          // now, the user unassigned the eth3. In this case we reassociate the dhcp to the eth4.
-          if (!ifc.isAssigned && origIfc.isAssigned) {
-            const anotherBridgedIfc = deviceRequest.interfaces.find(i =>
-              i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned);
-            if (anotherBridgedIfc) {
-              return { ...d, interface: anotherBridgedIfc.devId };
-            }
-          }
-
-          // if the IP of the interface is changed and it was in a bridge,
-          // we check if we can reassociate the dhcp to another assigned
-          // interface which has the orig IP.
-          // For example: eth3 and eth4 was in a bridge and dhcp was configured to eth3.
-          // now, the user changed the IP of eth3. In this case we reassociate the dhcp to the eth4.
-          if (ifc.isAssigned && ifc.IPv4 !== origIfc.IPv4) {
-            const anotherAssignWithSameIp = deviceRequest.interfaces.find(i =>
-              i.devId !== ifc.devId && i.IPv4 === origIfc.IPv4 && i.isAssigned);
-            if (anotherAssignWithSameIp) {
-              return { ...d, interface: anotherAssignWithSameIp.devId };
-            }
-          }
-
-          return d;
-        });
-
-        // validate DHCP info if it exists
-        for (const dhcpRequest of deviceRequest.dhcp) {
-          DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
+        // add device id to device request
+        const deviceToValidate = {
+          ...deviceRequest,
+          _id: origDevice._id
+        };
+        // unspecified 'interfaces' are allowed for backward compatibility of some integrations
+        if (typeof deviceToValidate.interfaces === 'undefined') {
+          deviceToValidate.interfaces = origDevice.interfaces;
         }
-      }
 
-      // validate static routes
-      if (Array.isArray(deviceRequest.staticroutes)) {
-        // if route is via a pending tunnel, set it as pending
-        const incompleteTunnels = origTunnels.filter(t => t.isPending);
-        const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.hasIpOnDevice === false);
+        const ver = getMajorVersion(origDevice.versions.agent);
 
-        deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
-          for (const t of incompleteTunnels) {
-            const { ip1, ip2 } = generateTunnelParams(t.num);
-            if (ip1 === s.gateway || ip2 === s.gateway) {
-              s.isPending = true;
-              s.pendingReason = eventsReasons.tunnelIsPending(t.num);
-              return s;
+        // Map dhcp config if needed
+        if (Array.isArray(deviceRequest.dhcp)) {
+          deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
+            const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
+            if (!ifc) return d;
+
+            const origIfc = origDevice.interfaces.find(i => i.devId === ifc.devId);
+            if (!origIfc) return d;
+
+            if (origIfc.IPv4 === '' || origIfc.IPv4Mask === '') return d;
+
+            const origIp = `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
+
+            const oldBridges = getBridges(origDevice.interfaces);
+            const newBridges = getBridges(deviceRequest.interfaces);
+
+            // ********************************************************* //
+            // The following checks are relate to the bridged interface
+            // if the orig interface wasn't in a bridge, skip the checks
+            // ********************************************************* //
+            if (!(origIp in oldBridges)) {
+              return d;
             }
-          }
 
-          // don't set to pending for old version since we don't sent the IP for bridged interface
-          if (ver >= 5) {
-            for (const ifc of interfacesWithoutIp) {
-              if (ifc.IPv4 === s.gateway) {
+            // if the interface is going to be unassigned now but it was assigned
+            // we check if we can re-associate the dhcp to another assigned interface in the bridge.
+            // For example: eth3, eth4, eth5 was in a bridge and dhcp was configured to eth3.
+            // now, the user unassigned the eth3. In this case we re-associate the dhcp to the eth4.
+            if (!ifc.isAssigned && origIfc.isAssigned && origIp in newBridges) {
+              const reassociatedBridgedIfc = newBridges[origIp][0];
+              if (reassociatedBridgedIfc) {
+                return { ...d, interface: reassociatedBridgedIfc };
+              }
+            }
+
+            // if the IP of the interface is changed and its going to be removed from the bridge,
+            // we check if we can re-associate the dhcp to one of the existing
+            // bridged interfaces.
+            // For example: eth3, eth4 and eth5 was in a bridge and dhcp was configured to eth3.
+            // now, the user changed the eth3 IP. In this case we re-associate the dhcp to the eth4.
+            if (ifc.isAssigned && ifc.IPv4 !== origIfc.IPv4 && origIp in newBridges) {
+              const reassociatedBridgedIfc = newBridges[origIp][0];
+              if (reassociatedBridgedIfc) {
+                return { ...d, interface: reassociatedBridgedIfc };
+              }
+            }
+
+            return d;
+          });
+
+          // validate DHCP info if it exists
+          for (const dhcpRequest of deviceRequest.dhcp) {
+            DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
+          }
+        }
+
+        // validate static routes
+        if (Array.isArray(deviceRequest.staticroutes)) {
+          // if route is via a pending tunnel, set it as pending
+          const incompleteTunnels = origTunnels.filter(t => t.isPending);
+          const interfacesWithoutIp = deviceRequest.interfaces.filter(i => i.IPv4 === '');
+
+          deviceRequest.staticroutes = deviceRequest.staticroutes.map(s => {
+            // if _id exists in the orig device object - dont allow to change the pending fields
+            const origRoute = origDevice.staticroutes.find(
+              os => s._id && os._id.toString() === s._id);
+            if (origRoute) {
+              s.isPending = origRoute.isPending;
+              s.pendingReason = origRoute.pendingReason;
+            }
+
+            for (const t of incompleteTunnels) {
+              const { ip1, ip2 } = generateTunnelParams(t.num);
+              if (ip1 === s.gateway || ip2 === s.gateway) {
                 s.isPending = true;
-                s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+                s.pendingReason = eventsReasons.tunnelIsPending(t.num);
                 return s;
               }
             }
-          }
 
-          return s;
-        });
+            // don't set as pending for old version since we don't sent the IP for bridged interface
+            if (ver >= 5) {
+              for (const ifc of interfacesWithoutIp) {
+                if (ifc.IPv4 === s.gateway) {
+                  s.isPending = true;
+                  s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+                  return s;
+                }
+              }
+            }
 
-        const staticRoutesUniqueKeys = {};
-        for (const route of deviceRequest.staticroutes) {
-          const { valid, err } = validateStaticRoute(deviceToValidate, origTunnels, route);
-          if (!valid) {
-            logger.warn('Wrong static route parameters',
-              {
-                params: { route, err }
-              });
-            throw new Error(err);
-          }
-          const staticRouteKey = `${route.destination} via ${route.gateway}`;
-          if (staticRoutesUniqueKeys.hasOwnProperty(staticRouteKey)) {
-            const errorMsg = `Duplicated static routes detected: ${staticRouteKey}`;
-            logger.warn(errorMsg, { params: { route } });
-            throw new Error(errorMsg);
-          }
-          staticRoutesUniqueKeys[staticRouteKey] = true;
-        }
-      }
-
-      // Don't allow to modify/assign/unassign
-      // interfaces that are assigned with DHCP
-      if (Array.isArray(deviceRequest.interfaces)) {
-        let dhcp = [...origDevice.dhcp];
-        if (Array.isArray(deviceRequest.dhcp)) {
-          // check only for the remaining dhcp configs
-          dhcp = dhcp.filter(orig =>
-            deviceRequest.dhcp.find(upd => orig.interface === upd.interface)
-          );
-        }
-        const modifiedInterfaces = deviceRequest.interfaces
-          .filter(intf => intf.modified)
-          .map(intf => {
-            return {
-              devId: intf.devId,
-              type: intf.type,
-              addr: intf.IPv4 && intf.IPv4Mask ? `${intf.IPv4}/${intf.IPv4Mask}` : '',
-              gateway: intf.gateway
-            };
+            return s;
           });
-        const { valid, err } = validateDhcpConfig(
-          { ...origDevice.toObject(), dhcp },
-          modifiedInterfaces
-        );
+
+          const staticRoutesUniqueKeys = {};
+          for (const route of deviceRequest.staticroutes) {
+            const { valid, err } = validateStaticRoute(deviceToValidate, origTunnels, route);
+            if (!valid) {
+              logger.warn('Wrong static route parameters',
+                {
+                  params: { route, err }
+                });
+              throw createError(400, err);
+            }
+            const staticRouteKey = `${route.destination} via ${route.gateway}`;
+            if (staticRoutesUniqueKeys.hasOwnProperty(staticRouteKey)) {
+              const errorMsg = `Duplicated static routes detected: ${staticRouteKey}`;
+              logger.warn(errorMsg, { params: { route } });
+              throw createError(400, errorMsg);
+            }
+            staticRoutesUniqueKeys[staticRouteKey] = true;
+          }
+        }
+
+        // Don't allow to modify/assign/unassign
+        // interfaces that are assigned with DHCP
+        if (Array.isArray(deviceRequest.interfaces)) {
+          let dhcp = [...origDevice.dhcp];
+          if (Array.isArray(deviceRequest.dhcp)) {
+            // check only for the remaining dhcp configs
+            dhcp = dhcp.filter(orig =>
+              deviceRequest.dhcp.find(upd => orig.interface === upd.interface)
+            );
+          }
+          const modifiedInterfaces = deviceRequest.interfaces
+            .filter(intf => intf.modified)
+            .map(intf => {
+              return {
+                devId: intf.devId,
+                type: intf.type,
+                addr: intf.IPv4 && intf.IPv4Mask ? `${intf.IPv4}/${intf.IPv4Mask}` : '',
+                gateway: intf.gateway
+              };
+            });
+          const { valid, err } = validateDhcpConfig(
+            { ...origDevice.toObject(), dhcp },
+            modifiedInterfaces
+          );
+          if (!valid) {
+            logger.warn('Device update failed',
+              {
+                params: { device: deviceRequest, err }
+              });
+            throw createError(400, err);
+          }
+        }
+        // Need to validate device specific rules combined with global policy rules
+        if (deviceToValidate.firewall) {
+          deviceToValidate.policies = {
+            firewall: origDevice.policies.firewall.toObject()
+          };
+        }
+        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
+
         if (!valid) {
           logger.warn('Device update failed',
             {
-              params: { device: deviceRequest, err }
+              params: { device: deviceRequest, devStatus, err }
             });
-          throw new Error(err);
+          throw createError(400, err);
         }
-      }
-      // Need to validate device specific rules combined with global policy rules
-      if (deviceToValidate.firewall) {
-        deviceToValidate.policies = {
-          firewall: origDevice.policies.firewall.toObject()
-        };
-      }
-      const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
 
-      if (!valid) {
-        logger.warn('Device update failed',
-          {
-            params: { device: deviceRequest, devStatus, err }
-          });
-        throw new Error(err);
-      }
+        // If device changed to not approved disconnect it's socket
+        if (deviceRequest.isApproved === false) connections.deviceDisconnect(origDevice.machineId);
 
-      // If device changed to not approved disconnect it's socket
-      if (deviceRequest.isApproved === false) connections.deviceDisconnect(origDevice.machineId);
+        // TBD: Remove these fields from the yaml PUT request
+        delete deviceRequest.machineId;
+        delete deviceRequest.org;
+        delete deviceRequest.hostname;
+        delete deviceRequest.ipList;
+        delete deviceRequest.fromToken;
+        delete deviceRequest.deviceToken;
+        delete deviceRequest.state;
+        delete deviceRequest.emailTokens;
+        delete deviceRequest.defaultAccount;
+        delete deviceRequest.defaultOrg;
+        delete deviceRequest.sync;
 
-      // TBD: Remove these fields from the yaml PUT request
-      delete deviceRequest.machineId;
-      delete deviceRequest.org;
-      delete deviceRequest.hostname;
-      delete deviceRequest.ipList;
-      delete deviceRequest.fromToken;
-      delete deviceRequest.deviceToken;
-      delete deviceRequest.state;
-      delete deviceRequest.emailTokens;
-      delete deviceRequest.defaultAccount;
-      delete deviceRequest.defaultOrg;
-      delete deviceRequest.sync;
-
-      const updDevice = await devices.findOneAndUpdate(
-        { _id: id, org: { $in: orgList } },
-        { ...deviceRequest },
-        { new: true, upsert: false, runValidators: true }
-      )
-        .session(session)
-        .populate('interfaces.pathlabels', '_id name description color type')
-        .populate('policies.firewall.policy', '_id name description rules')
-        .populate('policies.multilink.policy', '_id name description');
-      await session.commitTransaction();
-      session = null;
+        updDevice = await devices.findOneAndUpdate(
+          { _id: id, org: { $in: orgList } },
+          { ...deviceRequest },
+          { new: true, upsert: false, runValidators: true }
+        )
+          .session(session)
+          .populate('interfaces.pathlabels', '_id name description color type')
+          .populate('policies.firewall.policy', '_id name description rules')
+          .populate('policies.multilink.policy', '_id name description');
+      }, false);
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
@@ -1632,12 +1695,12 @@ class DevicesService {
       const deviceObj = await DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
-      if (session) session.abortTransaction();
-
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
       );
+    } finally {
+      if (sessionCopy) sessionCopy.endSession();
     }
   }
 
@@ -2481,45 +2544,54 @@ class DevicesService {
    */
   static validateDhcpRequest (device, dhcpRequest) {
     if (!dhcpRequest.interface || dhcpRequest.interface === '') {
-      throw new Error('Interface is required to define DHCP');
+      throw new Error('Interface is required to define DHCP Server');
     };
     const interfaceObj = device.interfaces.find(i => {
       return i.devId === dhcpRequest.interface;
     });
     if (!interfaceObj) {
-      throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP parameters`);
+      throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP Server parameters`);
     }
     if (!interfaceObj.isAssigned) {
-      throw new Error('DHCP can be defined only for assigned interfaces');
+      throw new Error('DHCP Server can be defined only for assigned interfaces');
     }
     if (interfaceObj.type !== 'LAN') {
-      throw new Error('DHCP can be defined only for LAN interfaces');
+      throw new Error('DHCP Server can be defined only for LAN interfaces');
     }
     if (interfaceObj.IPv4 === '') {
-      throw new Error(`DHCP cannot be defined for interface (${interfaceObj.name}) without IP`);
+      // eslint-disable-next-line max-len
+      throw new Error(`DHCP Server cannot be defined for interface ${interfaceObj.name} without IP`);
     }
 
     // check that DHCP Range Start/End IP are on the same subnet with interface IP
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
-      throw new Error('DHCP Range Start IP address is not on the same subnet with interface IP');
+      // eslint-disable-next-line max-len
+      throw new Error('DHCP Server Range Start IP address is not on the same subnet with interface IP');
     }
     if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeEnd)) {
-      throw new Error('DHCP Range End IP address is not on the same subnet with interface IP');
+      // eslint-disable-next-line max-len
+      throw new Error('DHCP Server Range End IP address is not on the same subnet with interface IP');
     }
     // check that DHCP range End address IP is greater than Start IP address
     const ip2int = IP => IP.split('.')
       .reduce((res, val, idx) => res + (+val) * 256 ** (3 - idx), 0);
     if (ip2int(dhcpRequest.rangeStart) > ip2int(dhcpRequest.rangeEnd)) {
-      throw new Error('DHCP Range End IP address must be greater than Start IP address');
+      throw new Error('DHCP Server Range End IP address must be greater than Start IP address');
     }
     // Check that no repeated mac, host or IP
     const macLen = dhcpRequest.macAssign.length;
     const uniqMacs = uniqBy(dhcpRequest.macAssign, 'mac');
     const uniqHosts = uniqBy(dhcpRequest.macAssign, 'host');
     const uniqIPs = uniqBy(dhcpRequest.macAssign, 'ipv4');
-    if (uniqMacs.length !== macLen) throw new Error('MAC bindings MACs are not unique');
-    if (uniqHosts.length !== macLen) throw new Error('MAC bindings hosts are not unique');
-    if (uniqIPs.length !== macLen) throw new Error('MAC bindings IPs are not unique');
+    if (uniqMacs.length !== macLen) {
+      throw new Error('DHCP Server MAC bindings MACs are not unique');
+    }
+    if (uniqHosts.length !== macLen) {
+      throw new Error('DHCP Server MAC bindings hosts are not unique');
+    }
+    if (uniqIPs.length !== macLen) {
+      throw new Error('DHCP Server MAC bindings IPs are not unique');
+    }
   }
 
   /**
@@ -2817,16 +2889,27 @@ class DevicesService {
   static async devicesIdStatusGET ({ id, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const { sync, machineId, isApproved, interfaces } = await devices.findOne(
+      const device = await devices.findOne(
         { _id: id, org: { $in: orgList } },
         'sync machineId isApproved interfaces.devId interfaces.internetAccess'
       ).lean();
+      if (!device) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+      const { sync, machineId, isApproved, interfaces } = device;
       const isConnected = connections.isConnected(machineId);
+
+      const status = deviceStatus.getDeviceStatus(machineId) || {};
+      const lteStatus = status.lteStatus;
+      const wifiStatus = status.wifiStatus;
+
       return Service.successResponse({
         sync,
         isApproved,
         connection: `${isConnected ? '' : 'dis'}connected`,
-        interfaces
+        interfaces,
+        lteStatus,
+        wifiStatus
       });
     } catch (e) {
       return Service.rejectResponse(

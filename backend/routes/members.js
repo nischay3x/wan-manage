@@ -284,6 +284,7 @@ membersRouter.route('/')
     // Send email
       .then(() => {
         const p = mailer.sendMailHTML(
+          configs.get('mailerEnvelopeFromAddress'),
           configs.get('mailerFromAddress'),
           req.body.email,
           `You are invited to a ${configs.get('companyName')} Account`,

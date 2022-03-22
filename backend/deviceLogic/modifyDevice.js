@@ -45,13 +45,14 @@ const isEmpty = require('lodash/isEmpty');
 const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
+const { getBridges } = require('../utils/deviceUtils');
 
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
  * @return {Array}            the same array after removing unnecessary fields
  */
-const prepareIfcParams = (interfaces, device, newDevice) => {
+const prepareIfcParams = (interfaces, newDevice) => {
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
@@ -173,10 +174,11 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
   // Check against the old configured interfaces.
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
-    const modifiedInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.interfaces, device, newDevice
-    );
-    if (modifiedInterfaces.length > 0) {
+    const interfaces = messageParams.modify_interfaces.interfaces || [];
+    const lteInterfaces = messageParams.modify_interfaces.lte_enable_disable || [];
+
+    if (interfaces.length > 0) {
+      const modifiedInterfaces = prepareIfcParams(interfaces, newDevice);
       requests.push(...modifiedInterfaces.map(item => {
         return {
           entity: 'agent',
@@ -186,33 +188,14 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
       }));
     }
 
-    const oldLteInterfaces = prepareIfcParams(
-      device.interfaces.filter(i => i.deviceType === 'lte').toObject(), device, newDevice);
-
-    const newLteInterfaces = prepareIfcParams(
-      messageParams.modify_interfaces.lte_enable_disable, device, newDevice
-    );
-
-    // we send lte job if configuration or interface metric was changed
-    const lteDiffInterfaces = differenceWith(
-      newLteInterfaces,
-      oldLteInterfaces,
-      (origIfc, newIfc) => {
-        return isEqual(origIfc.configuration, newIfc.configuration) &&
-          isEqual(origIfc.metric, newIfc.metric);
-      }
-    );
-
-    // don't put these requests as aggregated because
-    // they are don't related to router api in the agent
-    if (lteDiffInterfaces.length > 0) {
-      requests.push(...lteDiffInterfaces.map(item => {
+    if (lteInterfaces.length > 0) {
+      requests.push(...lteInterfaces.map(item => {
         return {
           entity: 'agent',
           message: item.configuration.enable ? 'add-lte' : 'remove-lte',
           params: {
             ...item.configuration,
-            dev_id: item.dev_id,
+            dev_id: item.devId,
             metric: item.metric
           }
         };
@@ -310,7 +293,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
   }
 
   if (has(messageParams, 'modify_router.assign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, device, newDevice);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.assign, newDevice);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -320,7 +303,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     }));
   }
   if (has(messageParams, 'modify_router.unassign')) {
-    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, device, newDevice);
+    const ifcParams = prepareIfcParams(messageParams.modify_router.unassign, newDevice);
     requests.push(...ifcParams.map(item => {
       return {
         entity: 'agent',
@@ -694,7 +677,7 @@ const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) 
       let tasksDeviceA = [];
       let tasksDeviceB = [];
 
-      const { deviceA, deviceB, pathlabel, peer } = tunnel;
+      const { deviceA, deviceB, pathlabel, peer, mtu, mssClamp, ospfCost } = tunnel;
       const ifcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
       });
@@ -721,6 +704,7 @@ const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) 
         pathlabel,
         deviceA,
         deviceB,
+        { mtu, mssClamp, ospfCost },
         peer
       );
       tasksDeviceA = tasksDeviceA.concat(addTasksA);
@@ -1009,35 +993,6 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
   return { dhcpRemove, dhcpAdd };
 };
 
-const getBridges = interfaces => {
-  const bridges = {};
-
-  for (const ifc of interfaces) {
-    const devId = ifc.devId;
-
-    if (ifc.IPv4 === '' && ifc.IPv4Mask === '') {
-      continue;
-    }
-    const addr = ifc.IPv4 + '/' + ifc.IPv4Mask;
-
-    const needsToBridge = interfaces.some(i => {
-      return devId !== i.devId && addr === i.IPv4 + '/' + i.IPv4Mask;
-    });
-
-    if (!needsToBridge) {
-      continue;
-    }
-
-    if (!bridges.hasOwnProperty(addr)) {
-      bridges[addr] = [];
-    }
-
-    bridges[addr].push(ifc.devId);
-  };
-
-  return bridges;
-};
-
 /**
  * Creates and queues the modify-device job. It compares
  * the current view of the device in the database with
@@ -1080,8 +1035,8 @@ const apply = async (device, user, data) => {
   }
 
   modifyParams.modify_router = {};
-  const oldBridges = getBridges(device[0].interfaces.filter(i => i.isAssigned));
-  const newBridges = getBridges(data.newDevice.interfaces.filter(i => i.isAssigned));
+  const oldBridges = getBridges(device[0].interfaces);
+  const newBridges = getBridges(data.newDevice.interfaces);
 
   const assignBridges = [];
   const unassignBridges = [];
@@ -1274,7 +1229,7 @@ const apply = async (device, user, data) => {
   // Queue job only if the device has changed
   // Return empty jobs array if the device did not change
   if (!modified) {
-    logger.warn('The device was not modified, nothing to apply', {
+    logger.debug('The device was not modified, nothing to apply', {
       params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
     });
     return {
@@ -1372,13 +1327,14 @@ const sync = async (deviceId, org) => {
     }
   )
     .lean()
+    // no need to populate pathLabel name here, since we need only the id's
     .populate('interfaces.pathlabels', '_id type');
 
   // Prepare add-interface message
   const deviceConfRequests = [];
 
   // build bridges
-  const bridges = getBridges(interfaces.filter(i => i.isAssigned));
+  const bridges = getBridges(interfaces);
   Object.keys(bridges).forEach(item => {
     deviceConfRequests.push({
       entity: 'agent',
