@@ -31,7 +31,7 @@
                 "description": "Allow VPN inbound traffic",
                 "destination": {
                   "ports": "${serverPort}",
-                  "protocols": ["tcp", "udp"]
+                  "protocols": ["udp"]
                 }
               }
             ]

@@ -26,15 +26,7 @@ const ObjectId = require('mongoose').Types.ObjectId;
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getMatchFilters } = require('../utils/filterUtils');
 
-const {
-  validateConfiguration,
-  pickAllowedFieldsOnly,
-  saveConfiguration,
-  needToUpdatedDevices,
-  selectConfigurationParams,
-  updateApplicationBilling,
-  getApplicationStatus
-} = require('../applicationLogic/applications');
+const appsLogic = require('../applicationLogic/applications')();
 const deviceStatus = require('../periodic/deviceStatus')();
 
 class ApplicationsService {
@@ -51,7 +43,7 @@ class ApplicationsService {
    * Select the API fields from application Object
    * @param {Object} item - jobs object
    */
-  static selectApplicationParams (item) {
+  static async selectApplicationParams (item) {
     item._id = item._id.toString();
 
     if (item.org) {
@@ -73,7 +65,8 @@ class ApplicationsService {
       });
     }
 
-    item.configuration = selectConfigurationParams(item.appStoreApp.identifier, item.configuration);
+    item.configuration = await appsLogic.selectConfigurationParams(
+      item.appStoreApp.identifier, item.configuration);
 
     return item;
   }
@@ -142,7 +135,8 @@ class ApplicationsService {
         .findOne({ org: { $in: orgList }, _id: id })
         .populate('appStoreApp').lean();
 
-      return Service.successResponse(ApplicationsService.selectApplicationParams(app));
+      const parsed = await ApplicationsService.selectApplicationParams(app);
+      return Service.successResponse(parsed);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -268,8 +262,9 @@ class ApplicationsService {
         return response;
       });
 
-      return Service.successResponse(response.map(r =>
+      const parsed = await Promise.all(response.map(r =>
         ApplicationsService.selectApplicationParams(r)));
+      return Service.successResponse(parsed);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -323,7 +318,8 @@ class ApplicationsService {
       installedApp = await applications.findOne({ _id: installedApp._id })
         .populate('appStoreApp').lean();
 
-      return Service.successResponse(ApplicationsService.selectApplicationParams(installedApp));
+      const parsed = await ApplicationsService.selectApplicationParams(installedApp);
+      return Service.successResponse(parsed);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -378,7 +374,7 @@ class ApplicationsService {
         { _id: id, org: { $in: orgList } }
       );
 
-      await updateApplicationBilling(app);
+      await appsLogic.updateApplicationBilling(app);
 
       return Service.successResponse(null, 204);
     } catch (e) {
@@ -418,13 +414,15 @@ class ApplicationsService {
         return Service.rejectResponse('Invalid application id', 500);
       }
 
+      const identifier = app.appStoreApp.identifier;
       // this configuration object is dynamically.
       // we need to pick only allowed fields for given application
-      configurationRequest = pickAllowedFieldsOnly(configurationRequest, app);
+      configurationRequest = await appsLogic.pickAllowedFieldsOnly(
+        identifier, configurationRequest, app);
 
-      const {
-        valid, err
-      } = await validateConfiguration(configurationRequest, app, user.defaultAccount);
+      const { valid, err } = await appsLogic.validateConfiguration(
+        identifier, configurationRequest, app, user.defaultAccount
+      );
 
       if (!valid) {
         logger.warn('Application update failed',
@@ -437,9 +435,10 @@ class ApplicationsService {
       // update old configuration object with new one
       const combinedConfig = { ...app.configuration, ...configurationRequest };
 
-      const isNeedToUpdatedDevices = needToUpdatedDevices(app, app.configuration, combinedConfig);
+      const isNeedToUpdatedDevices = await appsLogic.needToUpdatedDevices(
+        identifier, app.configuration, combinedConfig);
 
-      const updated = await saveConfiguration(app, combinedConfig, isNeedToUpdatedDevices);
+      const updated = await appsLogic.saveConfiguration(identifier, app, combinedConfig);
 
       // Update devices if needed
       if (isNeedToUpdatedDevices) {
@@ -455,7 +454,8 @@ class ApplicationsService {
         }
       }
 
-      return Service.successResponse(ApplicationsService.selectApplicationParams(updated));
+      const parsed = await ApplicationsService.selectApplicationParams(updated);
+      return Service.successResponse(parsed);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -558,7 +558,8 @@ class ApplicationsService {
         }
       ]).allowDiskUse(true);
 
-      const appStatus = await getApplicationStatus(identifier, app.org.account, app.org._id);
+      const appStatus = await appsLogic.getApplicationStatus(
+        identifier, app.org.account, app.org._id);
 
       for (const device of devicesList) {
         device.monitoring = {};

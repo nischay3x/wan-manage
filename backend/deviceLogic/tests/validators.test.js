@@ -257,13 +257,33 @@ describe('validateDevice', () => {
     device.name = 'Device 1';
     device._id = '123456';
     const organizationLanSubnets = [
-      { _id: '987', name: 'Device 2', subnet: '192.168.100.3' }
+      { _id: '987', name: 'Device 2', subnet: '192.168.100.3', type: 'interface' }
     ];
 
     const deviceSubnet = `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
     const overlapsDeviceName = organizationLanSubnets[0].name;
     failureObject.err =
-    `The LAN subnet ${deviceSubnet} overlaps with a LAN subnet of device ${overlapsDeviceName}`;
+    // eslint-disable-next-line max-len
+    `The LAN subnet ${deviceSubnet} overlaps with a LAN subnet (${organizationLanSubnets[0].subnet}) of device ${overlapsDeviceName}`;
+
+    const result = validateDevice(device, true, organizationLanSubnets);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if it has a LAN subnets overlap tunnel dedicated network', () => {
+    device.name = 'Device 1';
+    device._id = '123456';
+    device.interfaces[0].IPv4 = '10.100.0.1';
+    device.interfaces[0].IPv4Mask = '24';
+
+    const organizationLanSubnets = [
+      { _id: '987', name: 'Device 2', subnet: '192.168.100.3', type: 'interface' }
+    ];
+
+    const deviceSubnet = '10.100.0.1/24';
+    failureObject.err =
+    // eslint-disable-next-line max-len
+    `The subnet ${deviceSubnet} overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)`;
 
     const result = validateDevice(device, true, organizationLanSubnets);
     expect(result).toMatchObject(failureObject);
@@ -581,7 +601,7 @@ describe('validateWiFiInterfaceConfiguration', () => {
 
   it('Should be an invalid wifi configuration - missed securityMode', () => {
     configuration['2.4GHz'].securityMode = '';
-    failureObject.err = 'Security mode is required field on enabled WiFi band';
+    failureObject.err = '"value" does not match any of the allowed types';
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(failureObject);
   });
@@ -602,7 +622,7 @@ describe('validateWiFiInterfaceConfiguration', () => {
 
   it('Should be an invalid wifi configuration - channel not valid', () => {
     configuration['2.4GHz'].channel = '-2';
-    failureObject.err = '"channel" with value "-2" fails to match the required pattern: /^\\d+$/';
+    failureObject.err = '"value" does not match any of the allowed types';
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(failureObject);
   });

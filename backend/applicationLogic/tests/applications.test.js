@@ -15,26 +15,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const { isVpn } = require('../remotevpn');
-const {
-  needToUpdatedDevices
-} = require('../applications');
+const appLogic = require('../applications')();
 
-describe('Validate vpn name', () => {
-  it('Should be a valid vpn name', () => {
-    const res = isVpn('com.flexiwan.remotevpn');
-    expect(res).toBe(true);
-  });
-});
-
+const vpnIdentifier = 'com.flexiwan.remotevpn';
 describe('Validate vpn configuration', () => {
-  const app = {
-    appStoreApp: {
-      name: 'Remote Worker VPN',
-      identifier: 'com.flexiwan.remotevpn'
-    }
-  };
-
   let oldConfig = null;
   let newConfig = null;
 
@@ -53,32 +37,37 @@ describe('Validate vpn configuration', () => {
     };
   });
 
-  it('Should return false', () => {
-    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+  it('Should return false', async (done) => {
+    const res = await appLogic.needToUpdatedDevices(vpnIdentifier, oldConfig, newConfig);
     expect(res).toBe(false);
+    done();
   });
 
-  it('Should return true if serverPort is different', () => {
+  it('Should return true if serverPort is different', async done => {
     newConfig.serverPort = '1196';
-    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    const res = await appLogic.needToUpdatedDevices(vpnIdentifier, oldConfig, newConfig);
     expect(res).toBe(true);
+    done();
   });
 
-  it('Should return true if dnsIps is different', () => {
+  it('Should return true if dnsIps is different', async done => {
     newConfig.dnsIps = '8.8.4.4';
-    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    const res = await appLogic.needToUpdatedDevices(vpnIdentifier, oldConfig, newConfig);
     expect(res).toBe(true);
+    done();
   });
 
-  it('Should return true if dnsDomains is different', () => {
+  it('Should return true if dnsDomains is different', async done => {
     newConfig.dnsDomains = 'local2.dns';
-    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    const res = await appLogic.needToUpdatedDevices(vpnIdentifier, oldConfig, newConfig);
     expect(res).toBe(true);
+    done();
   });
 
-  it('Should return true if routeAllTraffic is different', () => {
+  it('Should return true if routeAllTraffic is different', async done => {
     newConfig.routeAllTrafficOverVpn = true;
-    const res = needToUpdatedDevices(app, oldConfig, newConfig);
+    const res = await appLogic.needToUpdatedDevices(vpnIdentifier, oldConfig, newConfig);
     expect(res).toBe(true);
+    done();
   });
 });

@@ -18,6 +18,7 @@
 const { devices } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const { generateTunnelParams } = require('./tunnelUtils');
+const appsLogic = require('../applicationLogic/applications')();
 
 /**
  * Get all LAN subnets in the organization
@@ -78,13 +79,9 @@ const getTunnelsSubnets = async org => {
 };
 
 const getAllOrganizationSubnets = async orgId => {
-  // import inside in order to prevent cycle dependencies
-  const { getApplicationSubnets } = require('../applicationLogic/applications');
-
-  // FIXME: do we need to check for WAN?
   const lanSubnets = await getAllOrganizationLanSubnets(orgId);
   const tunnelSubnets = await getTunnelsSubnets(orgId);
-  const applicationSubnets = await getApplicationSubnets(orgId);
+  const applicationSubnets = await appsLogic.getApplicationSubnets(orgId);
   return [...lanSubnets, ...tunnelSubnets, ...applicationSubnets];
 };
 

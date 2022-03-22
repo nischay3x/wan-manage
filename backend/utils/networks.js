@@ -20,26 +20,12 @@
  * @param  {number} mask  subnet mask
  * @return {number}       number of available ips
  */
-function getAvailableIps (mask) {
-  return Math.pow(2, 32 - mask);
-}
-
-/**
- * Get subnet mask by number of available ips
- * @param  {number} ips   number of ips range
- * @return {number}       subnet mask
- */
-function getSubnetMaskByRangeCount (ips) {
-  let count = 0;
-
-  while (ips) {
-    ips = ips >>> 1;
-    count++;
-  }
-
-  const mask = 32 - count + 1;
-  return mask;
-}
+const getRangeAndMask = number => {
+  const baseTwo = Math.ceil(Math.log2(number));
+  const mask = 32 - baseTwo;
+  const range = Math.pow(2, baseTwo);
+  return { range, mask };
+};
 
 /**
  * Find the start and end IPv4 from ip + mask
@@ -66,7 +52,6 @@ const getStartIp = (ipString, mask, shift = 0) => {
 };
 
 module.exports = {
-  getSubnetMask: getSubnetMaskByRangeCount,
-  getAvailableIps,
+  getRangeAndMask,
   getStartIp
 };

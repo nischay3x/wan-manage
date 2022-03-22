@@ -48,6 +48,8 @@ const appRules = require('./periodic/appRules')();
 const applications = require('./periodic/applications')();
 const statusesInDb = require('./periodic/statusesInDb')();
 
+require('./applicationLogic/initializeApps');
+
 // rate limiter
 const rateLimit = require('express-rate-limit');
 const RateLimitStore = require('./rateLimitStore');

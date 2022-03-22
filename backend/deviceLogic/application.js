@@ -30,20 +30,19 @@ const deviceQueues = require('../utils/deviceQueue')(
 
 const modifyDeviceApply = require('./modifyDevice').apply;
 
-const {
-  validateDeviceConfigurationRequest,
-  validateUninstallRequest,
-  getAppInstallWithAsQuery,
-  getDeviceSpecificConfiguration
-} = require('../applicationLogic/applications');
-
-const { getTasks } = require('../applicationLogic/applications');
+const appsLogic = require('../applicationLogic/applications')();
 
 const handleInstallOp = async (app, device, deviceConfiguration, idx) => {
   const appId = app._id.toString();
 
-  const deviceSpecificConfigurations =
-    getDeviceSpecificConfiguration(app, device, deviceConfiguration, idx);
+  const identifier = app.appStoreApp.identifier;
+  const isRequiredFieldsConfigured = await appsLogic.isReadyForDeviceInstallation(identifier, app);
+  if (!isRequiredFieldsConfigured) {
+    throw new Error('Required configuration are missing. Please configure your application');
+  }
+
+  const deviceSpecificConfigurations = await appsLogic.getDeviceSpecificConfiguration(
+    identifier, app, device, deviceConfiguration, idx);
 
   const query = { _id: device._id, org: device.org };
   const update = {};
@@ -72,7 +71,7 @@ const handleInstallOp = async (app, device, deviceConfiguration, idx) => {
   };
 
   // check if need to install more things along with the application (firewall rules, etc.)
-  const installWithQuery = getAppInstallWithAsQuery(app, device, 'install');
+  const installWithQuery = await appsLogic.getAppInstallWithAsQuery(app, device, 'install');
   if (!update.$set) {
     update.$set = {};
   }
@@ -100,7 +99,7 @@ const handleUninstallOp = async (app, device) => {
   };
 
   // check if need to remove more things together with the application
-  const installWithQuery = getAppInstallWithAsQuery(app, device, 'uninstall');
+  const installWithQuery = await appsLogic.getAppInstallWithAsQuery(app, device, 'uninstall');
   update.$set = {
     ...update.$set,
     ...installWithQuery
@@ -120,7 +119,7 @@ const handleConfigOp = async (app, device) => {
   };
 
   // check if need to remove more things together with the application
-  const installWithQuery = getAppInstallWithAsQuery(app, device, 'config');
+  const installWithQuery = await appsLogic.getAppInstallWithAsQuery(app, device, 'config');
   update.$set = {
     ...update.$set,
     ...installWithQuery
@@ -172,10 +171,11 @@ const apply = async (deviceList, user, data) => {
     deviceList = deviceList.filter(d => data.devices.hasOwnProperty(d._id));
   }
 
+  const identifier = app.appStoreApp.identifier;
   if (op === 'install' && deviceConfiguration) {
     // validate device configuration
-    const { valid, err } = await validateDeviceConfigurationRequest(
-      app, deviceConfiguration, deviceList);
+    const { valid, err } = await appsLogic.validateDeviceConfigurationRequest(
+      identifier, app, deviceConfiguration, deviceList);
     if (!valid) {
       throw createError(500, err);
     }
@@ -183,7 +183,7 @@ const apply = async (deviceList, user, data) => {
 
   if (op === 'uninstall') {
     // validate uninstall request
-    const { valid, err } = await validateUninstallRequest(app, deviceList);
+    const { valid, err } = await appsLogic.validateUninstallRequest(identifier, app, deviceList);
     if (!valid) {
       throw createError(500, err);
     }
@@ -307,7 +307,7 @@ const queueApplicationJob = async (
     const dev = deviceList[i];
 
     const newDevice = await devices.findOne({ _id: dev._id });
-    let tasks = await getTasks(newDevice, application, op);
+    let tasks = await appsLogic.getTasks(newDevice, application, op);
 
     if (tasks.length > 1) {
       tasks = [{
@@ -426,6 +426,8 @@ const error = async (jobId, res) => {
     params: { result: res, jobId: jobId }
   });
 
+  if (!res) return;
+
   const { op, org, app } = res.application;
   const { _id } = res.application.device;
 
@@ -500,7 +502,7 @@ const remove = async (job) => {
         // The second job is remains and will be send to the device.
         // Therefore in this case, we need to delete the additions from the DB.
         // The future sync process will know how to handle sending the appropriate JOBS.
-        const installWithQuery = getAppInstallWithAsQuery(app, devObj, 'uninstall');
+        const installWithQuery = await appsLogic.getAppInstallWithAsQuery(app, devObj, 'uninstall');
         const updated = await devices.findOneAndUpdate(
           query,
           { $set: { ...installWithQuery } },
@@ -540,7 +542,7 @@ const sync = async (deviceId, org) => {
   for (const app of device.applications) {
     const syncStatuses = ['installed', 'installing', 'installation failed', 'configuration failed'];
     if (syncStatuses.includes(app.status)) {
-      const tasks = await getTasks(device, app.app, 'install');
+      const tasks = await appsLogic.getTasks(device, app.app, 'install');
       requests = requests.concat(tasks);
 
       completeCbData.push({
