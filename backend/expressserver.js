@@ -21,6 +21,7 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 const configs = require('./configs')();
+const clientConfig = configs.getClientConfig();
 const swaggerUI = require('swagger-ui-express');
 const yamljs = require('yamljs');
 const express = require('express');
@@ -37,6 +38,7 @@ const { connectRouter } = require('./routes/connect');
 const morgan = require('morgan');
 const logger = require('./logging/logging')({ module: module.filename, type: 'req' });
 const { reqLogger, errLogger } = require('./logging/request-logging');
+const serialize = require('serialize-javascript');
 
 // periodic tasks
 const deviceStatus = require('./periodic/deviceStatus')();
@@ -171,6 +173,7 @@ class ExpressServer {
     this.app.use(cookieParser());
 
     // Routes allowed without authentication
+    this.app.get('/', (req, res) => this.sendIndexFile(res));
     this.app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
 
     // Secure traffic only
@@ -256,11 +259,37 @@ class ExpressServer {
       });
   }
 
+  sendIndexFile (res) {
+    const transformIndex = (origIndex) => {
+      let modifiedIndex = configs.get('removeBranding', 'boolean')
+        ? origIndex.replace('<title>FlexiWAN Management</title>',
+          `<title>${configs.get('companyName')} Management</title>`)
+        : origIndex;
+      const m = modifiedIndex.match(/const __FLEXIWAN_SERVER_CONFIG__=(.*?);/);
+      if (m instanceof Array && m.length > 0) { // successful match
+        // eslint-disable-next-line no-eval
+        const newConfig = eval('(' + m[1] + ')');
+        // Update default config with backend variables
+        for (const c in clientConfig) {
+          newConfig[c] = clientConfig[c];
+        }
+        modifiedIndex = modifiedIndex.replace(m[0],
+          'const __FLEXIWAN_SERVER_CONFIG__=' + serialize(newConfig, { isJSON: true }) + ';');
+      }
+      return modifiedIndex;
+    };
+
+    const indexFile =
+        fs.readFileSync(path.join(__dirname, configs.get('clientStaticDir'), 'index.html'));
+    const transformedIndex = transformIndex(indexFile.toString());
+    res.send(transformedIndex);
+  }
+
   addErrorHandler () {
     // "catchall" handler, for any request that doesn't match one above, send back index.html file.
     this.app.get('*', (req, res, next) => {
       logger.info('Route not found', { req: req });
-      res.sendFile(path.join(__dirname, configs.get('clientStaticDir'), 'index.html'));
+      this.sendIndexFile(res);
     });
 
     // catch 404 and forward to error handler
