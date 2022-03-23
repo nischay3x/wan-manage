@@ -303,7 +303,7 @@ const configEnv = {
     logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
-    flexiVpnServer: 'https://vpn01.flexiwan.com:443',
+    flexiVpnServer: 'https://vpnqa01.flexiwan.com:443',
     vpnBaseUrl: 'https://vpnqa01.flexiwan.com:443'
   },
   // Override for appqa02 environment
