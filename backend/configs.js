@@ -236,7 +236,8 @@ const configEnv = {
     billingRedirectOkUrl: 'https://app.flexiwan.com/ok.html',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80']
+    corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80'],
+    vpnBaseUrl: 'https://vpn.flexiwan.com:443'
   },
   hosted: {
     // modify next params for hosted server
@@ -277,7 +278,8 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80']
+    corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80'],
+    vpnBaseUrl: 'https://vpn.flexiwan.com:443'
   },
   // Override for appqa01 environment
   appqa01: {
