@@ -622,7 +622,7 @@ const sync = async (deviceId, org) => {
   const device = await devices.findOne(
     { _id: deviceId },
     { deviceSpecificRulesEnabled: 1, 'policies.firewall': 1, 'firewall.rules': 1 }
-  );
+  ).lean();
 
   const { policy, status } = device.policies.firewall;
 

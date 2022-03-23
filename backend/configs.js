@@ -164,6 +164,8 @@ const configEnv = {
     webHookRegisterDeviceSecret: 'ABC',
     // Global app identification rules file location
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
+    // Global applications file locations
+    applicationsUrl: './applications.json',
     // Default port for tunnels
     tunnelPort: '4789',
     // If to allow manager role to delete organizations, devices, tokens, tunnels, appIdentifications,
@@ -192,7 +194,14 @@ const configEnv = {
     publicAddrBlockTime: 60 * 60, // one hour
     // Tunnel MTU in bytes. Now provisioned globally per server. Specify number to set specific MTU.
     // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
-    globalTunnelMtu: 1500
+    globalTunnelMtu: 1500,
+    // flexiVpn server portal url
+    flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
+    vpnBaseUrl: 'https://localvpn.flexiwan.com:8000',
+    // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
+    // On the following renegotiations, the OpenVPN client will pass this token instead of the users password
+    vpnTmpTokenTime: 43200,
+    contactUsEmail: 'yourfriends@flexiwan.com'
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -227,7 +236,8 @@ const configEnv = {
     billingRedirectOkUrl: 'https://app.flexiwan.com/ok.html',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80']
+    corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80'],
+    vpnBaseUrl: 'https://vpn.flexiwan.com:443'
   },
   hosted: {
     // modify next params for hosted server
@@ -268,7 +278,8 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest',
     logLevel: 'info',
     logUserName: true,
-    corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80']
+    corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80'],
+    vpnBaseUrl: 'https://vpn.flexiwan.com:443'
   },
   // Override for appqa01 environment
   appqa01: {
@@ -291,7 +302,9 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     logLevel: 'debug',
     logUserName: true,
-    corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80']
+    corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
+    flexiVpnServer: 'https://vpn01.flexiwan.com:443',
+    vpnBaseUrl: 'https://vpnqa01.flexiwan.com:443'
   },
   // Override for appqa02 environment
   appqa02: {
@@ -314,7 +327,9 @@ const configEnv = {
     SwRepositoryUrl: 'https://deb.flexiwan.com/info/flexiwan-router/latest-testing',
     logLevel: 'debug',
     logUserName: true,
-    corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80']
+    corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
+    flexiVpnServer: 'https://vpnqa02.flexiwan.com:443',
+    vpnBaseUrl: 'https://vpnqa02.flexiwan.com:443'
   }
 };
 
@@ -402,7 +417,7 @@ class Configs {
       aboutContent: this.get('aboutContent'),
       feedbackUrl: this.get('feedbackUrl'),
       showDeviceLimitAlert: this.get('showDeviceLimitAlert', 'boolean'),
-      removeBranding: this.get('removeBranding', 'boolean')
+      vpnBaseUrl: this.get('vpnBaseUrl') + '/'
     };
   }
 }

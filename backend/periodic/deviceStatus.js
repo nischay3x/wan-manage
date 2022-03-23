@@ -18,7 +18,8 @@
 const periodic = require('./periodic')();
 const connections = require('../websocket/Connections')();
 const { deviceStats, deviceAggregateStats } = require('../models/analytics/deviceStats');
-const Joi = require('@hapi/joi');
+const applicationStats = require('../models/analytics/applicationStats');
+const Joi = require('joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const notificationsMgr = require('../notifications/notifications')();
 const configs = require('../configs')();
@@ -50,6 +51,7 @@ class DeviceStatus {
       ['rtt', 'rtt'],
       ['drop_rate', 'drop_rate']
     ]);
+    this.lastApplicationsStatusTime = {};
 
     this.start = this.start.bind(this);
     this.periodicPollDevices = this.periodicPollDevices.bind(this);
@@ -110,6 +112,7 @@ class DeviceStatus {
       period: Joi.number().required(),
       utc: Joi.date().timestamp('unix').required(),
       tunnel_stats: Joi.object().optional(),
+      application_stats: Joi.object().optional(),
       lte_stats: Joi.object().optional(),
       wifi_stats: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
@@ -136,7 +139,7 @@ class DeviceStatus {
     });
 
     for (const updateEntry of msg) {
-      const result = Joi.validate(updateEntry, devStatsSchema);
+      const result = devStatsSchema.validate(updateEntry);
       if (result.error) {
         return {
           valid: false,
@@ -193,6 +196,7 @@ class DeviceStatus {
             }
             this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
+            this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
             this.generateDevStatsNotifications();
             this.updateDeviceSyncStatus(
@@ -275,6 +279,56 @@ class DeviceStatus {
         params: { deviceID: deviceId, err: err.message },
         periodic: { task: this.taskInfo }
       });
+    }
+  }
+
+  /**
+     * Updates the applications stats per device in the database
+     * @param  {string} deviceID   device UUID
+     * @param  {Object} deviceInfo device info stored per connection (org, mongo device id, socket)
+     * @param  {Object} stats      contains the per-application stats
+     * @return {void}
+     */
+  updateAnalyticsApplicationsStats (deviceID, deviceInfo, statsList) {
+    for (const statsEntry of statsList) {
+      // Update the database once per update time configuration (default: 5min)
+      const msgTime = Math.floor(statsEntry.utc / configs.get('analyticsUpdateTime', 'number')) *
+        configs.get('analyticsUpdateTime', 'number');
+
+      if (this.lastApplicationsStatusTime[deviceID] === msgTime) return;
+
+      const appsStats = statsEntry.application_stats;
+      for (const identifier in appsStats) {
+        const appData = appsStats[identifier];
+
+        this.lastApplicationsStatusTime[deviceID] = msgTime;
+
+        // update the db
+        applicationStats.update(
+          // Query
+          { org: deviceInfo.org, device: deviceInfo.deviceObj, app: identifier, time: msgTime },
+          // Update
+          { $set: { stats: appData } },
+          // Options
+          { upsert: true })
+          .then((resp) => {
+            logger.debug('Storing applications statistics in DB', {
+              params: { deviceId: deviceID, identifier, appData },
+              periodic: { task: this.taskInfo }
+            });
+          }, (err) => {
+            logger.warn('Failed to store applications statistics', {
+              params: { deviceId: deviceID, identifier, appData, err: err.message },
+              periodic: { task: this.taskInfo }
+            });
+          })
+          .catch((err) => {
+            logger.warn('Failed to store applications statistics', {
+              params: { deviceId: deviceID, identifier, appData, err: err.message },
+              periodic: { task: this.taskInfo }
+            });
+          });
+      }
     }
   }
 
@@ -455,6 +509,27 @@ class DeviceStatus {
     const timeDelta = rawStats.period;
     const ifStats = rawStats.hasOwnProperty('stats') ? rawStats.stats : {};
     const devStats = {};
+
+    const appStatus = rawStats.application_stats;
+    if (rawStats.hasOwnProperty('application_stats') && Object.entries(appStatus).length !== 0) {
+      if (!this.status[machineId].applicationStatus) {
+        this.status[machineId].applicationStatus = {};
+      }
+      // Generate tunnel notifications
+      Object.entries(appStatus).forEach(ent => {
+        const [identifier, status] = ent;
+        this.status[machineId].applicationStatus[identifier] = {
+          running: status.running,
+          monitoring: status.statistics
+        };
+      });
+    } else {
+      if (this.status[machineId].applicationStatus) {
+        for (const identifier in this.status[machineId].applicationStatus) {
+          delete this.status[machineId].applicationStatus[identifier];
+        }
+      }
+    }
 
     // Set lte status in memory for now
     const lteStatus = rawStats.lte_stats;

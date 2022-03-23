@@ -1011,10 +1011,16 @@ const apply = async (device, user, data) => {
 
   device[0] = await device[0]
     .populate('interfaces.pathlabels', '_id name type')
-    .execPopulate();
+    .populate({
+      path: 'applications.app',
+      populate: {
+        path: 'appStoreApp'
+      }
+    }).execPopulate();
 
   data.newDevice = await data.newDevice
     .populate('interfaces.pathlabels', '_id name type')
+    .populate('policies.firewall.policy', '_id name rules')
     .execPopulate();
 
   // Create the default/static routes modification parameters
@@ -1264,6 +1270,7 @@ const apply = async (device, user, data) => {
     await setJobPendingInDB(device[0]._id, org, true);
     // Queue device modification job
     const jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
+
     return {
       ids: jobs.flat().map(job => job.id),
       status: 'completed',

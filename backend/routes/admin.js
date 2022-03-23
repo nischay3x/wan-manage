@@ -26,6 +26,7 @@ const accountsModel = require('../models/accounts');
 const flexibilling = require('../flexibilling');
 const { deviceAggregateStats } = require('../models/analytics/deviceStats');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
+const keyBy = require('lodash/keyBy');
 
 const adminRouter = express.Router();
 adminRouter.use(bodyParser.json());
@@ -73,9 +74,22 @@ adminRouter
       const AccountsForProcessing = accountsCopy.splice(0, 500);
       const ids = AccountsForProcessing.map(a => a.account_id);
       const summary = await flexibilling.getMaxDevicesRegisteredSummmaryByAccounts(ids);
-      summary.forEach(s => {
+      const featuresSummary = await flexibilling.getFeaturesSummaryByAccounts(ids);
+      for (const s of summary) {
         billing[s.account] = s;
-      });
+      };
+
+      for (const s of featuresSummary) {
+        if (!(s.account in billing)) {
+          continue;
+        }
+
+        if (!('features' in billing[s.account])) {
+          billing[s.account].features = {};
+        }
+
+        billing[s.account].features[s.feature] = s;
+      };
     } while (accountsCopy.length > 0);
 
     try {
@@ -97,8 +111,26 @@ adminRouter
             current: summary ? summary.current : null,
             max: summary ? summary.max : null,
             lastBillingDate: summary ? summary.lastBillingDate : null,
-            lastBillingMax: summary ? summary.lastBillingMax : null
+            lastBillingMax: summary ? summary.lastBillingMax : null,
+            features: {}
           };
+
+          const orgsFeaturesBilling = {};
+          if (summary && summary.features) {
+            for (const f in summary.features) {
+              const name = f.replace(/_/g, ' ');
+              accountBillingInfo.features[name] = {
+                current: summary.features[f].current,
+                max: summary.features[f].max,
+                lastBillingDate: summary.features[f].lastBillingDate,
+                lastBillingMax: summary.features[f].lastBillingMax
+              };
+
+              if (summary.features[f].organizations) {
+                orgsFeaturesBilling[f] = keyBy(summary.features[f].organizations, 'org');
+              }
+            };
+          }
           account.billingInfo = accountBillingInfo;
 
           if (!summary) {
@@ -110,8 +142,21 @@ adminRouter
             const orgBillingInfo = {
               current: o.current,
               max: o.max,
-              lastBillingMax: o.lastBillingMax
+              lastBillingMax: o.lastBillingMax,
+              features: {}
             };
+
+            for (const f in orgsFeaturesBilling) {
+              if (orgId in orgsFeaturesBilling[f]) {
+                const orgData = orgsFeaturesBilling[f][orgId];
+                const name = f.replace(/_/g, ' ');
+                orgBillingInfo.features[name] = {
+                  current: orgData.current,
+                  max: orgData.max,
+                  lastBillingMax: orgData.lastBillingMax
+                };
+              }
+            }
 
             // Check if organizations of billing exists in fleximanage db
             const orgExists = accountOrgs.hasOwnProperty(orgId);
