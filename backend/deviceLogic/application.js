@@ -36,9 +36,9 @@ const handleInstallOp = async (app, device, deviceConfiguration, idx) => {
   const appId = app._id.toString();
 
   const identifier = app.appStoreApp.identifier;
-  const isRequiredFieldsConfigured = await appsLogic.isReadyForDeviceInstallation(identifier, app);
-  if (!isRequiredFieldsConfigured) {
-    throw new Error('Required configuration are missing. Please configure your application');
+  const { valid, err } = await appsLogic.validateInstallRequest(identifier, app);
+  if (!valid) {
+    throw createError(500, err);
   }
 
   const deviceSpecificConfigurations = await appsLogic.getDeviceSpecificConfiguration(

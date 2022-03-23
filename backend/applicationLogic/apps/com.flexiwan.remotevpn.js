@@ -37,18 +37,13 @@ const flexibilling = require('../../flexibilling');
 
 const vpnIdentifier = 'com.flexiwan.remotevpn';
 
-class RemoteVpn {
+const IApplication = require('../applicationsInterface');
+
+class RemoteVpn extends IApplication {
   async pickAllowedFieldsOnly (configurationRequest) {
     return pick(configurationRequest, allowedFields);
   };
 
-  /**
-   * Validate vpn configurations. called when a user update the configurations
-   * @param {object} configurationRequest
-   * @param {objectId} application
-   * @param {objectId} accountId accountId
-   * @return {{valid: boolean, err: string}}  test result + error if message is invalid
-   */
   async validateConfiguration (configurationRequest, application, account) {
     // validate user inputs
     const result = vpnConfigSchema.validate(configurationRequest);
@@ -122,7 +117,7 @@ class RemoteVpn {
       if (outbound) {
         return {
           valid: false,
-          err: `An outbound rule is configured for the application.
+          err: `An outbound rule is configured in device "${dev.name}" for the application.
             Please remove it before uninstalling the application`
         };
       }
@@ -131,13 +126,16 @@ class RemoteVpn {
     return { valid: true, err: '' };
   };
 
-  /**
-   * Validate device specific configuration request
-   * @param {object} app the application will be installed
-   * @param {string} op the operation of the job (install, config, etc.)
-   * @param {[ObjectID]} deviceIds the devices id, that application should installed on them
-   * @return {{valid: boolean, err: string}}  test result + error if message is invalid
-   */
+  async validateInstallRequest (application) {
+    const configuredPort = application.configuration.serverPort;
+    const isPortConfigured = configuredPort !== null && configuredPort !== '';
+    if (!isPortConfigured) {
+      return { valid: false, err: 'VPN Server port is not configured' };
+    }
+
+    return { valid: true, err: '' };
+  }
+
   async validateDeviceConfigurationRequest (app, deviceConfiguration, deviceList) {
     // prevent installation if there are missing required configurations
     // validate user inputs
@@ -157,7 +155,7 @@ class RemoteVpn {
     });
 
     // "getAllOrganizationSubnets" is injected to this class with "registerUtilFunc"
-    const orgSubnets = await this.getAllOrganizationSubnets(app.org);
+    const orgSubnets = await this.utils.getAllOrganizationSubnets(app.org);
 
     // we don't need to check of network is overlapping with the vpn networks of the selected device
     const orgToCheck = orgSubnets.filter(o => {
@@ -279,13 +277,6 @@ class RemoteVpn {
     };
   };
 
-  /**
-   * Generate the device tasks for vpn application
-   * @param {object} device the device to get params for
-   * @param {object} application the application to be installed
-   * @param {string} op the operation of the job (install, config, etc.)
-   * @return {array} array of tasks to be sent to device
-  */
   async getTasks (device, application, op, params) {
     const tasks = [];
 
@@ -430,12 +421,6 @@ class RemoteVpn {
     return apps;
   };
 
-  async isReadyForDeviceInstallation (application) {
-    const configuredPort = application.configuration.serverPort;
-    const isPortConfigured = configuredPort !== null && configuredPort !== '';
-    return isPortConfigured;
-  }
-
   async getConfiguredPortalUsers (account, org = null, exclude = null) {
     const match = {
       account: account
@@ -496,7 +481,7 @@ class RemoteVpn {
     return { orgConnections, accountConnections };
   };
 
-  async getApplicationStatus (account, org) {
+  async getApplicationStats (account, org) {
     const status = {};
     const { orgConnections, accountConnections } = await this.getBillingData(account, org);
     status.orgConnections = orgConnections;

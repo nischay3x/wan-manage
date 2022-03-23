@@ -373,8 +373,8 @@ class ApplicationsService {
       await applications.deleteOne(
         { _id: id, org: { $in: orgList } }
       );
-
-      await appsLogic.updateApplicationBilling(app);
+      const identifier = app.appStoreApp.identifier;
+      await appsLogic.updateApplicationBilling(identifier, app);
 
       return Service.successResponse(null, 204);
     } catch (e) {
@@ -558,7 +558,7 @@ class ApplicationsService {
         }
       ]).allowDiskUse(true);
 
-      const appStatus = await appsLogic.getApplicationStatus(
+      const appStatus = await appsLogic.getApplicationStats(
         identifier, app.org.account, app.org._id);
 
       for (const device of devicesList) {

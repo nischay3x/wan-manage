@@ -23,8 +23,11 @@ const logger = require('../logging/logging')({
   type: 'req'
 });
 
-class ApplicationLogic {
+const IApplication = require('./applicationsInterface');
+
+class ApplicationLogic extends IApplication {
   constructor () {
+    super();
     this.apps = {};
     this.utilFuncs = {};
     this.buildApps();
@@ -35,7 +38,7 @@ class ApplicationLogic {
 
     // register the func with all installed applications
     for (const app in this.apps) {
-      this.apps[app][key] = func;
+      this.apps[app].utils[key] = func;
     }
   }
 
@@ -59,7 +62,7 @@ class ApplicationLogic {
 
     // register the funcs with the install application
     for (const utilFunc in this.utilFuncs) {
-      this.apps[identifier][utilFunc] = this.utilFuncs[utilFunc];
+      this.apps[identifier].utils[utilFunc] = this.utilFuncs[utilFunc];
     }
   }
 
@@ -72,10 +75,16 @@ class ApplicationLogic {
   async call (identifier, func, defaultRet, ...params) {
     try {
       if (!(identifier in this.apps)) {
+        logger.debug('app identifier didn\'t found', {
+          params: { apps: this.apps, identifier }
+        });
         return defaultRet;
       }
 
       if (!this.apps[identifier][func]) {
+        logger.debug('func didn\'t found in app class', {
+          params: { app: this.apps[identifier], identifier, func }
+        });
         return defaultRet;
       }
 
@@ -89,55 +98,13 @@ class ApplicationLogic {
   }
 
   /**
-   * Validate the global application configuration request sent by the user.
+   * Save application configurations
    *
-   * @param  {object} configurationRequest  user request for global configuration
-   * @param  {object} app application object
-   * @param  {object} account account object
-   * @return {{valid: boolean, err: string}}  test result + error if message is invalid
+   * @param  {string} identifier application identifier
+   * @param  {object} application application object
+   * @param  {object} updatedConfig updated application configuration
+   * @return {object}  new application object with updated config
   */
-  async validateConfiguration (identifier, configurationRequest, app, account) {
-    const defaultRet = { valid: false, err: 'Invalid application' };
-    return this.call(
-      identifier, 'validateConfiguration',
-      defaultRet, configurationRequest, app, account);
-  };
-
-  async selectConfigurationParams (identifier, configuration) {
-    return this.call(identifier, 'selectConfigurationParams', true, configuration);
-  };
-
-  /**
- * Update billing stuff for application
- *
- * @param  {object} app application object
- * @return void
- */
-  async updateApplicationBilling (app) {
-    return this.callAsync(app.appStoreApp.identifier, 'updateApplicationBilling', null, app);
-  };
-
-  /**
-   * Pick the allowed fields only from client request.
-   *
-   * Since the configuration in our database is a mixed object,
-   * We give the app developer the option to choose which data he wants to save.
-   * If this function is not implemented,
-   * all information sent from the user will be stored in the database.
-   * @param  {object}  configurationRequest  user configuration request
-   * @param  {object}  app application object
-   * @return {object}  object with allowed fields only.
-   */
-  async pickAllowedFieldsOnly (identifier, configurationRequest) {
-    const defaultRet = configurationRequest;
-    return this.call(identifier, 'pickAllowedFieldsOnly', defaultRet, configurationRequest);
-  };
-
-  async needToUpdatedDevices (identifier, oldConfig, newConfig) {
-    const defaultRet = true;
-    return this.call(identifier, 'needToUpdatedDevices', defaultRet, oldConfig, newConfig);
-  };
-
   async saveConfiguration (identifier, application, updatedConfig) {
     const updatedApp = await applicationsModel.findOneAndUpdate(
       { _id: application._id },
@@ -145,34 +112,23 @@ class ApplicationLogic {
       { new: true, upsert: false, runValidators: true }
     ).populate('appStoreApp').lean();
 
-    await this.call(identifier, 'updateApplicationBilling', true, updatedApp);
+    await this.call(identifier, 'updateApplicationBilling', null, updatedApp);
     return updatedApp;
   };
 
-  async getApplicationStatus (identifier, account, org) {
-    return this.call(identifier, 'getApplicationStatus', true, account, org);
-  };
-
   /**
-   * Validate the device specific application configuration request that sent by the user.
+   * get all application subnets for the given organization
    *
-   * @param  {object}     app application object
-   * @param  {object}     deviceConfiguration  user request for device configuration
-   * @param  {[objectId]} deviceList the devices ids list, that application should installed on them
-   * @return {{valid: boolean, err: string}}  test result + error if message is invalid
-   */
-  async validateDeviceConfigurationRequest (identifier, app, deviceConfiguration, deviceList) {
-    const defaultRet = { valid: false, err: 'Invalid application' };
-    return this.call(
-      identifier,
-      'validateDeviceConfigurationRequest',
-      defaultRet,
-      app,
-      deviceConfiguration,
-      deviceList
-    );
-  }
-
+   * @param  {objectid} orgId organization ID
+   * @return {[{
+   *  _id: objectId,
+   *  deviceId: objectId,
+   *  type: string,
+   *  deviceName: string,
+   *  name: string,
+   *  subnet: string
+   * }]}  list of application subnets
+  */
   async getApplicationSubnets (orgId) {
     const apps = await applicationsModel.find({ org: orgId }).populate('appStoreApp').lean();
     const subnets = [];
@@ -195,30 +151,6 @@ class ApplicationLogic {
   };
 
   /**
-   * Validate uninstall request.
-   *
-   * @param  {object}   app application object
-   * @param  {[objectId]} deviceList the devices ids list, that application should installed on them
-   * @return {{valid: boolean, err: string}}  test result + error if message is invalid
-   */
-  async validateUninstallRequest (identifier, app, deviceList) {
-    const defaultRet = { valid: false, err: 'Invalid application' };
-    return this.call(identifier, 'validateUninstallRequest', defaultRet, app, deviceList);
-  };
-
-  /**
-   * Get application configuration for specific device
-   *
-   * @param  {object} app application object
-   * @param  {object} device the device object to be configured
-   * @return {object} object of device configurations
-   */
-  async getDeviceSpecificConfiguration (identifier, app, device, deviceConfiguration, idx) {
-    return this.call(
-      identifier, 'getDeviceSpecificConfiguration', null, app, device, deviceConfiguration, idx);
-  };
-
-  /**
    * Returns database query of application's "installWith" parameter.
    *
    * This function takes the "installWith" value (see applications.json)
@@ -228,7 +160,7 @@ class ApplicationLogic {
    * @param  {object} device  the device object to be configured
    * @param  {string} op      operation type
    * @return void
-   */
+  */
   async getAppInstallWithAsQuery (app, device, op) {
     const _getVal = val => {
       if (typeof val !== 'string') return val;
@@ -302,31 +234,99 @@ class ApplicationLogic {
     return query;
   };
 
+  /// ////////////////////////////////////////////////////////////////////// ///
+  /// From here, we overriding the IApplication method and we adding         ///
+  /// an "identifier" params to each function.                               ///
+  /// You can find the application descriptions in the IApplication class    ///
+  /// ////////////////////////////////////////////////////////////////////// ///
+
+  async validateConfiguration (identifier, configurationRequest, app, account) {
+    const defaultRet = { valid: true, err: '' };
+    return this.call(
+      identifier, 'validateConfiguration',
+      defaultRet, configurationRequest, app, account);
+  };
+
+  async selectConfigurationParams (identifier, configuration) {
+    return this.call(identifier, 'selectConfigurationParams', configuration, configuration);
+  };
+
+  async updateApplicationBilling (identifier, app) {
+    return this.call(identifier, 'updateApplicationBilling', null, app);
+  };
+
   /**
-   * Creates the job parameters based on application name.
-   * @async
-   * @param  {object}   device      device to be modified
-   * @param  {object}   application application object
-   * @param  {string}   op          operation type
-   * @return {object}               parameters object
+   * Pick the allowed fields only from client request.
+   *
+   * Since the configuration in our database is a mixed object,
+   * We give the app developer the option to choose which data he wants to save.
+   * If this function is not implemented,
+   * all information sent from the user will be stored in the database.
+   * @param  {object}  configurationRequest  user configuration request
+   * @param  {object}  app application object
+   * @return {object}  object with allowed fields only.
    */
-  async getJobParams (device, application, op) {
-    const params = {
-      name: application.appStoreApp.name,
-      identifier: application.appStoreApp.identifier
-    };
+  async pickAllowedFieldsOnly (identifier, configurationRequest) {
+    const defaultRet = configurationRequest;
+    return this.call(identifier, 'pickAllowedFieldsOnly', defaultRet, configurationRequest);
+  };
 
-    const version = application.appStoreApp.versions.find(v => {
-      return v.version === application.installedVersion;
-    });
+  async needToUpdatedDevices (identifier, oldConfig, newConfig) {
+    const defaultRet = true;
+    return this.call(identifier, 'needToUpdatedDevices', defaultRet, oldConfig, newConfig);
+  };
 
-    if (!version) {
-      throw new Error('Invalid installed version');
-    }
+  async getApplicationStats (identifier, account, org) {
+    return this.call(identifier, 'getApplicationStats', true, account, org);
+  };
 
-    params.applicationParams = await this.call(
-      params.identifier, 'getJobParams', {}, device, application, op);
-    return params;
+  /**
+   * Validate the device specific application configuration request that sent by the user.
+   *
+   * @param  {object}     app application object
+   * @param  {object}     deviceConfiguration  user request for device configuration
+   * @param  {[objectId]} deviceList the devices ids list, that application should installed on them
+   * @return {{valid: boolean, err: string}}  test result + error if message is invalid
+   */
+  async validateDeviceConfigurationRequest (identifier, app, deviceConfiguration, deviceList) {
+    const defaultRet = { valid: true, err: '' };
+    return this.call(
+      identifier,
+      'validateDeviceConfigurationRequest',
+      defaultRet,
+      app,
+      deviceConfiguration,
+      deviceList
+    );
+  }
+
+  /**
+   * Validate uninstall request.
+   *
+   * @param  {object}   app application object
+   * @param  {[objectId]} deviceList the devices ids list, that application should installed on them
+   * @return {{valid: boolean, err: string}}  test result + error if message is invalid
+   */
+  async validateUninstallRequest (identifier, app, deviceList) {
+    const defaultRet = { valid: true, err: '' };
+    return this.call(identifier, 'validateUninstallRequest', defaultRet, app, deviceList);
+  };
+
+  async validateInstallRequest (identifier, application) {
+    const defaultRet = { valid: true, err: '' };
+    return this.call(identifier, 'validateInstallRequest', defaultRet, application);
+  }
+
+  /**
+   * Get application configuration for specific device
+   *
+   * @param  {object} app application object
+   * @param  {object} device the device object to be configured
+   * @return {object} object of device configurations
+   */
+  async getDeviceSpecificConfiguration (identifier, app, device, deviceConfiguration, idx) {
+    return this.call(
+      identifier, 'getDeviceSpecificConfiguration', null, app, device, deviceConfiguration, idx);
   };
 
   /**
@@ -349,10 +349,6 @@ class ApplicationLogic {
   async getApplicationSubnet (identifier, application) {
     return this.call(identifier, 'getApplicationSubnet', [], application);
   };
-
-  async isReadyForDeviceInstallation (identifier, application) {
-    return this.call(identifier, 'isReadyForDeviceInstallation', true, application);
-  }
 }
 
 var applicationLogic = null;
