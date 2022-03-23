@@ -31,6 +31,22 @@ const configEnv = {
     restServerUrl: ['https://local.flexiwan.com:3443'],
     // URL of the UI server
     uiServerUrl: ['https://local.flexiwan.com:3000'],
+    // Name of the company, is used in email templates
+    companyName: 'flexiWAN',
+    // URL that appears in contact us link in the UI,
+    contactUsUrl: 'mailto:yourfriends@flexiwan.com',
+    // Repository setup URL
+    agentRepositoryUrl: 'https://deb.flexiwan.com/setup',
+    // Captcha client key for flexiwan domain
+    captchaSiteKey: '6LfkP8IUAAAAABt2dxrb9U2WzxonxJlhs0_2Hadi',
+    // HTML content of the UI about page
+    aboutContent: '',
+    // UI URL for feedback
+    feedbackUrl: '',
+    // If to show device limit alert banner
+    showDeviceLimitAlert: true,
+    // Whether to remove branding, e.g. powered by...
+    removeBranding: false,
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
     userTokenSecretKey: 'abcdefg1234567',
     // Whether to validate open API response. True for testing and dev, False for production,
@@ -131,8 +147,6 @@ const configEnv = {
     mailerFromAddress: 'noreply@flexiwan.com',
     // Mail envelop from address
     mailerEnvelopeFromAddress: 'flexiWAN <noreply@flexiwan.com>',
-    // Name of the company, is used in email templates
-    companyName: 'flexiWAN',
     // Allow users registration, otherwise by invitation only
     allowUsersRegistration: true,
     // Software version query link
@@ -183,6 +197,7 @@ const configEnv = {
     globalTunnelMtu: 1500,
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
+    vpnBaseUrl: 'https://localvpn.flexiwan.com:8000',
     // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
     // On the following renegotiations, the OpenVPN client will pass this token instead of the users password
     vpnTmpTokenTime: 43200,
@@ -286,7 +301,8 @@ const configEnv = {
     logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
-    flexiVpnServer: 'https://vpn01.flexiwan.com:443'
+    flexiVpnServer: 'https://vpn01.flexiwan.com:443',
+    vpnBaseUrl: 'https://vpnqa01.flexiwan.com:443'
   },
   // Override for appqa02 environment
   appqa02: {
@@ -310,7 +326,8 @@ const configEnv = {
     logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
-    flexiVpnServer: 'https://vpnqa02.flexiwan.com:443'
+    flexiVpnServer: 'https://vpnqa02.flexiwan.com:443',
+    vpnBaseUrl: 'https://vpnqa02.flexiwan.com:443'
   }
 };
 
@@ -381,6 +398,25 @@ class Configs {
 
   getAll () {
     return this.config_values;
+  }
+
+  // The info returned by this function will be shared with the client
+  // Add fields that needs to be known by the client
+  // Pay attention not to expose confidential fields
+  // When adding a new variable add also in client/public/index.html
+  getClientConfig () {
+    return {
+      baseUrl: this.get('restServerUrl', 'list')[0] + '/api/',
+      companyName: this.get('companyName'),
+      allowUsersRegistration: this.get('allowUsersRegistration', 'boolean'),
+      contactUsUrl: this.get('contactUsUrl'),
+      agentRepositoryUrl: this.get('agentRepositoryUrl'),
+      captchaSiteKey: this.get('captchaKey'),
+      aboutContent: this.get('aboutContent'),
+      feedbackUrl: this.get('feedbackUrl'),
+      showDeviceLimitAlert: this.get('showDeviceLimitAlert', 'boolean'),
+      vpnBaseUrl: this.get('vpnBaseUrl') + '/'
+    };
   }
 }
 
