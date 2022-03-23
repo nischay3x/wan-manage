@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const { Schema } = require('mongoose');
+const { Schema, Types } = require('mongoose');
 const {
   validateIPv4WithMask,
   validateIPv4,
@@ -134,8 +134,8 @@ const firewallRuleSchema = new Schema({
   },
   priority: {
     type: Number,
-    min: [0, 'priority should be a number between 0-1000'],
-    max: [1000, 'priority should be a number between 0-1000'],
+    min: [-1000, 'priority should be a number between -1000 - 1000'],
+    max: [1000, 'priority should be a number between 0 - 1000'],
     required: true
   },
   enabled: {
@@ -161,7 +161,25 @@ const firewallRuleSchema = new Schema({
   },
   interfaces: [{
     type: String
-  }]
+  }],
+  // indicates if rule created by the system and cannot be modified by a user
+  system: {
+    type: Boolean,
+    required: true,
+    default: false
+  },
+  // In the case of a system rule, save some reference that associates
+  // it with another component in the system (an app for example)
+  reference: {
+    type: Types.ObjectId,
+    required: false,
+    refPath: 'referenceModel'
+  },
+  referenceModel: {
+    type: String,
+    required: false,
+    enum: ['applications']
+  }
 });
 
 module.exports = { firewallRuleSchema };

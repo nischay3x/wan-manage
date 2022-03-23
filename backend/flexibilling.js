@@ -145,6 +145,18 @@ class FlexiBilling {
   async updateAccountOrganizations (id, organizations) {
     return null;
   }
+
+  async getFeatureMax (account, feature, org = null) {
+    return config.billing.features[feature];
+  }
+
+  async updateFeature (account, org, feature, count, orgCount) {
+    return true;
+  }
+
+  async getFeaturesSummaryByAccounts (accounts) {
+    return [];
+  }
 }
 
 // check if flexibilling is required

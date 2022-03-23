@@ -31,6 +31,8 @@ const deviceConfSyncHandler = require('./modifyDevice').sync;
 const deviceConfCompleteHandler = require('./modifyDevice').completeSync;
 const tunnelsSyncHandler = require('./tunnels').sync;
 const tunnelsCompleteHandler = require('./tunnels').completeSync;
+const applicationsSyncHandler = require('./application').sync;
+const applicationsCompleteHandler = require('./application').completeSync;
 const appIdentificationSyncHandler = require('./appIdentification').sync;
 const appIdentificationCompleteHandler = require('./appIdentification').completeSync;
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
@@ -63,6 +65,10 @@ const syncHandlers = {
   appIdentification: {
     syncHandler: appIdentificationSyncHandler,
     completeHandler: appIdentificationCompleteHandler
+  },
+  applications: {
+    syncHandler: applicationsSyncHandler,
+    completeHandler: applicationsCompleteHandler
   }
 };
 

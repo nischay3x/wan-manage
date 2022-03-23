@@ -44,8 +44,9 @@ const {
   validateStaticRoute
 } = require('../deviceLogic/validators');
 const {
-  getAllOrganizationLanSubnets, mapLteNames, mapWifiNames, getBridges, parseLteStatus
+  mapLteNames, mapWifiNames, getBridges, parseLteStatus
 } = require('../utils/deviceUtils');
+const { getAllOrganizationSubnets } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const wifiChannels = require('../utils/wifi-channels');
@@ -59,6 +60,8 @@ const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
+const applications = require('../models/applications');
+const applicationStore = require('../models/applicationStore');
 const { getMajorVersion } = require('../versioning');
 const createError = require('http-errors');
 
@@ -149,6 +152,7 @@ class DevicesService {
       'account',
       'ipList',
       'policies',
+      'applications',
       // Internal array, objects
       'labels',
       'upgradeSchedule',
@@ -157,6 +161,7 @@ class DevicesService {
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
+    retDevice.state = deviceStatus.getDeviceStatus(retDevice.machineId) || 'pending';
 
     // pick interfaces
     let retInterfaces;
@@ -266,7 +271,8 @@ class DevicesService {
           'action',
           'internalIP',
           'internalPortStart',
-          'interfaces'
+          'interfaces',
+          'system'
         ]);
         retRule._id = retRule._id.toString();
         return retRule;
@@ -311,6 +317,7 @@ class DevicesService {
         // need to update changed statuses from memory to DB
         await statusesInDb.updateDevicesStatuses(orgList);
       }
+
       const pipeline = [
         {
           $match: {
@@ -351,6 +358,34 @@ class DevicesService {
             localField: 'interfaces.pathlabels',
             foreignField: '_id',
             as: 'pathlabels'
+          }
+        },
+        {
+          $lookup: {
+            from: 'applications',
+            localField: 'applications.app',
+            foreignField: '_id',
+            as: 'applications.app'
+          }
+        },
+        {
+          $unwind: {
+            path: '$applications.app',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
+            from: 'applicationStore',
+            localField: 'applications.app.appStoreApp',
+            foreignField: '_id',
+            as: 'applications.app.appStoreApp'
+          }
+        },
+        {
+          $unwind: {
+            path: '$applications.app.appStoreApp',
+            preserveNullAndEmptyArrays: true
           }
         },
         {
@@ -406,6 +441,7 @@ class DevicesService {
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            applications: 1,
             deviceState: '$deviceStatus.state'
           }
         });
@@ -640,11 +676,18 @@ class DevicesService {
       const result = await devices.findOne({ _id: id, org: { $in: orgList } })
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.firewall.policy', '_id name description rules')
-        .populate('policies.multilink.policy', '_id name description');
+        .populate('policies.multilink.policy', '_id name description')
+        .populate({
+          path: 'applications.app',
+          populate: {
+            path: 'appStoreApp'
+          }
+        });
 
       if (!result) {
         return Service.rejectResponse('Device not found', 404);
       }
+
       const device = await DevicesService.selectDeviceParams(result);
 
       return Service.successResponse([device]);
@@ -861,6 +904,27 @@ class DevicesService {
         return Service.rejectResponse('Device not found', 404);
       }
 
+      const isApplication = await applicationStore.findOne({ identifier: filter });
+      if (isApplication) {
+        const installedApp = await applications.aggregate([
+          { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
+          {
+            $lookup: {
+              from: 'applicationStore',
+              localField: 'appStoreApp',
+              foreignField: '_id',
+              as: 'app'
+            }
+          },
+          { $unwind: '$app' },
+          { $match: { 'app.identifier': filter } }
+        ]).allowDiskUse(true);
+
+        if (!installedApp.length) {
+          return Service.rejectResponse('Application is not installed', 404);
+        }
+      }
+
       if (!connections.isConnected(device[0].machineId)) {
         return Service.successResponse({
           error: null,
@@ -869,16 +933,25 @@ class DevicesService {
         });
       }
 
+      const params = {
+        lines: limit || '100',
+        filter: filter || 'all'
+      };
+
+      if (isApplication) {
+        params.application = {
+          identifier: filter
+        };
+        params.filter = 'application';
+      }
+
       const deviceLogs = await connections.deviceSendMessage(
         null,
         device[0].machineId,
         {
           entity: 'agent',
           message: 'get-device-logs',
-          params: {
-            lines: limit || '100',
-            filter: filter || 'all'
-          }
+          params: params
         },
         configs.get('directMessageTimeout', 'number')
       );
@@ -1190,7 +1263,13 @@ class DevicesService {
         })
           .session(session)
           .populate('policies.firewall.policy', '_id name rules')
-          .populate('interfaces.pathlabels', '_id name description color type');
+          .populate('interfaces.pathlabels', '_id name description color type')
+          .populate({
+            path: 'applications.app',
+            populate: {
+              path: 'appStoreApp'
+            }
+          });
 
         if (!origDevice) {
           throw createError(404, 'Device not found');
@@ -1211,10 +1290,9 @@ class DevicesService {
         const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
         const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
-        let orgLanSubnets = [];
-
+        let orgSubnets = [];
         if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-          orgLanSubnets = await getAllOrganizationLanSubnets(origDevice.org);
+          orgSubnets = await getAllOrganizationSubnets(origDevice.org);
         }
 
         const origTunnels = await tunnelsModel.find({
@@ -1637,13 +1715,50 @@ class DevicesService {
             throw createError(400, err);
           }
         }
+
+        // make sure that system rules not deleted or modified
+        if ('firewall' in deviceRequest && Array.isArray(deviceRequest.firewall.rules)) {
+          const origSystemRules = origDevice.firewall.rules.filter(r => r.system);
+          for (const origSystemRule of origSystemRules) {
+            const origId = origSystemRule._id.toString();
+            const idx = deviceRequest.firewall.rules.findIndex(r => r._id === origId);
+            if (idx === -1) {
+              // system rule doesn't exist in the incoming rules
+              throw new Error('System rules cannot be deleted');
+            } else {
+              // system rule cannot be modified, set it to the orig rule
+              deviceRequest.firewall.rules[idx] = origSystemRule.toObject();
+            }
+          }
+
+          for (const newRule of deviceRequest.firewall.rules) {
+            // prevent user to set negative value for non system rule
+            if (!newRule.system && newRule.priority < 0) {
+              throw new Error('A user\'s rule cannot have a priority lower than 0');
+            }
+
+            if (!newRule._id) {
+              // don't allow to create new rule as system rule
+              if (newRule.system) {
+                throw new Error('Cannot mark user rule as system rule');
+              }
+            } else {
+              // don't allow to change existing user rule to a system rule
+              const newRuleId = newRule._id.toString();
+              if (newRule.system && !origSystemRules.some(o => newRuleId === o._id.toString())) {
+                throw new Error('Cannot mark user rule as system rule');
+              }
+            }
+          };
+        }
+
         // Need to validate device specific rules combined with global policy rules
         if (deviceToValidate.firewall) {
           deviceToValidate.policies = {
             firewall: origDevice.policies.firewall.toObject()
           };
         }
-        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgLanSubnets);
+        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets);
 
         if (!valid) {
           logger.warn('Device update failed',
@@ -1692,6 +1807,7 @@ class DevicesService {
       const deviceObj = await DevicesService.selectDeviceParams(updDevice);
       return Service.successResponse(deviceObj, status);
     } catch (e) {
+      logger.error('update device failed', { params: { message: e.message, stack: e.stack } });
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500

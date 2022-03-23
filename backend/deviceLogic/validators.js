@@ -244,10 +244,10 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
  * therefore the device can be started.
  * @param {Object}  device                 the device to check
  * @param {Boolean} isRunning              is the device running
- * @param {[_id: objectId, name: string, subnet: string]} organizationLanSubnets to check overlaps
+ * @param {[_id: objectId, name: string, type: string, subnet: string]} orgSubnets to check overlaps
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, isRunning = false, organizationLanSubnets = []) => {
+const validateDevice = (device, isRunning = false, orgSubnets = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -383,27 +383,48 @@ const validateDevice = (device, isRunning = false, organizationLanSubnets = []) 
     };
   }
 
-  if (isRunning && organizationLanSubnets.length > 0) {
+  if (isRunning && orgSubnets.length > 0) {
     // LAN subnet must not be overlap with other devices in this org
-    for (const orgDevice of organizationLanSubnets) {
+    for (const orgSubnet of orgSubnets) {
       for (const currentLanIfc of lanIfcs) {
-        const orgSubnet = orgDevice.subnet;
+        const subnet = orgSubnet.subnet;
         const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
 
-        // Don't check overlapping with same device
-        if (orgDevice._id.toString() === device._id.toString()) {
+        // Don't check interface overlapping with same device
+        if (
+          orgSubnet.type === 'interface' &&
+          orgSubnet._id.toString() === device._id.toString()) {
           continue;
         };
 
-        if (cidr.overlap(currentSubnet, orgSubnet)) {
-          const msg =
-          `The LAN subnet ${currentSubnet} overlaps with a LAN subnet of device ${orgDevice.name}`;
+        if (cidr.overlap(currentSubnet, subnet)) {
+          let overlapsWith = 'some network in your organization';
+          if (orgSubnet.type === 'interface') {
+            overlapsWith = `a LAN subnet (${orgSubnet.subnet}) of device ${orgSubnet.name}`;
+          } else if (orgSubnet.type === 'tunnel') {
+            overlapsWith = `a loopback network (${orgSubnet.subnet}) of tunnel #${orgSubnet.num}`;
+          } else if (orgSubnet.type === 'application') {
+            overlapsWith = `an application ${orgSubnet.name} network
+            (${orgSubnet.subnet}) in device ${orgSubnet.deviceName}`;
+          }
 
           return {
             valid: false,
-            err: msg
+            err: `The LAN subnet ${currentSubnet} overlaps with ${overlapsWith}`
           };
         }
+      }
+    }
+
+    // Prevent setting LAN network that overlaps the network we are using for tunnels.
+    for (const lanIfc of lanIfcs) {
+      const subnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
+      if (cidr.overlap(subnet, '10.100.0.0/16')) {
+        return {
+          valid: false,
+          err:
+          `The subnet ${subnet} overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)`
+        };
       }
     }
   }
