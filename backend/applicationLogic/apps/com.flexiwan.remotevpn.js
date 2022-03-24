@@ -82,10 +82,16 @@ class RemoteVpn extends IApplication {
     const allowedPortalUsers = await flexibilling.getFeatureMax(accountId, 'vpn_portal_users');
 
     if (totalPortalUsers > allowedPortalUsers) {
+      const left = allowedPortalUsers - usedPortalUsers;
+      let leftMsg = `${left} licenses are left in your Account. `;
+      if (left <= 0) {
+        leftMsg = 'No licenses are left in your Account. ';
+      } else if (left === 1) {
+        leftMsg = '1 license is left in your Account. ';
+      }
       const err =
-      `You reached the maximum number of allowed portal users included
-      in your current plan for the entire account. ` +
-      `Please contact us at ${configs.get('contactUsEmail')} to add more connections`;
+      `The number ${requestedPortalUsers} is too high for "Max Remote Worker Users". ${leftMsg}` +
+      'Please contact your system provider for more information';
       return { valid: false, err: err };
     }
 
