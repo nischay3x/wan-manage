@@ -17,6 +17,7 @@
 
 const Service = require('./Service');
 
+const mongoose = require('mongoose');
 const Accounts = require('../models/accounts');
 const Devices = require('../models/devices');
 const Users = require('../models/users');
@@ -274,6 +275,121 @@ class OrganizationsService {
       } else {
         throw new Error('Please select an organization to update it');
       }
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get organization summary
+   *
+   * id String Numeric ID of the Organization to get
+   * returns Organization summary
+   **/
+  static async organizationsIdSummaryGET ({ id }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, undefined, false);
+      if (!orgList.includes(id)) {
+        throw new Error('Organization not found');
+      }
+
+      const devicesPipeline = [
+        // org match
+        { $match: { org: mongoose.Types.ObjectId(id) } },
+        {
+          $group: {
+            _id: null,
+            // Connected devices
+            connected: { $sum: { $cond: [{ $eq: ['$isConnected', true] }, 1, 0] } },
+            // Approved devices
+            approved: { $sum: { $cond: [{ $eq: ['$isApproved', true] }, 1, 0] } },
+            // Running devices - connected and running
+            running: {
+              $sum: {
+                $cond: [{
+                  $and: [
+                    { $eq: ['$isConnected', true] },
+                    { $eq: ['$status', 'running'] }]
+                }, 1, 0]
+              }
+            },
+            // Devices with warning
+            warning: {
+              $sum: {
+                $cond: [{
+                  $and: [
+                  // Device should be connected
+                    { $eq: ['$isConnected', true] },
+                    {
+                      $or: [{
+                      // One of the interfaces internet access != yes (size > 0)
+                        $gt: [{
+                          $size: {
+                            $filter: {
+                              input: '$interfaces',
+                              as: 'intf',
+                              cond: {
+                                $and: [
+                                  { $ne: ['$$intf.internetAccess', 'yes'] },
+                                  { $eq: ['$$intf.monitorInternet', true] },
+                                  { $eq: ['$$intf.type', 'WAN'] }]
+                              }
+                            }
+                          }
+                        }, 0]
+                      },
+                      {
+                      // or one of the static routes is pending (size > 0)
+                        $gt: [{
+                          $size: {
+                            $filter: {
+                              input: '$staticroutes',
+                              as: 'sr',
+                              cond: { $eq: ['$$sr.isPending', true] }
+                            }
+                          }
+                        }, 0]
+                      }]
+                    }]
+                }, 1, 0]
+              }
+            },
+            // Total devices
+            total: { $sum: 1 }
+          }
+        }
+      ];
+
+      const tunnelsPipeline = [
+        // org match and active
+        { $match: { org: mongoose.Types.ObjectId(id), isActive: true } },
+        {
+          $group: {
+            _id: null,
+            // Connected tunnels
+            tunConnected: { $sum: { $cond: [{ $eq: ['$status', 'up'] }, 1, 0] } },
+            // Approved devices
+            tunWarning: { $sum: { $cond: [{ $eq: ['$isPending', true] }, 1, 0] } },
+            // Total devices
+            tunTotal: { $sum: 1 }
+          }
+        }
+      ];
+
+      const devicesRes = await Devices.devices.aggregate(devicesPipeline).allowDiskUse(true);
+      const { connected, approved, running, warning, total } = devicesRes[0];
+      const tunnelsRes = await Tunnels.aggregate(tunnelsPipeline).allowDiskUse(true);
+      const { tunConnected, tunWarning, tunTotal } = tunnelsRes[0];
+
+      const response = {
+        devices: { connected, approved, running, warning, total },
+        tunnels: { connected: tunConnected, warning: tunWarning, total: tunTotal }
+      };
+
+      return Service.successResponse(response);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

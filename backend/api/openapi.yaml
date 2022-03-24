@@ -5427,6 +5427,58 @@ paths:
       x-swagger-router-controller: Organizations
       x-openapi-router-controller: OrganizationsController
       x-openapi-router-service: OrganizationsService
+  /organizations/{id}/summary:
+    get:
+      operationId: organizationsIdSummaryGET
+      parameters:
+      - description: Numeric ID of the Organization to get
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationSummary'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get Organization Summary by ID
+      tags:
+      - Organizations
+      x-swagger-router-controller: Organizations
+      x-openapi-router-controller: OrganizationsController
+      x-openapi-router-service: OrganizationsService
   /invoices:
     get:
       operationId: invoicesGET
@@ -8201,6 +8253,29 @@ components:
           - psk
           - ikev2
           type: string
+      type: object
+    OrganizationSummary:
+      example:
+        _id: _id
+        devices:
+          connected: 1
+          approved: 2
+          running: 1
+          warning: 0
+          total: 2
+        tunnels:
+          connected: 5
+          warning: 1
+          total: 7
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        devices:
+          type: object
+        tunnels:
+          type: object
       type: object
     ApplyJobsResponse:
       properties:
