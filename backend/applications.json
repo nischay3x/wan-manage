@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "time": 1636980481906
+  },
+  "applications": [
+    {
+      "name": "Remote Worker VPN",
+      "identifier": "com.flexiwan.remotevpn",
+      "description": "Allows users to connect to the corporate network remotely",
+      "createdDate": 1636980481687,
+      "creator": "flexiWAN",
+      "cost": 0,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "components": {
+            "agent": {},
+            "manage": {},
+            "portal": {}
+          },
+          "installWith": {
+            "linuxApplications": [
+              "openvpn"
+            ],
+            "firewallRules": [
+              {
+                "direction": "inbound",
+                "interfaces": [],
+                "inbound": "edgeAccess",
+                "action": "allow",
+                "description": "Allow VPN inbound traffic",
+                "destination": {
+                  "ports": "${serverPort}",
+                  "protocols": ["udp"]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

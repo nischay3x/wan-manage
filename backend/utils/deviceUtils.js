@@ -16,49 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const path = require('path');
-const { devices } = require('../models/devices');
 const apnsJson = require(path.join(__dirname, 'mcc_mnc_apn.json'));
-
-/**
- * Get all LAN subnets in the same organization
- * @param  {string} orgId         the id of the organization
- * @return {[_id: objectId, name: string, subnet: string]} array of LAN subnets with router name
- */
-const getAllOrganizationLanSubnets = async orgId => {
-  const subnets = await devices.aggregate([
-    { $match: { org: orgId } },
-    {
-      $project: {
-        'interfaces.IPv4': 1,
-        'interfaces.IPv4Mask': 1,
-        'interfaces.type': 1,
-        'interfaces.isAssigned': 1,
-        name: 1,
-        _id: 1
-      }
-    },
-    { $unwind: '$interfaces' },
-    {
-      $match: {
-        'interfaces.type': 'LAN',
-        'interfaces.isAssigned': true,
-        'interfaces.IPv4': { $ne: '' },
-        'interfaces.IPv4Mask': { $ne: '' }
-      }
-    },
-    {
-      $project: {
-        _id: 1,
-        name: 1,
-        subnet: {
-          $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
-        }
-      }
-    }
-  ]);
-
-  return subnets;
-};
 
 /**
  * Get the default gateway of the device
@@ -214,7 +172,6 @@ const getBridges = interfaces => {
 
 // Default exports
 module.exports = {
-  getAllOrganizationLanSubnets,
   getDefaultGateway,
   getBridges,
   mapLteNames,

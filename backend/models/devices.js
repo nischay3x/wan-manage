@@ -23,6 +23,17 @@ const mongoConns = require('../mongoConns.js')();
 const { firewallRuleSchema } = require('./firewallRule');
 const { pendingSchema } = require('./schemas/pendingSchema');
 
+const statusEnums = [
+  '',
+  'installing',
+  'installed',
+  'uninstalling',
+  'job queue failed',
+  'job deleted',
+  'installation failed',
+  'uninstallation failed'
+];
+
 /**
  * Interfaces Database Schema
  */
@@ -520,6 +531,36 @@ const deviceVersionsSchema = new Schema({
 });
 
 /**
+ * Device application Schema
+ */
+const deviceApplicationSchema = new Schema({
+  _id: false,
+  app: {
+    type: Schema.Types.ObjectId,
+    ref: 'applications',
+    default: null,
+    required: true
+  },
+  identifier: {
+    type: String,
+    required: true
+  },
+  status: {
+    type: String,
+    enum: [...statusEnums, 'upgrading'],
+    default: ''
+  },
+  configuration: {
+    type: Schema.Types.Mixed,
+    default: {}
+  },
+  requestTime: {
+    type: Date,
+    default: null
+  }
+});
+
+/**
  * Device multilink policy schema
  */
 const deviceMultilinkPolicySchema = new Schema({
@@ -531,18 +572,10 @@ const deviceMultilinkPolicySchema = new Schema({
   },
   status: {
     type: String,
-    enum: [
-      '',
-      'installing',
-      'installed',
-      'uninstalling',
-      'job queue failed',
-      'job deleted',
-      'installation failed',
-      'uninstallation failed'
-    ],
+    enum: statusEnums,
     default: ''
   },
+  // TODO: check if really needed
   requestTime: {
     type: Date,
     default: null
@@ -561,16 +594,7 @@ const deviceFirewallPolicySchema = new Schema({
   },
   status: {
     type: String,
-    enum: [
-      '',
-      'installing',
-      'installed',
-      'uninstalling',
-      'job queue failed',
-      'job deleted',
-      'installation failed',
-      'uninstallation failed'
-    ],
+    enum: statusEnums,
     default: ''
   },
   requestTime: {
@@ -853,7 +877,8 @@ const deviceSchema = new Schema({
         message: props => `${props.value} should be a valid integer`
       }
     }
-  }
+  },
+  applications: [deviceApplicationSchema]
 },
 {
   timestamps: true

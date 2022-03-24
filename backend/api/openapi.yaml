@@ -66,7 +66,7 @@ paths:
       security:
       - apiKey: []
       - bearerAuth: []
-      summary: Get all flexiManage servers list
+      summary: Get flexiManage configurations
       tags:
       - Configuration
       x-swagger-router-controller: Configuration
@@ -3584,6 +3584,7 @@ paths:
           - hostapd
           - agentui
           - application_ids
+          - com.flexiwan.remotevpn
           type: string
         style: form
       responses:
@@ -7413,6 +7414,390 @@ paths:
       x-swagger-router-controller: FirewallPolicies
       x-openapi-router-controller: FirewallPoliciesController
       x-openapi-router-service: FirewallPoliciesService
+  /appstore:
+    get:
+      operationId: appstoreGET
+      parameters:
+      - description: Stringified array of filter objects
+        explode: true
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Application'
+                type: array
+          x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all repository applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /appstore/purchase/{id}:
+    post:
+      operationId: appstorePurchaseIdPOST
+      parameters:
+      - description: Application store Id to purchase
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasedApplication'
+          x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Purchase an application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /appstore/purchased:
+    get:
+      operationId: appstorePurchasedGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description: Type of returned data
+        explode: true
+        in: query
+        name: responseType
+        required: false
+        schema:
+          enum:
+          - summary
+          type: string
+      - description: Stringified array of filter objects
+        explode: true
+        in: query
+        name: filters
+        required: false
+        schema:
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/PurchasedApplication'
+                type: array
+          x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get all purchased applications
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /appstore/purchased/{id}:
+    get:
+      operationId: appstorePurchasedIdGET
+      parameters:
+      - description: Purchased application id
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasedApplication'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get purchased application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+    put:
+      operationId: appstorePurchasedIdPUT
+      parameters:
+      - description: Purchased application id to update
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchasedApplicationConfigurationRequest'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasedApplication'
+          x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Update application
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+    delete:
+      operationId: appstorePurchasedIdDELETE
+      parameters:
+      - description: Purchased application id to remove
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Remove application from an organization
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /appstore/purchased/{id}/status:
+    get:
+      operationId: appstorePurchasedIdStatusGet
+      parameters:
+      - description: Purchased application id to get status for
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Get application Status
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
 components:
   responses:
     NotFoundError:
@@ -7548,6 +7933,57 @@ components:
         server:
           type: string
       type: object
+    PurchasedApplicationConfigurationRequest:
+      type: object
+    Application:
+      properties:
+        _id:
+          maxLength: 24
+          minLength: 24
+          type: string
+        name:
+          type: string
+        creator:
+          type: string
+        cost:
+          type: string
+        description:
+          type: string
+        identifier:
+          type: string
+        versions:
+          items:
+            $ref: '#/components/schemas/ApplicationVersion'
+          type: array
+    ApplicationVersion:
+      properties:
+        version:
+          type: string
+        components:
+          type: object
+          properties:
+            agent:
+              type: object
+            manage:
+              type: object
+    PurchasedApplication:
+      example:
+        _id: _id
+        app: library object
+        org: organization object
+        installedVersion: 1.2.3.5
+        configuration: object
+      properties:
+        _id:
+          type: string
+        app:
+          type: string
+        org:
+          type: string
+        installedVersion:
+          type: string
+        configuration:
+          type: object
     AppIdentificationRules:
       example:
         ip: 127.0.0.1
@@ -8152,6 +8588,9 @@ components:
         name: name
         _id: _id
         isApproved: true
+        applications:
+        - app: app
+          status: status
         staticroutes:
         - id: 1
           destination: 20.20.0.0
