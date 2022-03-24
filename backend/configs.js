@@ -413,7 +413,7 @@ class Configs {
       allowUsersRegistration: this.get('allowUsersRegistration', 'boolean'),
       contactUsUrl: this.get('contactUsUrl'),
       agentRepositoryUrl: this.get('agentRepositoryUrl'),
-      captchaSiteKey: this.get('captchaKey'),
+      captchaSiteKey: this.get('captchaSiteKey'),
       aboutContent: this.get('aboutContent'),
       feedbackUrl: this.get('feedbackUrl'),
       showDeviceLimitAlert: this.get('showDeviceLimitAlert', 'boolean'),
