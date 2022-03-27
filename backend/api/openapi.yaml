@@ -8267,6 +8267,10 @@ components:
           warning: 1
           unknown: 1
           total: 7
+        traffic:
+          - month: 1646085600000
+            bytes: 128114
+            deviceCount: 1
       properties:
         _id:
           maxLength: 24
@@ -8276,6 +8280,23 @@ components:
           type: object
         tunnels:
           type: object
+        traffic:
+          items:
+            $ref: '#/components/schemas/OrganizationTraffic'
+          type: array
+      type: object
+    OrganizationTraffic:
+      example:
+        month: 1646085600000
+        bytes: 128114
+        deviceCount: 1
+      properties:
+        month:
+          type: integer
+        bytes:
+          type: integer
+        deviceCount:
+          type: integer
       type: object
     ApplyJobsResponse:
       properties:

@@ -28,6 +28,7 @@ const Tokens = require('../models/tokens');
 const AccessTokens = require('../models/accesstokens');
 const MultiLinkPolicies = require('../models/mlpolicies');
 const PathLabels = require('../models/pathlabels');
+const { deviceAggregateStats } = require('../models/analytics/deviceStats');
 const { membership } = require('../models/membership');
 const Connections = require('../websocket/Connections')();
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -402,10 +403,38 @@ class OrganizationsService {
         }
       ];
 
+      const bytesPipeline = [
+        { $match: { month: { $gte: 1632762341553 } } },
+        { $project: { month: 1, ['stats.orgs.' + orgList[0]]: 1 } },
+        { $project: { month: 1, orgs: { $objectToArray: '$stats.orgs' } } },
+        { $unwind: '$orgs' },
+        { $project: { month: 1, org: '$orgs.k', devices: { $objectToArray: '$orgs.v.devices' } } },
+        { $unwind: '$devices' },
+        { $project: { month: 1, org: 1, account: 1, bytes: '$devices.v.bytes' } },
+        {
+          $group: {
+            _id: { month: '$month' },
+            devices_bytes: { $sum: '$bytes' },
+            devices_count: { $push: '$bytes' }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            org: '$_id.org',
+            month: '$_id.month',
+            bytes: '$devices_bytes',
+            deviceCount: { $size: '$devices_count' }
+          }
+        },
+        { $sort: { month: -1 } }
+      ];
+
       const devicesRes = await Devices.devices.aggregate(devicesPipeline).allowDiskUse(true);
       const { connected, approved, running, warning, total } = devicesRes[0];
       const tunnelsRes = await Tunnels.aggregate(tunnelsPipeline).allowDiskUse(true);
       const { tunConnected, tunWarning, tunUnknown, tunTotal } = tunnelsRes[0];
+      const bytesRes = await deviceAggregateStats.aggregate(bytesPipeline).allowDiskUse(true);
 
       const response = {
         devices: { connected, approved, running, warning, total },
@@ -414,7 +443,8 @@ class OrganizationsService {
           warning: tunWarning,
           unknown: tunUnknown,
           total: tunTotal
-        }
+        },
+        traffic: bytesRes
       };
 
       return Service.successResponse(response);
