@@ -95,6 +95,18 @@ class RemoteVpn extends IApplication {
       return { valid: false, err: err };
     }
 
+    // make sure that one auth method is enabled
+    let oneAuthMethodIsEnabled = false;
+    for (const authMethodType in configurationRequest.authentications) {
+      if (configurationRequest.authentications[authMethodType].enabled) {
+        oneAuthMethodIsEnabled = true;
+        break;
+      }
+    }
+    if (!oneAuthMethodIsEnabled) {
+      return { valid: false, err: 'At least one authentication method must be enabled' };
+    }
+
     return { valid: true, err: '' };
   };
 
