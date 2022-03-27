@@ -5427,18 +5427,17 @@ paths:
       x-swagger-router-controller: Organizations
       x-openapi-router-controller: OrganizationsController
       x-openapi-router-service: OrganizationsService
-  /organizations/{id}/summary:
+  /organizations/summary:
     get:
-      operationId: organizationsIdSummaryGET
+      operationId: organizationsSummaryGET
       parameters:
-      - description: Numeric ID of the Organization to get
-        explode: false
-        in: path
-        name: id
-        required: true
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
         schema:
           type: string
-        style: simple
       responses:
         "200":
           content:
@@ -8264,8 +8263,9 @@ components:
           warning: 0
           total: 2
         tunnels:
-          connected: 5
+          connected: 4
           warning: 1
+          unknown: 1
           total: 7
       properties:
         _id:

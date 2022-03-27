@@ -38,8 +38,8 @@ class OrganizationsController {
     await Controller.handleRequest(request, response, this.service.organizationsIdPUT);
   }
 
-  async organizationsIdSummaryGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.organizationsIdSummaryGET);
+  async organizationsSummaryGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.organizationsSummaryGET);
   }
 
   async organizationsSelectPOST (request, response) {

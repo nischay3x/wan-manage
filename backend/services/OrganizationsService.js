@@ -289,16 +289,13 @@ class OrganizationsService {
    * id String Numeric ID of the Organization to get
    * returns Organization summary
    **/
-  static async organizationsIdSummaryGET ({ id }, { user }) {
+  static async organizationsSummaryGET ({ org }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, undefined, false);
-      if (!orgList.includes(id)) {
-        throw new Error('Organization not found');
-      }
+      const orgList = await getAccessTokenOrgList(user, org, true);
 
       const devicesPipeline = [
         // org match
-        { $match: { org: mongoose.Types.ObjectId(id) } },
+        { $match: { org: mongoose.Types.ObjectId(orgList[0]) } },
         {
           $group: {
             _id: null,
@@ -365,15 +362,41 @@ class OrganizationsService {
 
       const tunnelsPipeline = [
         // org match and active
-        { $match: { org: mongoose.Types.ObjectId(id), isActive: true } },
+        { $match: { org: mongoose.Types.ObjectId(orgList[0]), isActive: true } },
+        // Populate device A and B
+        {
+          $lookup: {
+            from: 'devices',
+            let: { idA: '$deviceA', idB: '$deviceB' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $or: [{ $eq: ['$_id', '$$idA'] }, { $eq: ['$_id', '$$idB'] }] },
+                      { $eq: ['$isConnected', false] }]
+                  }
+                }
+              },
+              { $project: { _id: 0, isConnected: 1 } }],
+            as: 'devices'
+          }
+        },
         {
           $group: {
             _id: null,
             // Connected tunnels
-            tunConnected: { $sum: { $cond: [{ $eq: ['$status', 'up'] }, 1, 0] } },
-            // Approved devices
+            tunConnected: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $eq: ['$status', 'up'] }, { $eq: ['$devices', []] }] }, 1, 0]
+              }
+            },
+            // Tunnels with warning
             tunWarning: { $sum: { $cond: [{ $eq: ['$isPending', true] }, 1, 0] } },
-            // Total devices
+            // Tunnels unknown - devices not connected
+            tunUnknown: { $sum: { $cond: [{ $ne: ['$devices', []] }, 1, 0] } },
+            // Total tunnels
             tunTotal: { $sum: 1 }
           }
         }
@@ -382,11 +405,16 @@ class OrganizationsService {
       const devicesRes = await Devices.devices.aggregate(devicesPipeline).allowDiskUse(true);
       const { connected, approved, running, warning, total } = devicesRes[0];
       const tunnelsRes = await Tunnels.aggregate(tunnelsPipeline).allowDiskUse(true);
-      const { tunConnected, tunWarning, tunTotal } = tunnelsRes[0];
+      const { tunConnected, tunWarning, tunUnknown, tunTotal } = tunnelsRes[0];
 
       const response = {
         devices: { connected, approved, running, warning, total },
-        tunnels: { connected: tunConnected, warning: tunWarning, total: tunTotal }
+        tunnels: {
+          connected: tunConnected,
+          warning: tunWarning,
+          unknown: tunUnknown,
+          total: tunTotal
+        }
       };
 
       return Service.successResponse(response);
