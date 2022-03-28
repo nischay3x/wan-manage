@@ -15,9 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// const fetchUtils = require('../utils/fetchUtils');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
+const fetchUtils = require('../utils/fetchUtils');
 const applicationStore = require('../models/applicationStore');
 const applications = require('../models/applications');
 const organizations = require('../models/organizations');
@@ -164,15 +164,7 @@ class ApplicationsUpdateManager {
       params: { applicationsUri: this.applicationsUri }
     });
     try {
-      // TODO: fetch from url
-      // const result = await fetchUtils.fetchWithRetry(this.applicationsUri, 3);
-      // const body = await result.json();
-
-      // TODO: think on removed applications from repository
-
-      const fs = require('fs');
-      const result = fs.readFileSync(this.applicationsUri);
-      const body = JSON.parse(result);
+      const body = await fetchUtils.fetchWithRetry(this.applicationsUri, 3);
       logger.debug('Imported applications response received', {
         params: { time: body.meta.time, rulesCount: body.applications.length }
       });
