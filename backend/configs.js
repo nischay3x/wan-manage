@@ -149,7 +149,7 @@ const configEnv = {
     // Global app identification rules file location
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
     // Global applications file locations
-    applicationsUrl: './applications.json',
+    applicationsUrl: 'https://sandbox.flexiwan.com/Applications/applications.json',
     // Default port for tunnels
     tunnelPort: '4789',
     // If to allow manager role to delete organizations, devices, tokens, tunnels, appIdentifications,
@@ -241,7 +241,7 @@ const configEnv = {
     logLevel: 'info',
     logUserName: true,
     corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80'],
-    vpnBaseUrl: 'https://vpn.flexiwan.com:443'
+    vpnBaseUrl: 'https://vpn.flexiwan.com'
   },
   hosted: {
     // modify next params for hosted server
@@ -283,7 +283,7 @@ const configEnv = {
     logLevel: 'info',
     logUserName: true,
     corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80'],
-    vpnBaseUrl: 'https://vpn.flexiwan.com:443'
+    vpnBaseUrl: 'https://vpn.flexiwan.com'
   },
   // Override for appqa01 environment
   appqa01: {
@@ -308,7 +308,7 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
     flexiVpnServer: 'https://vpnqa01.flexiwan.com:443',
-    vpnBaseUrl: 'https://vpnqa01.flexiwan.com:443'
+    vpnBaseUrl: 'https://vpnqa01.flexiwan.com'
   },
   // Override for appqa02 environment
   appqa02: {
@@ -333,7 +333,7 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
     flexiVpnServer: 'https://vpnqa02.flexiwan.com:443',
-    vpnBaseUrl: 'https://vpnqa02.flexiwan.com:443'
+    vpnBaseUrl: 'https://vpnqa02.flexiwan.com'
   }
 };
 
