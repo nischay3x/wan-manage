@@ -803,7 +803,7 @@ const deviceSchema = new Schema({
     default: [40.416775, -3.703790],
     validate: {
       validator: (a) => a.length === 2,
-      message: 'Coordinates lenth must be 2'
+      message: 'Coordinates length must be 2'
     }
   },
   // versions

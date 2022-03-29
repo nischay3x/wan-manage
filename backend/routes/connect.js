@@ -93,11 +93,21 @@ function getCoordinates (interfaces, sourceIp) {
   // Try first to find location based on source IP
   if (!sourceIp || !lookupIp(sourceIp)) {
     if (interfaces) {
-      interfaces.some((i) => {
+      interfaces
+        // Check WAN interfaces IPs
+        .filter((i) => i.type === 'WAN')
+        // Put LTE last
+        .sort((i1, i2) => {
+          if (i1.deviceType === 'lte' && i2.deviceType !== 'lte') return 1;
+          if (i1.deviceType !== 'lte' && i2.deviceType === 'lte') return -1;
+          return 0;
+        })
+        // Try to find first location
+        .some((i) => {
         // Try to match public IP first
-        if (i.PublicIP) return lookupIp(i.PublicIP);
-        if (i.IPv4) return lookupIp(i.IPv4);
-      });
+          if (i.PublicIP) return lookupIp(i.PublicIP);
+          if (i.IPv4) return lookupIp(i.IPv4);
+        });
     }
   }
   return ll;

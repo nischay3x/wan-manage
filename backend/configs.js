@@ -181,7 +181,6 @@ const configEnv = {
     globalTunnelMtu: 1500,
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
-    vpnBaseUrl: 'https://localvpn.flexiwan.com:8000',
     // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
     // On the following renegotiations, the OpenVPN client will pass this token instead of the users password
     vpnTmpTokenTime: 43200,
@@ -205,7 +204,9 @@ const configEnv = {
     // Whether to remove branding, e.g. powered by...
     removeBranding: false,
     // URL for account qualification
-    qualifiedAccountsURL: 'https://www.flexiwan.com'
+    qualifiedAccountsURL: 'https://www.flexiwan.com',
+    // VPN portal URL
+    vpnBaseUrl: 'https://localvpn.flexiwan.com:8000'
   },
   // Override for development environment, default environment if not specified
   development: {

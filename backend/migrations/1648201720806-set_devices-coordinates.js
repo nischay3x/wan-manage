@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2022  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -21,23 +21,33 @@ const geoip = require('geoip-lite');
 function getIp (device) {
   let ll = null;
   if (device.interfaces) {
-    device.interfaces.some((i) => {
+    device.interfaces
+      // Check WAN interfaces IPs
+      .filter((i) => i.type === 'WAN')
+      // Put LTE last
+      .sort((i1, i2) => {
+        if (i1.deviceType === 'lte' && i2.deviceType !== 'lte') return 1;
+        if (i1.deviceType !== 'lte' && i2.deviceType === 'lte') return -1;
+        return 0;
+      })
+      // Try to find first location
+      .some((i) => {
       // Try to match public IP first
-      if (i.PublicIP) {
-        const geoIpInfo = geoip.lookup(i.PublicIP);
-        if (geoIpInfo) {
-          ll = geoIpInfo.ll;
-          return true; // Stop the interface loop
-        }
-      };
-      if (i.IPv4) {
-        const geoIpInfo = geoip.lookup(i.IPv4);
-        if (geoIpInfo) {
-          ll = geoIpInfo.ll;
-          return true; // Stop the interface loop
-        }
-      };
-    });
+        if (i.PublicIP) {
+          const geoIpInfo = geoip.lookup(i.PublicIP);
+          if (geoIpInfo) {
+            ll = geoIpInfo.ll;
+            return true; // Stop the interface loop
+          }
+        };
+        if (i.IPv4) {
+          const geoIpInfo = geoip.lookup(i.IPv4);
+          if (geoIpInfo) {
+            ll = geoIpInfo.ll;
+            return true; // Stop the interface loop
+          }
+        };
+      });
   }
   return ll;
 }

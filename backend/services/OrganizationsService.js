@@ -287,7 +287,7 @@ class OrganizationsService {
   /**
    * Get organization summary
    *
-   * id String Numeric ID of the Organization to get
+   * org String Numeric ID of the Organization to get
    * returns Organization summary
    **/
   static async organizationsSummaryGET ({ org }, { user }) {
@@ -431,9 +431,13 @@ class OrganizationsService {
       ];
 
       const devicesRes = await Devices.devices.aggregate(devicesPipeline).allowDiskUse(true);
-      const { connected, approved, running, warning, total } = devicesRes[0];
+      const { connected, approved, running, warning, total } = devicesRes.length > 0
+        ? devicesRes[0]
+        : { connected: 0, approved: 0, running: 0, warning: 0, total: 0 };
       const tunnelsRes = await Tunnels.aggregate(tunnelsPipeline).allowDiskUse(true);
-      const { tunConnected, tunWarning, tunUnknown, tunTotal } = tunnelsRes[0];
+      const { tunConnected, tunWarning, tunUnknown, tunTotal } = tunnelsRes.length > 0
+        ? tunnelsRes[0]
+        : { tunConnected: 0, tunWarning: 0, tunUnknown: 0, tunTotal: 0 };
       const bytesRes = await deviceAggregateStats.aggregate(bytesPipeline).allowDiskUse(true);
 
       const response = {
