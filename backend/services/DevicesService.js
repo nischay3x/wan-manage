@@ -157,7 +157,8 @@ class DevicesService {
       'labels',
       'upgradeSchedule',
       'sync',
-      'ospf'
+      'ospf',
+      'coords'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -437,6 +438,7 @@ class DevicesService {
             machineId: 1,
             sync: 1,
             versions: 1,
+            coords: 1,
             interfaces: { isAssigned: 1, name: 1, type: 1, IPv4: 1, PublicIP: 1, devId: 1 },
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
@@ -473,7 +475,8 @@ class DevicesService {
           'sync',
           'ospf',
           'isConnected',
-          'deviceState'
+          'deviceState',
+          'coords'
         ];
         // populate pathlabels for every interface
         pipeline.push({
@@ -3146,6 +3149,43 @@ class DevicesService {
       });
       DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(ospfConfigs, 202);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify device coordinates configuration
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by
+   * coordsConfig Coordinates Configs
+   * returns coordinates configuration
+   **/
+  static async devicesIdCoordsPUT ({ id, org, coordsConfigs }, { user, server }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      if (!coordsConfigs.coords ||
+        coordsConfigs.coords.length !== 2 ||
+        coordsConfigs.coords.some((c) => typeof c !== 'number')) {
+        throw new Error('Coordinates should contain an array of longitude, latitude numbers');
+      }
+
+      const updDevice = await devices.updateOne(
+        { _id: mongoose.Types.ObjectId(id), org: { $in: orgList } },
+        { $set: { coords: coordsConfigs.coords } },
+        { runValidators: true, upsert: false }
+      );
+
+      if (updDevice.n !== 1) { // Device not matched
+        throw new Error('Device not found');
+      }
+
+      return Service.successResponse(coordsConfigs, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

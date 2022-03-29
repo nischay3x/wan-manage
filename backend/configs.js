@@ -31,22 +31,6 @@ const configEnv = {
     restServerUrl: ['https://local.flexiwan.com:3443'],
     // URL of the UI server
     uiServerUrl: ['https://local.flexiwan.com:3000'],
-    // Name of the company, is used in email templates
-    companyName: 'flexiWAN',
-    // URL that appears in contact us link in the UI,
-    contactUsUrl: 'mailto:yourfriends@flexiwan.com',
-    // Repository setup URL
-    agentRepositoryUrl: 'https://deb.flexiwan.com/setup',
-    // Captcha client key for flexiwan domain
-    captchaSiteKey: '6LfkP8IUAAAAABt2dxrb9U2WzxonxJlhs0_2Hadi',
-    // HTML content of the UI about page
-    aboutContent: '',
-    // UI URL for feedback
-    feedbackUrl: '',
-    // If to show device limit alert banner
-    showDeviceLimitAlert: true,
-    // Whether to remove branding, e.g. powered by...
-    removeBranding: false,
     // Key used for users tokens, override default with environment variable USER_SECRET_KEY
     userTokenSecretKey: 'abcdefg1234567',
     // Whether to validate open API response. True for testing and dev, False for production,
@@ -197,11 +181,32 @@ const configEnv = {
     globalTunnelMtu: 1500,
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
-    vpnBaseUrl: 'https://localvpn.flexiwan.com:8000',
     // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
     // On the following renegotiations, the OpenVPN client will pass this token instead of the users password
     vpnTmpTokenTime: 43200,
-    contactUsEmail: 'yourfriends@flexiwan.com'
+    /****************************************************/
+    /*         Client Fields                            */
+    /****************************************************/
+    // Name of the company, is used in email templates
+    companyName: 'flexiWAN',
+    // URL that appears in contact us link in the UI,
+    contactUsUrl: 'mailto:yourfriends@flexiwan.com',
+    // Repository setup URL
+    agentRepositoryUrl: 'https://deb.flexiwan.com/setup',
+    // Captcha client key for flexiwan domain
+    captchaSiteKey: '6LfkP8IUAAAAABt2dxrb9U2WzxonxJlhs0_2Hadi',
+    // HTML content of the UI about page
+    aboutContent: '',
+    // UI URL for feedback
+    feedbackUrl: '',
+    // If to show device limit alert banner
+    showDeviceLimitAlert: true,
+    // Whether to remove branding, e.g. powered by...
+    removeBranding: false,
+    // URL for account qualification
+    qualifiedAccountsURL: 'https://www.flexiwan.com',
+    // VPN portal URL
+    vpnBaseUrl: 'https://localvpn.flexiwan.com:8000'
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -417,6 +422,8 @@ class Configs {
       aboutContent: this.get('aboutContent'),
       feedbackUrl: this.get('feedbackUrl'),
       showDeviceLimitAlert: this.get('showDeviceLimitAlert', 'boolean'),
+      removeBranding: this.get('removeBranding', 'boolean'),
+      qualifiedAccountsURL: this.get('qualifiedAccountsURL'),
       vpnBaseUrl: this.get('vpnBaseUrl') + '/'
     };
   }
