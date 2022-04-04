@@ -32,7 +32,14 @@ const generateRemoteVpnPKI = async (orgName) => {
   };
 
   return new Promise((resolve, reject) => {
-    const easyrsa = new EasyRSA({ pkiDir: `tmp/openvpn_pki/${orgName}` });
+    const pkiDir = `tmp/openvpn_pki/${orgName}`;
+
+    // remove the tmp directory if exists, otherwise, the package will throw an error
+    if (fs.existsSync(pkiDir)) {
+      fs.rmdirSync(pkiDir, { recursive: true });
+    }
+
+    const easyrsa = new EasyRSA({ pkiDir: pkiDir });
     easyrsa.initPKI()
       .then(t => {
         return easyrsa.buildCA();
