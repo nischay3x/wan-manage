@@ -149,7 +149,7 @@ const configEnv = {
     // Global app identification rules file location
     appRulesUrl: 'https://sandbox.flexiwan.com/Protocols/app-rules.json',
     // Global applications file locations
-    applicationsUrl: 'https://sandbox.flexiwan.com/Applications/applications.json',
+    applicationsUrl: 'https://sandbox.flexiwan.com/Templates/applications.json',
     // Default port for tunnels
     tunnelPort: '4789',
     // If to allow manager role to delete organizations, devices, tokens, tunnels, appIdentifications,
@@ -366,6 +366,8 @@ class Configs {
       combinedConfig.webHookRegisterDeviceUrl;
     combinedConfig.webHookRegisterDeviceSecret = process.env.WEBHOOK_REGISTER_DEVICE_KEY ||
       combinedConfig.webHookRegisterDeviceSecret;
+
+    combinedConfig.applicationsUrl = process.env.APPLICATIONS_URL || combinedConfig.applicationsUrl;
 
     this.config_values = combinedConfig;
     console.log('Configuration used:\n' + JSON.stringify(this.config_values, null, 2));
