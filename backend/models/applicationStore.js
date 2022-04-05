@@ -31,6 +31,15 @@ const componentsSchema = new Schema({
   },
   portal: {
     type: Object
+  },
+  client: {
+    version: {
+      type: String,
+      match: [
+        /^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$/,
+        'version must be a valid Semver version'
+      ]
+    }
   }
 },
 {
