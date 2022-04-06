@@ -367,7 +367,18 @@ class Configs {
     combinedConfig.webHookRegisterDeviceSecret = process.env.WEBHOOK_REGISTER_DEVICE_KEY ||
       combinedConfig.webHookRegisterDeviceSecret;
 
-    combinedConfig.applicationsUrl = process.env.APPLICATIONS_URL || combinedConfig.applicationsUrl;
+    /****************************************************/
+    /*           Applications URL workaround            */
+    /****************************************************/
+    // Currently and temporarily we take the "Template" folder from the "SwVersionUpdateUrl".
+    // In the future we will have "APPLICATIONS_URL" ENV for applications url.
+    if (process.env.APPLICATIONS_URL) {
+      combinedConfig.applicationsUrl = process.env.APPLICATIONS_URL;
+    } else {
+      const regex = /Templates.*\//g;
+      const templateDirName = combinedConfig.SwVersionUpdateUrl.match(regex)[0];
+      combinedConfig.applicationsUrl = combinedConfig.applicationsUrl.replace('Templates/', templateDirName);
+    }
 
     this.config_values = combinedConfig;
     console.log('Configuration used:\n' + JSON.stringify(this.config_values, null, 2));
