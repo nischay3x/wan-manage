@@ -21,6 +21,22 @@ const fs = require('fs');
 const { randomBytes } = require('crypto');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
+const deleteFolderRecursive = path => {
+  if (!fs.existsSync(path)) {
+    return;
+  }
+
+  fs.readdirSync(path).forEach((file, index) => {
+    const curPath = path + '/' + file;
+    if (fs.lstatSync(curPath).isDirectory()) { // recurse
+      deleteFolderRecursive(curPath);
+    } else { // delete file
+      fs.unlinkSync(curPath);
+    }
+  });
+  fs.rmdirSync(path);
+};
+
 const generateRemoteVpnPKI = async (orgName) => {
   const res = {
     caCert: null,
@@ -34,10 +50,8 @@ const generateRemoteVpnPKI = async (orgName) => {
   return new Promise((resolve, reject) => {
     const pkiDir = `tmp/openvpn_pki/${orgName}`;
 
-    // remove the tmp directory if exists, otherwise, the package will throw an error
-    if (fs.existsSync(pkiDir)) {
-      fs.rmdirSync(pkiDir, { recursive: true });
-    }
+    // Make sure pki tmp folder is not exists, otherwise the package will throw an error
+    deleteFolderRecursive(pkiDir);
 
     const easyrsa = new EasyRSA({ pkiDir: pkiDir });
     easyrsa.initPKI()
@@ -70,7 +84,7 @@ const generateRemoteVpnPKI = async (orgName) => {
       })
       .finally(() => {
         // on any case, remove the pki dir
-        fs.rmdirSync(easyrsa.dir, { recursive: true });
+        deleteFolderRecursive(pkiDir);
       });
   });
 };
