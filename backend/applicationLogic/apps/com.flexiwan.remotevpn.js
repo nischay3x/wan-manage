@@ -527,7 +527,22 @@ const secretFields = [
   // TODO: what about private key of gsuite service account?
 ];
 const vpnConfigSchema = Joi.object().keys({
-  networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20).required(),
+  networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20)
+    .invalid(
+      'flexiWAN', 'flexiwan', 'FLEXIWAN', 'company', 'acme', 'SASE', 'sase', 'security', 'info'
+    ).required()
+    .error(errors => {
+      errors.forEach(err => {
+        switch (err.code) {
+          case 'any.invalid':
+            err.message = `${err.local.value} is not allowed for Workspace name`;
+            break;
+          default:
+            break;
+        }
+      });
+      return errors;
+    }),
   serverPort: Joi.number().port().required(),
   routeAllTrafficOverVpn: Joi.boolean().required(),
   allowedPortalUsers: Joi.number().min(1).required(),
@@ -560,7 +575,20 @@ const vpnConfigSchema = Joi.object().keys({
     gsuite: Joi.object().keys({
       enabled: Joi.boolean().required(),
       domains: Joi.array().items(Joi.object().keys({
-        domain: Joi.string().required().pattern(/^\S+$/, 'domain without whitespace'),
+        domain: Joi.string().required()
+          .pattern(/^\S+$/, 'domain without whitespace').invalid('gmail.com')
+          .error(errors => {
+            errors.forEach(err => {
+              switch (err.code) {
+                case 'any.invalid':
+                  err.message = '"gmail.com" domain is not allowed';
+                  break;
+                default:
+                  break;
+              }
+            });
+            return errors;
+          }),
         groups: Joi.string().required().allow(''),
         clientEmail: Joi.string().when('groups', {
           is: '',
