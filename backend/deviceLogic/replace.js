@@ -50,7 +50,7 @@ const apply = async (opDevices, user, data) => {
   const oldInterfaces = oldDevice.interfaces.map(i => `${i.devId}${i.deviceType}`).sort();
   const newInterfaces = newDevice.interfaces.map(i => `${i.devId}${i.deviceType}`).sort();
   if (!isEqual(oldInterfaces, newInterfaces)) {
-    throw new Error('The hardware of the devices must be equal');
+    throw new Error('Device interfaces do not match, must have same number of interfaces.');
   }
   // check the new device config
   const tunnelCount = await tunnelsModel.countDocuments({
