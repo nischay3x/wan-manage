@@ -273,7 +273,8 @@ class DevicesService {
           'internalIP',
           'internalPortStart',
           'interfaces',
-          'system'
+          'system',
+          'reference'
         ]);
         retRule._id = retRule._id.toString();
         return retRule;
