@@ -41,6 +41,16 @@ class MongoConns {
     }, (err) => {
       logger.error('Failed to connect to analyticsDB', { params: { err: err.message } });
     });
+
+    this.vpnDB = mongoose.createConnection(configs.get('mongoVpnUrl'), {
+      useNewUrlParser: true,
+      useCreateIndex: true
+    });
+    this.vpnDB.then((db) => {
+      logger.info('Connected to MongoDB vpnDB');
+    }, (err) => {
+      logger.error('Failed to connect to vpnDB', { params: { err: err.message } });
+    });
   }
 
   getMainDB () {
@@ -82,6 +92,10 @@ class MongoConns {
 
   getAnalyticsDB () {
     return this.analyticsDB;
+  }
+
+  getVpnDB () {
+    return this.vpnDB;
   }
 }
 
