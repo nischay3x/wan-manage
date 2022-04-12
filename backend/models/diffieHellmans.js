@@ -18,4 +18,4 @@
 const mongoConns = require('../mongoConns.js')();
 
 // this collection stored on flexivpn db.
-module.exports = mongoConns.getMainDB().useDb('flexivpn').collection('diffiehellmans');
+module.exports = mongoConns.getVpnDB().collection('diffiehellmans');

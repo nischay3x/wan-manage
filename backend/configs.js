@@ -66,6 +66,8 @@ const configEnv = {
     mongoAnalyticsUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexiwanAnalytics?replicaSet=rs`,
     // Mongo Billing database
     mongoBillingUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexibilling?replicaSet=rs`,
+    // Mongo VPN database
+    mongoVpnUrl: `mongodb://${hostname}:27017,${hostname}:27018,${hostname}:27019/flexivpn?replicaSet=rs`,
     // Billing Redirect OK page url
     billingRedirectOkUrl: 'https://local.flexiwan.com/ok.html',
     // Biling config site - this is used as the billing site name in ChargeBee
@@ -358,6 +360,7 @@ class Configs {
     combinedConfig.mongoUrl = process.env.MONGO_URL || combinedConfig.mongoUrl;
     combinedConfig.mongoBillingUrl = process.env.MONGO_BILLING_URL || combinedConfig.mongoBillingUrl;
     combinedConfig.mongoAnalyticsUrl = process.env.MONGO_ANALYTICS_URL || combinedConfig.mongoAnalyticsUrl;
+    combinedConfig.mongoVpnUrl = process.env.MONGO_VPN_URL || combinedConfig.mongoVpnUrl;
     combinedConfig.billingApiKey = process.env.FLEXIBILLING_API_KEY || combinedConfig.billingApiKey;
     combinedConfig.redisUrl = process.env.REDIS_URL || combinedConfig.redisUrl;
     combinedConfig.webHookAddUserUrl = process.env.WEBHOOK_ADD_USER_URL || combinedConfig.webHookAddUserUrl;

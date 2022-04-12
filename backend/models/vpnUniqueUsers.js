@@ -18,4 +18,4 @@
 const mongoConns = require('../mongoConns.js')();
 
 // this collection stored on flexibilling db.
-module.exports = mongoConns.getMainDB().useDb('flexivpn').collection('uniqueusers');
+module.exports = mongoConns.getVpnDB().collection('uniqueusers');
