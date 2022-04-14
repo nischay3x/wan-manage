@@ -25,6 +25,14 @@ const getMajorVersion = (versionString) => {
   return parseInt(versionString.split('.')[0], 10);
 };
 
+/**
+ * Get the minor version Y from a string in semVer format X.Y.Z
+ * @param {String} versionString
+ */
+const getMinorVersion = (versionString) => {
+  return parseInt(versionString.split('.')[1], 10);
+};
+
 const mgmtMajorVersion = getMajorVersion(mgmtVersion);
 
 const isSemVer = (version) => {
@@ -97,6 +105,7 @@ const verifyAgentVersion = (version) => {
 
 module.exports = {
   getMajorVersion: getMajorVersion,
+  getMinorVersion: getMinorVersion,
   isAgentVersionCompatible: isAgentVersionCompatible,
   isSemVer: isSemVer,
   isVppVersion: isVppVersion,
