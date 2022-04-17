@@ -27,6 +27,7 @@ const diffieHellmans = require('../../models/diffieHellmans');
 const { validateFQDN } = require('../../models/validators');
 const configs = require('../../configs')();
 const { getRangeAndMask, getStartIp } = require('../../utils/networks');
+const { getMajorVersion, getMinorVersion } = require('../../versioning');
 
 const {
   generateRemoteVpnPKI,
@@ -155,6 +156,19 @@ class RemoteVpn extends IApplication {
   }
 
   async validateDeviceConfigurationRequest (app, deviceConfiguration, deviceList) {
+    // Make sure all devices with version 5.2.X and up
+    if (deviceList.some(device => {
+      const majorVersion = getMajorVersion(device.versions.agent);
+      const minorVersion = getMinorVersion(device.versions.agent);
+      return (majorVersion < 5 || (majorVersion === 5 && minorVersion < 2));
+    })) {
+      return {
+        valid: false,
+        err: 'Remote Worker VPN is supported from version 5.2.X,' +
+          ' Some devices have lower version'
+      };
+    }
+
     // prevent installation if there are missing required configurations
     // validate user inputs
     const result = vpnDeviceConfigSchema.validate(deviceConfiguration);
