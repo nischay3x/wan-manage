@@ -8,6 +8,7 @@ For the full list of open source used by flexiWAN check [this page](https://docs
 Name | Web Page | License | Modified? | Copyrights 
 --- | --- | --- | --- | ---
 mongodb | https://www.npmjs.com/package/mongodb | Apache | No | 2009-2012 Christian Amor Kvalheim, 2012-present MongoDB Contributors 
+geoip-lite | https://www.npmjs.com/package/geoip-lite | Apache | No | 2011 Philip Tellis 
 
 ```
 
@@ -253,9 +254,10 @@ cidr-tools | https://www.npmjs.com/package/cidr-tools | BSD-2 | No | silverwind
 Name | Web Page | License | Modified? | Copyrights 
 --- | --- | --- | --- | ---
 redis | https://redis.io/ | BSD-3 | No | 2006-2015, Salvatore Sanfilippo 
-@hapi/joi | https://www.npmjs.com/package/@hapi/joi | BSD-3 | No | 2012-2014, Walmart  2012-2019, Sideway Inc, and project contributors 
+joi | https://www.npmjs.com/package/joi | BSD-3 | No | 2012-2014, Walmart  2012-2019, Sideway Inc, and project contributors 
 isemail | https://www.npmjs.com/package/isemail | BSD-3 | No | 2008-2011, Dominic Sayers 2013-2014, GlobeSherpa 2014-2015, Eli Skeggs and Project contributors 
 node-forge | https://www.npmjs.com/package/node-forge | BSD-3 | No | Digital Bazaar, Inc 
+serialize-javascript | https://www.npmjs.com/package/serialize-javascript | BSD-3 | No | Yahoo! Inc. 
 
 ```
 
@@ -294,6 +296,7 @@ node-forge | https://www.npmjs.com/package/node-forge | BSD-3 | No | Digital Baz
 Name | Web Page | License | Modified? | Copyrights 
 --- | --- | --- | --- | ---
 eslint-plugin-promise | https://www.npmjs.com/package/eslint-plugin-promise | ISC | No | MMXV jden, 2016 Jamund Ferguson 
+rate-limiter-flexible | https://www.npmjs.com/package/rate-limiter-flexible | ISC |  | Copyright 2019 Roman Voloboev 
 
 ```
 
@@ -360,6 +363,7 @@ eslint-plugin-node | https://www.npmjs.com/package/eslint-plugin-node | MIT | No
 eslint-plugin-standard | https://www.npmjs.com/package/eslint-plugin-standard | MIT | No | 2015 Jamund Ferguson 
 express-openapi-validator | https://www.npmjs.com/package/express-openapi-validator | MIT | No | 2019 Carmine M. DiMascio 
 yamljs | https://www.npmjs.com/package/yamljs | MIT | No | 2010 Jeremy Faivre 
+easyrsa | https://www.npmjs.com/package/easyrsa | MIT | No | 2016 Olivier Louvignes 
 openapi-generator-cli | https://www.npmjs.com/package/@openapitools/openapi-generator-cli | MIT | No | 2018 HarmoWatch / Kay Schecker 
 
 ```
