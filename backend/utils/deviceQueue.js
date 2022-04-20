@@ -377,7 +377,7 @@ class DeviceQueues {
           let loopFrom = from;
           let loopDelta = CHUNK_SIZE;
           if (dir === 'desc') {
-            loopFrom = to - CHUNK_SIZE;
+            loopFrom = to - CHUNK_SIZE + 1;
             loopDelta = -CHUNK_SIZE;
           }
           for (
