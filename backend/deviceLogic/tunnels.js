@@ -1765,13 +1765,14 @@ const prepareTunnelParams = (
 
   // no additional header for not encrypted tunnels
   const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
-  const minMtu = Math.min(
+  let minMtu = Math.min(
     deviceAIntf.mtu || 1500,
     deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : 1500
   ) - packetHeaderSize;
 
   let { mtu, ospfCost, mssClamp } = advancedOptions;
   if (!mtu) {
+    minMtu = Math.min(mtu, minMtu);
     mtu = (globalTunnelMtu > 0) ? globalTunnelMtu : minMtu;
   }
   mtu = Math.min(Math.max(mtu, 500), 1500);
