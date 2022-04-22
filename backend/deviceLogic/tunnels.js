@@ -1772,10 +1772,10 @@ const prepareTunnelParams = (
 
   let { mtu, ospfCost, mssClamp } = advancedOptions;
   if (!mtu) {
-    minMtu = Math.min(mtu, minMtu);
     mtu = (globalTunnelMtu > 0) ? globalTunnelMtu : minMtu;
   }
   mtu = Math.min(Math.max(mtu, 500), 1500);
+  minMtu = Math.min(mtu, minMtu);
 
   // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
