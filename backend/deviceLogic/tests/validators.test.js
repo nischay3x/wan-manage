@@ -238,7 +238,7 @@ describe('validateDevice', () => {
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an valid device if WAN and default GW IP addresses are not on the same subnet',
+  it('Should be a valid device if WAN and default GW IP addresses are not on the same subnet',
     () => {
       device.interfaces[1].IPv4 = '10.0.0.2';
       // failureObject.err = 'WAN and default route IP addresses are not on the same subnet';
@@ -580,33 +580,40 @@ describe('validateWiFiInterfaceConfiguration', () => {
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an valid wifi configuration - 2.4GHz', () => {
+  it('Should be a valid wifi configuration - 2.4GHz', () => {
     delete configuration['5GHz'];
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an valid wifi configuration - 5GHz', () => {
-    delete configuration['2.4Ghz'];
+  it('Should be a valid wifi configuration - 5GHz', () => {
+    delete configuration['2.4GHz'];
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an valid wifi configuration - 5GHz', () => {
-    delete configuration['2.4Ghz'];
+  it('Should be a valid wifi configuration - 5GHz', () => {
+    delete configuration['2.4GHz'];
     delete configuration['5Ghz'];
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an invalid wifi configuration - missed securityMode', () => {
-    configuration['2.4GHz'].securityMode = '';
-    failureObject.err = '"value" does not match any of the allowed types';
+  it('Should be an invalid configuration - wrong securityMode is not allowed when enabled', () => {
+    configuration['2.4GHz'].securityMode = 'test';
+    failureObject.err = '"2.4GHz.securityMode" must be one of [open, wpa-psk, wpa2-psk]';
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be a valid wifi configuration - missed securityMode but band disabled', () => {
+  it('Should be an invalid configuration - empty securityMode is not allowed when enabled', () => {
+    configuration['2.4GHz'].securityMode = '';
+    failureObject.err = '"2.4GHz.securityMode" must be one of [open, wpa-psk, wpa2-psk]';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid wifi configuration - missed securityMode allowed when disabled', () => {
     configuration['2.4GHz'].securityMode = '';
     configuration['2.4GHz'].enable = false;
     const result = validateConfiguration(intf, configuration);
@@ -621,8 +628,15 @@ describe('validateWiFiInterfaceConfiguration', () => {
   });
 
   it('Should be an invalid wifi configuration - channel not valid', () => {
+    configuration['2.4GHz'].channel = 'test';
+    failureObject.err = 'test is not a valid channel number';
+    const result = validateConfiguration(intf, configuration);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid wifi configuration - channel not valid', () => {
     configuration['2.4GHz'].channel = '-2';
-    failureObject.err = '"value" does not match any of the allowed types';
+    failureObject.err = '-2 is not a valid channel number';
     const result = validateConfiguration(intf, configuration);
     expect(result).toMatchObject(failureObject);
   });
