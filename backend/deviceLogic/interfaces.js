@@ -125,6 +125,7 @@ const lteConfigurationSchema = Joi.object().keys({
   pin: Joi.string().allow(null, '')
 });
 
+const allowedSecurityModes = ['open', 'wpa-psk', 'wpa2-psk'];
 const shared = {
   enable: Joi.boolean().required(),
   ssid: Joi.alternatives().conditional('enable', {
@@ -132,9 +133,9 @@ const shared = {
     then: Joi.string().required(),
     otherwise: Joi.string().allow(null, '')
   }).required(),
-  password: Joi.alternatives().conditional('enable', {
+  password: Joi.when('enable', {
     is: true,
-    then: Joi.alternatives().conditional('securityMode', {
+    then: Joi.when('securityMode', {
       is: 'wep',
       then: Joi.string()
         .regex(/^([a-z0-9]{5}|[a-z0-9]{13}|[a-z0-9]{16})$/)
@@ -143,20 +144,28 @@ const shared = {
     }).required(),
     otherwise: Joi.string().allow(null, '')
   }).required(),
-  operationMode: Joi.alternatives().conditional('enable', {
+  operationMode: Joi.when('enable', {
     is: true,
     then: Joi.string().required().valid('b', 'g', 'n', 'a', 'ac'),
     otherwise: Joi.string().allow(null, '')
   }).required(),
-  channel: Joi.string().regex(/^\d+$/).required(),
+  channel: Joi.string().regex(/^\d+$/).required().error(errors => {
+    errors.forEach(err => {
+      switch (err.code) {
+        case 'string.pattern.base':
+          err.message = `${err.local.value} is not a valid channel number`;
+          break;
+        default:
+          break;
+      }
+    });
+    return errors;
+  }),
   bandwidth: Joi.string().valid('20').required(),
-  securityMode: Joi.alternatives().conditional('enable', {
+  securityMode: Joi.string().when('enable', {
     is: true,
-    then: Joi.string().valid(
-      'open', 'wpa-psk', 'wpa2-psk'
-      // 'wpa-eap', 'wpa2-eap'
-    ).required().error(() => 'Security mode is required field on enabled WiFi band'),
-    otherwise: Joi.string().allow(null, '')
+    then: Joi.valid(...allowedSecurityModes),
+    otherwise: Joi.valid(...allowedSecurityModes, '') // allowed empty if band disabled
   }).required(),
   hideSsid: Joi.boolean().required(),
   encryption: Joi.string().valid('aes-ccmp').required(),
@@ -168,11 +177,10 @@ const shared = {
   }).required()
 };
 
-const WifiConfigurationSchema = Joi.alternatives().try(
-  Joi.object().keys({ '2.4GHz': Joi.object().keys(shared) }),
-  Joi.object().keys({ '5GHz': Joi.object().keys(shared) }),
-  Joi.object().keys({ '5GHz': Joi.object().keys(shared), '2.4GHz': Joi.object().keys(shared) })
-);
+const WifiConfigurationSchema = Joi.object({
+  '2.4GHz': shared,
+  '5GHz': shared
+}).or('2.4GHz', '5GHz', { separator: false });
 
 const validateWifiCountryCode = (configurationReq) => {
   const regions = Object.values(wifiChannels);

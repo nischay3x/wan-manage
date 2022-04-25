@@ -49,7 +49,6 @@ const {
 const { getAllOrganizationSubnets } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
-const wifiChannels = require('../utils/wifi-channels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -826,7 +825,7 @@ class DevicesService {
           },
           parseResponse: async response => {
             response = mapWifiNames(response);
-            return { ...response, wifiChannels };
+            return response;
           }
         }
       };
