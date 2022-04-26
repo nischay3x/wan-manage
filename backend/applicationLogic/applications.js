@@ -188,10 +188,15 @@ class ApplicationLogic extends IApplication {
     if ('firewallRules' in version.installWith) {
       const requestedRules = version.installWith.firewallRules;
 
-      // filter out the application firewall rules
-      const updatedFirewallRules = device.firewall.rules.filter(r => {
-        if (!r.reference) return true; // keep non-referenced rules
-        return r.reference.toString() !== app._id.toString();
+      const existingRules = {}; // map of existing application rules based on on referenceNumber
+      const updatedFirewallRules = []; // array of all rules except of application related rules
+
+      device.firewall.rules.forEach(r => {
+        if (r.system && r.reference && r.reference.toString() !== app._id.toString()) {
+          existingRules[r.referenceNumber] = r;
+        } else {
+          updatedFirewallRules.push(r.toObject()); // reference to application
+        }
       });
 
       // in add operation - add the needed firewall rules
@@ -210,6 +215,7 @@ class ApplicationLogic extends IApplication {
             system: true,
             reference: app._id,
             referenceModel: 'applications',
+            referenceNumber: rule.appRuleNum,
             description: _getVal(rule.description),
             priority: initialPriority,
             enabled: true,
@@ -226,13 +232,9 @@ class ApplicationLogic extends IApplication {
             }
           };
 
-          // already exists
-          const exists = device.firewall.rules.find(r => {
-            return r.system === newRule.system && r.priority === newRule.priority;
-          });
-
-          if (exists && !exists.enabled) {
-            newRule.enabled = false;
+          // rule exists
+          if (existingRules[rule.appRuleNum]) {
+            newRule.enabled = existingRules[rule.appRuleNum].enabled;
           }
 
           updatedFirewallRules.push(newRule);
@@ -240,8 +242,8 @@ class ApplicationLogic extends IApplication {
         }
       }
 
-      const { valid, err } = validateFirewallRules(updatedFirewallRules.toObject());
-
+      // validate new rules
+      const { valid, err } = validateFirewallRules(updatedFirewallRules);
       if (!valid) {
         throw new Error(err);
       }
