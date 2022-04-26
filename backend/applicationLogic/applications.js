@@ -22,6 +22,7 @@ const logger = require('../logging/logging')({
   module: module.filename,
   type: 'req'
 });
+const { validateFirewallRules } = require('../deviceLogic/validators');
 
 const IApplication = require('./applicationsInterface');
 
@@ -187,7 +188,7 @@ class ApplicationLogic extends IApplication {
     if ('firewallRules' in version.installWith) {
       const requestedRules = version.installWith.firewallRules;
 
-      // take out the related firewall rules
+      // filter out the application firewall rules
       const updatedFirewallRules = device.firewall.rules.filter(r => {
         if (!r.reference) return true; // keep non-referenced rules
         return r.reference.toString() !== app._id.toString();
@@ -205,12 +206,13 @@ class ApplicationLogic extends IApplication {
         }
 
         for (const rule of requestedRules) {
-          updatedFirewallRules.push({
+          const newRule = {
             system: true,
             reference: app._id,
             referenceModel: 'applications',
             description: _getVal(rule.description),
             priority: initialPriority,
+            enabled: true,
             direction: _getVal(rule.direction),
             interfaces: _getVal(rule.interfaces),
             inbound: _getVal(rule.inbound),
@@ -222,10 +224,26 @@ class ApplicationLogic extends IApplication {
                 }
               }
             }
+          };
+
+          // already exists
+          const exists = device.firewall.rules.find(r => {
+            return r.system === newRule.system && r.priority === newRule.priority;
           });
 
+          if (exists && !exists.enabled) {
+            newRule.enabled = false;
+          }
+
+          updatedFirewallRules.push(newRule);
           initialPriority--;
         }
+      }
+
+      const { valid, err } = validateFirewallRules(updatedFirewallRules.toObject());
+
+      if (!valid) {
+        throw new Error(err);
       }
 
       query['firewall.rules'] = updatedFirewallRules;

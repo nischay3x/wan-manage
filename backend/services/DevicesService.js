@@ -1720,39 +1720,47 @@ class DevicesService {
         }
 
         // make sure that system rules not deleted or modified
+        const origSystemRules = origDevice.firewall.rules.filter(r => r.system);
         if ('firewall' in deviceRequest && Array.isArray(deviceRequest.firewall.rules)) {
-          const origSystemRules = origDevice.firewall.rules.filter(r => r.system);
           for (const origSystemRule of origSystemRules) {
             const origId = origSystemRule._id.toString();
             const idx = deviceRequest.firewall.rules.findIndex(r => r._id === origId);
             if (idx === -1) {
               // system rule doesn't exist in the incoming rules
-              throw new Error('System rules cannot be deleted');
+              throw new Error('Firewall system rule cannot be deleted');
             } else {
-              // system rule cannot be modified, set it to the orig rule
-              deviceRequest.firewall.rules[idx] = origSystemRule.toObject();
+              // system rule cannot be modified but disabled/enabled only.
+              // set it back to the orig rule except of the "enabled" field
+              deviceRequest.firewall.rules[idx] = {
+                ...origSystemRule.toObject(),
+                enabled: deviceRequest.firewall.rules[idx].enabled
+              };
             }
           }
 
           for (const newRule of deviceRequest.firewall.rules) {
             // prevent user to set negative value for non system rule
             if (!newRule.system && newRule.priority < 0) {
-              throw new Error('A user\'s rule cannot have a priority lower than 0');
+              throw new Error('A user\'s firewall rule cannot have a priority lower than 0');
             }
 
             if (!newRule._id) {
               // don't allow to create new rule as system rule
               if (newRule.system) {
-                throw new Error('Cannot mark user rule as system rule');
+                throw new Error('A system rule cannot be created by a user');
               }
             } else {
               // don't allow to change existing user rule to a system rule
               const newRuleId = newRule._id.toString();
               if (newRule.system && !origSystemRules.some(o => newRuleId === o._id.toString())) {
-                throw new Error('Cannot mark user rule as system rule');
+                throw new Error('A system rule cannot be created by a user');
               }
             }
           };
+        } else if (origSystemRules.length > 0) {
+          // there are system rules in the origDevice,
+          // but incoming modified device has no system rules
+          throw new Error('Firewall system rule cannot be deleted');
         }
 
         // Need to validate device specific rules combined with global policy rules
@@ -1793,9 +1801,16 @@ class DevicesService {
           { new: true, upsert: false, runValidators: true }
         )
           .session(session)
+          // should be populated exactly as devicesIdGet response
           .populate('interfaces.pathlabels', '_id name description color type')
           .populate('policies.firewall.policy', '_id name description rules')
-          .populate('policies.multilink.policy', '_id name description');
+          .populate('policies.multilink.policy', '_id name description')
+          .populate({
+            path: 'applications.app',
+            populate: {
+              path: 'appStoreApp'
+            }
+          });
       }, false);
 
       // If the change made to the device fields requires a change on the
