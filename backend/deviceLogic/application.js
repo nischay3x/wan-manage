@@ -333,7 +333,7 @@ const queueApplicationJob = async (
     // during application installation, we can change the device,
     // e.g. adding firewall rules.
     // Here we call modifyDevice function to send the needed jobs
-    await modifyDeviceApply([dev], 'system', {
+    await modifyDeviceApply([dev], { username: 'system' }, {
       org: org,
       newDevice: newDevice
     });
