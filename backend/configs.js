@@ -350,7 +350,11 @@ class Configs {
     Object.keys(combinedConfig).forEach(k => {
       // get upper case snake case variable
       const uSnakeCase = k.split(/(?=[A-Z])/).join('_').toUpperCase();
-      combinedConfig[k] = process.env[uSnakeCase] || combinedConfig[k];
+
+      // allow env variable to be empty string and override the combinedConfig
+      if (process.env[uSnakeCase] !== undefined && process.env[uSnakeCase] !== null) {
+        combinedConfig[k] = process.env[uSnakeCase];
+      }
     });
 
     // Override with predefined special environment variables
