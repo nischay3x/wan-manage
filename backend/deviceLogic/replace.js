@@ -83,7 +83,7 @@ const apply = async (opDevices, user, data) => {
     { upsert: false }
   );
   const status = 'completed';
-  const message = 'Replaced successfully';
+  const message = 'Devices replaced successfully';
   return { ids: [], status, message };
 };
 
