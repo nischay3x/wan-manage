@@ -34,9 +34,15 @@ const getFilterExpression = ({ key, op, val }) => {
   if (key.includes('?')) {
     const cond = op.includes('!') ? '$and' : '$or';
     return {
-      [cond]: ['A', 'B'].map(side => getFilterExpression({
-        key: key.replace(/\?/g, side), op, val
-      }))
+      [cond]: ['A', 'B'].map(side => {
+        const sideKey = key.replace(/\?/g, side);
+        const expr = getFilterExpression({ key: sideKey, op, val });
+        if (cond === '$and') {
+          // we need to ignore null values for negative conditions
+          return { $or: [{ [sideKey]: null }, expr] };
+        }
+        return expr;
+      })
     };
   }
   // Special case for dates filtering
