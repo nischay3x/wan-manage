@@ -309,7 +309,8 @@ const handlePeers = async (
     // peer is supported for major version 5
     const majorAgentVersion = getMajorVersion(device.versions.agent);
     if (majorAgentVersion < 5) {
-      reasons.add('Peer tunnel is not supported on some of the selected devices');
+      reasons.add('Selected devices do not run required flexiWAN version for peering. ' +
+        'Please upgrade and try again');
       continue;
     };
 
