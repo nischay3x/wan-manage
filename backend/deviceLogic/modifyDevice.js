@@ -1175,7 +1175,7 @@ const apply = async (device, user, data) => {
   const oldBridges = getBridges(device[0].interfaces);
   const newBridges = getBridges(data.newDevice.interfaces);
 
-  const assignBridges = [];d
+  const assignBridges = [];
   const unassignBridges = [];
 
   // Check add-switch
