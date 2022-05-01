@@ -76,7 +76,7 @@ const getFilterExpression = ({ key, op, val }) => {
     case '==':
       return { [key]: isString ? new RegExp('^' + val + '$', 'i') : val };
     case '!=':
-      return { [key]: isString ? new RegExp('^(?!' + val + '$)', 'i') : { $ne: val } };
+      return { [key]: isString ? { $not: new RegExp('^' + val, 'i') } : { $ne: val } };
     case 'contains':
       return { [key]: new RegExp(val, 'i') };
     case '!contains':
