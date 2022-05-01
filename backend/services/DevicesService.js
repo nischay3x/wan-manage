@@ -319,6 +319,11 @@ class DevicesService {
         await statusesInDb.updateDevicesStatuses(orgList);
       }
 
+      let parsedFilters = [];
+      if (filters) {
+        parsedFilters = JSON.parse(filters);
+      }
+
       const pipeline = [
         {
           $match: {
@@ -362,34 +367,6 @@ class DevicesService {
           }
         },
         {
-          $lookup: {
-            from: 'applications',
-            localField: 'applications.app',
-            foreignField: '_id',
-            as: 'applications.app'
-          }
-        },
-        {
-          $unwind: {
-            path: '$applications.app',
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $lookup: {
-            from: 'applicationStore',
-            localField: 'applications.app.appStoreApp',
-            foreignField: '_id',
-            as: 'applications.app.appStoreApp'
-          }
-        },
-        {
-          $unwind: {
-            path: '$applications.app.appStoreApp',
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
           $addFields: {
             _id: { $toString: '$_id' },
             'deviceStatus.state': {
@@ -403,8 +380,13 @@ class DevicesService {
         }
       ];
 
-      if (filters) {
-        const parsedFilters = JSON.parse(filters);
+      // The stages associated with apps are relatively heavy.
+      // They are used only for filtering. No need to run them every time
+      if (parsedFilters.find(f => f.key.includes('applications'))) {
+        pipeline.push(...deviceApplicationFilters);
+      }
+
+      if (parsedFilters.length > 0) {
         const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
           pipeline.push({
@@ -3234,5 +3216,67 @@ class DevicesService {
     }
   }
 }
+
+const deviceApplicationFilters = [{
+  // split applications array to objects. Note! this creates duplication in devices,
+  // remember to group it back
+  $unwind: {
+    path: '$applications',
+    preserveNullAndEmptyArrays: true
+  }
+},
+{
+  $lookup: {
+    from: 'applications',
+    localField: 'applications.app',
+    foreignField: '_id',
+    as: 'applications.app'
+  }
+},
+{
+  $unwind: {
+    path: '$applications.app',
+    preserveNullAndEmptyArrays: true
+  }
+},
+{
+  $lookup: {
+    from: 'applicationStore',
+    localField: 'applications.app.appStoreApp',
+    foreignField: '_id',
+    as: 'applications.app.appStoreApp'
+  }
+},
+{
+  $unwind: {
+    path: '$applications.app.appStoreApp',
+    preserveNullAndEmptyArrays: true
+  }
+},
+{
+  $group: {
+    _id: '$_id',
+    device: { $first: '$$ROOT' },
+    applications: {
+      $push: '$applications'
+    }
+  }
+},
+{
+  $addFields: {
+    'device.applications': {
+      $filter: {
+        input: '$applications',
+        as: 'app',
+        cond: {
+          $ne: ['$$app.app', {}]
+        }
+      }
+    }
+  }
+},
+{
+  $replaceRoot: { newRoot: '$device' }
+}];
 
 module.exports = DevicesService;
