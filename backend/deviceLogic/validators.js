@@ -115,7 +115,7 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
       }
       // WAN Interface must be specified in nat1to1 and portForward inbound rules
       const specifiedInterface = destination.ipProtoPort.interface;
-      if (inbound !== 'edgeAccess' && (!specifiedInterface || specifiedInterface === '')) {
+      if (inbound !== 'edgeAccess' && !specifiedInterface) {
         return {
           valid: false,
           err: 'WAN Interface must be specified in nat1to1 and portForward inbound rules'
