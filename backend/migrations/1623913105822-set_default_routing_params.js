@@ -30,15 +30,6 @@ async function up () {
     deadInterval: 40
   };
 
-  const defaultBGPGlobalSettings = {
-    enable: false,
-    localASN: '',
-    routerId: '',
-    keepaliveInterval: '30',
-    holdInterval: '90',
-    neighbors: []
-  };
-
   try {
     await devices.updateMany(
       { },
