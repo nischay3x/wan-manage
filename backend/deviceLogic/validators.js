@@ -113,6 +113,14 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
           err: 'Ports must be specified in edgeAccess and portForward inbound rules'
         };
       }
+      // WAN Interface must be specified in nat1to1 and portForward inbound rules
+      const specifiedInterface = destination.ipProtoPort.interface;
+      if (inbound !== 'edgeAccess' && !specifiedInterface) {
+        return {
+          valid: false,
+          err: 'WAN Interface must be specified in nat1to1 and portForward inbound rules'
+        };
+      }
       // Inbound rules destination ports can't be overlapped
       if (direction === 'inbound' && destination.ipProtoPort.ports) {
         const { ports } = destination.ipProtoPort;

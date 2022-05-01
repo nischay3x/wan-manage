@@ -420,8 +420,14 @@ class ApplicationsService {
       configurationRequest = await appsLogic.pickAllowedFieldsOnly(
         identifier, configurationRequest, app);
 
+      const installedDevices = await devices.find({
+        org: { $in: orgList },
+        'applications.app': id,
+        'applications.status': { $in: ['installed', 'installing', 'configuration failed'] }
+      }).populate('policies.firewall.policy', '_id name rules');
+
       const { valid, err } = await appsLogic.validateConfiguration(
-        identifier, configurationRequest, app, user.defaultAccount
+        identifier, configurationRequest, app, user.defaultAccount, installedDevices
       );
 
       if (!valid) {
@@ -441,17 +447,9 @@ class ApplicationsService {
       const updated = await appsLogic.saveConfiguration(identifier, app, combinedConfig);
 
       // Update devices if needed
-      if (isNeedToUpdatedDevices) {
-        const opDevices = await devices.find({
-          org: { $in: orgList },
-          'applications.app': id,
-          'applications.status': { $in: ['installed', 'installing', 'configuration failed'] }
-        });
-
-        if (opDevices.length) {
-          await dispatcher.apply(opDevices, 'application',
-            user, { org: orgList[0], meta: { op: 'config', id: id } });
-        }
+      if (isNeedToUpdatedDevices && installedDevices.length > 0) {
+        await dispatcher.apply(installedDevices, 'application',
+          user, { org: orgList[0], meta: { op: 'config', id: id } });
       }
 
       const parsed = await ApplicationsService.selectApplicationParams(updated);
