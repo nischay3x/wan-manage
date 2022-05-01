@@ -36,7 +36,7 @@ const handleInstallOp = async (app, device, deviceConfiguration, idx) => {
   const appId = app._id.toString();
 
   const identifier = app.appStoreApp.identifier;
-  const { valid, err } = await appsLogic.validateInstallRequest(identifier, app);
+  const { valid, err } = await appsLogic.validateInstallRequest(identifier, app, device);
   if (!valid) {
     throw createError(500, err);
   }
