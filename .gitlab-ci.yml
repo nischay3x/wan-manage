@@ -16,7 +16,8 @@ build:
   stage: build
   script:
     - cd backend
-    - npm ci
+    ## temp fix: change to npm ci when mongo-express is fixed
+    - npm install mongo-express --ignore-scripts && npm install
   artifacts:
     untracked: true
     paths:
