@@ -46,7 +46,7 @@ test_backend:
 backend_npm_audit:
   stage: test
   variables:
-    BACKEND_PACKAGE_WHITE_LIST: "dot-prop pug mquery extend async express-fileupload mongoose mpath node-forge minimist"
+    BACKEND_PACKAGE_WHITE_LIST: "dot-prop pug mquery extend async express-fileupload mongoose mpath node-forge minimist yargs-parser"
   script:
    - cd backend
     ## temp fix: change to 'npm ci audit-ci' when mongo-express is fixed
