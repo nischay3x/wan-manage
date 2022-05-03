@@ -2677,11 +2677,13 @@ class DevicesService {
     }
 
     // check that DHCP Range Start/End IP are on the same subnet with interface IP
-    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeStart)) {
+    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`,
+    `${dhcpRequest.rangeStart}/32`)) {
       // eslint-disable-next-line max-len
       throw new Error('DHCP Server Range Start IP address is not on the same subnet with interface IP');
     }
-    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`, dhcpRequest.rangeEnd)) {
+    if (!cidr.overlap(`${interfaceObj.IPv4}/${interfaceObj.IPv4Mask}`,
+    `${dhcpRequest.rangeEnd}/32`)) {
       // eslint-disable-next-line max-len
       throw new Error('DHCP Server Range End IP address is not on the same subnet with interface IP');
     }
