@@ -680,8 +680,8 @@ const BGPNeighborSchema = new Schema({
     type: String,
     required: true,
     validate: {
-      validator: validators.validateIPv4WithMask,
-      message: props => `${props.value} should be a valid ipv4 with mask type`
+      validator: validators.validateIPv4,
+      message: props => `${props.value} should be a valid ipv4`
     }
   },
   remoteASN: {

@@ -1166,7 +1166,7 @@ const apply = async (device, user, data) => {
   }
 
   // Create BGP modification parameters
-  const { remove: removeBGP, add: addBGP } = prepareModifyBGP(device[0], data.newDevice);
+  const { remove: removeBGP, add: addBGP } = await prepareModifyBGP(device[0], data.newDevice);
   if (removeBGP || addBGP) {
     modifyParams.modify_bgp = { remove: removeBGP, add: addBGP };
   }
