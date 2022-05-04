@@ -35,6 +35,8 @@ const appsLogic = require('../applicationLogic/applications')();
 const handleInstallOp = async (app, device, deviceConfiguration, idx) => {
   const appId = app._id.toString();
 
+  await device.populate('policies.firewall.policy', '_id name rules').execPopulate();
+
   const identifier = app.appStoreApp.identifier;
   const { valid, err } = await appsLogic.validateInstallRequest(identifier, app, device);
   if (!valid) {
