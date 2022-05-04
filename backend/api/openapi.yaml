@@ -6019,7 +6019,7 @@ paths:
           type: string
       responses:
         "204":
-          description: Successfull operation
+          description: Successful operation
         "401":
           content:
             application/json:
@@ -7955,6 +7955,10 @@ paths:
         style: simple
       responses:
         "200":
+          content:
+            application/json:
+              schema:
+                type: object
           description: Successful operation
         "401":
           content:

@@ -2431,7 +2431,7 @@ class DevicesService {
         );
       }
 
-      return Service.successResponse({}, 202);
+      return Service.successResponse(null, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
