@@ -7815,6 +7815,10 @@ paths:
         style: simple
       responses:
         "200":
+          content:
+            application/json:
+              schema:
+                type: object
           description: Successful operation
         "401":
           content:
