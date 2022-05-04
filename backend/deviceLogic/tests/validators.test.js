@@ -257,7 +257,7 @@ describe('validateDevice', () => {
     device.name = 'Device 1';
     device._id = '123456';
     const organizationLanSubnets = [
-      { _id: '987', name: 'Device 2', subnet: '192.168.100.3', type: 'interface' }
+      { _id: '987', name: 'Device 2', subnet: '192.168.100.3/24', type: 'interface' }
     ];
 
     const deviceSubnet = `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
@@ -277,7 +277,7 @@ describe('validateDevice', () => {
     device.interfaces[0].IPv4Mask = '24';
 
     const organizationLanSubnets = [
-      { _id: '987', name: 'Device 2', subnet: '192.168.100.3', type: 'interface' }
+      { _id: '987', name: 'Device 2', subnet: '192.168.100.3/24', type: 'interface' }
     ];
 
     const deviceSubnet = '10.100.0.1/24';
@@ -293,7 +293,7 @@ describe('validateDevice', () => {
     device.name = 'Device 1';
     device._id = '123456';
     const organizationLanSubnets = [
-      { _id: '987', name: 'Device 2', subnet: '192.168.88.3' }
+      { _id: '987', name: 'Device 2', subnet: '192.168.88.3/24' }
     ];
     const result = validateDevice(device, true, organizationLanSubnets);
     expect(result).toMatchObject(successObject);

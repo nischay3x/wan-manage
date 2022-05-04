@@ -361,7 +361,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
         };
       }
       // prevent Public IP / WAN overlap
-      if (ifc1.PublicIP && cidr.overlap(ifc2Subnet, ifc1.PublicIP)) {
+      if (ifc1.PublicIP && cidr.overlap(ifc2Subnet, `${ifc1.PublicIP}/32`)) {
         return {
           valid: false,
           err: `IP address of [${ifc2.name}] has an overlap with Public IP of [${ifc1.name}]`
