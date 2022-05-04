@@ -354,8 +354,8 @@ class ApplicationLogic extends IApplication {
     const query = await this.getAppInstallWithAsQuery(application, device, op);
     const deviceSpecific = query && query['firewall.rules'] ? query['firewall.rules'] : [];
 
-    const globalRules = device.policies && device.policies.firewall &&
-    device.policies.firewall.policy && device.policies.firewall.status.startsWith('install')
+    const globalRules = device.policies?.firewall?.policy &&
+      device.policies?.firewall?.status.startsWith('install')
       ? device.policies.firewall.policy.rules.toObject()
       : [];
 
