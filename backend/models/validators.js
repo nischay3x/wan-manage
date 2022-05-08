@@ -32,7 +32,7 @@ const isValidURL = (url) => { return urlValidator.isUri(url) !== undefined; };
 const isValidFileName = (name) => {
   return !isEmpty(name) && name !== '' && filenamify(name) === name;
 };
-const validateIsInteger = val => Number.isInteger(+val);
+const validateIsInteger = val => /^[1-9]\d+|^\d$/.test(val);
 
 const validateIsPhoneNumber = (number) => {
   try {
