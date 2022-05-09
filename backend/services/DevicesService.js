@@ -32,7 +32,6 @@ const validator = require('validator');
 const net = require('net');
 const pick = require('lodash/pick');
 const isEqual = require('lodash/isEqual');
-
 const uniqBy = require('lodash/uniqBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
@@ -3225,6 +3224,191 @@ class DevicesService {
       });
       DevicesService.setLocationHeader(server, response, ids, orgList[0]);
       return Service.successResponse(ospfConfigs, 202);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get FRR Access Lists
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by (optional)
+   * returns list of frrAccessList
+   **/
+  static async devicesIdRoutingFrrAccessListsGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }
+      );
+
+      if (!device) return Service.rejectResponse('Device not found', 404);
+
+      if (!device.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+
+      return Service.successResponse(device.frrAccessLists, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Create new FRR Access List
+   *
+   * id String Numeric ID of the Device
+   * org String Organization to be filtered by
+   * frrAccessList frrAccessList object
+   * returns list of frrAccessList
+   **/
+  static async devicesIdRoutingFrrAccessListsPOST ({ id, org, frrAccessList }, { user }, response) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: deviceObject._id },
+        { $push: { frrAccessLists: frrAccessList } },
+        { new: true, runValidators: true, upsert: false }
+      );
+
+      // TODO: complete
+      // const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+      //   org: orgList[0],
+      //   newDevice: updDevice
+      // });
+      // DevicesService.setLocationHeader(server, res, ids, orgList[0]);
+      return Service.successResponse(updDevice.frrAccessLists, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify FRR Access List By ID
+   *
+   * id String Numeric ID of the Device
+   * listId String Numeric ID of the FRR Access list to modify
+   * org String Organization to be filtered by (optional)
+   * frrAccessList updated frrAccessList object
+   * returns list of frrAccessList
+   **/
+  static async devicesIdRoutingFrrAccessListsListIdPUT (
+    { id, listId, org, frrAccessList }, { user, server }, res
+  ) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const deviceObject = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      });
+      if (!deviceObject) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+      if (!deviceObject.isApproved) {
+        throw new Error('Device must be first approved');
+      }
+      const listExists = deviceObject.frrAccessLists.find(l => l._id.toString() === listId);
+      if (!listExists) return Service.rejectResponse('FRR Access List ID not found', 404);
+
+      // DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
+      const updatedList = {
+        ...frrAccessList,
+        _id: listId
+      };
+
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: deviceObject._id },
+        { $set: { 'frrAccessLists.$[elem]': updatedList } },
+        {
+          arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(listId) }],
+          new: true,
+          runValidators: true
+        }
+      );
+
+      // TODO: complete
+      // const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+      //   org: orgList[0],
+      //   newDevice: updDevice
+      // });
+      // DevicesService.setLocationHeader(server, res, ids, orgList[0]);
+      return Service.successResponse(updDevice.frrAccessLists);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Delete FRR Access List
+   *
+   * id String Numeric ID of the Device
+   * listId String Numeric ID of the FRR access list to delete
+   * org String Organization to be filtered by (optional)
+   * returns list of frrAccessList
+   **/
+  static async devicesIdRoutingFrrAccessListsListIdDELETE (
+    { id, listId, org }, { user, server }, response
+  ) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+      const device = await devices.findOne(
+        {
+          _id: mongoose.Types.ObjectId(id),
+          org: { $in: orgList }
+        }
+      );
+
+      if (!device) return Service.rejectResponse('Device not found', 404);
+      const listExists = device.frrAccessLists.find(l => l._id.toString() === listId);
+      if (!listExists) return Service.rejectResponse('FRR Access List ID not found', 404);
+
+      const updDevice = await devices.findOneAndUpdate(
+        { _id: device._id, org: { $in: orgList } },
+        {
+          $pull: {
+            frrAccessLists: {
+              _id: mongoose.Types.ObjectId(listId)
+            }
+          }
+        },
+        { new: true }
+      );
+
+      // TODO: complete
+      // const { ids } = await dispatcher.apply([deviceObject], 'modify', user, {
+      //   org: orgList[0],
+      //   newDevice: updDevice
+      // });
+      // DevicesService.setLocationHeader(server, res, ids, orgList[0]);
+
+      return Service.successResponse(updDevice.frrAccessLists, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

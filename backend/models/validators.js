@@ -91,6 +91,7 @@ const validateUsbAddress = usb => {
   );
 };
 const validateIfcName = (name) => { return /^[a-zA-Z0-9_]{1,15}$/i.test(name || ''); };
+const validateIsNumber = (str) => { return !isNaN(Number(str)); };
 const validateDriverName = (name) => { return /^[a-z0-9_-]{1,30}$/i.test(name || ''); };
 const validateMacAddress = mac => {
   return /^(([A-F0-9]{2}:){5}[A-F0-9]{2})|(([A-F0-9]{2}-){5}[A-F0-9]{2})$/i.test(
@@ -220,5 +221,6 @@ module.exports = {
   validateStringNoSpaces,
   validateApplicationIdentifier,
   validateBGPASN,
-  validateBGPInterval
+  validateBGPInterval,
+  validateIsNumber
 };

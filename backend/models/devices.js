@@ -561,6 +561,51 @@ const deviceApplicationSchema = new Schema({
 });
 
 /**
+ * Device FRR access list rule Schema
+ */
+const deviceFrrAccessListRuleSchema = new Schema({
+  sequence: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'sequence should be a number'
+    }
+  },
+  action: {
+    type: String,
+    enum: ['permit', 'deny'],
+    required: true
+  },
+  network: {
+    type: String,
+    validate: {
+      validator: val => validators.validateIPv4WithMask(val) || val === 'any',
+      message: 'network should be a valid IPv4/mask or "any"'
+    },
+    required: true
+  }
+});
+
+/**
+ * Device FRR access list Schema
+ */
+const deviceFrrAccessListSchema = new Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String,
+    required: true
+  },
+  rules: {
+    type: [deviceFrrAccessListRuleSchema],
+    required: true
+  }
+});
+
+/**
  * Device multilink policy schema
  */
 const deviceMultilinkPolicySchema = new Schema({
@@ -941,6 +986,9 @@ const deviceSchema = new Schema({
         message: props => `${props.value} should be a valid integer`
       }
     }
+  },
+  frrAccessLists: {
+    type: [deviceFrrAccessListSchema]
   },
   applications: [deviceApplicationSchema]
 },
