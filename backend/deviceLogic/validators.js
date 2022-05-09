@@ -484,6 +484,22 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
       return { valid, err };
     }
   }
+
+  // Firewall rules validation
+  if (device.frrAccessLists) {
+    for (const list of device.frrAccessLists) {
+      const name = list.name;
+      const duplicateName = device.frrAccessLists.filter(l => l.name === name).length > 1;
+      if (duplicateName) {
+        return {
+          valid: false,
+          err: 'FRR access lists with the same name are not allowed'
+        };
+      }
+    }
+
+    // TODO: Check if list used by a route map
+  }
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {

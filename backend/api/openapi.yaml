@@ -9150,6 +9150,8 @@ components:
         - 40.4
         - 5.7
         sync: device sync status
+        frrAccessLists:
+        - frrAccessList
       properties:
         _id:
           maxLength: 24
@@ -9188,6 +9190,10 @@ components:
         dhcp:
           items:
             $ref: '#/components/schemas/Dhcp'
+          type: array
+        frrAccessLists:
+          items:
+            $ref: '#/components/schemas/FrrAccessList'
           type: array
         coords:
           items:
@@ -9529,15 +9535,7 @@ components:
         - isApproved
     FrrAccessList:
       example:
-        name: list name
-        description: list description
-        rules:
-        - sequence: 100
-          action: permit
-          network: any
-        - sequence: 200
-          action: deny
-          network: 10.10.10.0/24
+        $ref: '#/components/examples/FrrAccessListExample'
       properties:
         name:
           type: string
@@ -9550,9 +9548,7 @@ components:
       type: object
     FrrAccessListRule:
       example:
-        sequence: 100
-        action: permit
-        network: any
+        $ref: '#/components/examples/FrrAccessListRuleExample'
       properties:
         sequence:
           type: string
@@ -11403,3 +11399,23 @@ components:
       bearerFormat: JWT
       scheme: bearer
       type: http
+  examples:
+    FrrAccessListExample:
+      value:
+        name: list name
+        description: list description
+        rules:
+        - $ref: '#/components/examples/FrrAccessListRuleExample'
+        - $ref: '#/components/examples/FrrAccessListRuleBExample'
+    FrrAccessListRuleExample:
+      value:
+        sequence: 100
+        action: permit
+        network: any
+    FrrAccessListRuleBExample:
+      value:
+        sequence: 200
+        action: deny
+        network: 10.10.10.0/24
+
+

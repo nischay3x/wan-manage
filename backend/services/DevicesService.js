@@ -157,7 +157,8 @@ class DevicesService {
       'sync',
       'ospf',
       'coords',
-      'bgp'
+      'bgp',
+      'frrAccessLists'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
