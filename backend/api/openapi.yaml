@@ -8620,6 +8620,7 @@ components:
           useFixedPublicPort: false
           monitorInternet: true
           internetAccess: 'yes'
+          linkStatus: 'up'
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -8644,6 +8645,7 @@ components:
           useFixedPublicPort: false
           monitorInternet: true
           internetAccess: 'no'
+          linkStatus: 'down'
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -8805,6 +8807,7 @@ components:
         useStun: useStun
         monitorInternet: true
         internetAccess: 'yes'
+        linkStatus: 'up'
         IPv4: IPv4
         type: WAN
         MAC: MAC
@@ -8859,6 +8862,12 @@ components:
           - ''
           - yes
           - no
+          type: string
+        linkStatus:
+          enum:
+          - ''
+          - up
+          - down
           type: string
         gateway:
           type: string

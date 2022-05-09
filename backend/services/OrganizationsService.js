@@ -331,9 +331,19 @@ class OrganizationsService {
                               as: 'intf',
                               cond: {
                                 $and: [
-                                  { $ne: ['$$intf.internetAccess', 'yes'] },
-                                  { $eq: ['$$intf.monitorInternet', true] },
-                                  { $eq: ['$$intf.type', 'WAN'] }]
+                                  {
+                                    $or: [
+                                      { $eq: ['$$intf.linkStatus', 'down'] },
+                                      {
+                                        $and: [
+                                          { $ne: ['$$intf.internetAccess', 'yes'] },
+                                          { $eq: ['$$intf.monitorInternet', true] }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  { $eq: ['$$intf.type', 'WAN'] }
+                                ]
                               }
                             }
                           }
