@@ -322,10 +322,11 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
       }
 
       // DHCP client is not allowed on LAN interface
-      if (ifc.dhcp === 'yes') {
+      if (ifc.dhcp === 'yes' && device.dhcp.find(d => d.interface === ifc.devId)) {
         return {
           valid: false,
-          err: 'LAN interfaces should not be set to DHCP'
+          err: `Configure DHCP server on interface ${ifc.name} is not allowed \
+          while the interface configured with DHCP client`
         };
       }
     }

@@ -1523,7 +1523,7 @@ const sync = async (deviceId, org) => {
     });
   }
 
-  if (bgp.enable) {
+  if (bgp?.enable) {
     let bgpData = await transformBGP(bgp, interfaces.filter(i => i.isAssigned));
     bgpData = omitBy(bgpData, val => val === '');
     if (!isEmpty(bgpData)) {
