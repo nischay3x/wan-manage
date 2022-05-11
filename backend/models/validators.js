@@ -23,7 +23,7 @@ const filenamify = require('filenamify');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
 
 // Globals
-const protocols = ['OSPF', 'NONE'];
+const protocols = ['OSPF', 'NONE', 'BGP', 'OSPF,BGP'];
 const interfaceTypes = ['WAN', 'LAN', 'NONE'];
 
 // Helper functions

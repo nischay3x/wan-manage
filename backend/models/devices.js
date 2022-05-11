@@ -370,6 +370,10 @@ const staticroutesSchema = new Schema({
     type: Boolean,
     default: false
   },
+  redistributeViaBGP: {
+    type: Boolean,
+    default: false
+  },
   ...pendingSchema
 }, {
   timestamps: true
@@ -606,6 +610,37 @@ const deviceFrrAccessListSchema = new Schema({
 });
 
 /**
+ * Device FRR route maps Schema
+ */
+const deviceFrrRouteMapsSchema = new Schema({
+  name: {
+    type: String,
+    required: true
+  },
+  description: {
+    type: String,
+    required: true
+  },
+  action: {
+    type: String,
+    enum: ['permit', 'deny'],
+    required: true
+  },
+  sequence: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'sequence should be a number'
+    }
+  },
+  accessList: {
+    type: String,
+    required: true
+  }
+});
+
+/**
  * Device multilink policy schema
  */
 const deviceMultilinkPolicySchema = new Schema({
@@ -738,6 +773,12 @@ const BGPNeighborSchema = new Schema({
     }
   },
   password: {
+    type: String
+  },
+  routeMapInboundFilter: {
+    type: String
+  },
+  routeMapOutboundFilter: {
     type: String
   }
 }, {
@@ -989,6 +1030,9 @@ const deviceSchema = new Schema({
   },
   frrAccessLists: {
     type: [deviceFrrAccessListSchema]
+  },
+  frrRouteMaps: {
+    type: [deviceFrrRouteMapsSchema]
   },
   applications: [deviceApplicationSchema]
 },

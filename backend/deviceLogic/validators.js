@@ -20,7 +20,9 @@ const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const { getMajorVersion } = require('../versioning');
+const keyBy = require('lodash/keyBy');
 const maxMetric = 2 * 10 ** 9;
+
 /**
  * Checks whether a value is empty
  * @param  {string}  val the value to be checked
@@ -486,7 +488,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
     }
   }
 
-  // Firewall rules validation
+  // FRR Access lists validation
   if (device.frrAccessLists) {
     for (const list of device.frrAccessLists) {
       const name = list.name;
@@ -498,9 +500,54 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
         };
       }
     }
-
-    // TODO: Check if list used by a route map
   }
+
+  // FRR Route Maps validation
+  if (device.frrRouteMaps) {
+    for (const routeMap of device.frrRouteMaps) {
+      const name = routeMap.name;
+      const duplicateName = device.frrRouteMaps.filter(l => l.name === name).length > 1;
+      if (duplicateName) {
+        return {
+          valid: false,
+          err: 'FRR route maps with the same name are not allowed'
+        };
+      }
+
+      if (routeMap.accessList && routeMap.accessList !== '') {
+        const accessListExists = device.frrAccessLists.find(l => l.name === routeMap.accessList);
+        if (!accessListExists) {
+          return {
+            valid: false,
+            err: `"${routeMap.name}" FRR Route map uses an unrecognized \
+            access list ("${routeMap.accessList}")`
+          };
+        }
+      }
+    }
+  }
+
+  const routeMapNames = keyBy(device.frrRouteMaps, 'name');
+  for (const bgpNeighbor of device.bgp.neighbors) {
+    const inboundFilter = bgpNeighbor.routeMapInboundFilter;
+    const outboundFilter = bgpNeighbor.routeMapOutboundFilter;
+    if (inboundFilter && inboundFilter !== '' && !(inboundFilter in routeMapNames)) {
+      return {
+        valid: false,
+        err: `BGP neighbor ${bgpNeighbor.ip} uses an  \
+        unrecognized FRR Route Map name ("${inboundFilter}")`
+      };
+    }
+
+    if (outboundFilter && outboundFilter !== '' && !(outboundFilter in routeMapNames)) {
+      return {
+        valid: false,
+        err: `BGP neighbor ${bgpNeighbor.ip} uses an \
+        unrecognized FRR Route Map name ("${outboundFilter}")`
+      };
+    }
+  }
+
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {

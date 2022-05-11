@@ -9195,6 +9195,10 @@ components:
           items:
             $ref: '#/components/schemas/FrrAccessList'
           type: array
+        frrRouteMaps:
+          items:
+            $ref: '#/components/schemas/FrrRouteMap'
+          type: array
         coords:
           items:
             type: number
@@ -9314,6 +9318,7 @@ components:
           enum:
           - OSPF
           - BGP
+          - OSPF,BGP
           - NONE
           type: string
         type:
@@ -9545,6 +9550,26 @@ components:
           items:
             $ref: '#/components/schemas/FrrAccessListRule'
           type: array
+      type: object
+    FrrRouteMap:
+      example:
+        $ref: '#/components/examples/FrrRouteMapExample'
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        sequence:
+          type: string
+          pattern: ^\d+$
+          description: sequence number
+        action:
+          enum:
+          - permit
+          - deny
+          type: string
+        accessList:
+          type: string
       type: object
     FrrAccessListRule:
       example:
@@ -11412,6 +11437,13 @@ components:
         sequence: 100
         action: permit
         network: any
+    FrrRouteMapExample:
+      value:
+        name: list name
+        description: list description
+        action: permit
+        sequence: 100
+        accessList: default
     FrrAccessListRuleBExample:
       value:
         sequence: 200

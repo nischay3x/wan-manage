@@ -158,7 +158,8 @@ class DevicesService {
       'ospf',
       'coords',
       'bgp',
-      'frrAccessLists'
+      'frrAccessLists',
+      'frrRouteMaps'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
