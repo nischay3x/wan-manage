@@ -295,7 +295,7 @@ class ExpressServer {
     // "catchall" handler, for any request that doesn't match one above, send back index.html file.
     this.app.get('*', (req, res, next) => {
       logger.info('Route not found', { req: req });
-      this.sendIndexFile(res);
+      this.sendIndexFile(req, res);
     });
 
     // catch 404 and forward to error handler
