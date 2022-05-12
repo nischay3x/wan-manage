@@ -46,7 +46,7 @@ const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
 const { getBridges } = require('../utils/deviceUtils');
-
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
@@ -114,9 +114,14 @@ const prepareIfcParams = (interfaces, newDevice) => {
  * Transforms mongoose array of interfaces into array of objects
  *
  * @param {*} interfaces
+ * @param {*} globalOSPF device globalOspf configuration
+ * @param {*} deviceVersion
  * @returns array of interfaces
  */
-const transformInterfaces = (interfaces, globalOSPF) => {
+const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
+  const majorVersion = getMajorVersion(deviceVersion);
+  const minorVersion = getMinorVersion(deviceVersion);
+
   return interfaces.map(ifc => {
     const ifcObg = {
       _id: ifc._id,
@@ -132,7 +137,6 @@ const transformInterfaces = (interfaces, globalOSPF) => {
       gateway: ifc.gateway,
       metric: ifc.metric,
       mtu: ifc.mtu,
-      routing: ifc.routing,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
       pathlabels: ifc.pathlabels,
@@ -142,6 +146,12 @@ const transformInterfaces = (interfaces, globalOSPF) => {
       dnsDomains: ifc.dnsDomains,
       useDhcpDnsServers: ifc.useDhcpDnsServers
     };
+
+    if (majorVersion >= 5 && minorVersion >= 3) {
+      ifcObg.routing = ifc.routing.split(/,\s*/); // send as list
+    } else {
+      ifcObg.routing = ifc.routing;
+    }
 
     // add ospf data if relevant
     if (ifcObg.routing === 'OSPF') {
@@ -198,6 +208,56 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             dev_id: item.devId,
             metric: item.metric
           }
+        };
+      }));
+    }
+  }
+
+  // frr access lists
+  if (has(messageParams, 'modify_frr_access_lists')) {
+    const { remove, add } = messageParams.modify_frr_access_lists;
+
+    if (remove) {
+      requests.push(remove.map(item => {
+        return {
+          entity: 'agent',
+          message: 'remove-frr-access-list',
+          params: { ...item }
+        };
+      }));
+    }
+
+    if (add) {
+      requests.push(add.map(item => {
+        return {
+          entity: 'agent',
+          message: 'add-frr-access-list',
+          params: { ...item }
+        };
+      }));
+    }
+  }
+
+  // frr route maps
+  if (has(messageParams, 'modify_frr_route_maps')) {
+    const { remove, add } = messageParams.modify_frr_route_maps;
+
+    if (remove) {
+      requests.push(remove.map(item => {
+        return {
+          entity: 'agent',
+          message: 'remove-frr-route-map',
+          params: { ...item }
+        };
+      }));
+    }
+
+    if (add) {
+      requests.push(add.map(item => {
+        return {
+          entity: 'agent',
+          message: 'add-frr-route-map',
+          params: { ...item }
         };
       }));
     }
@@ -611,6 +671,8 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     !has(messageParams, 'modify_dhcp_config') &&
     !has(messageParams, 'modify_ospf') &&
     !has(messageParams, 'modify_bgp') &&
+    !has(messageParams, 'modify_frr_access_lists') &&
+    !has(messageParams, 'modify_frr_route_maps') &&
     !has(messageParams, 'modify_firewall') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
@@ -908,6 +970,44 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
 };
 
 /**
+ * Transform FRR access list params
+ * @param  {array} frrAccessLists frrAccessLists array
+ * @return {array}   frrAccessLists array
+ */
+const transformFrrAccessLists = (frrAccessLists) => {
+  return frrAccessLists.map(list => {
+    return {
+      name: list.name,
+      description: list.description,
+      rules: list.rules.map(r => {
+        return {
+          sequence: r.sequence,
+          action: r.action,
+          network: r.network
+        };
+      })
+    };
+  });
+};
+
+/**
+ * Transform FRR route maps list params
+ * @param  {array} frrRouteMaps frrRouteMaps array
+ * @return {array}   frrRouteMaps array
+ */
+const transformFrrRouteMaps = (frrRouteMaps) => {
+  return frrRouteMaps.map(routeMap => {
+    return {
+      name: routeMap.name,
+      description: routeMap.description,
+      action: routeMap.action,
+      sequence: routeMap.sequence,
+      accessList: routeMap.accessList
+    };
+  });
+};
+
+/**
  * Creates a modify-ospf object
  * @param  {Object} origDevice device object before changes in the database
  * @param  {Object} newDevice  device object after changes in the database
@@ -926,45 +1026,18 @@ const transformOSPF = (ospf) => {
  * @param  {Object} interfaces  assigned interfaces of device
  * @return {Object}            an object containing an array of routes
  */
-const transformBGP = async (bgp, interfaces) => {
-  const neighbors = [];
-
-  // for (const ifc of interfaces.filter(i => i.type === 'WAN')) {
-  //   const tunnels = await tunnelsModel
-  //     .find({
-  //       isActive: true,
-  //       $or: [{ interfaceA: ifc._id }, { interfaceB: ifc._id }]
-  //     })
-  //     .populate('deviceA')
-  //     .populate('deviceB');
-
-  //   for (const tunnel of tunnels) {
-  //     const tunnelParams = generateTunnelParams(tunnel.num);
-  //     const ifcId = ifc._id.toString();
-  //     neighbors.push({
-  //       // we use the remote side of the tunnel as neighbor
-  //       ip: tunnel.interfaceA.toString() === ifcId ? tunnelParams.ip2 : tunnelParams.ip1,
-  //       // we use the local ASN to establish iBGP between them
-  //       remoteASN: bgp.localASN
-  //     });
-  //   }
-  // }
-
-  bgp.neighbors.forEach(n => {
-    const neighborObj = {
+const transformBGP = (bgp, interfaces) => {
+  const neighbors = bgp.neighbors.map(n => {
+    return {
       ip: n.ip,
-      remoteASN: n.remoteASN
+      remoteASN: n.remoteASN,
+      password: n.password || '',
+      accessList: n.accessList || ''
     };
-
-    if (n.password) {
-      neighborObj.password = n.password;
-    }
-
-    neighbors.push(neighborObj);
   });
 
   const networks = [];
-  interfaces.filter(i => i.routing === 'BGP').forEach(i => {
+  interfaces.filter(i => i.routing === 'BGP' || i.routing === 'OSPF,BGP').forEach(i => {
     networks.push({
       ipv4: `${i.IPv4}/${i.IPv4Mask}`
     });
@@ -991,9 +1064,8 @@ const transformBGP = async (bgp, interfaces) => {
  */
 const prepareModifyBGP = async (origDevice, newDevice) => {
   const [origBGP, newBGP] = [
-    // transformBGP(origDevice.bgp, origDevice.interfaces.filter(bgpAssignedFilter)),
-    await transformBGP(origDevice.bgp, origDevice.interfaces.filter(i => i.isAssigned)),
-    await transformBGP(newDevice.bgp, newDevice.interfaces.filter(i => i.isAssigned))
+    transformBGP(origDevice.bgp, origDevice.interfaces.filter(i => i.isAssigned)),
+    transformBGP(newDevice.bgp, newDevice.interfaces.filter(i => i.isAssigned))
   ];
 
   const origEnable = origDevice.bgp.enable;
@@ -1016,6 +1088,70 @@ const prepareModifyBGP = async (origDevice, newDevice) => {
 
   // if there is a change, send pair of remove-bgp and add-bgp
   return { remove: origBGP, add: newBGP };
+};
+
+/**
+ * Creates add/remove-frr-access-list jobs
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing add and remove ospf parameters
+ */
+const prepareModifyFRRAccessLists = (origDevice, newDevice) => {
+  const [origLists, newLists] = [
+    transformFrrAccessLists(origDevice.frrAccessLists),
+    transformFrrAccessLists(newDevice.frrAccessLists)
+  ];
+
+  const [addFrrAccessLists, removeFrrAccessLists] = [
+    differenceWith(
+      newLists,
+      origLists,
+      (origList, newList) => {
+        return isEqual(origList, newList);
+      }
+    ),
+    differenceWith(
+      origLists,
+      newLists,
+      (origList, newList) => {
+        return isEqual(origList, newList);
+      }
+    )
+  ];
+
+  return { addFrrAccessLists, removeFrrAccessLists };
+};
+
+/**
+ * Creates add/remove-frr-route-map jobs
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing add and remove ospf parameters
+ */
+const prepareModifyFRRRouteMaps = (origDevice, newDevice) => {
+  const [origRouteMaps, newRouteMaps] = [
+    transformFrrRouteMaps(origDevice.frrRouteMaps),
+    transformFrrRouteMaps(newDevice.frrRouteMaps)
+  ];
+
+  const [addFrrRouteMaps, removeFrrRouteMaps] = [
+    differenceWith(
+      newRouteMaps,
+      origRouteMaps,
+      (origRouteMap, newRouteMap) => {
+        return isEqual(origRouteMap, newRouteMap);
+      }
+    ),
+    differenceWith(
+      origRouteMaps,
+      newRouteMaps,
+      (origRouteMap, newRouteMap) => {
+        return isEqual(origRouteMap, newRouteMap);
+      }
+    )
+  ];
+
+  return { addFrrRouteMaps, removeFrrRouteMaps };
 };
 
 /**
@@ -1171,6 +1307,22 @@ const apply = async (device, user, data) => {
     modifyParams.modify_bgp = { remove: removeBGP, add: addBGP };
   }
 
+  // Create FRR access lists modification parameters
+  const {
+    removeFrrAccessLists, addFrrAccessLists
+  } = prepareModifyFRRAccessLists(device[0], data.newDevice);
+  if (removeFrrAccessLists.length > 0 || addFrrAccessLists.length > 0) {
+    modifyParams.modify_frr_access_lists = { remove: removeFrrAccessLists, add: addFrrAccessLists };
+  }
+
+  // Create FRR route maps list parameters
+  const {
+    addFrrRouteMaps, removeFrrRouteMaps
+  } = prepareModifyFRRRouteMaps(device[0], data.newDevice);
+  if (addFrrRouteMaps.length > 0 || removeFrrRouteMaps.length > 0) {
+    modifyParams.modify_frr_route_maps = { remove: removeFrrRouteMaps, add: addFrrRouteMaps };
+  }
+
   modifyParams.modify_router = {};
   const oldBridges = getBridges(device[0].interfaces);
   const newBridges = getBridges(data.newDevice.interfaces);
@@ -1204,9 +1356,10 @@ const apply = async (device, user, data) => {
   // Compare the array of interfaces, and return
   // an array of the interfaces that have changed
   // First, extract only the relevant interface fields
+  const origDeviceVersion = device[0].versions.agent;
   const [origInterfaces, origIsAssigned] = [
     // add global ospf settings to each interface
-    transformInterfaces(device[0].interfaces, device[0].ospf),
+    transformInterfaces(device[0].interfaces, device[0].ospf, origDeviceVersion),
     device[0].interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -1216,9 +1369,10 @@ const apply = async (device, user, data) => {
     })
   ];
 
+  const newDeviceVersion = data.newDevice.versions.agent;
   const [newInterfaces, newIsAssigned] = [
     // add global ospf settings to each interface
-    transformInterfaces(data.newDevice.interfaces, data.newDevice.ospf),
+    transformInterfaces(data.newDevice.interfaces, data.newDevice.ospf, newDeviceVersion),
     data.newDevice.interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -1360,6 +1514,8 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_router') ||
       has(modifyParams, 'modify_interfaces') ||
       has(modifyParams, 'modify_ospf') ||
+      has(modifyParams, 'modify_frr_access_lists') ||
+      has(modifyParams, 'modify_frr_route_maps') ||
       has(modifyParams, 'modify_bgp') ||
       has(modifyParams, 'modify_firewall') ||
       has(modifyParams, 'modify_dhcp_config');
@@ -1455,7 +1611,9 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const { interfaces, staticroutes, dhcp, ospf, bgp } = await devices.findOne(
+  const {
+    interfaces, staticroutes, dhcp, ospf, bgp, frrAccessLists, frrRouteMaps, versions
+  } = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
@@ -1463,6 +1621,8 @@ const sync = async (deviceId, org) => {
       dhcp: 1,
       ospf: 1,
       bgp: 1,
+      frrRouteMaps: 1,
+      frrAccessLists: 1,
       versions: 1
     }
   )
@@ -1486,7 +1646,7 @@ const sync = async (deviceId, org) => {
   });
 
   // build interfaces
-  buildInterfaces(interfaces, ospf).forEach(item => {
+  buildInterfaces(interfaces, ospf, versions.agent).forEach(item => {
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-interface',
@@ -1523,8 +1683,36 @@ const sync = async (deviceId, org) => {
     });
   }
 
+  // Prepare add-frr-access-list message
+  const frrAccessListsData = transformFrrAccessLists(frrAccessLists);
+  frrAccessListsData.forEach(entry => {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-frr-access-list',
+      params: entry
+    });
+  });
+
+  // Prepare add-frr-route-map message
+  const frrRouteMapsData = transformFrrRouteMaps(frrRouteMaps);
+  frrRouteMapsData.forEach(entry => {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-frr-route-map',
+      params: entry
+    });
+  });
+
+  if (!isEmpty(ospfData)) {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-ospf',
+      params: ospfData
+    });
+  }
+
   if (bgp?.enable) {
-    let bgpData = await transformBGP(bgp, interfaces.filter(i => i.isAssigned));
+    let bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned));
     bgpData = omitBy(bgpData, val => val === '');
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({

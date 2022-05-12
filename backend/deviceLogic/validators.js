@@ -562,7 +562,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
   if (device.bgp.enable) {
     const routerId = device.bgp.routerId;
     const routerIdExists = orgBgpDevices.find(d => {
-      return d._id !== device._id && d.bgp.routerId === routerId;
+      return d._id.toString() !== device._id.toString() && d.bgp.routerId === routerId;
     });
 
     if (routerIdExists) {
