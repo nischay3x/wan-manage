@@ -8214,6 +8214,7 @@ components:
     OrganizationRequest:
       example:
         name: name
+        description: description
         group: group
         encryptionMethod: ikev2
       required:
@@ -8222,6 +8223,8 @@ components:
         - encryptionMethod
       properties:
         name:
+          type: string
+        description:
           type: string
         group:
           type: string
@@ -8235,6 +8238,7 @@ components:
     Organization:
       example:
         name: name
+        description: description
         _id: _id
         account: account
         group: group
@@ -8245,6 +8249,8 @@ components:
           minLength: 24
           type: string
         name:
+          type: string
+        description:
           type: string
         group:
           type: string
