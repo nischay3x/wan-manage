@@ -33,6 +33,9 @@ describe('validateDevice', () => {
 
   beforeEach(() => {
     device = {
+      bgp: {
+        neighbors: []
+      },
       interfaces: [{
         name: 'eth0',
         devId: '00:02.00',
