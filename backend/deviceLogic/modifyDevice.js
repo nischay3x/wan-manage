@@ -1032,7 +1032,8 @@ const transformBGP = (bgp, interfaces) => {
       ip: n.ip,
       remoteASN: n.remoteASN,
       password: n.password || '',
-      accessList: n.accessList || ''
+      routeMapInboundFilter: n.routeMapInboundFilter || '',
+      routeMapOutboundFilter: n.routeMapOutboundFilter || ''
     };
   });
 

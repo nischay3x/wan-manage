@@ -307,6 +307,13 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
 
+    if ((ifc.routing === 'BGP' || ifc.routing === 'OSPF,BGP') && !device.bgp.enable) {
+      return {
+        valid: false,
+        err: `Cannot set BGP routing protocol for interface ${ifc.name}. BGP is not enabled`
+      };
+    }
+
     if (ifc.type === 'LAN') {
       // Path labels are not allowed on LAN interfaces
       if (ifc.pathlabels.length !== 0) {
@@ -561,14 +568,25 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
 
   if (device.bgp.enable) {
     const routerId = device.bgp.routerId;
+    const localASN = device.bgp.localASN;
+    let errMsg = '';
     const routerIdExists = orgBgpDevices.find(d => {
-      return d._id.toString() !== device._id.toString() && d.bgp.routerId === routerId;
+      if (d._id.toString() === device._id.toString()) return false;
+      if (d.bgp.routerId === routerId) {
+        errMsg = `Device ${d.name} already configured the requests BGP router ID`;
+        return true;
+      }
+
+      if (d.bgp.localASN === localASN) {
+        errMsg = `Device ${d.name} already configured the requests BGP local ASN`;
+        return true;
+      }
     });
 
     if (routerIdExists) {
       return {
         valid: false,
-        err: `Device ${routerIdExists.name} already configured the requests BGP router ID`
+        err: errMsg
       };
     }
   }

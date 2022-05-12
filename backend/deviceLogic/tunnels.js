@@ -607,6 +607,22 @@ const applyTunnelAdd = async (devices, user, data) => {
     return arr;
   }, []);
 
+  const updDevices = await devicesModel.find({
+    _id: { $in: devices.map(d => d._id) }
+  });
+
+  const modifyDeviceDispatcher = require('./modifyDevice').apply;
+  for (let i = 0; i < updDevices.length; i++) {
+    await modifyDeviceDispatcher(
+      [devices[i]],
+      { username: 'system' },
+      {
+        org: org.toString(),
+        newDevice: updDevices[i]
+      }
+    );
+  }
+
   const status = fulfilled.length < dbTasks.length
     ? 'partially completed' : 'completed';
 
@@ -1433,6 +1449,23 @@ const applyTunnelDel = async (devices, user, data) => {
     });
 
     const promiseStatus = await Promise.allSettled(delPromises);
+
+    const updDevices = await devicesModel.find({
+      _id: { $in: devices.map(d => d._id) }
+    });
+
+    const modifyDeviceDispatcher = require('./modifyDevice').apply;
+    for (let i = 0; i < updDevices.length; i++) {
+      await modifyDeviceDispatcher(
+        [devices[i]],
+        { username: 'system' },
+        {
+          org: org.toString(),
+          newDevice: updDevices[i]
+        }
+      );
+    }
+
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
         const job = elem.value;
