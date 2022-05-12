@@ -58,7 +58,7 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
- * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {String}   topology topology of created tunnels (hubAndSpoke|fullMesh)
  * @param  {Number}   hubIdx index of the hub in 'Hub and Spoke' topology
  * @param  {set}      reasons reference to Set of reasons
@@ -292,7 +292,7 @@ const handleTunnels = async (
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
- * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {array}    peersIds array of peers ids
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
@@ -534,7 +534,7 @@ const applyTunnelAdd = async (devices, user, data) => {
   }
 
   const { pathLabels, advancedOptions, peers, topology, hub } = data.meta;
-  const { mtu, mssClamp, ospfCost } = advancedOptions || {};
+  const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
 
   if (mtu !== undefined && mtu !== '' && (isNaN(mtu) || mtu < 500 || mtu > 1500)) {
     logger.error('Wrong MTU value when creating tunnels', { params: { mtu } });
@@ -565,6 +565,13 @@ const applyTunnelAdd = async (devices, user, data) => {
     if (hubIdx === -1) {
       logger.error('Hub device not found', { params: { hub: hub } });
       throw new Error('Hub device not found');
+    }
+  }
+
+  if (routing === 'bgp') {
+    const bothInstalledBGP = devices.every(d => d.bgp.enable === true);
+    if (!bothInstalledBGP) {
+      throw new Error('BGP is not enabled on all selected devices');
     }
   }
 
@@ -714,7 +721,7 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB, peerId = false) => {
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
  * @param  {string}   encryptionMethod key exchange method [none|ikev2|psk]
- * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {boolean}  peer         peer configurations
  */
 const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
@@ -953,7 +960,7 @@ const queueTunnel = async (
  * @param  {pathLabel} path label used for this tunnel
  * @param  {Object} deviceA details of device A
  * @param  {Object?} deviceB details of device B
- * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {Object?}  peer peer configurations
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
@@ -1162,7 +1169,7 @@ const prepareTunnelAddJob = async (
  * @param  {Object?}  deviceB      details of device B
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
- * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {Object?}  peer         peer configurations
  * @return {void}
  */
@@ -1193,7 +1200,7 @@ const addTunnel = async (
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
   // Advanced tunnel options
-  const { mtu, mssClamp, ospfCost } = advancedOptions || {};
+  const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
 
   // check if need to create the tunnel as pending
   let isPending = false;
@@ -1235,12 +1242,47 @@ const addTunnel = async (
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,
-      advancedOptions: { mtu, mssClamp, ospfCost },
+      advancedOptions: { mtu, mssClamp, ospfCost, routing },
       peer: peer ? peer._id : null
     },
     // Options
     { upsert: true, new: true }
   );
+
+  // create bgp neighbors automatically for both devices.
+  // for peer tunnel, the user should create the bgp neighbors manually since
+  // we don't know the remote asn and other configurations
+  if (routing === 'bgp' && !peer) {
+    // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
+    const tunnelParams = generateTunnelParams(tunnel.num);
+
+    const deviceANeighbor = {
+      ip: tunnelParams.ip2,
+      remoteASN: deviceB.bgp.localASN,
+      password: deviceB.bgp.password || ''
+    };
+
+    const deviceBNeighbor = {
+      ip: tunnelParams.ip1,
+      remoteASN: deviceA.bgp.localASN
+    };
+
+    if (!deviceA.bgp.neighbors.find(n => n.ip === deviceANeighbor.ip)) {
+      await devicesModel.updateOne(
+        { _id: deviceA._id },
+        { $push: { 'bgp.neighbors': deviceANeighbor } },
+        { upsert: false }
+      );
+    }
+
+    if (!deviceB.bgp.neighbors.find(n => n.ip === deviceBNeighbor.ip)) {
+      await devicesModel.updateOne(
+        { _id: deviceB._id },
+        { $push: { 'bgp.neighbors': deviceBNeighbor } },
+        { upsert: false }
+      );
+    }
+  }
 
   // don't send jobs for pending tunnels
   if (isPending) {
@@ -1449,7 +1491,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   };
 
   // Define devices
-  const { num, deviceA, deviceB, pathLabel, peer } = tunnelResp;
+  const { num, deviceA, deviceB, pathLabel, peer, advancedOptions } = tunnelResp;
 
   // Check is tunnel used by any static route
   const { ip1, ip2 } = generateTunnelParams(num);
@@ -1494,6 +1536,25 @@ const oneTunnelDel = async (tunnelID, user, org) => {
     // Options
     { upsert: false, new: true }
   );
+
+  const { routing } = advancedOptions || {};
+  if (routing === 'bgp' && !peer) {
+    if (deviceA.bgp.neighbors.find(n => n.ip === ip2)) {
+      await devicesModel.updateOne(
+        { _id: deviceA._id },
+        { $pull: { 'bgp.neighbors': { ip: ip2 } } },
+        { upsert: false }
+      );
+    }
+
+    if (deviceB.bgp.neighbors.find(n => n.ip === ip1)) {
+      await devicesModel.updateOne(
+        { _id: deviceB._id },
+        { $pull: { 'bgp.neighbors': { ip: ip1 } } },
+        { upsert: false }
+      );
+    }
+  }
 
   // remove the tunnel status from memory
   const deviceStatus = require('../periodic/deviceStatus')();
@@ -1752,7 +1813,7 @@ const sync = async (deviceId, org) => {
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object?} deviceBIntf device B tunnel interface
  * @param  {pathLabel?} path label used for this tunnel
- * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {Object?}  peer peer configurations. If exists, fill peer configurations
 */
 const prepareTunnelParams = (
@@ -1771,7 +1832,7 @@ const prepareTunnelParams = (
     deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : 1500
   ) - packetHeaderSize;
 
-  let { mtu, ospfCost, mssClamp } = advancedOptions;
+  let { mtu, ospfCost, mssClamp, routing } = advancedOptions;
   if (!mtu) {
     mtu = (globalTunnelMtu > 0) ? globalTunnelMtu : minMtu;
   }
@@ -1792,7 +1853,7 @@ const prepareTunnelParams = (
 
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
-    paramsDeviceA.peer.routing = 'ospf';
+    paramsDeviceA.peer.routing = routing || 'ospf';
     paramsDeviceA.peer.mtu = mtu;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
@@ -1817,7 +1878,7 @@ const prepareTunnelParams = (
       addr: tunnelParams.ip1 + '/31',
       mac: tunnelParams.mac1,
       mtu: mtu,
-      routing: 'ospf',
+      routing: routing || 'ospf',
       multilink: {
         labels: pathLabel ? [pathLabel] : []
       }
@@ -1836,7 +1897,7 @@ const prepareTunnelParams = (
       addr: tunnelParams.ip2 + '/31',
       mac: tunnelParams.mac2,
       mtu: mtu,
-      routing: 'ospf',
+      routing: routing || 'ospf',
       multilink: {
         labels: pathLabel ? [pathLabel] : []
       }

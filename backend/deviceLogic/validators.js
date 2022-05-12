@@ -255,9 +255,10 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
  * @param {Object}  device                 the device to check
  * @param {Boolean} isRunning              is the device running
  * @param {[_id: objectId, name: string, type: string, subnet: string]} orgSubnets to check overlaps
+ * @param {[_id: objectId, bgp: object]} orgBgpDevices
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, isRunning = false, orgSubnets = []) => {
+const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevices = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -528,6 +529,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
   }
 
   const routeMapNames = keyBy(device.frrRouteMaps, 'name');
+  const usedNeighborIps = {};
   for (const bgpNeighbor of device.bgp.neighbors) {
     const inboundFilter = bgpNeighbor.routeMapInboundFilter;
     const outboundFilter = bgpNeighbor.routeMapOutboundFilter;
@@ -544,6 +546,29 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
         valid: false,
         err: `BGP neighbor ${bgpNeighbor.ip} uses an \
         unrecognized FRR Route Map name ("${outboundFilter}")`
+      };
+    }
+
+    if (bgpNeighbor.ip in usedNeighborIps) {
+      return {
+        valid: false,
+        err: 'Duplication in BGP neighbor IP is not allowed'
+      };
+    } else {
+      usedNeighborIps[bgpNeighbor.ip] = 1;
+    }
+  }
+
+  if (device.bgp.enable) {
+    const routerId = device.bgp.routerId;
+    const routerIdExists = orgBgpDevices.find(d => {
+      return d._id !== device._id && d.bgp.routerId === routerId;
+    });
+
+    if (routerIdExists) {
+      return {
+        valid: false,
+        err: `Device ${routerIdExists.name} already configured the requests BGP router ID`
       };
     }
   }

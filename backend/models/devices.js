@@ -773,13 +773,16 @@ const BGPNeighborSchema = new Schema({
     }
   },
   password: {
-    type: String
+    type: String,
+    default: ''
   },
   routeMapInboundFilter: {
-    type: String
+    type: String,
+    default: ''
   },
   routeMapOutboundFilter: {
-    type: String
+    type: String,
+    default: ''
   }
 }, {
   timestamps: true
