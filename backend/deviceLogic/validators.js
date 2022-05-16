@@ -514,11 +514,13 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
   if (device.frrRouteMaps) {
     for (const routeMap of device.frrRouteMaps) {
       const name = routeMap.name;
-      const duplicateName = device.frrRouteMaps.filter(l => l.name === name).length > 1;
+      const sequence = routeMap.sequence;
+      const duplicateName = device.frrRouteMaps.filter(
+        l => l.name === name && l.sequence === sequence).length > 1;
       if (duplicateName) {
         return {
           valid: false,
-          err: 'FRR route maps with the same name are not allowed'
+          err: 'FRR route maps with the same name and sequence is not allowed'
         };
       }
 
@@ -657,8 +659,15 @@ const isIPv4Address = (ip, mask) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateStaticRoute = (device, tunnels, route) => {
-  const { ifname, gateway, isPending } = route;
+  const { ifname, gateway, isPending, redistributeViaBGP } = route;
   const gatewaySubnet = `${gateway}/32`;
+
+  if (redistributeViaBGP && !device.bgp.enable) {
+    return {
+      valid: false,
+      err: 'Cannot redistribute static route via BGP. Please enable BGP first'
+    };
+  }
 
   if (ifname) {
     const ifc = device.interfaces.find(i => i.devId === ifname);

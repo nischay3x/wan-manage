@@ -636,7 +636,7 @@ const deviceFrrRouteMapsSchema = new Schema({
   },
   accessList: {
     type: String,
-    required: true
+    default: ''
   }
 });
 
@@ -1003,6 +1003,10 @@ const deviceSchema = new Schema({
         message: props => `${props.value} should be a vaild interval`
       }
     },
+    redistributeOspf: {
+      type: Boolean,
+      default: true
+    },
     neighbors: [BGPNeighborSchema]
   },
   ospf: {
@@ -1029,6 +1033,10 @@ const deviceSchema = new Schema({
         validator: validators.validateOSPFInterval,
         message: props => `${props.value} should be a valid integer`
       }
+    },
+    redistributeBgp: {
+      type: Boolean,
+      default: true
     }
   },
   frrAccessLists: {

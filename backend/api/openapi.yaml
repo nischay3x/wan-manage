@@ -9599,6 +9599,7 @@ components:
         keepaliveInterval: 30
         holdInterval: 90
         routerId: A.B.C.D
+        redistributeOspf: true
         neighbors:
         - ip: 1.1.1.1/24
           remoteASN: 6
@@ -9620,6 +9621,9 @@ components:
         routerId:
           type: string
           description: The Router ID of the router
+        redistributeOspf:
+          type: boolean
+          description: If to redistribute to BGP routes that learned by OSPF
         neighbors:
           items:
             $ref: '#/components/schemas/BgpNeighbor'
@@ -9647,6 +9651,7 @@ components:
         helloInterval: 10
         deadInterval: 40
         routerId: A.B.C.D
+        redistributeBgp: true
       properties:
         helloInterval:
           type: integer
@@ -9657,6 +9662,9 @@ components:
         routerId:
           type: string
           description: The Router ID of the router originating the LSA
+        redistributeBgp:
+          type: boolean
+          description: If to redistribute to OSPF routes that learned by BGP
       type: object
     CoordsConfigs:
       example:

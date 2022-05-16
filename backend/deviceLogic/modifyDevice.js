@@ -150,11 +150,11 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
     if (majorVersion >= 5 && minorVersion >= 3) {
       ifcObg.routing = ifc.routing.split(/,\s*/); // send as list
     } else {
-      ifcObg.routing = ifc.routing;
+      ifcObg.routing = ifc.routing.includes('OSPF') ? 'OSPF' : 'NONE';
     }
 
     // add ospf data if relevant
-    if (ifcObg.routing === 'OSPF') {
+    if (ifc.routing.includes('OSPF')) {
       ifcObg.ospf = {
         ...ifc.ospf.toObject(),
         helloInterval: globalOSPF.helloInterval,
@@ -217,8 +217,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
   if (has(messageParams, 'modify_frr_access_lists')) {
     const { remove, add } = messageParams.modify_frr_access_lists;
 
-    if (remove) {
-      requests.push(remove.map(item => {
+    if (remove && remove.length > 0) {
+      requests.push(...remove.map(item => {
         return {
           entity: 'agent',
           message: 'remove-frr-access-list',
@@ -227,8 +227,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
       }));
     }
 
-    if (add) {
-      requests.push(add.map(item => {
+    if (add && add.length > 0) {
+      requests.push(...add.map(item => {
         return {
           entity: 'agent',
           message: 'add-frr-access-list',
@@ -243,7 +243,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     const { remove, add } = messageParams.modify_frr_route_maps;
 
     if (remove) {
-      requests.push(remove.map(item => {
+      requests.push(...remove.map(item => {
         return {
           entity: 'agent',
           message: 'remove-frr-route-map',
@@ -252,8 +252,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
       }));
     }
 
-    if (add) {
-      requests.push(add.map(item => {
+    if (add && add.length > 0) {
+      requests.push(...add.map(item => {
         return {
           entity: 'agent',
           message: 'add-frr-route-map',
@@ -1016,7 +1016,7 @@ const transformFrrRouteMaps = (frrRouteMaps) => {
 const transformOSPF = (ospf) => {
   // Extract only global fields from ospf
   // The rest fields are per interface and sent to device via add/modify-interface jobs
-  const globalFields = ['routerId'];
+  const globalFields = ['routerId', 'redistributeBgp'];
   return pick(ospf, globalFields);
 };
 
@@ -1050,6 +1050,7 @@ const transformBGP = (bgp, interfaces) => {
     keepaliveInterval: bgp.keepaliveInterval,
     localASN: bgp.localASN,
     neighbors: neighbors,
+    redistributeOspf: bgp.redistributeOspf,
     networks: networks
   };
 
@@ -1704,14 +1705,6 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  if (!isEmpty(ospfData)) {
-    deviceConfRequests.push({
-      entity: 'agent',
-      message: 'add-ospf',
-      params: ospfData
-    });
-  }
-
   if (bgp?.enable) {
     let bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned));
     bgpData = omitBy(bgpData, val => val === '');
@@ -1738,7 +1731,8 @@ const sync = async (deviceId, org) => {
       via: gateway,
       dev_id: ifname || undefined,
       metric: metric ? parseInt(metric, 10) : undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF
+      redistributeViaOSPF: route.redistributeViaOSPF,
+      redistributeViaBGP: route.redistributeViaBGP
     };
 
     deviceConfRequests.push({

@@ -223,6 +223,7 @@ class DevicesService {
           'ifname',
           'metric',
           'redistributeViaOSPF',
+          'redistributeViaBGP',
           'isPending',
           'pendingReason'
         ]);

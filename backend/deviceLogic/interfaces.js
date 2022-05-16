@@ -87,7 +87,7 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
     if (majorVersion >= 5 && minorVersion >= 3) {
       ifcInfo.routing = routing.split(/,\s*/); // send as list
     } else {
-      ifcInfo.routing = routing;
+      ifcInfo.routing = routing.includes('OSPF') ? 'OSPF' : 'NONE';
     }
 
     if (ifc.type === 'WAN') {
@@ -104,7 +104,7 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
       }
     }
 
-    if (ifc.routing === 'OSPF') {
+    if (routing.includes('OSPF')) {
       ifcInfo.ospf = {
         ...ospf,
         ...globalOSPF

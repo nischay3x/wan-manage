@@ -23,6 +23,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'm
 async function up () {
   const defaultBGPGlobalSettings = {
     enable: false,
+    redistributeOspf: true,
     localASN: '',
     routerId: '',
     keepaliveInterval: '30',
@@ -38,7 +39,8 @@ async function up () {
           frrAccessLists: [],
           frrRouteMaps: [],
           'staticroutes.$[].redistributeViaBGP': false,
-          bgp: defaultBGPGlobalSettings
+          bgp: defaultBGPGlobalSettings,
+          'ospf.redistributeBgp': true
         }
       },
       { upsert: false }
@@ -63,7 +65,8 @@ async function down () {
           frrAccessLists: '',
           frrRouteMaps: '',
           'staticroutes.$[].redistributeViaBGP': '',
-          bgp: ''
+          bgp: '',
+          'ospf.redistributeBgp': ''
         }
       },
       { upsert: false }
