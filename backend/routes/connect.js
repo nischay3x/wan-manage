@@ -190,7 +190,7 @@ connectRouter.route('/register')
                   }
                 } else {
                   intf.type = 'LAN';
-                  intf.dhcp = 'no';
+                  intf.dhcp = intf.dhcp || 'no';
                   intf.routing = 'OSPF';
                   intf.gateway = '';
                   intf.metric = '';
