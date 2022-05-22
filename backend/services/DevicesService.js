@@ -225,7 +225,8 @@ class DevicesService {
           'redistributeViaOSPF',
           'redistributeViaBGP',
           'isPending',
-          'pendingReason'
+          'pendingReason',
+          'onLink'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;
