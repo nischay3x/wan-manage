@@ -659,7 +659,7 @@ const isIPv4Address = (ip, mask) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateStaticRoute = (device, tunnels, route) => {
-  const { ifname, gateway, isPending, redistributeViaBGP } = route;
+  const { ifname, gateway, isPending, redistributeViaBGP, onLink } = route;
   const gatewaySubnet = `${gateway}/32`;
 
   if (redistributeViaBGP && !device.bgp.enable) {
@@ -685,10 +685,12 @@ const validateStaticRoute = (device, tunnels, route) => {
     }
     if (!isPending && !cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
       // A pending route may not overlap with an interface
-      return {
-        valid: false,
-        err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
-      };
+      if (onLink !== true) {
+        return {
+          valid: false,
+          err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+        };
+      }
     }
 
     // Don't allow putting static route on a bridged interface

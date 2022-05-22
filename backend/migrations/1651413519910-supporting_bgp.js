@@ -39,6 +39,7 @@ async function up () {
           frrAccessLists: [],
           frrRouteMaps: [],
           'staticroutes.$[].redistributeViaBGP': false,
+          'staticroutes.$[].onLink': false,
           bgp: defaultBGPGlobalSettings,
           'ospf.redistributeBgp': true
         }
@@ -65,6 +66,7 @@ async function down () {
           frrAccessLists: '',
           frrRouteMaps: '',
           'staticroutes.$[].redistributeViaBGP': '',
+          'staticroutes.$[].onLink': '',
           bgp: '',
           'ospf.redistributeBgp': ''
         }

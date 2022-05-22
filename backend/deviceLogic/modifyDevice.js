@@ -316,7 +316,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined,
             redistributeViaOSPF: item.redistributeViaOSPF,
-            redistributeViaBGP: item.redistributeViaBGP
+            redistributeViaBGP: item.redistributeViaBGP,
+            onLink: item.onLink
           }
         });
       }
@@ -330,7 +331,8 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
             devId: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined,
             redistributeViaOSPF: item.redistributeViaOSPF,
-            redistributeViaBGP: item.redistributeViaBGP
+            redistributeViaBGP: item.redistributeViaBGP,
+            onLink: item.onLink
           }
         });
       }
@@ -906,7 +908,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         ifname: route.ifname,
         metric: route.metric,
         redistributeViaOSPF: route.redistributeViaOSPF,
-        redistributeViaBGP: route.redistributeViaBGP
+        redistributeViaBGP: route.redistributeViaBGP,
+        onLink: route.onLink
       });
     }),
 
@@ -917,7 +920,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
         ifname: route.ifname,
         metric: route.metric,
         redistributeViaOSPF: route.redistributeViaOSPF,
-        redistributeViaBGP: route.redistributeViaBGP
+        redistributeViaBGP: route.redistributeViaBGP,
+        onLink: route.onLink
       });
     })
   ];
@@ -951,7 +955,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       devId: route.ifname || undefined,
       metric: route.metric || undefined,
       redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP
+      redistributeViaBGP: route.redistributeViaBGP,
+      onLink: route.onLink
     });
   });
   routesToAdd.forEach(route => {
@@ -962,7 +967,8 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
       devId: route.ifname || undefined,
       metric: route.metric || undefined,
       redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP
+      redistributeViaBGP: route.redistributeViaBGP,
+      onLink: route.onLink
     });
   });
 
@@ -1732,7 +1738,8 @@ const sync = async (deviceId, org) => {
       dev_id: ifname || undefined,
       metric: metric ? parseInt(metric, 10) : undefined,
       redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP
+      redistributeViaBGP: route.redistributeViaBGP,
+      onLink: route.onLink
     };
 
     deviceConfRequests.push({

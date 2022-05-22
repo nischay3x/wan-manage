@@ -374,6 +374,10 @@ const staticroutesSchema = new Schema({
     type: Boolean,
     default: false
   },
+  onLink: {
+    type: Boolean,
+    default: false
+  },
   ...pendingSchema
 }, {
   timestamps: true
