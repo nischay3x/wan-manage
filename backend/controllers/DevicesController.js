@@ -182,34 +182,6 @@ class DevicesController {
   async devicesIdCoordsPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdCoordsPUT);
   }
-
-  async devicesIdRoutingBGPGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.devicesIdRoutingBGPGET);
-  };
-
-  async devicesIdRoutingBGPPUT (request, response) {
-    await Controller.handleRequest(request, response, this.service.devicesIdRoutingBGPPUT);
-  };
-
-  async devicesIdRoutingFrrAccessListsGET (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdRoutingFrrAccessListsGET);
-  };
-
-  async devicesIdRoutingFrrAccessListsPOST (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdRoutingFrrAccessListsPOST);
-  };
-
-  async devicesIdRoutingFrrAccessListsListIdDELETE (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdRoutingFrrAccessListsListIdDELETE);
-  };
-
-  async devicesIdRoutingFrrAccessListsListIdPUT (request, response) {
-    await Controller.handleRequest(
-      request, response, this.service.devicesIdRoutingFrrAccessListsListIdPUT);
-  };
 }
 
 module.exports = DevicesController;
