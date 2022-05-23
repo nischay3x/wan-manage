@@ -181,7 +181,7 @@ class DevicesController {
 
   async devicesIdCoordsPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdCoordsPUT);
-  }
+  };
 }
 
 module.exports = DevicesController;

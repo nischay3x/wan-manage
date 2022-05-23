@@ -107,7 +107,8 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
     if (routing.includes('OSPF')) {
       ifcInfo.ospf = {
         ...ospf,
-        ...globalOSPF
+        helloInterval: globalOSPF.helloInterval,
+        deadInterval: globalOSPF.deadInterval
       };
 
       // remove empty values since they are optional

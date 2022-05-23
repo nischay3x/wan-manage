@@ -607,10 +607,11 @@ const applyTunnelAdd = async (devices, user, data) => {
     return arr;
   }, []);
 
+  // Check if need to trigger modify-device job
+  // bgp neighbors can be added
   const updDevices = await devicesModel.find({
     _id: { $in: devices.map(d => d._id) }
   });
-
   const modifyDeviceDispatcher = require('./modifyDevice').apply;
   for (let i = 0; i < updDevices.length; i++) {
     await modifyDeviceDispatcher(
@@ -1274,8 +1275,7 @@ const addTunnel = async (
 
     const deviceANeighbor = {
       ip: tunnelParams.ip2,
-      remoteASN: deviceB.bgp.localASN,
-      password: deviceB.bgp.password || ''
+      remoteASN: deviceB.bgp.localASN
     };
 
     const deviceBNeighbor = {
@@ -1450,10 +1450,11 @@ const applyTunnelDel = async (devices, user, data) => {
 
     const promiseStatus = await Promise.allSettled(delPromises);
 
+    // After removing the tunnels, check if need to send modify device job
+    // bgp neighbors might be deleted
     const updDevices = await devicesModel.find({
       _id: { $in: devices.map(d => d._id) }
     });
-
     const modifyDeviceDispatcher = require('./modifyDevice').apply;
     for (let i = 0; i < updDevices.length; i++) {
       await modifyDeviceDispatcher(
@@ -1570,6 +1571,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
     { upsert: false, new: true }
   );
 
+  // remove the bgp neighbors
   const { routing } = advancedOptions || {};
   if (routing === 'bgp' && !peer) {
     if (deviceA.bgp.neighbors.find(n => n.ip === ip2)) {
