@@ -48,6 +48,7 @@ class OrganizationsService {
   static selectOrganizationParams (item) {
     const retOrg = pick(item, [
       'name',
+      'description',
       '_id',
       'account',
       'group',
@@ -77,6 +78,7 @@ class OrganizationsService {
         return {
           _id: element._id.toString(),
           name: element.name,
+          description: element.description,
           account: element.account ? element.account.toString() : '',
           group: element.group,
           encryptionMethod: element.encryptionMethod
@@ -125,6 +127,7 @@ class OrganizationsService {
         const result = {
           _id: updUser.defaultOrg._id.toString(),
           name: updUser.defaultOrg.name,
+          description: updUser.defaultOrg.description,
           account: updUser.defaultOrg.account ? updUser.defaultOrg.account.toString() : '',
           group: updUser.defaultOrg.group,
           encryptionMethod: updUser.defaultOrg.encryptionMethod
@@ -263,10 +266,10 @@ class OrganizationsService {
       // are set properly for updating this organization
       const orgList = await getAccessTokenOrgList(user, undefined, false);
       if (orgList.includes(id)) {
-        const { name, group, encryptionMethod } = organizationRequest;
+        const { name, description, group, encryptionMethod } = organizationRequest;
         const resultOrg = await Organizations.findOneAndUpdate(
           { _id: id },
-          { $set: { name, group, encryptionMethod } },
+          { $set: { name, description, group, encryptionMethod } },
           { upsert: false, multi: false, new: true, runValidators: true }
         );
         // Update token
@@ -331,9 +334,19 @@ class OrganizationsService {
                               as: 'intf',
                               cond: {
                                 $and: [
-                                  { $ne: ['$$intf.internetAccess', 'yes'] },
-                                  { $eq: ['$$intf.monitorInternet', true] },
-                                  { $eq: ['$$intf.type', 'WAN'] }]
+                                  {
+                                    $or: [
+                                      { $eq: ['$$intf.linkStatus', 'down'] },
+                                      {
+                                        $and: [
+                                          { $ne: ['$$intf.internetAccess', 'yes'] },
+                                          { $eq: ['$$intf.monitorInternet', true] }
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  { $eq: ['$$intf.type', 'WAN'] }
+                                ]
                               }
                             }
                           }

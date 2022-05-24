@@ -159,8 +159,9 @@ connectRouter.route('/register')
                 intf.isAssigned = false;
                 intf.useStun = true;
                 intf.useFixedPublicPort = false;
+                intf.linkStatus = intf.link;
                 intf.internetAccess = intf.internetAccess === undefined ? ''
-                  : intf.internetAccess ? 'yes' : 'no';
+                  : intf.linkStatus !== 'down' && intf.internetAccess ? 'yes' : 'no';
                 intf.mtu = !isNaN(intf.mtu) ? +intf.mtu : 1500;
                 if (!defaultIntf && intf.name === req.body.default_dev) {
                   // old version agent

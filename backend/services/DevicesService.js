@@ -178,6 +178,7 @@ class DevicesService {
           'useFixedPublicPort',
           'internetAccess',
           'monitorInternet',
+          'linkStatus',
           'gateway',
           'metric',
           'mtu',
@@ -205,6 +206,7 @@ class DevicesService {
         retIf._id = retIf._id.toString();
         // if device is not connected then internet access status is unknown
         retIf.internetAccess = retDevice.isConnected ? retIf.internetAccess : '';
+        retIf.linkStatus = retDevice.isConnected ? retIf.linkStatus : '';
 
         retIf.isPublicAddressRateLimited =
           await publicAddrInfoLimiter.isBlocked(`${deviceId}:${retIf._id}`);
@@ -1338,6 +1340,7 @@ class DevicesService {
                 ? origIntf.PublicPort : configs.get('tunnelPort');
               updIntf.NatType = updIntf.useStun ? origIntf.NatType : 'Static';
               updIntf.internetAccess = origIntf.internetAccess;
+              updIntf.linkStatus = origIntf.linkStatus;
               // Device type is assigned by system only
               updIntf.deviceType = origIntf.deviceType;
 
@@ -3017,7 +3020,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.findOne(
         { _id: id, org: { $in: orgList } },
-        'sync machineId isApproved interfaces.devId interfaces.internetAccess'
+        'sync machineId isApproved interfaces.devId interfaces.internetAccess interfaces.linkStatus'
       ).lean();
       if (!device) {
         return Service.rejectResponse('Device not found', 404);

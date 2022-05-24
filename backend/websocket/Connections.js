@@ -457,6 +457,20 @@ class Connections {
             return i;
           }
 
+          // send a notification if the link changed to down
+          if (updatedConfig.link === 'down' && i.linkStatus !== 'down') {
+            const { org, deviceObj } = prevDeviceInfo;
+            notificationsMgr.sendNotifications([
+              {
+                org: org,
+                title: 'Link status changed',
+                time: new Date(),
+                device: deviceObj,
+                machineId: machineId,
+                details: `Link ${i.name} ${i.IPv4} is DOWN`
+              }
+            ]);
+          }
           const updInterface = {
             ...i.toJSON(),
             PublicIP: updatedConfig.public_ip && i.useStun
@@ -465,7 +479,8 @@ class Connections {
               ? updatedConfig.public_port : i.PublicPort,
             NatType: updatedConfig.nat_type || i.NatType,
             internetAccess: updatedConfig.internetAccess === undefined ? ''
-              : updatedConfig.internetAccess ? 'yes' : 'no',
+              : updatedConfig.link !== 'down' && updatedConfig.internetAccess ? 'yes' : 'no',
+            linkStatus: updatedConfig.link,
             hasIpOnDevice: updatedConfig.IPv4 !== ''
           };
 

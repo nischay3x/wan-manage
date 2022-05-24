@@ -246,6 +246,16 @@ const interfacesSchema = new Schema({
     ],
     default: ''
   },
+  // the interface link status
+  linkStatus: {
+    type: String,
+    enum: [
+      '',
+      'up',
+      'down'
+    ],
+    default: ''
+  },
   // device type - wifi, lte
   deviceType: {
     type: String,

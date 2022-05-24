@@ -59,7 +59,7 @@ class RemoteVpn extends IApplication {
       {
         _id: { $ne: application._id },
         configuration: { $exists: 1 },
-        'configuration.networkId': { $regex: regex, $options: 'i' }
+        'configuration.networkId': { $regex: regex }
       }
     );
 

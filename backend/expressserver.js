@@ -21,7 +21,6 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 const configs = require('./configs')();
-const clientConfig = configs.getClientConfig();
 const swaggerUI = require('swagger-ui-express');
 const yamljs = require('yamljs');
 const express = require('express');
@@ -177,7 +176,7 @@ class ExpressServer {
     this.app.use(cookieParser());
 
     // Routes allowed without authentication
-    this.app.get('/', (req, res) => this.sendIndexFile(res));
+    this.app.get('/', (req, res) => this.sendIndexFile(req, res));
     this.app.use(express.static(path.join(__dirname, configs.get('clientStaticDir'))));
 
     // Secure traffic only
@@ -263,7 +262,10 @@ class ExpressServer {
       });
   }
 
-  sendIndexFile (res) {
+  sendIndexFile (req, res) {
+    // get client config based on request object
+    const clientConfig = configs.getClientConfig(req);
+
     const transformIndex = (origIndex) => {
       let modifiedIndex = configs.get('removeBranding', 'boolean')
         ? origIndex.replace('<title>FlexiWAN Management</title>',
@@ -293,7 +295,7 @@ class ExpressServer {
     // "catchall" handler, for any request that doesn't match one above, send back index.html file.
     this.app.get('*', (req, res, next) => {
       logger.info('Route not found', { req: req });
-      this.sendIndexFile(res);
+      this.sendIndexFile(req, res);
     });
 
     // catch 404 and forward to error handler

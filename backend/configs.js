@@ -208,7 +208,7 @@ const configEnv = {
     // URL for account qualification
     qualifiedAccountsURL: 'https://www.flexiwan.com',
     // VPN portal URL
-    vpnBaseUrl: 'https://localvpn.flexiwan.com:8000'
+    vpnBaseUrl: ['https://localvpn.flexiwan.com:8000']
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -244,7 +244,7 @@ const configEnv = {
     logLevel: 'info',
     logUserName: true,
     corsWhiteList: ['https://app.flexiwan.com:443', 'http://app.flexiwan.com:80'],
-    vpnBaseUrl: 'https://vpn.flexiwan.com'
+    vpnBaseUrl: ['https://vpn.flexiwan.com']
   },
   hosted: {
     // modify next params for hosted server
@@ -286,7 +286,7 @@ const configEnv = {
     logLevel: 'info',
     logUserName: true,
     corsWhiteList: ['https://manage.flexiwan.com:443', 'http://manage.flexiwan.com:80'],
-    vpnBaseUrl: 'https://vpn.flexiwan.com'
+    vpnBaseUrl: ['https://vpn.flexiwan.com']
   },
   // Override for appqa01 environment
   appqa01: {
@@ -311,7 +311,7 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
     flexiVpnServer: 'https://vpnqa01.flexiwan.com:443',
-    vpnBaseUrl: 'https://vpnqa01.flexiwan.com'
+    vpnBaseUrl: ['https://vpnqa01.flexiwan.com']
   },
   // Override for appqa02 environment
   appqa02: {
@@ -336,7 +336,7 @@ const configEnv = {
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
     flexiVpnServer: 'https://vpnqa02.flexiwan.com:443',
-    vpnBaseUrl: 'https://vpnqa02.flexiwan.com'
+    vpnBaseUrl: ['https://vpnqa02.flexiwan.com']
   }
 };
 
@@ -431,9 +431,25 @@ class Configs {
   // Add fields that needs to be known by the client
   // Pay attention not to expose confidential fields
   // When adding a new variable add also in client/public/index.html
-  getClientConfig () {
+  getClientConfig (req) {
+    const servers = this.get('restServerUrl', 'list');
+    const vpnServers = this.get('vpnBaseUrl', 'list');
+
+    let baseUrl = servers[0];
+    let vpnBaseUrl = vpnServers[0];
+
+    if (req.hostname) {
+      const usedServer = servers.findIndex(s => s.includes(req.hostname));
+      if (usedServer > -1) {
+        baseUrl = servers[usedServer];
+        if (vpnServers.at(usedServer)) {
+          vpnBaseUrl = vpnServers[usedServer];
+        }
+      }
+    }
+
     return {
-      baseUrl: this.get('restServerUrl', 'list')[0] + '/api/',
+      baseUrl: baseUrl + '/api/',
       companyName: this.get('companyName'),
       allowUsersRegistration: this.get('allowUsersRegistration', 'boolean'),
       contactUsUrl: this.get('contactUsUrl'),
@@ -444,7 +460,7 @@ class Configs {
       showDeviceLimitAlert: this.get('showDeviceLimitAlert', 'boolean'),
       removeBranding: this.get('removeBranding', 'boolean'),
       qualifiedAccountsURL: this.get('qualifiedAccountsURL'),
-      vpnBaseUrl: this.get('vpnBaseUrl') + '/'
+      vpnBaseUrl: vpnBaseUrl + '/'
     };
   }
 }

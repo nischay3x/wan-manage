@@ -8214,6 +8214,7 @@ components:
     OrganizationRequest:
       example:
         name: name
+        description: description
         group: group
         encryptionMethod: ikev2
       required:
@@ -8222,6 +8223,8 @@ components:
         - encryptionMethod
       properties:
         name:
+          type: string
+        description:
           type: string
         group:
           type: string
@@ -8235,6 +8238,7 @@ components:
     Organization:
       example:
         name: name
+        description: description
         _id: _id
         account: account
         group: group
@@ -8245,6 +8249,8 @@ components:
           minLength: 24
           type: string
         name:
+          type: string
+        description:
           type: string
         group:
           type: string
@@ -8624,6 +8630,7 @@ components:
           useFixedPublicPort: false
           monitorInternet: true
           internetAccess: 'yes'
+          linkStatus: 'up'
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -8648,6 +8655,7 @@ components:
           useFixedPublicPort: false
           monitorInternet: true
           internetAccess: 'no'
+          linkStatus: 'down'
           IPv4: IPv4
           type: WAN
           gateway: gateway
@@ -8819,6 +8827,7 @@ components:
         useStun: useStun
         monitorInternet: true
         internetAccess: 'yes'
+        linkStatus: 'up'
         IPv4: IPv4
         type: WAN
         MAC: MAC
@@ -8873,6 +8882,12 @@ components:
           - ''
           - yes
           - no
+          type: string
+        linkStatus:
+          enum:
+          - ''
+          - up
+          - down
           type: string
         gateway:
           type: string
