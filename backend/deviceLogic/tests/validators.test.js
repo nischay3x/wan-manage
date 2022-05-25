@@ -780,14 +780,6 @@ describe('validateStaticRoute', () => {
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid static route config if unassigned interface used', () => {
-    device.interfaces.push({ name: 'eth3', devId: 'pci:0000:00:03.00', isAssigned: false });
-    route.ifname = 'pci:0000:00:03.00';
-    failureObject.err = `Static routes not allowed on unassigned interfaces '${route.ifname}'`;
-    const result = validateStaticRoute(device, tunnels, route);
-    expect(result).toMatchObject(failureObject);
-  });
-
   it('Should be an invalid route if interface IP and gateway not on the same subnet', () => {
     const ifc = device.interfaces[0];
     route.ifname = 'pci:0000:00:01.00';

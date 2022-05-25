@@ -561,12 +561,7 @@ const validateStaticRoute = (device, tunnels, route) => {
         err: `Static route interface not found '${ifname}'`
       };
     };
-    if (!ifc.isAssigned) {
-      return {
-        valid: false,
-        err: `Static routes not allowed on unassigned interfaces '${ifname}'`
-      };
-    }
+
     if (!isPending && !cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
       // A pending route may not overlap with an interface
       return {
