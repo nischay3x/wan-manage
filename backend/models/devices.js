@@ -579,65 +579,33 @@ const deviceApplicationSchema = new Schema({
 });
 
 /**
- * Device FRR access list rule Schema
+ * Device routing filter schema
  */
-const deviceFrrAccessListRuleSchema = new Schema({
-  sequence: {
-    type: String,
-    required: true,
-    validate: {
-      validator: validators.validateIsNumber,
-      message: 'sequence should be a number'
-    }
-  },
-  action: {
-    type: String,
-    enum: ['permit', 'deny'],
-    required: true
-  },
+const deviceRoutingFilterRuleSchema = new Schema({
   network: {
     type: String,
     validate: {
-      validator: val => validators.validateIPv4WithMask(val) || val === 'any',
-      message: 'network should be a valid IPv4/mask or "any"'
+      validator: val => validators.validateIPv4WithMask(val),
+      message: 'network should be a valid IPv4/mask'
     },
     required: true
   }
 });
 
 /**
- * Device FRR access list Schema
+ * Device routing filter schema
  */
-const deviceFrrAccessListSchema = new Schema({
+const deviceRoutingFiltersSchema = new Schema({
   name: {
     type: String,
     required: true
   },
-  description: {
-    type: String,
-    required: true
-  },
-  rules: {
-    type: [deviceFrrAccessListRuleSchema],
-    required: true
-  }
-});
-
-/**
- * Device FRR route maps Schema
- */
-const deviceFrrRouteMapsSchema = new Schema({
-  name: {
-    type: String,
-    required: true
+  denyAllAllowRules: {
+    type: Boolean,
+    default: true
   },
   description: {
     type: String,
-    required: true
-  },
-  action: {
-    type: String,
-    enum: ['permit', 'deny'],
     required: true
   },
   sequence: {
@@ -648,9 +616,9 @@ const deviceFrrRouteMapsSchema = new Schema({
       message: 'sequence should be a number'
     }
   },
-  accessList: {
-    type: String,
-    default: ''
+  rules: {
+    type: [deviceRoutingFilterRuleSchema],
+    required: true
   }
 });
 
@@ -790,11 +758,11 @@ const BGPNeighborSchema = new Schema({
     type: String,
     default: ''
   },
-  routeMapInboundFilter: {
+  inboundFilter: {
     type: String,
     default: ''
   },
-  routeMapOutboundFilter: {
+  outboundFilter: {
     type: String,
     default: ''
   }
@@ -1053,11 +1021,8 @@ const deviceSchema = new Schema({
       default: true
     }
   },
-  frrAccessLists: {
-    type: [deviceFrrAccessListSchema]
-  },
-  frrRouteMaps: {
-    type: [deviceFrrRouteMapsSchema]
+  routingFilters: {
+    type: [deviceRoutingFiltersSchema]
   },
   applications: [deviceApplicationSchema]
 },

@@ -496,65 +496,38 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
   }
 
-  // FRR Access lists validation
-  if (device.frrAccessLists) {
-    for (const list of device.frrAccessLists) {
-      const name = list.name;
-      const duplicateName = device.frrAccessLists.filter(l => l.name === name).length > 1;
+  // routing filters validation
+  if (device.routingFilters) {
+    for (const filter of device.routingFilters) {
+      const name = filter.name;
+      const duplicateName = device.routingFilters.filter(l => l.name === name).length > 1;
       if (duplicateName) {
         return {
           valid: false,
-          err: 'FRR access lists with the same name are not allowed'
+          err: 'Routing filters with the same name are not allowed'
         };
       }
     }
   }
 
-  // FRR Route Maps validation
-  if (device.frrRouteMaps) {
-    for (const routeMap of device.frrRouteMaps) {
-      const name = routeMap.name;
-      const sequence = routeMap.sequence;
-      const duplicateName = device.frrRouteMaps.filter(
-        l => l.name === name && l.sequence === sequence).length > 1;
-      if (duplicateName) {
-        return {
-          valid: false,
-          err: 'FRR route maps with the same name and sequence is not allowed'
-        };
-      }
-
-      if (routeMap.accessList && routeMap.accessList !== '') {
-        const accessListExists = device.frrAccessLists.find(l => l.name === routeMap.accessList);
-        if (!accessListExists) {
-          return {
-            valid: false,
-            err: `"${routeMap.name}" FRR Route map uses an unrecognized \
-            access list ("${routeMap.accessList}")`
-          };
-        }
-      }
-    }
-  }
-
-  const routeMapNames = keyBy(device.frrRouteMaps, 'name');
+  const routingFilterNames = keyBy(device.routingFilters, 'name');
   const usedNeighborIps = {};
   for (const bgpNeighbor of device.bgp.neighbors) {
-    const inboundFilter = bgpNeighbor.routeMapInboundFilter;
-    const outboundFilter = bgpNeighbor.routeMapOutboundFilter;
-    if (inboundFilter && inboundFilter !== '' && !(inboundFilter in routeMapNames)) {
+    const inboundFilter = bgpNeighbor.inboundFilter;
+    const outboundFilter = bgpNeighbor.outboundFilter;
+    if (inboundFilter && inboundFilter !== '' && !(inboundFilter in routingFilterNames)) {
       return {
         valid: false,
         err: `BGP neighbor ${bgpNeighbor.ip} uses an  \
-        unrecognized FRR Route Map name ("${inboundFilter}")`
+        unrecognized routing filter name ("${inboundFilter}")`
       };
     }
 
-    if (outboundFilter && outboundFilter !== '' && !(outboundFilter in routeMapNames)) {
+    if (outboundFilter && outboundFilter !== '' && !(outboundFilter in routingFilterNames)) {
       return {
         valid: false,
         err: `BGP neighbor ${bgpNeighbor.ip} uses an \
-        unrecognized FRR Route Map name ("${outboundFilter}")`
+        unrecognized routing filter name ("${outboundFilter}")`
       };
     }
 
