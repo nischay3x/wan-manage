@@ -598,7 +598,11 @@ const deviceRoutingFilterRuleSchema = new Schema({
 const deviceRoutingFiltersSchema = new Schema({
   name: {
     type: String,
-    required: true
+    required: true,
+    validate: {
+      validator: validators.validateStringNoSpaces,
+      message: 'name cannot include spaces'
+    }
   },
   defaultAction: {
     type: String,
