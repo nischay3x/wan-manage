@@ -8726,8 +8726,8 @@ components:
         - 40.4
         - 5.7
         sync: device sync status
-        frrAccessLists:
-        - frrAccessList
+        routingFilters:
+        - routingFilter
       properties:
         _id:
           maxLength: 24
@@ -8767,13 +8767,9 @@ components:
           items:
             $ref: '#/components/schemas/Dhcp'
           type: array
-        frrAccessLists:
+        routingFilters:
           items:
-            $ref: '#/components/schemas/FrrAccessList'
-          type: array
-        frrRouteMaps:
-          items:
-            $ref: '#/components/schemas/FrrRouteMap'
+            $ref: '#/components/schemas/RoutingFilter'
           type: array
         coords:
           items:
@@ -9121,59 +9117,31 @@ components:
         - sync
         - connection
         - isApproved
-    FrrAccessList:
+    RoutingFilter:
       example:
-        $ref: '#/components/examples/FrrAccessListExample'
+        $ref: '#/components/examples/RoutingFilterExample'
       properties:
         name:
           type: string
         description:
           type: string
+        defaultAction:
+          type: string
+          enum:
+          - deny
+          - allow
         rules:
           items:
-            $ref: '#/components/schemas/FrrAccessListRule'
+            $ref: '#/components/schemas/RoutingFilterRule'
           type: array
       type: object
-    FrrRouteMap:
+    RoutingFilterRule:
       example:
-        $ref: '#/components/examples/FrrRouteMapExample'
+        $ref: '#/components/examples/RoutingFilterRuleExample'
       properties:
-        name:
-          type: string
-        description:
-          type: string
-        sequence:
-          type: string
-          pattern: ^\d+$
-          description: sequence number
-        action:
-          enum:
-          - permit
-          - deny
-          type: string
-        accessList:
-          type: string
-      type: object
-    FrrAccessListRule:
-      example:
-        $ref: '#/components/examples/FrrAccessListRuleExample'
-      properties:
-        sequence:
-          type: string
-          pattern: ^\d+$
-          description: sequence number
-        action:
-          enum:
-          - permit
-          - deny
-          type: string
         network:
-          anyOf:
-          - type: string
-            enum:
-            - any
-          - type: string
-            maxLength: 24
+          type: string
+          maxLength: 24
       type: object
     BgpConfigs:
       example:
@@ -11016,29 +10984,14 @@ components:
       scheme: bearer
       type: http
   examples:
-    FrrAccessListExample:
+    RoutingFilterExample:
       value:
         name: list name
         description: list description
         rules:
-        - $ref: '#/components/examples/FrrAccessListRuleExample'
-        - $ref: '#/components/examples/FrrAccessListRuleBExample'
-    FrrAccessListRuleExample:
+        - $ref: '#/components/examples/RoutingFilterRuleExample'
+    RoutingFilterRuleExample:
       value:
-        sequence: 100
-        action: permit
-        network: any
-    FrrRouteMapExample:
-      value:
-        name: list name
-        description: list description
-        action: permit
-        sequence: 100
-        accessList: default
-    FrrAccessListRuleBExample:
-      value:
-        sequence: 200
-        action: deny
-        network: 10.10.10.0/24
+        network: 100.200.30.1/24
 
 

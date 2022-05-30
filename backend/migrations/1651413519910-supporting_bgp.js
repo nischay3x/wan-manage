@@ -36,8 +36,7 @@ async function up () {
       { },
       {
         $set: {
-          frrAccessLists: [],
-          frrRouteMaps: [],
+          routingFilters: [],
           'staticroutes.$[].redistributeViaBGP': false,
           'staticroutes.$[].onLink': false,
           bgp: defaultBGPGlobalSettings,
@@ -63,8 +62,7 @@ async function down () {
       { },
       {
         $unset: {
-          frrAccessLists: '',
-          frrRouteMaps: '',
+          routingFilters: '',
           'staticroutes.$[].redistributeViaBGP': '',
           'staticroutes.$[].onLink': '',
           bgp: '',

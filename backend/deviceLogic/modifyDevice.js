@@ -214,14 +214,14 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
   }
 
   // frr access lists
-  if (has(messageParams, 'modify_frr_access_lists')) {
-    const { remove, add } = messageParams.modify_frr_access_lists;
+  if (has(messageParams, 'modify_routing_filters')) {
+    const { remove, add } = messageParams.modify_routing_filters;
 
     if (remove && remove.length > 0) {
       requests.push(...remove.map(item => {
         return {
           entity: 'agent',
-          message: 'remove-frr-access-list',
+          message: 'remove-routing-filter',
           params: { ...item }
         };
       }));
@@ -231,32 +231,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
       requests.push(...add.map(item => {
         return {
           entity: 'agent',
-          message: 'add-frr-access-list',
-          params: { ...item }
-        };
-      }));
-    }
-  }
-
-  // frr route maps
-  if (has(messageParams, 'modify_frr_route_maps')) {
-    const { remove, add } = messageParams.modify_frr_route_maps;
-
-    if (remove) {
-      requests.push(...remove.map(item => {
-        return {
-          entity: 'agent',
-          message: 'remove-frr-route-map',
-          params: { ...item }
-        };
-      }));
-    }
-
-    if (add && add.length > 0) {
-      requests.push(...add.map(item => {
-        return {
-          entity: 'agent',
-          message: 'add-frr-route-map',
+          message: 'add-routing-filter',
           params: { ...item }
         };
       }));
@@ -673,8 +648,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     !has(messageParams, 'modify_dhcp_config') &&
     !has(messageParams, 'modify_ospf') &&
     !has(messageParams, 'modify_bgp') &&
-    !has(messageParams, 'modify_frr_access_lists') &&
-    !has(messageParams, 'modify_frr_route_maps') &&
+    !has(messageParams, 'modify_routing_filters') &&
     !has(messageParams, 'modify_firewall') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
@@ -976,39 +950,21 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
 };
 
 /**
- * Transform FRR access list params
- * @param  {array} frrAccessLists frrAccessLists array
- * @return {array}   frrAccessLists array
+ * Transform routing filters params
+ * @param  {array} RoutingFilters routingFilters array
+ * @return {array}   routingFilters array
  */
-const transformFrrAccessLists = (frrAccessLists) => {
-  return frrAccessLists.map(list => {
+const transformRoutingFilters = (routingFilters) => {
+  return routingFilters.map(filter => {
     return {
-      name: list.name,
-      description: list.description,
-      rules: list.rules.map(r => {
+      name: filter.name,
+      description: filter.description,
+      defaultAction: filter.defaultAction,
+      rules: filter.rules.map(r => {
         return {
-          sequence: r.sequence,
-          action: r.action,
           network: r.network
         };
       })
-    };
-  });
-};
-
-/**
- * Transform FRR route maps list params
- * @param  {array} frrRouteMaps frrRouteMaps array
- * @return {array}   frrRouteMaps array
- */
-const transformFrrRouteMaps = (frrRouteMaps) => {
-  return frrRouteMaps.map(routeMap => {
-    return {
-      name: routeMap.name,
-      description: routeMap.description,
-      action: routeMap.action,
-      sequence: routeMap.sequence,
-      accessList: routeMap.accessList
     };
   });
 };
@@ -1038,8 +994,8 @@ const transformBGP = (bgp, interfaces) => {
       ip: n.ip,
       remoteASN: n.remoteASN,
       password: n.password || '',
-      routeMapInboundFilter: n.routeMapInboundFilter || '',
-      routeMapOutboundFilter: n.routeMapOutboundFilter || ''
+      inboundFilter: n.inboundFilter || '',
+      outboundFilter: n.outboundFilter || ''
     };
   });
 
@@ -1099,18 +1055,18 @@ const prepareModifyBGP = async (origDevice, newDevice) => {
 };
 
 /**
- * Creates add/remove-frr-access-list jobs
+ * Creates add/remove-routing-filter jobs
  * @param  {Object} origDevice device object before changes in the database
  * @param  {Object} newDevice  device object after changes in the database
- * @return {Object}            an object containing add and remove ospf parameters
+ * @return {Object}            an object containing add and remove routing filter parameters
  */
-const prepareModifyFRRAccessLists = (origDevice, newDevice) => {
+const prepareModifyRoutingFilters = (origDevice, newDevice) => {
   const [origLists, newLists] = [
-    transformFrrAccessLists(origDevice.frrAccessLists),
-    transformFrrAccessLists(newDevice.frrAccessLists)
+    transformRoutingFilters(origDevice.routingFilters),
+    transformRoutingFilters(newDevice.routingFilters)
   ];
 
-  const [addFrrAccessLists, removeFrrAccessLists] = [
+  const [addRoutingFilters, removeRoutingFilters] = [
     differenceWith(
       newLists,
       origLists,
@@ -1127,39 +1083,7 @@ const prepareModifyFRRAccessLists = (origDevice, newDevice) => {
     )
   ];
 
-  return { addFrrAccessLists, removeFrrAccessLists };
-};
-
-/**
- * Creates add/remove-frr-route-map jobs
- * @param  {Object} origDevice device object before changes in the database
- * @param  {Object} newDevice  device object after changes in the database
- * @return {Object}            an object containing add and remove ospf parameters
- */
-const prepareModifyFRRRouteMaps = (origDevice, newDevice) => {
-  const [origRouteMaps, newRouteMaps] = [
-    transformFrrRouteMaps(origDevice.frrRouteMaps),
-    transformFrrRouteMaps(newDevice.frrRouteMaps)
-  ];
-
-  const [addFrrRouteMaps, removeFrrRouteMaps] = [
-    differenceWith(
-      newRouteMaps,
-      origRouteMaps,
-      (origRouteMap, newRouteMap) => {
-        return isEqual(origRouteMap, newRouteMap);
-      }
-    ),
-    differenceWith(
-      origRouteMaps,
-      newRouteMaps,
-      (origRouteMap, newRouteMap) => {
-        return isEqual(origRouteMap, newRouteMap);
-      }
-    )
-  ];
-
-  return { addFrrRouteMaps, removeFrrRouteMaps };
+  return { addRoutingFilters, removeRoutingFilters };
 };
 
 /**
@@ -1315,20 +1239,12 @@ const apply = async (device, user, data) => {
     modifyParams.modify_bgp = { remove: removeBGP, add: addBGP };
   }
 
-  // Create FRR access lists modification parameters
+  // Create routing filters modification parameters
   const {
-    removeFrrAccessLists, addFrrAccessLists
-  } = prepareModifyFRRAccessLists(device[0], data.newDevice);
-  if (removeFrrAccessLists.length > 0 || addFrrAccessLists.length > 0) {
-    modifyParams.modify_frr_access_lists = { remove: removeFrrAccessLists, add: addFrrAccessLists };
-  }
-
-  // Create FRR route maps list parameters
-  const {
-    addFrrRouteMaps, removeFrrRouteMaps
-  } = prepareModifyFRRRouteMaps(device[0], data.newDevice);
-  if (addFrrRouteMaps.length > 0 || removeFrrRouteMaps.length > 0) {
-    modifyParams.modify_frr_route_maps = { remove: removeFrrRouteMaps, add: addFrrRouteMaps };
+    removeRoutingFilters, addRoutingFilters
+  } = prepareModifyRoutingFilters(device[0], data.newDevice);
+  if (removeRoutingFilters.length > 0 || addRoutingFilters.length > 0) {
+    modifyParams.modify_routing_filters = { remove: removeRoutingFilters, add: addRoutingFilters };
   }
 
   modifyParams.modify_router = {};
@@ -1522,8 +1438,7 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_router') ||
       has(modifyParams, 'modify_interfaces') ||
       has(modifyParams, 'modify_ospf') ||
-      has(modifyParams, 'modify_frr_access_lists') ||
-      has(modifyParams, 'modify_frr_route_maps') ||
+      has(modifyParams, 'modify_routing_filters') ||
       has(modifyParams, 'modify_bgp') ||
       has(modifyParams, 'modify_firewall') ||
       has(modifyParams, 'modify_dhcp_config');
@@ -1620,7 +1535,7 @@ const completeSync = async (jobId, jobsData) => {
  */
 const sync = async (deviceId, org) => {
   const {
-    interfaces, staticroutes, dhcp, ospf, bgp, frrAccessLists, frrRouteMaps, versions
+    interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions
   } = await devices.findOne(
     { _id: deviceId },
     {
@@ -1629,8 +1544,7 @@ const sync = async (deviceId, org) => {
       dhcp: 1,
       ospf: 1,
       bgp: 1,
-      frrRouteMaps: 1,
-      frrAccessLists: 1,
+      routingFilters: 1,
       versions: 1
     }
   )
@@ -1691,22 +1605,12 @@ const sync = async (deviceId, org) => {
     });
   }
 
-  // Prepare add-frr-access-list message
-  const frrAccessListsData = transformFrrAccessLists(frrAccessLists);
-  frrAccessListsData.forEach(entry => {
+  // Prepare add-routing-filter message
+  const routingFiltersData = transformRoutingFilters(routingFilters);
+  routingFiltersData.forEach(entry => {
     deviceConfRequests.push({
       entity: 'agent',
-      message: 'add-frr-access-list',
-      params: entry
-    });
-  });
-
-  // Prepare add-frr-route-map message
-  const frrRouteMapsData = transformFrrRouteMaps(frrRouteMaps);
-  frrRouteMapsData.forEach(entry => {
-    deviceConfRequests.push({
-      entity: 'agent',
-      message: 'add-frr-route-map',
+      message: 'add-routing-filter',
       params: entry
     });
   });
