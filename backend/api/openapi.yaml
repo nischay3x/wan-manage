@@ -9125,6 +9125,11 @@ components:
           type: string
         description:
           type: string
+        defaultAction:
+          type: string
+          enum:
+          - deny
+          - allow
         rules:
           items:
             $ref: '#/components/schemas/RoutingFilterRule'
@@ -9134,22 +9139,9 @@ components:
       example:
         $ref: '#/components/examples/RoutingFilterRuleExample'
       properties:
-        sequence:
-          type: string
-          pattern: ^\d+$
-          description: sequence number
-        action:
-          enum:
-          - permit
-          - deny
-          type: string
         network:
-          anyOf:
-          - type: string
-            enum:
-            - any
-          - type: string
-            maxLength: 24
+          type: string
+          maxLength: 24
       type: object
     BgpConfigs:
       example:
@@ -11000,8 +10992,6 @@ components:
         - $ref: '#/components/examples/RoutingFilterRuleExample'
     RoutingFilterRuleExample:
       value:
-        sequence: 100
-        action: permit
-        network: any
+        network: 100.200.30.1/24
 
 

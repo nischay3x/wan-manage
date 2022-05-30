@@ -959,8 +959,7 @@ const transformRoutingFilters = (routingFilters) => {
     return {
       name: filter.name,
       description: filter.description,
-      denyAllAllowRules: filter.denyAllAllowRules,
-      sequence: filter.sequence,
+      defaultAction: filter.defaultAction,
       rules: filter.rules.map(r => {
         return {
           network: r.network

@@ -600,21 +600,14 @@ const deviceRoutingFiltersSchema = new Schema({
     type: String,
     required: true
   },
-  denyAllAllowRules: {
-    type: Boolean,
-    default: true
+  defaultAction: {
+    type: String,
+    enum: ['deny', 'allow'],
+    default: 'deny'
   },
   description: {
     type: String,
     required: true
-  },
-  sequence: {
-    type: String,
-    required: true,
-    validate: {
-      validator: validators.validateIsNumber,
-      message: 'sequence should be a number'
-    }
   },
   rules: {
     type: [deviceRoutingFilterRuleSchema],
