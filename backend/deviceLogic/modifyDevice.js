@@ -47,6 +47,9 @@ const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
 const { getBridges } = require('../utils/deviceUtils');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+
+const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
+
 /**
  * Remove fields that should not be sent to the device from the interfaces array.
  * @param  {Array} interfaces an array of interfaces that will be sent to the device
@@ -239,12 +242,12 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
   }
 
   if (has(messageParams, 'modify_bgp')) {
-    const { remove, add } = messageParams.modify_bgp;
+    const { remove, add, modify } = messageParams.modify_bgp;
 
     if (remove) {
       requests.push({
         entity: 'agent',
-        message: 'remove-bgp',
+        message: 'remove-routing-bgp',
         params: { ...remove }
       });
     }
@@ -252,8 +255,19 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     if (add) {
       requests.push({
         entity: 'agent',
-        message: 'add-bgp',
+        message: 'add-routing-bgp',
         params: { ...add }
+      });
+    }
+
+    if (modify) {
+      requests.push({
+        entity: 'agent',
+        message: 'modify-routing-bgp',
+        params: {
+          localASN: modify.localASN,
+          ...pick(modify, modifyBGPParams)
+        }
       });
     }
   }
@@ -983,7 +997,7 @@ const transformOSPF = (ospf) => {
 };
 
 /**
- * Creates a modify-bgp object
+ * Creates a modify-routing-bgp object
  * @param  {Object} bgp bgp configuration
  * @param  {Object} interfaces  assigned interfaces of device
  * @return {Object}            an object containing an array of routes
@@ -995,7 +1009,9 @@ const transformBGP = (bgp, interfaces) => {
       remoteASN: n.remoteASN,
       password: n.password || '',
       inboundFilter: n.inboundFilter || '',
-      outboundFilter: n.outboundFilter || ''
+      outboundFilter: n.outboundFilter || '',
+      holdInterval: bgp.holdInterval,
+      keepaliveInterval: bgp.keepaliveInterval
     };
   });
 
@@ -1008,8 +1024,6 @@ const transformBGP = (bgp, interfaces) => {
 
   const res = {
     routerId: bgp.routerId,
-    holdInterval: bgp.holdInterval,
-    keepaliveInterval: bgp.keepaliveInterval,
     localASN: bgp.localASN,
     neighbors: neighbors,
     redistributeOspf: bgp.redistributeOspf,
@@ -1021,7 +1035,7 @@ const transformBGP = (bgp, interfaces) => {
 };
 
 /**
- * Creates add/remove-bgp jobs
+ * Creates add/remove-routing-bgp jobs
  * @param  {Object} origDevice device object before changes in the database
  * @param  {Object} newDevice  device object after changes in the database
  * @return {Object}            an object containing add and remove ospf parameters
@@ -1034,24 +1048,28 @@ const prepareModifyBGP = async (origDevice, newDevice) => {
 
   const origEnable = origDevice.bgp.enable;
   const newEnable = newDevice.bgp.enable;
-  // if (origEnable === newEnable && isEqual(origBGP, newBGP)) {
-  //   return { remove: null, add: null };
-  // }
 
   if (origEnable && !newEnable) {
-    return { remove: origBGP, add: null };
+    return { remove: origBGP, add: null, modify: null };
   }
 
   if (!origEnable && newEnable) {
-    return { remove: null, add: newBGP };
+    return { remove: null, add: newBGP, modify: null };
   }
 
-  if (isEqual(origBGP, newBGP)) {
-    return { remove: null, add: null };
+  // if there is a change in critical settings, send pair of remove-routing-bgp and add-routing-bgp
+  if (!isEqual(omit(origBGP, modifyBGPParams), omit(newBGP, modifyBGPParams))) {
+    return { remove: origBGP, add: newBGP, modify: null };
   }
 
-  // if there is a change, send pair of remove-bgp and add-bgp
-  return { remove: origBGP, add: newBGP };
+  // if there is a change in parameters that can trigger only modification but not removing all bgp
+  // send only modify job
+  if (!isEqual(pick(origBGP, modifyBGPParams), pick(newBGP, modifyBGPParams))) {
+    return { remove: null, add: null, modify: newBGP };
+  }
+
+  // if there is no change at all, don't sent anything
+  return { remove: null, add: null, modify: null };
 };
 
 /**
@@ -1234,9 +1252,11 @@ const apply = async (device, user, data) => {
   }
 
   // Create BGP modification parameters
-  const { remove: removeBGP, add: addBGP } = await prepareModifyBGP(device[0], data.newDevice);
-  if (removeBGP || addBGP) {
-    modifyParams.modify_bgp = { remove: removeBGP, add: addBGP };
+  const {
+    remove: removeBGP, add: addBGP, modify: modifyBGP
+  } = await prepareModifyBGP(device[0], data.newDevice);
+  if (removeBGP || addBGP || modifyBGP) {
+    modifyParams.modify_bgp = { remove: removeBGP, add: addBGP, modify: modifyBGP };
   }
 
   // Create routing filters modification parameters
@@ -1621,7 +1641,7 @@ const sync = async (deviceId, org) => {
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({
         entity: 'agent',
-        message: 'add-bgp',
+        message: 'add-routing-bgp',
         params: bgpData
       });
     }
