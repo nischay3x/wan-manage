@@ -265,7 +265,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
         entity: 'agent',
         message: 'modify-routing-bgp',
         params: {
-          localAsn: modify.localASN,
+          localAsn: modify.localAsn,
           ...pick(modify, modifyBGPParams)
         }
       });
