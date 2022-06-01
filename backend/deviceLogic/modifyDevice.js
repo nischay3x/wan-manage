@@ -265,7 +265,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
         entity: 'agent',
         message: 'modify-routing-bgp',
         params: {
-          localASN: modify.localASN,
+          localAsn: modify.localASN,
           ...pick(modify, modifyBGPParams)
         }
       });
@@ -1006,7 +1006,7 @@ const transformBGP = (bgp, interfaces) => {
   const neighbors = bgp.neighbors.map(n => {
     return {
       ip: n.ip,
-      remoteASN: n.remoteASN,
+      remoteAsn: n.remoteASN,
       password: n.password || '',
       inboundFilter: n.inboundFilter || '',
       outboundFilter: n.outboundFilter || '',
@@ -1024,7 +1024,7 @@ const transformBGP = (bgp, interfaces) => {
 
   const res = {
     routerId: bgp.routerId,
-    localASN: bgp.localASN,
+    localAsn: bgp.localASN,
     neighbors: neighbors,
     redistributeOspf: bgp.redistributeOspf,
     networks: networks
