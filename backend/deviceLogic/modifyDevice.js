@@ -150,7 +150,7 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       useDhcpDnsServers: ifc.useDhcpDnsServers
     };
 
-    if (majorVersion >= 5 && minorVersion >= 3) {
+    if (majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3)) {
       ifcObg.routing = ifc.routing.split(/,\s*/); // send as list
     } else {
       ifcObg.routing = ifc.routing.includes('OSPF') ? 'OSPF' : 'NONE';
@@ -1016,7 +1016,7 @@ const transformBGP = (bgp, interfaces) => {
   });
 
   const networks = [];
-  interfaces.filter(i => i.routing === 'BGP' || i.routing === 'OSPF,BGP').forEach(i => {
+  interfaces.filter(i => i.routing.includes('BGP')).forEach(i => {
     networks.push({
       ipv4: `${i.IPv4}/${i.IPv4Mask}`
     });

@@ -84,8 +84,8 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
       configuration
     };
 
-    if (majorVersion >= 5 && minorVersion >= 3) {
-      ifcInfo.routing = routing.split(/,\s*/); // send as list
+    if (majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3)) {
+      ifcInfo.routing = routing.split(/,\s*/); // send as a list
     } else {
       ifcInfo.routing = routing.includes('OSPF') ? 'OSPF' : 'NONE';
     }

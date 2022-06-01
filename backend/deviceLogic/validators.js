@@ -515,7 +515,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
   for (const bgpNeighbor of device.bgp.neighbors) {
     const inboundFilter = bgpNeighbor.inboundFilter;
     const outboundFilter = bgpNeighbor.outboundFilter;
-    if (inboundFilter && inboundFilter !== '' && !(inboundFilter in routingFilterNames)) {
+    if (inboundFilter && !(inboundFilter in routingFilterNames)) {
       return {
         valid: false,
         err: `BGP neighbor ${bgpNeighbor.ip} uses an  \
@@ -523,7 +523,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
 
-    if (outboundFilter && outboundFilter !== '' && !(outboundFilter in routingFilterNames)) {
+    if (outboundFilter && !(outboundFilter in routingFilterNames)) {
       return {
         valid: false,
         err: `BGP neighbor ${bgpNeighbor.ip} uses an \
