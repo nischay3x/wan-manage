@@ -8561,6 +8561,26 @@ components:
         coords:
         - 46.5
         - 3.6
+        routingFilters:
+        - defaultAction: deny
+          name: routingFilterName
+          description: description for the filter
+          rules:
+          - network: 192.168.55.0/24
+            network: 192.168.66.0/24
+        bgp:
+          enable: true
+          holdInterval: 90
+          keepaliveInterval: 30,
+          localASN: 65001
+          routerId: 192.168.1.124
+          redistributeOspf: true
+          neighbors:
+          - password: ''
+            ip: 192.168.1.250
+            remoteASN: 65002
+            inboundFilter: routingFilterName
+            outboundFilter: routingFilterName
       properties:
         machineId:
           type: string
@@ -8599,6 +8619,12 @@ components:
         coords:
           items:
             type: number
+          type: array
+        bgp:
+          $ref: '#/components/schemas/BgpConfigs'
+        routingFilters:
+          items:
+            $ref: '#/components/schemas/RoutingFilter'
           type: array
         upgradeSchedule:
           $ref: '#/components/schemas/UpgradeSchedule'
@@ -9196,6 +9222,12 @@ components:
         password:
           type: string
           description: A MD5 password to be used with the tcp socket that is being used to connect to the remote peer
+        inboundFilter:
+          type: string
+          description: A routing filter name to apply on the incoming routes from BGP peer
+        outboundFilter:
+          type: string
+          description: A routing filter name to apply on the expose routes to the BGP peer
       type: object
     OspfConfigs:
       example:
