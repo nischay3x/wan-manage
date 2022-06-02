@@ -60,7 +60,7 @@ const eventsReasons = require('../deviceLogic/events/eventReasons');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const applications = require('../models/applications');
 const applicationStore = require('../models/applicationStore');
-const { getMajorVersion } = require('../versioning');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
 
 class DevicesService {
@@ -1620,6 +1620,15 @@ class DevicesService {
           // validate DHCP info if it exists
           for (const dhcpRequest of deviceRequest.dhcp) {
             DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
+          }
+        }
+
+        if (deviceRequest?.bgp?.enable) {
+          const major = getMajorVersion(origDevice.versions.agent);
+          const minor = getMinorVersion(origDevice.versions.agent);
+          if (major <= 5 && minor < 3) {
+            throw createError(400, 'The device do not run required flexiWAN version for BGP. ' +
+              'Please disable BGP or upgrade the device');
           }
         }
 
