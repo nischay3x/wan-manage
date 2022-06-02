@@ -1627,7 +1627,8 @@ class DevicesService {
           const major = getMajorVersion(origDevice.versions.agent);
           const minor = getMinorVersion(origDevice.versions.agent);
           if (major <= 5 && minor < 3) {
-            throw createError(400, 'The device do not run required flexiWAN version for BGP. ' +
+            throw createError(400,
+              'The device does not run the required flexiWAN version for BGP. ' +
               'Please disable BGP or upgrade the device');
           }
         }
