@@ -1022,16 +1022,13 @@ const transformBGP = (bgp, interfaces) => {
     });
   });
 
-  const res = {
+  return {
     routerId: bgp.routerId,
     localAsn: bgp.localASN,
     neighbors: neighbors,
     redistributeOspf: bgp.redistributeOspf,
     networks: networks
   };
-
-  // remove empty values
-  return omitBy(res, val => val === '');
 };
 
 /**
@@ -1636,8 +1633,7 @@ const sync = async (deviceId, org) => {
   });
 
   if (bgp?.enable) {
-    let bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned));
-    bgpData = omitBy(bgpData, val => val === '');
+    const bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned));
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({
         entity: 'agent',
