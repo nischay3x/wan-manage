@@ -32,7 +32,6 @@ const validator = require('validator');
 const net = require('net');
 const pick = require('lodash/pick');
 const isEqual = require('lodash/isEqual');
-
 const uniqBy = require('lodash/uniqBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
@@ -46,7 +45,7 @@ const {
 const {
   mapLteNames, mapWifiNames, getBridges, parseLteStatus
 } = require('../utils/deviceUtils');
-const { getAllOrganizationSubnets } = require('../utils/orgUtils');
+const { getAllOrganizationSubnets, getAllOrganizationBGPDevices } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const deviceQueues = require('../utils/deviceQueue')(
@@ -61,7 +60,7 @@ const eventsReasons = require('../deviceLogic/events/eventReasons');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const applications = require('../models/applications');
 const applicationStore = require('../models/applicationStore');
-const { getMajorVersion } = require('../versioning');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
 
 class DevicesService {
@@ -157,7 +156,9 @@ class DevicesService {
       'upgradeSchedule',
       'sync',
       'ospf',
-      'coords'
+      'coords',
+      'bgp',
+      'routingFilters'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -223,8 +224,10 @@ class DevicesService {
           'ifname',
           'metric',
           'redistributeViaOSPF',
+          'redistributeViaBGP',
           'isPending',
-          'pendingReason'
+          'pendingReason',
+          'onLink'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;
@@ -1281,6 +1284,7 @@ class DevicesService {
         if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
           orgSubnets = await getAllOrganizationSubnets(origDevice.org);
         }
+        const orgBgp = await getAllOrganizationBGPDevices(origDevice.org);
 
         const origTunnels = await tunnelsModel.find({
           isActive: true,
@@ -1502,6 +1506,12 @@ class DevicesService {
                 );
               }
 
+              if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
+                throw new Error(
+                  `Can't set BGP on (${origIntf.name}). BGP is disabled`
+                );
+              }
+
               if (updIntf.isAssigned && updIntf.type === 'WAN') {
                 const dhcp = updIntf.dhcp;
                 const servers = updIntf.dnsServers;
@@ -1610,6 +1620,16 @@ class DevicesService {
           // validate DHCP info if it exists
           for (const dhcpRequest of deviceRequest.dhcp) {
             DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
+          }
+        }
+
+        if (deviceRequest?.bgp?.enable) {
+          const major = getMajorVersion(origDevice.versions.agent);
+          const minor = getMinorVersion(origDevice.versions.agent);
+          if (major <= 5 && minor < 3) {
+            throw createError(400,
+              'The device does not run the required flexiWAN version for BGP. ' +
+              'Please disable BGP or upgrade the device');
           }
         }
 
@@ -1754,7 +1774,7 @@ class DevicesService {
             firewall: origDevice.policies.firewall.toObject()
           };
         }
-        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets);
+        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets, orgBgp);
 
         if (!valid) {
           logger.warn('Device update failed',

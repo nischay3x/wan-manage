@@ -380,6 +380,14 @@ const staticroutesSchema = new Schema({
     type: Boolean,
     default: false
   },
+  redistributeViaBGP: {
+    type: Boolean,
+    default: false
+  },
+  onLink: {
+    type: Boolean,
+    default: false
+  },
   ...pendingSchema
 }, {
   timestamps: true
@@ -571,6 +579,47 @@ const deviceApplicationSchema = new Schema({
 });
 
 /**
+ * Device routing filter schema
+ */
+const deviceRoutingFilterRuleSchema = new Schema({
+  network: {
+    type: String,
+    validate: {
+      validator: val => validators.validateIPv4WithMask(val),
+      message: 'network should be a valid IPv4/mask'
+    },
+    required: true
+  }
+});
+
+/**
+ * Device routing filter schema
+ */
+const deviceRoutingFiltersSchema = new Schema({
+  name: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateStringNoSpaces,
+      message: 'name cannot include spaces'
+    }
+  },
+  defaultAction: {
+    type: String,
+    enum: ['deny', 'allow'],
+    default: 'deny'
+  },
+  description: {
+    type: String,
+    required: true
+  },
+  rules: {
+    type: [deviceRoutingFilterRuleSchema],
+    required: true
+  }
+});
+
+/**
  * Device multilink policy schema
  */
 const deviceMultilinkPolicySchema = new Schema({
@@ -683,6 +732,39 @@ const IKEv2Schema = new Schema({
     type: Boolean,
     default: false
   }
+});
+
+const BGPNeighborSchema = new Schema({
+  ip: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateIPv4,
+      message: props => `${props.value} should be a valid ipv4`
+    }
+  },
+  remoteASN: {
+    type: String,
+    required: true,
+    validate: {
+      validator: validators.validateBGPASN,
+      message: props => `${props.value} should be a vaild ASN`
+    }
+  },
+  password: {
+    type: String,
+    default: ''
+  },
+  inboundFilter: {
+    type: String,
+    default: ''
+  },
+  outboundFilter: {
+    type: String,
+    default: ''
+  }
+}, {
+  timestamps: true
 });
 
 /**
@@ -862,6 +944,50 @@ const deviceSchema = new Schema({
     type: IKEv2Schema,
     default: IKEv2Schema
   },
+  bgp: {
+    enable: {
+      type: Boolean,
+      required: true,
+      default: false
+    },
+    routerId: {
+      type: String,
+      required: false,
+      validate: {
+        validator: validators.validateIPv4,
+        message: props => `${props.value} should be a vaild ip address`
+      }
+    },
+    localASN: {
+      type: String,
+      default: '',
+      validate: {
+        validator: asn => asn === '' || validators.validateBGPASN(asn),
+        message: props => `${props.value} should be a vaild ASN`
+      }
+    },
+    keepaliveInterval: {
+      type: String,
+      default: '30',
+      validate: {
+        validator: validators.validateBGPInterval,
+        message: props => `${props.value} should be a vaild interval`
+      }
+    },
+    holdInterval: {
+      type: String,
+      default: '90',
+      validate: {
+        validator: validators.validateBGPInterval,
+        message: props => `${props.value} should be a vaild interval`
+      }
+    },
+    redistributeOspf: {
+      type: Boolean,
+      default: true
+    },
+    neighbors: [BGPNeighborSchema]
+  },
   ospf: {
     routerId: {
       type: String,
@@ -886,7 +1012,14 @@ const deviceSchema = new Schema({
         validator: validators.validateOSPFInterval,
         message: props => `${props.value} should be a valid integer`
       }
+    },
+    redistributeBgp: {
+      type: Boolean,
+      default: true
     }
+  },
+  routingFilters: {
+    type: [deviceRoutingFiltersSchema]
   },
   applications: [deviceApplicationSchema]
 },

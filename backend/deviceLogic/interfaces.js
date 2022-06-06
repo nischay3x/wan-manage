@@ -20,16 +20,22 @@ const wifiChannels = require('../utils/wifi-channels');
 const Joi = require('joi');
 const omitBy = require('lodash/omitBy');
 const omit = require('lodash/omit');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 /**
  * Builds collection of interfaces to be sent to device
  *
  * @param {array} deviceInterfaces interfaces stored in db
  * @param {object} globalOSPF global OSPF configuration to apply on each interfaces
+ * @param {string} deviceVersion device version
  * @returns array of interfaces
  */
-const buildInterfaces = (deviceInterfaces, globalOSPF) => {
+const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
   const interfaces = [];
+
+  const majorVersion = getMajorVersion(deviceVersion);
+  const minorVersion = getMinorVersion(deviceVersion);
+
   for (const ifc of deviceInterfaces) {
     // Skip unassigned/un-typed interfaces, as they
     // cannot be part of the device configuration
@@ -72,12 +78,18 @@ const buildInterfaces = (deviceInterfaces, globalOSPF) => {
       addr: `${(IPv4 && IPv4Mask ? `${IPv4}/${IPv4Mask}` : '')}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
       mtu,
-      routing,
       type,
       multilink: { labels: labels.map((label) => label._id.toString()) },
       deviceType,
       configuration
     };
+
+    if (majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3)) {
+      ifcInfo.routing = routing.split(/,\s*/); // send as a list
+    } else {
+      ifcInfo.routing = routing.includes('OSPF') ? 'OSPF' : 'NONE';
+    }
+
     if (ifc.type === 'WAN') {
       ifcInfo.gateway = gateway;
       ifcInfo.metric = metric;
@@ -92,10 +104,11 @@ const buildInterfaces = (deviceInterfaces, globalOSPF) => {
       }
     }
 
-    if (ifc.routing === 'OSPF') {
+    if (routing.includes('OSPF')) {
       ifcInfo.ospf = {
         ...ospf,
-        ...globalOSPF
+        helloInterval: globalOSPF.helloInterval,
+        deadInterval: globalOSPF.deadInterval
       };
 
       // remove empty values since they are optional
