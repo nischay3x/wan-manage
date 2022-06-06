@@ -92,6 +92,7 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
 const validateFirewallRules = (rules, interfaces = undefined) => {
   const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
   const usedInboundPorts = [];
+  let inboundPortsCount = 0;
   const enabledRules = rules.filter(r => r.enabled);
   // Common rules validation
   for (const rule of enabledRules) {
@@ -146,6 +147,7 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
           }
         }
         usedInboundPorts.push([portLow, portHigh]);
+        inboundPortsCount += (portHigh - portLow + 1);
       }
     }
     for (const side of ['source', 'destination']) {
@@ -179,6 +181,10 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
       }
     }
   };
+
+  if (inboundPortsCount > 1000) {
+    return { valid: false, err: 'Inbound ports range is limited to 1000' };
+  }
 
   // Device-specific rules validation
   if (interfaces) {
