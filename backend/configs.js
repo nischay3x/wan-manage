@@ -442,7 +442,7 @@ class Configs {
       const usedServer = servers.findIndex(s => s.includes(req.hostname));
       if (usedServer > -1) {
         baseUrl = servers[usedServer];
-        if (vpnServers.at(usedServer)) {
+        if (vpnServers[usedServer]) {
           vpnBaseUrl = vpnServers[usedServer];
         }
       }

@@ -484,6 +484,15 @@ class Connections {
             hasIpOnDevice: updatedConfig.IPv4 !== ''
           };
 
+          // allow to modify the interface type dpdk/pppoe for unassigned interfaces
+          if (!i.isAssigned && ['dpdk', 'pppoe'].includes(updatedConfig.deviceType)) {
+            updInterface.deviceType = updatedConfig.deviceType;
+            updInterface.dhcp = updatedConfig.dhcp;
+            if (updatedConfig.deviceType === 'pppoe') {
+              updInterface.type = 'WAN';
+            }
+          }
+
           if (!i.isAssigned || i.deviceType === 'pppoe') {
             updInterface.metric = updatedConfig.metric;
             if (updatedConfig.mtu) {
