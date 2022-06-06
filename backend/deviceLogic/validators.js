@@ -20,7 +20,9 @@ const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const { getMajorVersion } = require('../versioning');
+const keyBy = require('lodash/keyBy');
 const maxMetric = 2 * 10 ** 9;
+
 /**
  * Checks whether a value is empty
  * @param  {string}  val the value to be checked
@@ -259,9 +261,10 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
  * @param {Object}  device                 the device to check
  * @param {Boolean} isRunning              is the device running
  * @param {[_id: objectId, name: string, type: string, subnet: string]} orgSubnets to check overlaps
+ * @param {[_id: objectId, bgp: object]} orgBgpDevices
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, isRunning = false, orgSubnets = []) => {
+const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevices = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -310,6 +313,13 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
       };
     }
 
+    if ((ifc.routing === 'BGP' || ifc.routing === 'OSPF,BGP') && !device.bgp.enable) {
+      return {
+        valid: false,
+        err: `Cannot set BGP routing protocol for interface ${ifc.name}. BGP is not enabled`
+      };
+    }
+
     if (ifc.type === 'LAN') {
       // Path labels are not allowed on LAN interfaces
       if (ifc.pathlabels.length !== 0) {
@@ -328,10 +338,11 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
       }
 
       // DHCP client is not allowed on LAN interface
-      if (ifc.dhcp === 'yes') {
+      if (ifc.dhcp === 'yes' && device.dhcp.find(d => d.interface === ifc.devId)) {
         return {
           valid: false,
-          err: 'LAN interfaces should not be set to DHCP'
+          err: `Configure DHCP server on interface ${ifc.name} is not allowed \
+          while the interface configured with DHCP client`
         };
       }
     }
@@ -490,6 +501,77 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
       return { valid, err };
     }
   }
+
+  // routing filters validation
+  if (device.routingFilters) {
+    for (const filter of device.routingFilters) {
+      const name = filter.name;
+      const duplicateName = device.routingFilters.filter(l => l.name === name).length > 1;
+      if (duplicateName) {
+        return {
+          valid: false,
+          err: 'Routing filters with the same name are not allowed'
+        };
+      }
+    }
+  }
+
+  const routingFilterNames = keyBy(device.routingFilters, 'name');
+  const usedNeighborIps = {};
+  for (const bgpNeighbor of device.bgp.neighbors) {
+    const inboundFilter = bgpNeighbor.inboundFilter;
+    const outboundFilter = bgpNeighbor.outboundFilter;
+    if (inboundFilter && !(inboundFilter in routingFilterNames)) {
+      return {
+        valid: false,
+        err: `BGP neighbor ${bgpNeighbor.ip} uses an  \
+        unrecognized routing filter name ("${inboundFilter}")`
+      };
+    }
+
+    if (outboundFilter && !(outboundFilter in routingFilterNames)) {
+      return {
+        valid: false,
+        err: `BGP neighbor ${bgpNeighbor.ip} uses an \
+        unrecognized routing filter name ("${outboundFilter}")`
+      };
+    }
+
+    if (bgpNeighbor.ip in usedNeighborIps) {
+      return {
+        valid: false,
+        err: 'Duplication in BGP neighbor IP is not allowed'
+      };
+    } else {
+      usedNeighborIps[bgpNeighbor.ip] = 1;
+    }
+  }
+
+  if (device.bgp.enable) {
+    const routerId = device.bgp.routerId;
+    const localASN = device.bgp.localASN;
+    let errMsg = '';
+    const routerIdExists = orgBgpDevices.find(d => {
+      if (d._id.toString() === device._id.toString()) return false;
+      if (d.bgp.routerId === routerId) {
+        errMsg = `Device ${d.name} already configured the requests BGP router ID`;
+        return true;
+      }
+
+      if (d.bgp.localASN === localASN) {
+        errMsg = `Device ${d.name} already configured the requests BGP local ASN`;
+        return true;
+      }
+    });
+
+    if (routerIdExists) {
+      return {
+        valid: false,
+        err: errMsg
+      };
+    }
+  }
+
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -556,8 +638,15 @@ const isIPv4Address = (ip, mask) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateStaticRoute = (device, tunnels, route) => {
-  const { ifname, gateway, isPending } = route;
+  const { ifname, gateway, isPending, redistributeViaBGP, onLink } = route;
   const gatewaySubnet = `${gateway}/32`;
+
+  if (redistributeViaBGP && !device.bgp.enable) {
+    return {
+      valid: false,
+      err: 'Cannot redistribute static route via BGP. Please enable BGP first'
+    };
+  }
 
   if (ifname) {
     const ifc = device.interfaces.find(i => i.devId === ifname);
@@ -570,10 +659,12 @@ const validateStaticRoute = (device, tunnels, route) => {
 
     if (!isPending && !cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
       // A pending route may not overlap with an interface
-      return {
-        valid: false,
-        err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
-      };
+      if (onLink !== true) {
+        return {
+          valid: false,
+          err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+        };
+      }
     }
 
     // Don't allow putting static route on a bridged interface

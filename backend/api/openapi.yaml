@@ -8561,6 +8561,26 @@ components:
         coords:
         - 46.5
         - 3.6
+        routingFilters:
+        - defaultAction: deny
+          name: routingFilterName
+          description: description for the filter
+          rules:
+          - network: 192.168.55.0/24
+            network: 192.168.66.0/24
+        bgp:
+          enable: true
+          holdInterval: 90
+          keepaliveInterval: 30,
+          localASN: 65001
+          routerId: 192.168.1.124
+          redistributeOspf: true
+          neighbors:
+          - password: ''
+            ip: 192.168.1.250
+            remoteASN: 65002
+            inboundFilter: routingFilterName
+            outboundFilter: routingFilterName
       properties:
         machineId:
           type: string
@@ -8599,6 +8619,12 @@ components:
         coords:
           items:
             type: number
+          type: array
+        bgp:
+          $ref: '#/components/schemas/BgpConfigs'
+        routingFilters:
+          items:
+            $ref: '#/components/schemas/RoutingFilter'
           type: array
         upgradeSchedule:
           $ref: '#/components/schemas/UpgradeSchedule'
@@ -8726,6 +8752,8 @@ components:
         - 40.4
         - 5.7
         sync: device sync status
+        routingFilters:
+        - routingFilter
       properties:
         _id:
           maxLength: 24
@@ -8764,6 +8792,10 @@ components:
         dhcp:
           items:
             $ref: '#/components/schemas/Dhcp'
+          type: array
+        routingFilters:
+          items:
+            $ref: '#/components/schemas/RoutingFilter'
           type: array
         coords:
           items:
@@ -8890,6 +8922,8 @@ components:
         routing:
           enum:
           - OSPF
+          - BGP
+          - OSPF,BGP
           - NONE
           type: string
         type:
@@ -9109,11 +9143,98 @@ components:
         - sync
         - connection
         - isApproved
+    RoutingFilter:
+      example:
+        $ref: '#/components/examples/RoutingFilterExample'
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        defaultAction:
+          type: string
+          enum:
+          - deny
+          - allow
+        rules:
+          items:
+            $ref: '#/components/schemas/RoutingFilterRule'
+          type: array
+      type: object
+    RoutingFilterRule:
+      example:
+        $ref: '#/components/examples/RoutingFilterRuleExample'
+      properties:
+        network:
+          type: string
+          maxLength: 24
+      type: object
+    BgpConfigs:
+      example:
+        enable: true
+        localASN: 45235
+        keepaliveInterval: 30
+        holdInterval: 90
+        routerId: A.B.C.D
+        redistributeOspf: true
+        neighbors:
+        - ip: 1.1.1.1/24
+          remoteASN: 6
+        - ip: 2.2.2.2/24
+          remoteASN: 22435
+          password: abcdefg
+      properties:
+        enable:
+          type: boolean
+        localASN:
+          type: string
+          description: The AS number is an identifier for the autonomous system
+        keepaliveInterval:
+          type: string
+          description: The number of seconds for keepalive timer
+        holdInterval:
+          type: string
+          description: The number of seconds for hold time
+        routerId:
+          type: string
+          description: The Router ID of the router
+        redistributeOspf:
+          type: boolean
+          description: If to redistribute to BGP routes that learned by OSPF
+        neighbors:
+          items:
+            $ref: '#/components/schemas/BgpNeighbor'
+          type: array
+      type: object
+    BgpNeighbor:
+      example:
+        ip: 8.8.8.8/32
+        remoteASN: 25
+        password: abcde
+      properties:
+        ip:
+          type: string
+          maxLength: 24
+          description: Ip and Mask of the neighbor interface
+        remoteASN:
+          type: string
+          description: The AS number of the remote neighbor
+        password:
+          type: string
+          description: A MD5 password to be used with the tcp socket that is being used to connect to the remote peer
+        inboundFilter:
+          type: string
+          description: A routing filter name to apply on the incoming routes from BGP peer
+        outboundFilter:
+          type: string
+          description: A routing filter name to apply on the expose routes to the BGP peer
+      type: object
     OspfConfigs:
       example:
         helloInterval: 10
         deadInterval: 40
         routerId: A.B.C.D
+        redistributeBgp: true
       properties:
         helloInterval:
           type: integer
@@ -9124,6 +9245,9 @@ components:
         routerId:
           type: string
           description: The Router ID of the router originating the LSA
+        redistributeBgp:
+          type: boolean
+          description: If to redistribute to OSPF routes that learned by BGP
       type: object
     CoordsConfigs:
       example:
@@ -10891,3 +11015,15 @@ components:
       bearerFormat: JWT
       scheme: bearer
       type: http
+  examples:
+    RoutingFilterExample:
+      value:
+        name: list name
+        description: list description
+        rules:
+        - $ref: '#/components/examples/RoutingFilterRuleExample'
+    RoutingFilterRuleExample:
+      value:
+        network: 100.200.30.1/24
+
+

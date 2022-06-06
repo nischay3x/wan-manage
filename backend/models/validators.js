@@ -23,7 +23,7 @@ const filenamify = require('filenamify');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
 
 // Globals
-const protocols = ['OSPF', 'NONE'];
+const protocols = ['OSPF', 'NONE', 'BGP', 'OSPF,BGP'];
 const interfaceTypes = ['WAN', 'LAN', 'NONE'];
 
 // Helper functions
@@ -91,6 +91,7 @@ const validateUsbAddress = usb => {
   );
 };
 const validateIfcName = (name) => { return /^[a-zA-Z0-9_]{1,15}$/i.test(name || ''); };
+const validateIsNumber = (str) => { return !isNaN(Number(str)); };
 const validateDriverName = (name) => { return /^[a-z0-9_-]{1,30}$/i.test(name || ''); };
 const validateMacAddress = mac => {
   return /^(([A-F0-9]{2}:){5}[A-F0-9]{2})|(([A-F0-9]{2}-){5}[A-F0-9]{2})$/i.test(
@@ -172,6 +173,8 @@ const validateOSPFInterval = val => val && validateIsInteger(val) && +val >= 1 &
 const validateFQDN = val => val && validator.isFQDN(val);
 const validateStringNoSpaces = str => { return str === '' || /^\S+$/i.test(str || ''); };
 const validateApplicationIdentifier = str => { return /[A-Za-z_.-]/i.test(str || ''); };
+const validateBGPASN = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
+const validateBGPInterval = val => val && validateIsInteger(val) && +val >= 0 && +val < 65535;
 
 module.exports = {
   validateDHCP,
@@ -216,5 +219,8 @@ module.exports = {
   validateOSPFInterval,
   validateFQDN,
   validateStringNoSpaces,
-  validateApplicationIdentifier
+  validateApplicationIdentifier,
+  validateBGPASN,
+  validateBGPInterval,
+  validateIsNumber
 };

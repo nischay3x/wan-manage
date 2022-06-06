@@ -33,6 +33,9 @@ describe('validateDevice', () => {
 
   beforeEach(() => {
     device = {
+      bgp: {
+        neighbors: []
+      },
       interfaces: [{
         name: 'eth0',
         devId: '00:02.00',
@@ -788,6 +791,15 @@ describe('validateStaticRoute', () => {
       `Interface IP ${ifc.IPv4} and gateway ${route.gateway} are not on the same subnet`;
     const result = validateStaticRoute(device, tunnels, route);
     expect(result).toMatchObject(failureObject);
+  });
+
+  // eslint-disable-next-line max-len
+  it('Should be a valid route if interface IP and gateway not on the same subnet but "onlink" enabled', () => {
+    route.ifname = 'pci:0000:00:01.00';
+    route.gateway = '192.168.101.1';
+    route.onLink = true;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(successObject);
   });
 
   it('Should be an invalid route if interface IP and gateway not on the same subnet', () => {
