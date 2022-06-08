@@ -547,9 +547,12 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     let errMsg = '';
     const routerIdExists = orgBgpDevices.find(d => {
       if (d._id.toString() === device._id.toString()) return false;
+
       if (d.bgp.routerId === routerId) {
-        errMsg = `Device ${d.name} already configured the requests BGP router ID`;
-        return true;
+        if (routerId !== '' && d.bgp.routerId !== '') { // allow multiple routerIds to be empty
+          errMsg = `Device ${d.name} already configured the requests BGP router ID`;
+          return true;
+        }
       }
 
       if (d.bgp.localASN === localASN) {
