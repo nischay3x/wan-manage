@@ -518,7 +518,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
 
   const routingFilterNames = keyBy(device.routingFilters, 'name');
   const usedNeighborIps = {};
-  for (const bgpNeighbor of device.bgp.neighbors) {
+  for (const bgpNeighbor of device.bgp?.neighbors ?? []) {
     const inboundFilter = bgpNeighbor.inboundFilter;
     const outboundFilter = bgpNeighbor.outboundFilter;
     if (inboundFilter && !(inboundFilter in routingFilterNames)) {
@@ -547,19 +547,25 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
   }
 
-  if (device.bgp.enable) {
+  if (device.bgp?.enable) {
     const routerId = device.bgp.routerId;
     const localASN = device.bgp.localASN;
     let errMsg = '';
     const routerIdExists = orgBgpDevices.find(d => {
       if (d._id.toString() === device._id.toString()) return false;
-      if (d.bgp.routerId === routerId) {
-        errMsg = `Device ${d.name} already configured the requests BGP router ID`;
-        return true;
-      }
 
       if (d.bgp.localASN === localASN) {
         errMsg = `Device ${d.name} already configured the requests BGP local ASN`;
+        return true;
+      }
+
+      if (!routerId || routerId === '') {
+        // allow multiple routerIds to be empty string or undefined
+        return;
+      }
+
+      if (d.bgp.routerId === routerId) {
+        errMsg = `Device ${d.name} already configured the requests BGP router ID`;
         return true;
       }
     });

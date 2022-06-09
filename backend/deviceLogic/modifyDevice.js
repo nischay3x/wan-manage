@@ -985,15 +985,26 @@ const transformRoutingFilters = (routingFilters) => {
 
 /**
  * Creates a modify-ospf object
- * @param  {Object} origDevice device object before changes in the database
- * @param  {Object} newDevice  device object after changes in the database
- * @return {Object}            an object containing an array of routes
+ * @param  {Object} ospf device OSPF object
+ * @param  {Object} bgp  device BGP OSPF object
+ * @return {Object}      an object containing the OSPF parameters
  */
-const transformOSPF = (ospf) => {
+const transformOSPF = (ospf, bgp) => {
   // Extract only global fields from ospf
   // The rest fields are per interface and sent to device via add/modify-interface jobs
-  const globalFields = ['routerId', 'redistributeBgp'];
-  return pick(ospf, globalFields);
+  // const globalFields = ['routerId', 'redistributeBgp'];
+  const ospfParams = {
+    routerId: ospf.routerId
+  };
+
+  // if bgp is disabled, send this field as false to the device.
+  if (bgp.enable) {
+    ospfParams.redistributeBgp = ospf.redistributeBgp;
+  } else {
+    ospfParams.redistributeBgp = false;
+  }
+
+  return ospfParams;
 };
 
 /**
@@ -1109,8 +1120,8 @@ const prepareModifyRoutingFilters = (origDevice, newDevice) => {
  */
 const prepareModifyOSPF = (origDevice, newDevice) => {
   const [origOSPF, newOSPF] = [
-    transformOSPF(origDevice.ospf),
-    transformOSPF(newDevice.ospf)
+    transformOSPF(origDevice.ospf, origDevice.bgp),
+    transformOSPF(newDevice.ospf, newDevice.bgp)
   ];
 
   if (isEqual(origOSPF, newOSPF)) {
@@ -1611,7 +1622,7 @@ const sync = async (deviceId, org) => {
   }
 
   // IMPORTANT: routing data should be before static routes!
-  let ospfData = transformOSPF(ospf);
+  let ospfData = transformOSPF(ospf, bgp);
   // remove empty values because they are optional
   ospfData = omitBy(ospfData, val => val === '');
   if (!isEmpty(ospfData)) {
