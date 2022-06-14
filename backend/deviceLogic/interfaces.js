@@ -120,7 +120,11 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
     }
 
     ifcInfo.bridge_addr = ifc.type === 'LAN' && deviceInterfaces.some(i => {
-      return devId !== i.devId && i.isAssigned && IPv4 === i.IPv4 && IPv4Mask === i.IPv4Mask;
+      return devId !== i.devId &&
+      i.type === 'LAN' &&
+      i.isAssigned &&
+      IPv4 === i.IPv4 &&
+      IPv4Mask === i.IPv4Mask;
     }) ? ifcInfo.addr : null;
 
     interfaces.push(ifcInfo);

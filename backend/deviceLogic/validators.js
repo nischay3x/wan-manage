@@ -321,6 +321,14 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
 
     if (ifc.type === 'LAN') {
+      // Prevent LAN and WAN to be with same IP
+      if (wanIfcs.some(wi => wi.IPv4 === ifc.IPv4 && wi.IPv4Mask === ifc.IPv4Mask)) {
+        return {
+          valid: false,
+          err: `LAN and WAN interfaces cannot have the same IP - ${ifc.IPv4}/${ifc.IPv4Mask}`
+        };
+      }
+
       // Path labels are not allowed on LAN interfaces
       if (ifc.pathlabels.length !== 0) {
         return {
@@ -348,6 +356,17 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
 
     if (ifc.type === 'WAN') {
+      // Prevent two WANs to be with same IP
+      const anotherWanWithSameIp = wanIfcs.some(wi => {
+        return wi.devId !== ifc.devId && wi.IPv4 === ifc.IPv4 && wi.IPv4Mask === ifc.IPv4Mask;
+      });
+      if (anotherWanWithSameIp) {
+        return {
+          valid: false,
+          err: `Multiple WAN interfaces cannot have the same IP - ${ifc.IPv4}/${ifc.IPv4Mask}`
+        };
+      }
+
       // OSPF is not allowed on WAN interfaces
       if (ifc.routing === 'OSPF') {
         return {

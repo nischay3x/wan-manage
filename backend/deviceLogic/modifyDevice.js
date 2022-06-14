@@ -78,7 +78,9 @@ const prepareIfcParams = (interfaces, newDevice) => {
     // We put this field only if the interface is LAN
     // and other assigned interfaces have the same IP.
     newIfc.bridge_addr = ifc.type === 'LAN' && ifc.isAssigned && newDevice.interfaces.some(i => {
-      return newIfc.dev_id !== i.devId && i.isAssigned && newIfc.addr === i.IPv4 + '/' + i.IPv4Mask;
+      return newIfc.dev_id !== i.devId &&
+      i.type === 'LAN' && i.isAssigned &&
+      newIfc.addr === i.IPv4 + '/' + i.IPv4Mask;
     }) ? newIfc.addr : null;
 
     if (ifc.isAssigned) {
