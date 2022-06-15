@@ -19,8 +19,10 @@ const net = require('net');
 const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
+const { getBridges } = require('../utils/deviceUtils');
 const { getMajorVersion } = require('../versioning');
 const keyBy = require('lodash/keyBy');
+const { isEqual } = require('lodash');
 const maxMetric = 2 * 10 ** 9;
 
 /**
@@ -294,6 +296,8 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     };
   }
 
+  const bridges = getBridges(assignedIfs);
+  const assignedByDevId = keyBy(assignedIfs, 'devId');
   for (const ifc of assignedIfs) {
     // Assigned interfaces must be either WAN or LAN
     if (!['WAN', 'LAN'].includes(ifc.type)) {
@@ -311,6 +315,19 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
           : `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
                       ? 'IPv4 mask' : 'IP address'}`
       };
+    }
+
+    const ipv4 = `${ifc.IPv4}/${ifc.IPv4Mask}`;
+    // if interface in a bridge - make sure all bridged interface has no conflicts in configuration
+    if (ipv4 in bridges) {
+      for (const devId of bridges[ipv4]) {
+        if (!isEqual(assignedByDevId[devId].ospf, ifc.ospf)) {
+          return {
+            valid: false,
+            err: 'There is a conflict between the OSPF configuration of the bridge interfaces'
+          };
+        }
+      }
     }
 
     if ((ifc.routing === 'BGP' || ifc.routing === 'OSPF,BGP') && !device.bgp.enable) {
