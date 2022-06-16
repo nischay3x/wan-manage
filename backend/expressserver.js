@@ -30,7 +30,7 @@ const bodyParser = require('body-parser');
 const { OpenApiValidator } = require('express-openapi-validator');
 const openapiRouter = require('./utils/openapiRouter');
 const createError = require('http-errors');
-
+// const session = require('express-session');
 const passport = require('passport');
 const auth = require('./authenticate');
 const { connectRouter } = require('./routes/connect');
@@ -116,6 +116,23 @@ class ExpressServer {
     // Request logging middleware - must be defined before routers.
     this.app.use(reqLogger);
     this.app.set('trust proxy', true); // Needed to get the public IP if behind a proxy
+
+    // function makeSecret () {
+    //   var result = '';
+    //   var characters = 'ABCDEFGHIJKLM%NOPQRSTUVWXYZabcdefg*!hijklmnopqrstuvwxyz0123456789';
+    //   var charactersLength = characters.length;
+    //   for (var i = 0; i < 40; i++) {
+    //     result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    //   }
+    //   return result;
+    // }
+
+    // this.app.use(session({
+    //   secret: makeSecret(),
+    //   resave: false,
+    //   saveUninitialized: true,
+    //   cookie: { secure: true, maxAge: 60000, sameSite: 'lax' }
+    // }));
 
     // Don't expose system internals in response headers
     this.app.disable('x-powered-by');

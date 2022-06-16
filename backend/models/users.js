@@ -130,6 +130,17 @@ const User = new Schema({
   defaultOrg: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'organizations'
+  },
+  // Default user organization
+  mfa: {
+    secret: {
+      type: String,
+      default: null
+    },
+    verified: {
+      type: Boolean,
+      default: false
+    }
   }
 });
 

@@ -24,7 +24,7 @@ const User = require('../models/users');
 const Account = require('../models/accounts');
 const { membership, preDefinedPermissions } = require('../models/membership');
 const auth = require('../authenticate');
-const { getToken, getRefreshToken } = require('../tokens');
+// const { getToken, getRefreshToken } = require('../tokens');
 const cors = require('./cors');
 const mongoConns = require('../mongoConns.js')();
 const randomKey = require('../utils/random-key');
@@ -39,7 +39,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { getUiServerUrl } = require('../utils/httpUtils');
 const flexibilling = require('../flexibilling');
 const { getUserOrganizations } = require('../utils/membershipUtils');
-
+// const { generateTOTP } = require('../otp');
 router.use(bodyParser.json());
 
 // Error formatter
@@ -447,15 +447,26 @@ router.route('/reset-password')
 // Authentication check is done within passport, if passed, no login error exists
 router.route('/login')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .post(cors.corsWithOptions, auth.verifyUserLocal, async (req, res) => {
+  .post(cors.corsWithOptions, auth.verifyUserLocal, async (req, res, next) => {
+    const { mfa } = req.user;
+    const { verified, secret } = mfa;
+    if (!secret || !verified) {
+      return next(createError(461, '2FA is not configured'));
+    } else if (secret && verified) {
+      return next(createError(460, '2FA verification required'));
+    } else {
+      return next(createError(401, 'Not able to authorize'));
+    }
+    // req.session.mfaConfigured = body.username;
+
     // Create token with user id and username
-    const token = await getToken(req);
-    const refreshToken = await getRefreshToken(req);
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Refresh-JWT', token);
-    res.setHeader('refresh-token', refreshToken);
-    res.json({ name: req.user.name, status: 'logged in' });
+    // const token = await getToken(req);
+    // const refreshToken = await getRefreshToken(req);
+    // res.statusCode = 200;
+    // res.setHeader('Content-Type', 'application/json');
+    // res.setHeader('Refresh-JWT', token);
+    // res.setHeader('refresh-token', refreshToken);
+    // res.json({ name: req.user.name, status: 'logged in' });
   });
 
 // Authentication check is done within passport, if passed, no login error exists
