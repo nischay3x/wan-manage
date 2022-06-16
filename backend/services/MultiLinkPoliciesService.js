@@ -87,16 +87,6 @@ class MultiLinkPoliciesService {
           message: 'Enabled rule must contain Path Labels'
         };
       }
-
-      // Link-quality with DIA labels not allowed
-      if (rule.action.links.some(link => (link.order === 'link-quality' &&
-          link.pathlabels.some(label => label.type === 'DIA')
-      ))) {
-        return {
-          valid: false,
-          message: 'Link-quality with DIA labels not allowed'
-        };
-      };
     };
 
     // Duplicate names are not allowed in the same organization
