@@ -26,6 +26,7 @@ const upgrade = require('./applyUpgrade');
 const mlpolicy = require('./mlpolicy');
 const application = require('./application');
 const firewallPolicy = require('./firewallPolicy');
+const qosPolicy = require('./qosPolicy');
 const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
 const sync = require('./sync');
@@ -114,6 +115,12 @@ const methods = {
     complete: firewallPolicy.complete,
     error: firewallPolicy.error,
     remove: firewallPolicy.remove
+  },
+  qosPolicy: {
+    apply: qosPolicy.apply,
+    complete: qosPolicy.complete,
+    error: qosPolicy.error,
+    remove: qosPolicy.remove
   },
   appIdentification: {
     apply: appIdentification.apply,

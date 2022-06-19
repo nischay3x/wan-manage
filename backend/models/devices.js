@@ -269,6 +269,19 @@ const interfacesSchema = new Schema({
     type: Object,
     default: {}
   },
+  wanBandwidthMbps: {
+    type: Object,
+    required: true,
+    default: {
+      tx: 100,
+      rx: 100
+    }
+  },
+  qosPolicy: {
+    type: Schema.Types.ObjectId,
+    ref: 'QOSPolicies',
+    default: null
+  },
   ospf: {
     area: {
       type: Schema.Types.Mixed,
@@ -620,13 +633,13 @@ const deviceRoutingFiltersSchema = new Schema({
 });
 
 /**
- * Device multilink policy schema
+ * Device policy schema
  */
-const deviceMultilinkPolicySchema = new Schema({
+const devicePolicySchema = (ref) => new Schema({
   _id: false,
   policy: {
     type: Schema.Types.ObjectId,
-    ref: 'MultiLinkPolicies',
+    ref: ref,
     default: null
   },
   status: {
@@ -635,27 +648,6 @@ const deviceMultilinkPolicySchema = new Schema({
     default: ''
   },
   // TODO: check if really needed
-  requestTime: {
-    type: Date,
-    default: null
-  }
-});
-
-/**
- * Device firewall policy schema
- */
-const deviceFirewallPolicySchema = new Schema({
-  _id: false,
-  policy: {
-    type: Schema.Types.ObjectId,
-    ref: 'FirewallPolicies',
-    default: null
-  },
-  status: {
-    type: String,
-    enum: statusEnums,
-    default: ''
-  },
   requestTime: {
     type: Date,
     default: null
@@ -920,12 +912,16 @@ const deviceSchema = new Schema({
   labels: [String],
   policies: {
     multilink: {
-      type: deviceMultilinkPolicySchema,
-      default: deviceMultilinkPolicySchema
+      type: devicePolicySchema('MultiLinkPolicies'),
+      default: devicePolicySchema('MultiLinkPolicies')
     },
     firewall: {
-      type: deviceFirewallPolicySchema,
-      default: deviceFirewallPolicySchema
+      type: devicePolicySchema('FirewallPolicies'),
+      default: devicePolicySchema('FirewallPolicies')
+    },
+    qos: {
+      type: devicePolicySchema('QOSPolicies'),
+      default: devicePolicySchema('QOSPolicies')
     }
   },
   deviceSpecificRulesEnabled: {

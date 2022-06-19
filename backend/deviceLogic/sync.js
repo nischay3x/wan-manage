@@ -27,6 +27,8 @@ const mlPolicySyncHandler = require('./mlpolicy').sync;
 const mlPolicyCompleteHandler = require('./mlpolicy').completeSync;
 const firewallPolicySyncHandler = require('./firewallPolicy').sync;
 const firewallPolicyCompleteHandler = require('./firewallPolicy').completeSync;
+const qosPolicySyncHandler = require('./qosPolicy').sync;
+const qosPolicyCompleteHandler = require('./qosPolicy').completeSync;
 const deviceConfSyncHandler = require('./modifyDevice').sync;
 const deviceConfCompleteHandler = require('./modifyDevice').completeSync;
 const tunnelsSyncHandler = require('./tunnels').sync;
@@ -61,6 +63,10 @@ const syncHandlers = {
   firewallPolicies: {
     syncHandler: firewallPolicySyncHandler,
     completeHandler: firewallPolicyCompleteHandler
+  },
+  qosPolicies: {
+    syncHandler: qosPolicySyncHandler,
+    completeHandler: qosPolicyCompleteHandler
   },
   appIdentification: {
     syncHandler: appIdentificationSyncHandler,

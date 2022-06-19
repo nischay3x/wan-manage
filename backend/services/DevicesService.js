@@ -197,6 +197,8 @@ class DevicesService {
           'deviceType',
           'configuration',
           'deviceParams',
+          'qosPolicy',
+          'wanBandwidthMbps',
           'dnsServers',
           'dnsDomains',
           'useDhcpDnsServers',
@@ -365,6 +367,20 @@ class DevicesService {
         },
         {
           $lookup: {
+            from: 'qospolicies',
+            localField: 'policies.qos.policy',
+            foreignField: '_id',
+            as: 'policies.qos.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.qos.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
             from: 'pathlabels',
             localField: 'interfaces.pathlabels',
             foreignField: '_id',
@@ -430,6 +446,7 @@ class DevicesService {
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            'policies.qos': { status: 1, policy: { name: 1, description: 1 } },
             applications: 1,
             deviceState: '$deviceStatus.state'
           }
@@ -458,6 +475,8 @@ class DevicesService {
           'dhcp',
           'deviceSpecificRulesEnabled',
           'firewall',
+          'qosPolicy',
+          'wanBandwidthMbps',
           'upgradeSchedule',
           'sync',
           'ospf',
@@ -667,6 +686,8 @@ class DevicesService {
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description')
+        .populate('policies.qos.policy', '_id name description')
+        .populate('interfaces.qosPolicy', '_id name description')
         .populate({
           path: 'applications.app',
           populate: {
@@ -1810,6 +1831,7 @@ class DevicesService {
           .populate('interfaces.pathlabels', '_id name description color type')
           .populate('policies.firewall.policy', '_id name description rules')
           .populate('policies.multilink.policy', '_id name description')
+          .populate('policies.qos.policy', '_id name description')
           .populate({
             path: 'applications.app',
             populate: {

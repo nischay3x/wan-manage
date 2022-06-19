@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019-2020  flexiWAN Ltd.
+// Copyright (C) 2022  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -16,7 +16,8 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const createError = require('http-errors');
-const firewallPoliciesModel = require('../models/firewallPolicies');
+const pick = require('lodash/pick');
+const qosPoliciesModel = require('../models/qosPolicies');
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { devices } = require('../models/devices');
@@ -25,198 +26,147 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 
-const { getDevicesAppIdentificationJobInfo } = require('./appIdentification');
-const appComplete = require('./appIdentification').complete;
-const appError = require('./appIdentification').error;
-const appRemove = require('./appIdentification').remove;
-const isEmpty = require('lodash/isEmpty');
-const { validateFirewallRules } = require('../deviceLogic/validators');
-
-/**
- * Gets the device firewall data needed for creating a job
- * @async
- * @param   {Object} device - the device to send firewall parameters
- * @return  {Object} parameters to include in the job response data { requests, response }
-*/
-const getDevicesFirewallJobInfo = async (device) => {
-  let op = 'install';
-  const { policy: firewallPolicy } = device.policies.firewall;
-  const policyParams = getFirewallParameters(firewallPolicy, device);
-  if (!policyParams) op = 'uninstall';
-  // Extract applications information
-  const apps = await getDevicesAppIdentificationJobInfo(
-    device.org,
-    'firewall',
-    [device._id],
-    op === 'install'
-  );
-
-  const requestTime = Date.now();
-  await updateDevicesBeforeJob([device._id], op, requestTime, firewallPolicy, device.org);
-  return prepareFirewallJobInfo(device, policyParams, op, device.org, apps, requestTime);
+const toCamelCase = (str) => {
+  return str.replace(/^.|-./g, (l, i) => i ? l.substr(1).toUpperCase() : l.toLowerCase());
 };
 
-const prepareFirewallJobInfo = (device, policyParams, op, org, apps, requestTime) => {
+/**
+ * Gets the device QOS data needed for creating a job
+ * @async
+ * @param   {Object} device - the device to send QOS parameters
+ * @return  {Object} parameters to include in the job response data { requests, response }
+*/
+const getDevicesQOSJobInfo = async (device) => {
+  let op = 'install';
+  const { policy: qosPolicy } = device.policies.qos;
+  const policyParams = getQOSParameters(qosPolicy, device);
+  if (!policyParams) op = 'uninstall';
+
+  const requestTime = Date.now();
+  await updateDevicesBeforeJob([device._id], op, requestTime, qosPolicy, device.org);
+  return prepareQOSJobInfo(device, policyParams, op, device.org, requestTime);
+};
+
+const prepareQOSJobInfo = (device, policyParams, op, org, requestTime) => {
   const tasks = [
     {
       entity: 'agent',
-      message: `${op === 'install' ? 'add' : 'remove'}-firewall-policy`,
+      message: `${op === 'install' ? 'add' : 'remove'}-qos-policy`,
       params: policyParams
     }
   ];
   const data = {
     policy: {
-      device: { _id: device._id, firewallPolicy: policyParams ? policyParams.id : '' },
+      device: { _id: device._id, qosPolicy: policyParams ? policyParams.id : '' },
       requestTime: requestTime,
       op: op,
       org: org
     }
   };
 
-  // If the device's appIdentification database is outdated
-  // we add an add-application/remove-application message as well.
-  // add-application comes before add-firewall-policy when installing.
-  // remove-application comes after remove-firewall-policy when uninstalling.
-  if (apps.installIds[device._id] === true) {
-    const task = {
-      entity: 'agent',
-      message: apps.message,
-      params: apps.params
-    };
-    op === 'install' ? tasks.unshift(task) : tasks.push(task);
+  // If the QOS traffic map was modified and not sent yet, attach the task
+  // .... todo  
 
-    data.appIdentification = {
-      deviceId: device._id,
-      ...apps.deviceJobResp
-    };
-  }
   return { tasks, data };
 };
 
 /**
- * Gets firewall policy parameters of the device, needed for creating a job
- * @param   {Object} policy - the global firewall policy with array of rules
- * @param   {Object} device - the device where to send firewall parameters
- * @return  {Object} parameters to include in the job or null if nothing to send
+ * Converts the QOS Policy parameters to match the agent API
+ * @param   {Object} policy - a global QOS policy applied on the device
+ * @return  {Object} parameters to include in the job
  */
-const getFirewallParameters = (policy, device) => {
-  // global rules must be applied after device specific rules
-  // assuming there will be not more than 10000 local rules
-  const globalShift = 10000;
-  const policyRules = policy ? policy.rules
-    .filter(r => r.enabled)
-    .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
-  const deviceRules = device.deviceSpecificRulesEnabled ? device.firewall.rules
-    .filter(r => r.enabled) : [];
-  const firewallRules = [...policyRules, ...deviceRules]
-    .sort((r1, r2) => r1.priority - r2.priority);
-  if (firewallRules.length === 0) {
-    return null;
+const convertParameters = (policy) => {
+  const { name, advanced, inbound, outbound } = policy;
+  let params;
+  if (!advanced) {
+    params = {
+      name,
+      inbound: {
+        policer: {
+          bandwidthLimitPercentHigh: 100,
+          bandwidthLimitPercentMedium: 100 - inbound.bandwidthReservation,
+          bandwidthLimitPercentLow: 100 - inbound.bandwidthReservation - 15
+        }
+      },
+      outbound: {
+        scheduling: {
+          realtimeQueue: {
+            bandwidthLimitPercent: 100 - outbound.bandwidthReservation
+          },
+          controlSignalingQueue: { weight: 60 },
+          primeSelectQueue: { weight: 30 },
+          standardSelectQueue: { weight: 8 },
+          bestEffortQueue: { weight: 2 }
+        }
+      }
+    };
+  } else {
+    const scheduling = {};
+    const queueNames = [
+      'realtime',
+      'control-signaling',
+      'prime-select',
+      'standard-select',
+      'best-effort'
+    ];
+    for (const queueName of queueNames) {
+      if (outbound[queueName]) {
+        scheduling[toCamelCase(queueName) + 'Queue'] = outbound[queueName];
+      }
+    };
+    params = {
+      name,
+      inbound: {
+        policer: pick(inbound, [
+          'bandwidthLimitPercentHigh',
+          'bandwidthLimitPercentMedium',
+          'bandwidthLimitPercentLow'
+        ])
+      },
+      outbound: {
+        scheduling: scheduling
+      }
+    };
   }
-  const params = {};
-  params.id = policy ? policy._id : 'device-specific';
-  params.outbound = {
-    rules: firewallRules.filter(rule => rule.direction === 'outbound').map(rule => {
-      const { _id, priority, action, interfaces } = rule;
-      const classification = {};
-      if (rule.classification) {
-        if (!isEmpty(rule.classification.source)) {
-          classification.source = {};
-          ['trafficId', 'ipPort'].forEach(item => {
-            if (!isEmpty(rule.classification.source[item])) {
-              classification.source[item] = rule.classification.source[item];
-            }
-          });
-        }
-        if (!isEmpty(rule.classification.destination)) {
-          classification.destination = {};
-          ['trafficId', 'trafficTags', 'ipProtoPort'].forEach(item => {
-            if (!isEmpty(rule.classification.destination[item])) {
-              classification.destination[item] = rule.classification.destination[item];
-            }
-          });
-        }
-      }
-      const jobRule = {
-        id: _id,
-        priority,
-        classification,
-        action: {
-          interfaces,
-          permit: action === 'allow'
-        }
-      };
-      return jobRule;
-    })
-  };
-  params.inbound = firewallRules.filter(r => r.direction === 'inbound')
-    .reduce((result, rule) => {
-      const { _id, inbound, priority, action } = rule;
-      const classification = {};
-      if (!isEmpty(rule.classification.source) && inbound !== 'nat1to1') {
-        classification.source = {};
-        ['trafficId', 'ipPort'].forEach(item => {
-          if (!isEmpty(rule.classification.source[item])) {
-            classification.source[item] = rule.classification.source[item];
-          }
-        });
-      }
-      const { ipProtoPort } = rule.classification.destination;
-      if (!isEmpty(ipProtoPort)) {
-        classification.destination = {};
-        const inboundParams = inbound === 'nat1to1' ? ['interface']
-          : ['interface', 'ports', 'protocols'];
-        inboundParams.forEach(item => {
-          if (!isEmpty(ipProtoPort[item])) {
-            classification.destination[item] = ipProtoPort[item];
-          }
-        });
-      }
-      const ruleAction = {};
-      switch (inbound) {
-        case 'nat1to1':
-          ruleAction.internalIP = rule.internalIP;
-          break;
-        case 'portForward':
-          ruleAction.internalIP = rule.internalIP;
-          ruleAction.internalPortStart = +rule.internalPortStart;
-          break;
-        default:
-          ruleAction.permit = action === 'allow';
-      }
-      const jobRule = {
-        id: _id,
-        priority,
-        classification,
-        action: ruleAction
-      };
-      result[inbound] = result[inbound] || { rules: [] };
-      result[inbound].rules.push(jobRule);
-      return result;
-    }, {});
   return params;
 };
 
-const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
+/**
+ * Gets QOS policy parameters of the device, needed for creating a job
+ * @param   {Object} policy - a global QOS policy applied on the device
+ * @param   {Object} device - the device where to send the QOS parameters
+ * @return  {Object} parameters to include in the job or null if nothing to send
+ */
+const getQOSParameters = (policy, device) => {
+  const params = {};
+  // global police applied on the device
+  if (policy) {
+    params.default = convertParameters(policy);
+  }
+  // interfaces specific policies
+  for (const ifc of device.interfaces.filter(i => i.isAssigned && i.type === 'WAN')) {
+    if (ifc.qosPolicy) {
+      if (!params.wanInterfaces) {
+        params.wanInterfaces = {};
+      }
+      params.wanInterfaces[ifc.devId] = convertParameters(ifc.qosPolicy);
+    }
+  }
+  return params;
+};
+
+const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
 
-  // Extract applications information
-  const apps = await getDevicesAppIdentificationJobInfo(
-    org,
-    'firewall',
-    deviceList.filter(d => op === 'install' || !d.deviceSpecificRulesEnabled).map(d => d._id),
-    op === 'install'
-  );
-
   deviceList.forEach(dev => {
-    const policyParams = getFirewallParameters(policy, dev);
+    const policyParams = getQOSParameters(policy, dev);
     if (!policyParams) op = 'uninstall';
 
     const jobTitle = op === 'install'
-      ? policy ? `Install policy ${policy.name}` : 'Install device specific policy'
+      ? policy ? `Install policy ${policy.name}` : 'Install interfaces specific policies'
       : 'Uninstall policy';
 
-    const { tasks, data } = prepareFirewallJobInfo(dev, policyParams, op, org, apps, requestTime);
+    const { tasks, data } = prepareQOSJobInfo(dev, policyParams, op, org, requestTime);
     jobs.push(
       deviceQueues.addJob(
         dev.machineId,
@@ -229,7 +179,7 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
         },
         // Response data
         {
-          method: 'firewallPolicy',
+          method: 'qosPolicy',
           data: data
         },
         // Metadata
@@ -258,8 +208,8 @@ const getOpDevices = async (devicesObj, org, policy) => {
   const result = await devices.find(
     {
       org: org,
-      'policies.firewall.policy': _id,
-      'policies.firewall.status': { $in: ['installing', 'installed'] }
+      'policies.qos.policy': _id,
+      'policies.qos.status': { $in: ['installing', 'installed'] }
     },
     { _id: 1 }
   );
@@ -269,7 +219,7 @@ const getOpDevices = async (devicesObj, org, policy) => {
 
 const filterDevices = (devices, deviceIds, op) => {
   const filteredDevices = devices.filter(device => {
-    const { status, policy } = device.policies.firewall || {};
+    const { status, policy } = device.policies.qos || {};
     // Don't attempt to uninstall a policy if the device
     // doesn't have one, or if its policy is already in
     // the process of being uninstalled.
@@ -283,25 +233,25 @@ const filterDevices = (devices, deviceIds, op) => {
 };
 
 /**
- * Get a global firewall policy with rules by Id from the database
+ * Get a global QOS policy by Id from the database
  * @async
- * @param  {string} id  - the global firewall policy Id
+ * @param  {string} id  - the global QOS policy Id
  * @param  {string} org - the organization Id
- * @return {Object} mongo firewallPolicy object with rules or undefined
+ * @return {Object} mongo qosPolicy object or undefined
  */
-const getFirewallPolicy = async (id, org) => {
+const getQOSPolicy = async (id, org) => {
   if (!id) return undefined;
-  const firewallPolicy = await firewallPoliciesModel.findOne(
+  const qosPolicy = await qosPoliciesModel.findOne(
     { org: org, _id: id },
-    { rules: 1, name: 1 }
+    { name: 1, inbound: 1, outbound: 1 }
   ).lean();
-  return firewallPolicy;
+  return qosPolicy;
 };
 
 /**
  * Update devices policy status in DB before sending jobs
  */
-const updateDevicesBeforeJob = async (deviceIds, op, requestTime, firewallPolicy, org) => {
+const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org) => {
   const updateOps = [];
   if (op === 'install') {
     updateOps.push({
@@ -309,8 +259,8 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, firewallPolicy
         filter: { _id: { $in: deviceIds }, org: org },
         update: {
           $set: {
-            'policies.firewall': {
-              policy: firewallPolicy ? firewallPolicy._id : null,
+            'policies.qos': {
+              policy: qosPolicy ? qosPolicy._id : null,
               status: 'installing',
               requestTime: requestTime
             }
@@ -322,11 +272,21 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, firewallPolicy
   } else {
     updateOps.push({
       updateMany: {
-        filter: { _id: { $in: deviceIds }, org: org, deviceSpecificRulesEnabled: false },
+        filter: {
+          _id: { $in: deviceIds },
+          org: org,
+          interfaces: {
+            $not: {
+              $elemMatch: {
+                qosPolicy: { $ne: null }
+              }
+            }
+          }
+        },
         update: {
           $set: {
-            'policies.firewall.status': 'uninstalling',
-            'policies.firewall.requestTime': requestTime
+            'policies.qos.status': 'uninstalling',
+            'policies.qos.requestTime': requestTime
           }
         },
         upsert: false
@@ -334,10 +294,18 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, firewallPolicy
     });
     updateOps.push({
       updateMany: {
-        filter: { _id: { $in: deviceIds }, org: org, deviceSpecificRulesEnabled: true },
+        filter: {
+          _id: { $in: deviceIds },
+          org: org,
+          interfaces: {
+            $elemMatch: {
+              qosPolicy: { $ne: null }
+            }
+          }
+        },
         update: {
           $set: {
-            'policies.firewall': {
+            'policies.qos': {
               policy: null,
               status: 'installing',
               requestTime: requestTime
@@ -363,32 +331,34 @@ const apply = async (deviceList, user, data) => {
   const { org } = data;
   const { op, id } = data.meta;
 
-  let firewallPolicy, deviceIds;
+  deviceList = await Promise.all(deviceList.map(d => d
+    //.populate('policies.qos.policy') //  need?   
+    .populate('interfaces.qosPolicy')
+    .execPopulate()
+  ));
+
+  let qosPolicy, deviceIds;
 
   try {
     if (op === 'install') {
       // Retrieve policy from database
-      firewallPolicy = await getFirewallPolicy(id, org);
+      qosPolicy = await getQOSPolicy(id, org);
 
-      if (!firewallPolicy) {
-        throw createError(404, `Firewall policy ${id} does not exist`);
-      }
-      // Disabled rules should not be sent to the device
-      firewallPolicy.rules = firewallPolicy.rules.filter(rule => rule.enabled);
-      if (firewallPolicy.rules.length === 0) {
-        throw createError(400, 'Policy must have at least one enabled rule');
+      if (!qosPolicy) {
+        throw createError(404, `QOS policy ${id} does not exist`);
       }
     }
 
     // Extract the device IDs to operate on
     deviceIds = data.devices
-      ? await getOpDevices(data.devices, org, firewallPolicy)
+      ? await getOpDevices(data.devices, org, qosPolicy)
       : [deviceList[0]._id];
 
     if (op === 'install') {
+      /*    
       const reqDevices = await devices.find(
         { org: org, _id: { $in: deviceIds } },
-        { name: 1, interfaces: 1, 'firewall.rules': 1, deviceSpecificRulesEnabled: 1 }
+        { name: 1, interfaces: 1, deviceSpecificRulesEnabled: 1 }
       ).lean();
       for (const dev of reqDevices) {
         const { valid, err } = validateFirewallRules(
@@ -399,6 +369,7 @@ const apply = async (deviceList, user, data) => {
           throw createError(500, `Can't install policy on ${dev.name}: ${err}`);
         }
       }
+      */    
     }
   } catch (err) {
     throw err.name === 'MongoError'
@@ -410,27 +381,27 @@ const apply = async (deviceList, user, data) => {
     // no need to apply if not installed on any of devices
     return;
   }
-  return applyPolicy(opDevices, firewallPolicy, op, user, org);
+  return applyPolicy(opDevices, qosPolicy, op, user, org);
 };
 
 /**
  * Updates devices, creates and queues add/remove policy jobs.
  * @async
  * @param  {Array}   opDevices        an array of the devices to be modified
- * @param  {Object}  firewallPolicy   the policy to apply
+ * @param  {Object}  qosPolicy        the policy to apply
  * @param  {String}  op               operation [install|uninstall]
  * @param  {Object}  user             User object
  * @param  {String}  org              Org ID
  */
-const applyPolicy = async (opDevices, firewallPolicy, op, user, org) => {
+const applyPolicy = async (opDevices, qosPolicy, op, user, org) => {
   const deviceIds = opDevices.map(device => device._id);
   const requestTime = Date.now();
 
   // Update devices policy in the database
-  await updateDevicesBeforeJob(deviceIds, op, requestTime, firewallPolicy, org);
+  await updateDevicesBeforeJob(deviceIds, op, requestTime, qosPolicy, org);
 
   // Queue policy jobs
-  const jobs = await queueFirewallPolicyJob(opDevices, op, requestTime, firewallPolicy, user, org);
+  const jobs = await queueQOSPolicyJob(opDevices, op, requestTime, qosPolicy, user, org);
   const failedToQueue = [];
   const succeededToQueue = [];
   jobs.forEach(job => {
@@ -466,7 +437,7 @@ const applyPolicy = async (opDevices, firewallPolicy, op, user, org) => {
     // Update devices' policy status in the database
     await devices.updateMany(
       { _id: { $in: failedDevices }, org: org },
-      { $set: { 'policies.firewall.status': 'job queue failed' } },
+      { $set: { 'policies.qos.status': 'job queue failed' } },
       { upsert: false }
     );
     status = 'partially completed';
@@ -493,20 +464,14 @@ const complete = async (jobId, res) => {
   const { _id } = res.policy.device;
   try {
     const update = op === 'install'
-      ? { $set: { 'policies.firewall.status': 'installed' } }
-      : { $set: { 'policies.firewall': {} } };
+      ? { $set: { 'policies.qos.status': 'installed' } }
+      : { $set: { 'policies.qos': {} } };
 
     await devices.updateOne(
       { _id: _id, org: org },
       update,
       { upsert: false }
     );
-
-    // Call appIdentification complete callback if needed
-    if (res.appIdentification) {
-      res = res.appIdentification;
-      appComplete(jobId, res);
-    }
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -531,7 +496,7 @@ const completeSync = async (jobId, jobsData) => {
       });
     }
   } catch (err) {
-    logger.error('Firewall policy sync complete callback failed', {
+    logger.error('QOS policy sync complete callback failed', {
       params: { jobsData, reason: err.message }
     });
   }
@@ -557,15 +522,9 @@ const error = async (jobId, res) => {
     const status = `${op === 'install' ? '' : 'un'}installation failed`;
     await devices.updateOne(
       { _id: _id, org: org },
-      { $set: { 'policies.firewall.status': status } },
+      { $set: { 'policies.qos.status': status } },
       { upsert: false }
     );
-
-    // Call appIdentification error callback if needed
-    if (res.appIdentification) {
-      res = res.appIdentification;
-      appError(jobId, res);
-    }
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -598,18 +557,11 @@ const remove = async (job) => {
         {
           _id: _id,
           org: org,
-          'policies.firewall.requestTime': { $eq: requestTime }
+          'policies.qos.requestTime': { $eq: requestTime }
         },
-        { $set: { 'policies.firewall.status': status } },
+        { $set: { 'policies.qos.status': status } },
         { upsert: false }
       );
-
-      // Call applications remove callback if needed
-      const { appIdentification } = job.data.response.data;
-      if (appIdentification) {
-        job.data.response.data = appIdentification;
-        appRemove(job);
-      }
     } catch (err) {
       logger.error('Device policy status update failed', {
         params: { job: job, status: status, err: err.message }
@@ -625,10 +577,13 @@ const remove = async (job) => {
 const sync = async (deviceId, org) => {
   const device = await devices.findOne(
     { _id: deviceId },
-    { deviceSpecificRulesEnabled: 1, 'policies.firewall': 1, 'firewall.rules': 1 }
-  ).lean();
+    { 'interfaces.devId': 1, 'interfaces.qosPolicy': 1, 'policies.qos': 1 }
+  )
+    //.populate('policies.qos.policy')    // need?   
+    .populate('interfaces.qosPolicy')
+    .lean();
 
-  const { policy, status } = device.policies.firewall;
+  const { policy, status } = device.policies.qos;
 
   // No need to take care of no policy cases,
   // as the device removes the policy in the
@@ -636,23 +591,24 @@ const sync = async (deviceId, org) => {
   const requests = [];
   const completeCbData = [];
   let callComplete = false;
-  let firewallPolicy;
+  let qosPolicy;
   if (status.startsWith('install')) {
-    firewallPolicy = await firewallPoliciesModel.findOne(
+    qosPolicy = await qosPoliciesModel.findOne(
       {
         _id: policy
       },
       {
-        rules: 1,
-        name: 1
+        name: 1,
+        outbound: 1,
+        inbound: 1
       }
     ).lean();
   }
-  // if no firewall policy then device specific rules will be sent
-  const params = getFirewallParameters(firewallPolicy, device);
+  // if no QOS global policy then interfaces specific policies will be sent
+  const params = getQOSParameters(qosPolicy, device);
   if (params) {
     // Push policy task and relevant data for sync complete handler
-    requests.push({ entity: 'agent', message: 'add-firewall-policy', params });
+    requests.push({ entity: 'agent', message: 'add-qos-policy', params });
     completeCbData.push({
       org,
       deviceId,
@@ -676,5 +632,5 @@ module.exports = {
   remove: remove,
   sync: sync,
   applyPolicy,
-  getDevicesFirewallJobInfo
+  getDevicesQOSJobInfo
 };
