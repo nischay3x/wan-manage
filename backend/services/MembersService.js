@@ -33,6 +33,7 @@ const Users = require('../models/users');
 const Accounts = require('../models/accounts');
 const Organizations = require('../models/organizations');
 const { getUserOrganizations } = require('../utils/membershipUtils');
+const users = require('../models/users');
 const mongoConns = require('../mongoConns.js')();
 
 class MembersService {
@@ -385,9 +386,13 @@ class MembersService {
         }
       }
 
-      // TBD: Should we also remove defaultAccount and defaultOrg?
+      // TBD: If user has other permissions on the account, keep the account and set org to null
+      // If user has permissions to other accounts, change the account and set org to null
+      // Otherwise, set both the account and org to null,
+      //   this will not allow the user to make operations - need to logout the user on login
+      // await Users.updateOne({ _id: user._id }, { defaultAccount: null, defaultOrg: null });
 
-      // Delete member
+      // Delete membership entry, user may have other permissions to that account
       await membership.deleteOne({
         _id: id,
         account: user.defaultAccount._id

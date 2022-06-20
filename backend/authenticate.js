@@ -47,7 +47,7 @@ opts.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
 opts.secretOrKey = configs.get('userTokenSecretKey');
 exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done) => {
   // check if account exists on payload
-  if (!jwtPayload.account) return done(null, false, { message: 'Invalid token' });
+  if (!jwtPayload.account) return done(null, false, { message: 'Account not found' });
 
   // check if token exists
   let token = null;
