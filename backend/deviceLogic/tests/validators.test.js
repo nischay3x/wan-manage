@@ -77,6 +77,27 @@ describe('validateDevice', () => {
         routing: 'None',
         type: 'WAN',
         pathlabels: [ObjectId('5e65290fbe66a2335718e081')]
+      },
+      {
+        name: 'eth2',
+        devId: '00:03.00',
+        driver: 'igb-1000',
+        MAC: 'ab:45:90:ed:89:17',
+        dhcp: 'no',
+        IPv4: '192.168.105.1',
+        IPv4Mask: '24',
+        IPv6: '2001:db8:85a3:8d3:1319:8a2e:370:7349',
+        IPv6Mask: '64',
+        PublicIP: '72.168.10.56',
+        PublicPort: '4789',
+        NatType: '',
+        useStun: true,
+        gateway: '',
+        metric: '',
+        isAssigned: false,
+        routing: 'OSPF',
+        type: 'LAN',
+        pathlabels: []
       }]
     };
   });
@@ -236,6 +257,31 @@ describe('validateDevice', () => {
   it('Should be an invalid device if assigned interfaces are on the same subnet', () => {
     device.interfaces[0].IPv4 = '10.0.0.1';
     device.interfaces[1].IPv4 = '10.0.0.2';
+    failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid device if assigned interfaces are on the same subnet', () => {
+    device.interfaces[0].IPv4 = '10.0.0.1';
+    device.interfaces[1].IPv4 = '10.0.0.1';
+    failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
+    const result = validateDevice(device);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid device if LAN assigned interfaces have the same ip', () => {
+    device.interfaces[0].IPv4 = '10.0.0.1';
+    device.interfaces[2].IPv4 = '10.0.0.1';
+    device.interfaces[2].isAssigned = true;
+    const result = validateDevice(device);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid device if LAN assigned interfaces have overlapping', () => {
+    device.interfaces[0].IPv4 = '10.0.0.1';
+    device.interfaces[2].IPv4 = '10.0.0.2';
+    device.interfaces[2].isAssigned = true;
     failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
     const result = validateDevice(device);
     expect(result).toMatchObject(failureObject);
