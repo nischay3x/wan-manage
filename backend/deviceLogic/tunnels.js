@@ -536,7 +536,7 @@ const applyTunnelAdd = async (devices, user, data) => {
   }
 
   const { pathLabels, advancedOptions, peers, topology, hub } = data.meta;
-  // If ospfConst is not defined, use the default cost
+  // If ospfCost is not defined, use the default cost
   advancedOptions.ospfCost = advancedOptions.ospfCost || defaultTunnelOspfCost;
   const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
 
