@@ -262,7 +262,7 @@ describe('validateDevice', () => {
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if assigned interfaces are on the same subnet', () => {
+  it('Should be an invalid device if LAN and WAN have the same ip', () => {
     device.interfaces[0].IPv4 = '10.0.0.1';
     device.interfaces[1].IPv4 = '10.0.0.1';
     failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
