@@ -181,6 +181,10 @@ const configEnv = {
     // Tunnel MTU in bytes. Now provisioned globally per server. Specify number to set specific MTU.
     // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
     globalTunnelMtu: 1500,
+    // Default tunnel ospf cost, this value will be used if no value specified in the advanced tunnel config
+    defaultTunnelOspfCost: 100,
+    // TCP clamping header size, this value will be reduced from the MTU when calculating the mss clamping size
+    tcpClampingHeaderSize: 40,
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
     // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
