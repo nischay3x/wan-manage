@@ -338,14 +338,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
 
     if (ifc.type === 'LAN') {
-      // Prevent LAN and WAN to be with same IP
-      if (wanIfcs.some(wi => wi.IPv4 === ifc.IPv4 && wi.IPv4Mask === ifc.IPv4Mask)) {
-        return {
-          valid: false,
-          err: `LAN and WAN interfaces cannot have the same IP - ${ifc.IPv4}/${ifc.IPv4Mask}`
-        };
-      }
-
       // Path labels are not allowed on LAN interfaces
       if (ifc.pathlabels.length !== 0) {
         return {
@@ -373,17 +365,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
 
     if (ifc.type === 'WAN') {
-      // Prevent two WANs to be with same IP
-      const anotherWanWithSameIp = wanIfcs.some(wi => {
-        return wi.devId !== ifc.devId && wi.IPv4 === ifc.IPv4 && wi.IPv4Mask === ifc.IPv4Mask;
-      });
-      if (anotherWanWithSameIp) {
-        return {
-          valid: false,
-          err: `Multiple WAN interfaces cannot have the same IP - ${ifc.IPv4}/${ifc.IPv4Mask}`
-        };
-      }
-
       // OSPF is not allowed on WAN interfaces
       if (ifc.routing === 'OSPF') {
         return {
@@ -407,7 +388,15 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     for (const ifc2 of assignedNotEmptyIfs.filter(i => i.devId !== ifc1.devId)) {
       const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
       const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
-      if (ifc1Subnet !== ifc2Subnet && cidr.overlap(ifc1Subnet, ifc2Subnet)) {
+
+      // Allow only LANs with the same IP on the same device for the LAN bridge feature.
+      // Note, for the LAN bridge feature, we allow only the same IP on multiple LANs,
+      // but overlapping is not allowed.
+      if (ifc1.type === 'LAN' && ifc2.type === 'LAN' && ifc1Subnet === ifc2Subnet) {
+        continue;
+      }
+
+      if (cidr.overlap(ifc1Subnet, ifc2Subnet)) {
         return {
           valid: false,
           err: 'IP addresses of the assigned interfaces have an overlap'
