@@ -78,3 +78,16 @@ exports.getRefreshToken = async ({ user }, override = {}) => {
 exports.verifyToken = (token) => {
   return jwt.verify(token, configs.get('userTokenSecretKey'));
 };
+
+exports.getLoginProcessToken = async (user, phase = 0) => {
+  return jwt.sign(
+    {
+      type: 'login',
+      phase: phase,
+      userId: user._id,
+      mfaEnabled: user?.mfa?.enabled ?? false
+    },
+    configs.get('userTokenSecretKey'),
+    { expiresIn: 300 }
+  );
+};

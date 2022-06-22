@@ -133,11 +133,15 @@ const User = new Schema({
   },
   // Default user organization
   mfa: {
+    unverifiedSecrets: {
+      type: [String],
+      default: []
+    },
     secret: {
       type: String,
       default: null
     },
-    verified: {
+    enabled: {
       type: Boolean,
       default: false
     }

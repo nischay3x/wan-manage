@@ -24,7 +24,7 @@ const User = require('../models/users');
 const Account = require('../models/accounts');
 const { membership, preDefinedPermissions } = require('../models/membership');
 const auth = require('../authenticate');
-// const { getToken, getRefreshToken } = require('../tokens');
+const { getLoginProcessToken, getToken, getRefreshToken } = require('../tokens');
 const cors = require('./cors');
 const mongoConns = require('../mongoConns.js')();
 const randomKey = require('../utils/random-key');
@@ -39,6 +39,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { getUiServerUrl } = require('../utils/httpUtils');
 const flexibilling = require('../flexibilling');
 const { getUserOrganizations } = require('../utils/membershipUtils');
+const { generateSecret, verifyTOTP } = require('../otp');
 // const { generateTOTP } = require('../otp');
 router.use(bodyParser.json());
 
@@ -448,25 +449,23 @@ router.route('/reset-password')
 router.route('/login')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.corsWithOptions, auth.verifyUserLocal, async (req, res, next) => {
-    const { mfa } = req.user;
-    const { verified, secret } = mfa;
-    if (!secret || !verified) {
-      return next(createError(461, '2FA is not configured'));
-    } else if (secret && verified) {
-      return next(createError(460, '2FA verification required'));
-    } else {
-      return next(createError(401, 'Not able to authorize'));
-    }
-    // req.session.mfaConfigured = body.username;
+    // const { mfa } = req.user;
+    // const { enabled, secret } = mfa;
+    // if (!secret || !enabled) {
+    //   return next(createError(461, '2FA is not configured'));
+    // } else if (secret && enabled) {
+    //   return next(createError(460, '2FA verification required'));
+    // } else {
+    //   return next(createError(401, 'Not able to authorize'));
+    // }
 
     // Create token with user id and username
-    // const token = await getToken(req);
+    const token = await getLoginProcessToken(req.user, 1);
     // const refreshToken = await getRefreshToken(req);
     // res.statusCode = 200;
     // res.setHeader('Content-Type', 'application/json');
-    // res.setHeader('Refresh-JWT', token);
-    // res.setHeader('refresh-token', refreshToken);
-    // res.json({ name: req.user.name, status: 'logged in' });
+    // res.setHeader('Login-JWT', token);
+    res.status(200).json({ name: req.user.name, token });
   });
 
 // Authentication check is done within passport, if passed, no login error exists
@@ -489,6 +488,105 @@ router.route('/logout')
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.json({ status: 'logged out' });
+  });
+
+// Authentication check is done within passport, if passed, no login error exists
+router.route('/mfa/getSecret')
+  .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
+  .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+    // if verified - don't generate
+    if (req.user.mfa.enabled) {
+      return next(createError(500, 'Secret already verified'));
+    }
+
+    // generate unique secret for user
+    // this secret will be used to check the verification code sent by user
+    const secret = await generateSecret();
+
+    // save secret for the user
+    await User.findOneAndUpdate(
+      { _id: req.user._id },
+      { $push: { 'mfa.unverifiedSecrets': { $each: [secret.base32], $slice: 100 } } },
+      { upsert: false }
+    );
+
+    const userName = req.user.email;
+
+    const issuer = 'flexiManage';
+    const algorithm = 'SHA1';
+    const digits = '6';
+    const period = '30';
+    const otpType = 'totp';
+    const configUri = `otpauth://${otpType}/${issuer}:${userName}\
+?algorithm=${algorithm}&\
+digits=${digits}&\
+period=${period}&\
+issuer=${issuer}&\
+secret=${secret.base32}`;
+
+    res.status(200).json({ configUri });
+  });
+
+// Authentication check is done within passport, if passed, no login error exists
+router.route('/mfa/verify')
+  .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
+  .post(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+    if (!req.body.token) {
+      return next(createError(401, 'Token is required'));
+    }
+
+    let secrets = [];
+    if (req.user.mfa.secret) {
+      secrets.push(req.user.mfa.secret);
+    } else if (req.user.mfa.unverifiedSecrets.length > 0) {
+      secrets = req.user.mfa.unverifiedSecrets;
+    } else {
+      return next(createError(401, 'Multi-Factor is not configured'));
+    }
+
+    let validated = null;
+    for (const secret of secrets) {
+      const isValid = verifyTOTP(req.body.token, secret);
+      if (isValid) {
+        validated = secret;
+        break;
+      }
+    }
+
+    if (!validated) {
+      return next(createError(401, 'Code is invalid'));
+    }
+
+    const updateQuery = { $set: {} };
+    if (!req.user.mfa.secret) {
+      updateQuery.$set['mfa.secret'] = validated;
+    }
+
+    if (!req.user.mfa.enabled) {
+      updateQuery.$set['mfa.enabled'] = true;
+    }
+
+    if (req.user.mfa.unverifiedSecrets.length > 0) {
+      updateQuery.$set['mfa.unverifiedSecrets'] = [];
+    }
+
+    if (Object.keys(updateQuery.$set).length > 0) {
+      // save secret for the user
+      await User.findOneAndUpdate(
+        { _id: req.user._id },
+        updateQuery,
+        { upsert: false }
+      );
+    }
+
+    // Create token with user id and username
+    const token = await getToken(req);
+    const refreshToken = await getRefreshToken(req);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Refresh-JWT', token);
+    res.setHeader('refresh-token', refreshToken);
+    res.json({ name: req.user.name, status: 'logged in' });
   });
 
 // Default exports

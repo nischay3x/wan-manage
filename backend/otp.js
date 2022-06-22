@@ -1,5 +1,8 @@
-const crypto = require('crypto');
 const base32Decode = require('base32-decode');
+const crypto = require('crypto');
+// const util = require('util');
+const speakeasy = require('speakeasy');
+// const base32Encode = require('base32-encode');
 
 const generateHOTP = (secret, counter) => {
   const decodedSecret = base32Decode(secret, 'RFC4648');
@@ -42,7 +45,13 @@ const verifyTOTP = (token, secret, window = 1) => {
   return false;
 };
 
+const generateSecret = async () => {
+  const secret = speakeasy.generateSecret();
+  return secret;
+};
+
 module.exports = {
   verifyTOTP,
-  generateTOTP
+  generateTOTP,
+  generateSecret
 };

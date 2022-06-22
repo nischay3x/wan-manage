@@ -45,7 +45,12 @@ exports.localPassport = passport.use(new LocalStrategy(User.authenticate()));
 var opts = {};
 opts.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
 opts.secretOrKey = configs.get('userTokenSecretKey');
-exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done) => {
+exports.jwtPassport = passport.use('jwt', new JwtStrategy(opts, async (jwtPayload, done) => {
+  // prevent access sensitive resources with login token
+  if (jwtPayload.type === 'login') {
+    return done(null, false, { message: 'A login token is unauthorized to access this resource' });
+  }
+
   // check if account exists on payload
   if (!jwtPayload.account) return done(null, false, { message: 'Invalid token' });
 
@@ -74,6 +79,27 @@ exports.jwtPassport = passport.use(new JwtStrategy(opts, async (jwtPayload, done
         return res === true
           ? done(null, user)
           : done(null, false, { message: 'Invalid Token' });
+      } else {
+        done(null, false, { message: 'Invalid Token' });
+      }
+    });
+}));
+
+passport.use('jwt-login', new JwtStrategy(opts, async (jwtPayload, done) => {
+  // prevent access sensitive resources with login token
+  if (jwtPayload.type !== 'login') {
+    return done(null, false, { message: 'A login token is unauthorized to access this resource' });
+  }
+
+  User
+    .findOne({ _id: jwtPayload.userId })
+    .populate('defaultOrg')
+    .populate('defaultAccount')
+    .exec(async (err, user) => {
+      if (err) {
+        return done(err, false);
+      } else if (user) {
+        return done(null, user);
       } else {
         done(null, false, { message: 'Invalid Token' });
       }
@@ -322,4 +348,20 @@ exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
 
 exports.validatePassword = function (password) {
   return (password !== null && password !== undefined && password.length >= 8);
+};
+
+exports.verifyUserLoginJWT = function (req, res, next) {
+  // Allow options to pass through without verification for preflight options requests
+  if (!req.originalUrl.startsWith('/api/users')) {
+    return next(createError(403, "You don't have permission to perform this operation"));
+  }
+
+  passport.authenticate('jwt-login', { session: false }, async (err, user, info) => {
+    if (err || !user) {
+      logger.warn('JWT verification failed', { params: { err: err?.message }, req: req });
+      return next(createError(401));
+    }
+    req.user = user;
+    return next();
+  })(req, res, next);
 };
