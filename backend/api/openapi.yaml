@@ -7984,7 +7984,7 @@ paths:
             schema:
               $ref: '#/components/schemas/QosTrafficMapRequest'
       responses:
-        "201":
+        "200":
           content:
             application/json:
               schema:

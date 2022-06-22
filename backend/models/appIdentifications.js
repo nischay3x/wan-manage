@@ -20,7 +20,6 @@ const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const find = require('lodash/find');
 const concat = require('lodash/concat');
-const union = require('lodash/union');
 const { validateIPv4WithMask, validatePortRange } = require('./validators');
 
 /**
@@ -382,24 +381,7 @@ const getAllServiceClasses = async (orgList) => {
       }
     }
   ]);
-  const customRes = await appIdentifications.aggregate([
-    { $match: { 'meta.org': { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
-    { $project: { 'appIdentifications.serviceClass': 1 } },
-    { $unwind: '$appIdentifications' },
-    {
-      $group: {
-        _id: null,
-        serviceClasses: {
-          $addToSet: '$appIdentifications.serviceClass'
-        }
-      }
-    }
-  ]);
-
-  return union(
-    customRes.length ? customRes[0].serviceClasses : [],
-    importedRes.length ? importedRes[0].serviceClasses : []
-  );
+  return importedRes.length ? importedRes[0].serviceClasses.sort() : [];
 };
 
 // Default exports

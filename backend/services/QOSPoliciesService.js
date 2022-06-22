@@ -481,7 +481,7 @@ class QOSPoliciesService {
       const res = await QOSTrafficMap.findOneAndUpdate(
         { org: { $in: orgList } },
         { $set: { trafficMap: qosTrafficMapRequest } },
-        { upsert: true }
+        { upsert: true, new: true }
       ).lean();
       const trafficMap = await QOSPoliciesService.getFullTrafficMap(orgList, res?.trafficMap);
       return Service.successResponse(trafficMap);
