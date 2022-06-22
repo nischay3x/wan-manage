@@ -65,7 +65,7 @@ const prepareQOSJobInfo = (device, policyParams, op, org, requestTime) => {
   };
 
   // If the QOS traffic map was modified and not sent yet, attach the task
-  // .... todo  
+  // .... todo
 
   return { tasks, data };
 };
@@ -332,7 +332,6 @@ const apply = async (deviceList, user, data) => {
   const { op, id } = data.meta;
 
   deviceList = await Promise.all(deviceList.map(d => d
-    //.populate('policies.qos.policy') //  need?   
     .populate('interfaces.qosPolicy')
     .execPopulate()
   ));
@@ -355,7 +354,7 @@ const apply = async (deviceList, user, data) => {
       : [deviceList[0]._id];
 
     if (op === 'install') {
-      /*    
+      /*
       const reqDevices = await devices.find(
         { org: org, _id: { $in: deviceIds } },
         { name: 1, interfaces: 1, deviceSpecificRulesEnabled: 1 }
@@ -369,7 +368,7 @@ const apply = async (deviceList, user, data) => {
           throw createError(500, `Can't install policy on ${dev.name}: ${err}`);
         }
       }
-      */    
+      */
     }
   } catch (err) {
     throw err.name === 'MongoError'
@@ -579,7 +578,6 @@ const sync = async (deviceId, org) => {
     { _id: deviceId },
     { 'interfaces.devId': 1, 'interfaces.qosPolicy': 1, 'policies.qos': 1 }
   )
-    //.populate('policies.qos.policy')    // need?   
     .populate('interfaces.qosPolicy')
     .lean();
 
