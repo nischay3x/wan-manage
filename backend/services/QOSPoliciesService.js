@@ -39,7 +39,56 @@ class QOSPoliciesService {
         message: 'Duplicate names are not allowed in the same organization'
       };
     };
+    const { outbound } = qosPolicyRequest;
+    if (!outbound) {
+      return {
+        valid: false,
+        message: 'WAN Outbound QoS parameters must be specified'
+      };
+    }
 
+    const dscpOptions = [
+      'CS0', 'CS1', 'CS2', 'CS3', 'CS4', 'CS5', 'CS6', 'CS7',
+      'AF11', 'AF12', 'AF13', 'AF21', 'AF22', 'AF23', 'AF31',
+      'AF32', 'AF33', 'AF41', 'AF42', 'AF43', 'EF', 'VA'
+    ];
+
+    const { bandwidthLimitPercent, dscpRewrite } = outbound.realtime || {};
+    if (!bandwidthLimitPercent || bandwidthLimitPercent < 10 || bandwidthLimitPercent > 90) {
+      return {
+        valid: false,
+        message: 'Wrong Realtime Bandwidth Limit Percent value'
+      };
+    }
+
+    if (!dscpOptions.includes(dscpRewrite)) {
+      return {
+        valid: false,
+        message: 'Wrong Realtime DSCP Rewrite value'
+      };
+    }
+
+    const dataTrafficClasses = [
+      'control-signaling',
+      'prime-select',
+      'standard-select',
+      'best-effort'
+    ];
+    for (const trafficClassName of dataTrafficClasses) {
+      const { weight, dscpRewrite } = outbound[trafficClassName] || {};
+      if (!weight || weight < 10 || weight > 70) {
+        return {
+          valid: false,
+          message: `Wrong ${trafficClassName} weight value`
+        };
+      }
+      if (!dscpOptions.includes(dscpRewrite)) {
+        return {
+          valid: false,
+          message: `Wrong ${trafficClassName} DSCP Rewrite value`
+        };
+      }
+    }
     return { valid: true, message: '' };
   }
 
