@@ -9039,7 +9039,7 @@ components:
           dnsServers: [8.8.8.8, 8.8.4.4]
           dnsDomains: [subdomain.maindomain]
           useDhcpDnsServers: false
-          wanBandwidthMbps:
+          bandwidthMbps:
             tx: 100
             rx: 100
           qosPolicy: null
@@ -9063,7 +9063,7 @@ components:
           devId: devId
           _id: _id
           deviceType: dpdk
-          wanBandwidthMbps:
+          bandwidthMbps:
             tx: 4.5
             rx: 10
           qosPolicy: null
@@ -9441,7 +9441,7 @@ components:
         dnsServers: [8.8.8.8, 8.8.4.4]
         dnsDomains: [subdomain.maindomain]
         isPublicAddressRateLimited: false
-        wanBandwidthMbps:
+        bandwidthMbps:
           tx: 100
           rx: 100
         qosPolicy: null
@@ -9561,7 +9561,7 @@ components:
         isPublicAddressRateLimited:
           type: boolean
           description: Specifies whether the IP or port address for this interface changes at a high rate
-        wanBandwidthMbps:
+        bandwidthMbps:
           type: object
         qosPolicy:
           type: object

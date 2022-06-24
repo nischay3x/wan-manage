@@ -269,7 +269,7 @@ const interfacesSchema = new Schema({
     type: Object,
     default: {}
   },
-  wanBandwidthMbps: {
+  bandwidthMbps: {
     type: Object,
     required: true,
     default: {
