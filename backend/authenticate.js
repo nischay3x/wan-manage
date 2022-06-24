@@ -171,6 +171,8 @@ exports.verifyUserLocal = async function (req, res, next) {
         req.user = user;
         // Try to update organization if null
         await orgUpdateFromNull(req, res);
+        // If there's no account found after login generate an error
+        if (!req.user.defaultAccount) return next(createError(401, 'Account not found'));
         // Add userId to the request for logging purposes.
         req.userId = useUserName ? user.username : user.id;
         return next();
