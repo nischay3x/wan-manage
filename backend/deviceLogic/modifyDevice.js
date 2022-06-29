@@ -1646,7 +1646,10 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  if (bgp?.enable) {
+  const majorVersion = getMajorVersion(versions.agent);
+  const minorVersion = getMinorVersion(versions.agent);
+  const isBgpSupported = majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3);
+  if (isBgpSupported && bgp?.enable) {
     const bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned));
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({
