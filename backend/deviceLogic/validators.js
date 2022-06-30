@@ -624,7 +624,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
-    if (ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') {
+    if (ifc.dhcp === 'yes' && ifc.addr === '') {
       // allow empty IP on WAN with dhcp client
       continue;
     }
