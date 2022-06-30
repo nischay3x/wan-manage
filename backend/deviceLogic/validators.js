@@ -440,6 +440,11 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
         const subnet = orgSubnet.subnet;
         const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
 
+        // Allow DHCP LAN without ip
+        if (currentLanIfc.dhcp === 'yes' && currentLanIfc.IPv4 === '') {
+          continue;
+        }
+
         // Don't check interface overlapping with same device
         if (
           orgSubnet.type === 'interface' &&
@@ -469,6 +474,12 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     // Prevent setting LAN network that overlaps the network we are using for tunnels.
     for (const lanIfc of lanIfcs) {
       const subnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
+
+      // Allow DHCP LAN without ip
+      if (lanIfc.dhcp === 'yes' && lanIfc.IPv4 === '') {
+        continue;
+      }
+
       if (cidr.overlap(subnet, '10.100.0.0/16')) {
         return {
           valid: false,
@@ -624,7 +635,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
-    if (ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') {
+    if (ifc.dhcp === 'yes' && ifc.addr === '') {
       // allow empty IP on WAN with dhcp client
       continue;
     }
