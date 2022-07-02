@@ -275,7 +275,7 @@ exports.verifyUserJWT = function (req, res, next) {
 exports.verifyAdmin = function (req, res, next) {
   // Allow access to admin users only
   return !req.user.admin
-    ? next(createError(403, 'not authorized')) : next();
+    ? next(createError(403, 'You are not authorized for this operation')) : next();
 };
 
 /**
