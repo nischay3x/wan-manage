@@ -190,6 +190,12 @@ const configEnv = {
     // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
     // On the following renegotiations, the OpenVPN client will pass this token instead of the users password
     vpnTmpTokenTime: 43200,
+    // Ticketing system username
+    ticketingSystemUsername: '',
+    // Ticketing system token
+    ticketingSystemToken: '',
+    // Ticketing system url
+    ticketingSystemUrl: '',
     /****************************************************/
     /*         Client Fields                            */
     /****************************************************/
