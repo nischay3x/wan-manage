@@ -60,7 +60,8 @@ const adminRouter = require('./routes/admin');
 const ticketsRouter = require('./routes/tickets')(
   configs.get('ticketingSystemUsername', 'string'),
   configs.get('ticketingSystemToken', 'string'),
-  configs.get('ticketingSystemUrl', 'string')
+  configs.get('ticketingSystemUrl', 'string'),
+  configs.get('ticketingSystemAccountId', 'string')
 );
 
 // WSS

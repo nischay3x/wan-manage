@@ -196,6 +196,8 @@ const configEnv = {
     ticketingSystemToken: '',
     // Ticketing system url
     ticketingSystemUrl: '',
+    // Ticketing system account ID to view
+    ticketingSystemAccountId: '',
     /****************************************************/
     /*         Client Fields                            */
     /****************************************************/
