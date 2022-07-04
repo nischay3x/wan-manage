@@ -27,6 +27,7 @@ const mlpolicy = require('./mlpolicy');
 const application = require('./application');
 const firewallPolicy = require('./firewallPolicy');
 const qosPolicy = require('./qosPolicy');
+const qosTrafficMap = require('./qosTrafficMap');
 const dhcp = require('./dhcp');
 const appIdentification = require('./appIdentification');
 const sync = require('./sync');
@@ -121,6 +122,12 @@ const methods = {
     complete: qosPolicy.complete,
     error: qosPolicy.error,
     remove: qosPolicy.remove
+  },
+  qosTrafficMap: {
+    apply: qosTrafficMap.apply,
+    complete: qosTrafficMap.complete,
+    error: qosTrafficMap.error,
+    remove: qosTrafficMap.remove
   },
   appIdentification: {
     apply: appIdentification.apply,

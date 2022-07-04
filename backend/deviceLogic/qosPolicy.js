@@ -18,6 +18,21 @@
 const createError = require('http-errors');
 const pick = require('lodash/pick');
 const qosPoliciesModel = require('../models/qosPolicies');
+
+const {
+  complete: appComplete,
+  error: appError,
+  remove: appRemove,
+  getDevicesAppIdentificationJobInfo
+} = require('./appIdentification');
+
+const {
+  complete: trafficMapComplete,
+  error: trafficMapError,
+  remove: trafficMapRemove,
+  getDevicesTrafficMapJobInfo
+} = require('./qosTrafficMap');
+
 const configs = require('../configs')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { devices } = require('../models/devices');
@@ -26,9 +41,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 
-const toCamelCase = (str) => {
-  return str.replace(/^.|-./g, (l, i) => i ? l.substr(1).toUpperCase() : l.toLowerCase());
-};
+const { toCamelCase } = require('../utils/helpers');
 
 /**
  * Gets the device QOS data needed for creating a job
@@ -41,13 +54,21 @@ const getDevicesQOSJobInfo = async (device) => {
   const { policy: qosPolicy } = device.policies.qos;
   const policyParams = getQOSParameters(qosPolicy, device);
   if (!policyParams) op = 'uninstall';
-
+  // Extract QoS traffic map information
+  const trafficMap = await getDevicesTrafficMapJobInfo(device.org, [device._id]);
+  // Extract applications information
+  const apps = await getDevicesAppIdentificationJobInfo(
+    device.org,
+    'qos',
+    [device._id],
+    op === 'install'
+  );
   const requestTime = Date.now();
   await updateDevicesBeforeJob([device._id], op, requestTime, qosPolicy, device.org);
-  return prepareQOSJobInfo(device, policyParams, op, device.org, requestTime);
+  return prepareQOSJobInfo(device, policyParams, op, device.org, apps, trafficMap, requestTime);
 };
 
-const prepareQOSJobInfo = (device, policyParams, op, org, requestTime) => {
+const prepareQOSJobInfo = (device, policyParams, op, org, apps, trafficMap, requestTime) => {
   const tasks = [
     {
       entity: 'agent',
@@ -65,8 +86,35 @@ const prepareQOSJobInfo = (device, policyParams, op, org, requestTime) => {
   };
 
   // If the QOS traffic map was modified and not sent yet, attach the task
-  // .... todo
+  if (trafficMap.installIds[device._id] === true && op === 'install') {
+    const task = {
+      entity: 'agent',
+      message: trafficMap.message,
+      params: trafficMap.params
+    };
+    tasks.unshift(task);
+    data.qosTrafficMap = {
+      deviceId: device._id
+    };
+  }
 
+  // If the device's appIdentification database is outdated
+  // we add an add-application/remove-application message as well.
+  // add-application comes before add-qos-policy when installing.
+  // remove-application comes after remove-qos-policy when uninstalling.
+  if (apps.installIds[device._id] === true) {
+    const task = {
+      entity: 'agent',
+      message: apps.message,
+      params: apps.params
+    };
+    op === 'install' ? tasks.unshift(task) : tasks.push(task);
+
+    data.appIdentification = {
+      deviceId: device._id,
+      ...apps.deviceJobResp
+    };
+  }
   return { tasks, data };
 };
 
@@ -77,57 +125,48 @@ const prepareQOSJobInfo = (device, policyParams, op, org, requestTime) => {
  */
 const convertParameters = (policy) => {
   const { name, advanced, inbound, outbound } = policy;
-  let params;
-  if (!advanced) {
-    params = {
-      name,
-      inbound: {
-        policer: {
-          bandwidthLimitPercentHigh: 100,
-          bandwidthLimitPercentMedium: 100 - inbound.bandwidthReservation,
-          bandwidthLimitPercentLow: 100 - inbound.bandwidthReservation - 15
-        }
-      },
-      outbound: {
-        scheduling: {
-          realtimeQueue: {
-            bandwidthLimitPercent: 100 - outbound.bandwidthReservation
-          },
-          controlSignalingQueue: { weight: 60 },
-          primeSelectQueue: { weight: 30 },
-          standardSelectQueue: { weight: 8 },
-          bestEffortQueue: { weight: 2 }
-        }
-      }
-    };
-  } else {
-    const scheduling = {};
-    const queueNames = [
-      'realtime',
-      'control-signaling',
-      'prime-select',
-      'standard-select',
-      'best-effort'
-    ];
-    for (const queueName of queueNames) {
-      if (outbound[queueName]) {
-        scheduling[toCamelCase(queueName) + 'Queue'] = outbound[queueName];
-      }
-    };
-    params = {
-      name,
-      inbound: {
-        policer: pick(inbound, [
-          'bandwidthLimitPercentHigh',
-          'bandwidthLimitPercentMedium',
-          'bandwidthLimitPercentLow'
-        ])
-      },
-      outbound: {
-        scheduling: scheduling
-      }
-    };
-  }
+
+  const dataTrafficClasses = [
+    'control-signaling',
+    'prime-select',
+    'standard-select',
+    'best-effort'
+  ];
+
+  const { bandwidthLimitPercent, dscpRewrite } = outbound.realtime || {};
+  const scheduling = {
+    realtimeQueue: {
+      bandwidthLimitPercent: bandwidthLimitPercent,
+      dscpRewrite: advanced && dscpRewrite ? dscpRewrite : 'CS0'
+    }
+  };
+  for (const queueName of dataTrafficClasses) {
+    if (outbound[queueName]) {
+      const { weight, dscpRewrite } = outbound[queueName];
+      scheduling[toCamelCase(queueName) + 'Queue'] = {
+        weight: weight,
+        dscpRewrite: advanced && dscpRewrite ? dscpRewrite : 'CS0'
+      };
+    }
+  };
+
+  const policerBandwidthLimitPercent = pick(inbound?.policerBandwidthLimitPercent || {
+    // default inbound values
+    high: 100,
+    medium: 80,
+    low: 65
+  }, [
+    'high',
+    'medium',
+    'low'
+  ]);
+
+  const params = {
+    name,
+    inbound: { policerBandwidthLimitPercent },
+    outbound: { scheduling }
+  };
+
   return params;
 };
 
@@ -158,6 +197,17 @@ const getQOSParameters = (policy, device) => {
 const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org) => {
   const jobs = [];
 
+  // Extract QoS traffic map information
+  const trafficMap = await getDevicesTrafficMapJobInfo(org, deviceList.map(d => d._id));
+
+  // Extract applications information
+  const apps = await getDevicesAppIdentificationJobInfo(
+    org,
+    'qos',
+    deviceList.filter(d => op === 'install' || !d.deviceSpecificRulesEnabled).map(d => d._id),
+    op === 'install'
+  );
+
   deviceList.forEach(dev => {
     const policyParams = getQOSParameters(policy, dev);
     if (!policyParams) op = 'uninstall';
@@ -166,7 +216,9 @@ const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org)
       ? policy ? `Install policy ${policy.name}` : 'Install interfaces specific policies'
       : 'Uninstall policy';
 
-    const { tasks, data } = prepareQOSJobInfo(dev, policyParams, op, org, requestTime);
+    const { tasks, data } = prepareQOSJobInfo(
+      dev, policyParams, op, org, apps, trafficMap, requestTime
+    );
     jobs.push(
       deviceQueues.addJob(
         dev.machineId,
@@ -471,6 +523,13 @@ const complete = async (jobId, res) => {
       update,
       { upsert: false }
     );
+    const { appIdentification, qosTrafficMap } = res;
+    if (appIdentification) {
+      appComplete(jobId, appIdentification);
+    }
+    if (qosTrafficMap) {
+      trafficMapComplete(jobId, qosTrafficMap);
+    }
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -524,6 +583,13 @@ const error = async (jobId, res) => {
       { $set: { 'policies.qos.status': status } },
       { upsert: false }
     );
+    const { appIdentification, qosTrafficMap } = res;
+    if (appIdentification) {
+      appError(jobId, res);
+    }
+    if (qosTrafficMap) {
+      trafficMapError(jobId, qosTrafficMap);
+    }
   } catch (err) {
     logger.error('Device policy status update failed', {
       params: { jobId: jobId, res: res, err: err.message }
@@ -561,6 +627,16 @@ const remove = async (job) => {
         { $set: { 'policies.qos.status': status } },
         { upsert: false }
       );
+      // Call remove callbacks if needed
+      const { appIdentification, qosTrafficMap } = job.data.response.data;
+      if (appIdentification) {
+        job.data.response.data = appIdentification;
+        appRemove(job);
+      }
+      if (qosTrafficMap) {
+        job.data.response.data = qosTrafficMap;
+        trafficMapRemove(job);
+      }
     } catch (err) {
       logger.error('Device policy status update failed', {
         params: { job: job, status: status, err: err.message }

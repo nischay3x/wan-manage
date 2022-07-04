@@ -11353,14 +11353,14 @@ components:
     QOSTrafficMap:
       example:
         oam:
-          high: real-time
+          high: realtime
         signaling:
           medium: best-effort
       type: object
     QosTrafficMapRequest:
       example:
         oam:
-          high: real-time
+          high: realtime
         signaling:
           medium: best-effort
       type: object

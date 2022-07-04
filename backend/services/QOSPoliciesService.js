@@ -20,10 +20,10 @@ const createError = require('http-errors');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const QOSPolicies = require('../models/qosPolicies');
 const QOSTrafficMap = require('../models/qosTrafficMap');
-const { getAllServiceClasses } = require('../models/appIdentifications');
 const { devices } = require('../models/devices');
 const { ObjectId } = require('mongoose').Types;
 const { applyPolicy } = require('../deviceLogic/qosPolicy');
+const { getFullTrafficMap, apply: applyTrafficMap } = require('../deviceLogic/qosTrafficMap');
 
 class QOSPoliciesService {
   static async verifyRequestSchema (qosPolicyRequest, org) {
@@ -451,47 +451,6 @@ class QOSPoliciesService {
   }
 
   /**
-   * Returns the full QOS traffic map extended with default values
-   * Logic behind default queue mapping:
-   * - 'low' importance is mapped to 'best-effort'
-   * - 'medium' importance is mapped to 'standard-select'
-   * - 'high' importance of 'real-time' is mapped to 'real-time'
-   * - 'high' importance of 'network-control', 'signaling', 'oam' is mapped to 'control-signaling'
-   * - all other 'high' importance is mapped to 'prime-select'
-   *
-   * @static
-   * @param {*} orgList Organization filter
-   * @param {*} trafficMapInDB Existing QOS traffic map in DB
-   * @returns {Object} The QOS Traffic Map object
-   */
-  static async getFullTrafficMap (orgList, trafficMapInDB) {
-    const serviceClasses = await getAllServiceClasses(orgList);
-    const trafficMap = {};
-    for (const serviceClass of serviceClasses) {
-      trafficMap[serviceClass] = {};
-      trafficMap[serviceClass].low = 'best-effort';
-      trafficMap[serviceClass].medium = 'standard-select';
-      if (serviceClass === 'real-time') {
-        trafficMap[serviceClass].high = 'real-time';
-      } else if (['network-control', 'signaling', 'oam'].includes(serviceClass)) {
-        trafficMap[serviceClass].high = 'control-signaling';
-      } else {
-        trafficMap[serviceClass].high = 'prime-select';
-      }
-    }
-    if (trafficMapInDB) {
-      for (const serviceClass in trafficMapInDB) {
-        for (const importance in trafficMapInDB[serviceClass]) {
-          if (trafficMap[serviceClass]) {
-            trafficMap[serviceClass][importance] = trafficMapInDB[serviceClass][importance];
-          }
-        }
-      }
-    }
-    return trafficMap;
-  }
-
-  /**
    * Get the QOS traffic map
    *
    * @static
@@ -502,11 +461,7 @@ class QOSPoliciesService {
   static async qosTrafficMapGET ({ org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const res = await QOSTrafficMap.findOne(
-        { org: { $in: orgList } },
-        { trafficMap: 1 }
-      ).lean();
-      const trafficMap = await QOSPoliciesService.getFullTrafficMap(orgList, res?.trafficMap);
+      const { trafficMap } = await getFullTrafficMap(orgList);
       return Service.successResponse(trafficMap);
     } catch (e) {
       return Service.rejectResponse(
@@ -527,12 +482,15 @@ class QOSPoliciesService {
   static async qosTrafficMapPUT ({ org, qosTrafficMapRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const res = await QOSTrafficMap.findOneAndUpdate(
+      // todo: validate qos traffic map request
+      await QOSTrafficMap.findOneAndUpdate(
         { org: { $in: orgList } },
         { $set: { trafficMap: qosTrafficMapRequest } },
         { upsert: true, new: true }
-      ).lean();
-      const trafficMap = await QOSPoliciesService.getFullTrafficMap(orgList, res?.trafficMap);
+      );
+      const opDevices = await devices.find({ org: { $in: orgList } });
+      await applyTrafficMap(opDevices, user, { org: orgList[0] });
+      const { trafficMap } = await getFullTrafficMap(orgList);
       return Service.successResponse(trafficMap);
     } catch (e) {
       return Service.rejectResponse(

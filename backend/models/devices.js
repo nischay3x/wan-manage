@@ -655,6 +655,36 @@ const devicePolicySchema = (ref) => new Schema({
 });
 
 /**
+ * Device QoS traffic map install schema
+ */
+const QOSTrafficMapSchema = new Schema({
+  /**
+   * This indicates the last time requested to update.
+   * Its purpose is to prevent multiple identical requests
+   * Updated when a new job request is sent or when the job removed/failed
+   * Possible values:
+   *  - null: last request indicated to remove the QoS traffic map
+   *  - <Latest Date>: last request indicated to add the QoS traffic map
+   */
+  lastRequestTime: {
+    type: Date,
+    default: null
+  },
+  /**
+   * This indicates what is installed on the device, only updated by QOS Policy complete callback
+   * Possible values:
+   *  - null: last request indicated to remove the QoS Traffic Map
+   *  - <Latest Date>: last request indicated to install the QoS Traffic Map
+   */
+  lastUpdateTime: {
+    type: Date,
+    default: null
+  }
+}, {
+  timestamps: false
+});
+
+/**
  * Version Upgrade Database Schema
  */
 const versionUpgradeSchema = new Schema({
@@ -931,6 +961,7 @@ const deviceSchema = new Schema({
   firewall: {
     rules: [firewallRuleSchema]
   },
+  qosTrafficMap: QOSTrafficMapSchema,
   sync: {
     type: deviceSyncSchema,
     default: deviceSyncSchema
