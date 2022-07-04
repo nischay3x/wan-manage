@@ -35,10 +35,10 @@ ticketsRouter
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, auth.verifyAdmin, async (req, res, next) => {
     try {
-      if (!zendeskClient) {
+      if (!zendeskClient || !accountId) {
         return next(createError(500, 'Ticketing System Not Provisioned'));
       }
-      const tickets = await zendeskClient.tickets.listByOrganization('4561161012242');
+      const tickets = await zendeskClient.tickets.listByOrganization(accountId);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       return res.json(tickets);
@@ -53,8 +53,12 @@ ticketsRouter
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, auth.verifyAdmin, async (req, res, next) => {
     try {
-      if (!zendeskClient) {
+      if (!zendeskClient || !accountId) {
         return next(createError(500, 'Ticketing System Not Provisioned'));
+      }
+      const ticket = await zendeskClient.tickets.show(req.params.ticketId);
+      if (ticket.organization_id?.toString() !== accountId) {
+        return next(createError(403, 'You are not allowed to view this ticket'));
       }
       const comments = await zendeskClient.tickets.getComments(req.params.ticketId);
       res.statusCode = 200;
@@ -68,15 +72,17 @@ ticketsRouter
 
 // Default exports
 let zendeskClient = null;
-module.exports = function (username, token, url) {
+let accountId = '';
+module.exports = function (username, token, url, account) {
   if (zendeskClient) return ticketsRouter;
   else {
-    if (username && token && url) {
+    if (username && token && url && account) {
       zendeskClient = zendesk.createClient({
         username,
         token,
         remoteUri: url
       });
+      accountId = account;
     }
     return ticketsRouter;
   }
