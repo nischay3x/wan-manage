@@ -214,7 +214,7 @@ const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org)
 
     const jobTitle = op === 'install'
       ? policy ? `Install policy ${policy.name}` : 'Install interfaces specific policies'
-      : 'Uninstall policy';
+      : `Uninstall policy ${policy ? policy.name : ''}`;
 
     const { tasks, data } = prepareQOSJobInfo(
       dev, policyParams, op, org, apps, trafficMap, requestTime
@@ -390,8 +390,12 @@ const apply = async (deviceList, user, data) => {
 
   let qosPolicy, deviceIds;
 
+  if (op === 'install' && !id) {
+    throw createError(400, 'QOS policy id is required');
+  }
+
   try {
-    if (op === 'install') {
+    if (id) {
       // Retrieve policy from database
       qosPolicy = await getQOSPolicy(id, org);
 
