@@ -537,7 +537,7 @@ const applyTunnelAdd = async (devices, user, data) => {
 
   const { pathLabels, advancedOptions, peers, topology, hub } = data.meta;
   // If ospfCost is not defined, use the default cost
-  advancedOptions.ospfCost = advancedOptions.ospfCost || defaultTunnelOspfCost;
+  advancedOptions.ospfCost = Number(advancedOptions.ospfCost || defaultTunnelOspfCost);
   const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
 
   if (mtu !== undefined && mtu !== '' && (isNaN(mtu) || mtu < 500 || mtu > 1500)) {
@@ -550,9 +550,9 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('MSS Clamping must be "yes" or "no"');
   }
 
-  if (ospfCost !== undefined && ospfCost !== '' && isNaN(ospfCost)) {
+  if (isNaN(ospfCost) || ospfCost <= 0) {
     logger.error('Wrong OSPF cost when creating tunnels', { params: { ospfCost } });
-    throw new Error('OSPF cost must be numeric value or empty');
+    throw new Error('OSPF cost must be a positive numeric value or empty');
   }
 
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
