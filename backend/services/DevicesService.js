@@ -1508,7 +1508,8 @@ class DevicesService {
 
               if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
                 throw new Error(
-                  `Can't set BGP on (${origIntf.name}). BGP is disabled`
+                  `Can't set BGP on ${origIntf.name}. ` +
+                  'BGP is disabled, please configure BGP from routing settings first'
                 );
               }
 
