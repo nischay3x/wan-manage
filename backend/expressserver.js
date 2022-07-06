@@ -100,10 +100,10 @@ class ExpressServer {
 
   async setupMiddleware () {
     // this.setupAllowedMedia();
-    this.app.use((req, res, next) => {
-      console.log(`${req.method}: ${req.url}`);
-      return next();
-    });
+    // this.app.use((req, res, next) => {
+    //   console.log(`${req.method}: ${req.url}`);
+    //   return next();
+    // });
 
     // A middleware that adds a unique request ID for each request
     // or uses the existing request ID, if there is one.

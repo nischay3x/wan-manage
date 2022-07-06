@@ -72,7 +72,7 @@ const checkDeviceVersion = async (req, res, next) => {
     });
     const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
     const { versions } = await swUpdater.getLatestSwVersions();
-    console.log('versions=' + versions);
+    // console.log('versions=' + versions);
     res.setHeader('latestVersion', versions.device); // set last device version
     return next(createError(statusCode, err));
   }
