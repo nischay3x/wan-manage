@@ -177,10 +177,11 @@ class ApplicationLogic extends IApplication {
       return val;
     };
 
-    const orgAppIds = {};
+    const orgAppIds = new Set();
     const orgApps = await applicationsModel.find({ org: device.org }, '_id').lean();
     orgApps.forEach(a => {
-      orgAppIds[a._id.toString()] = 1;
+      const id = a._id.toString();
+      orgAppIds.add(id);
     });
 
     const query = {};
@@ -200,7 +201,7 @@ class ApplicationLogic extends IApplication {
       device.firewall.rules.forEach(r => {
         if (r.system && r.reference && r.reference.toString() === app._id.toString()) {
           existingRules[r.referenceNumber] = r;
-        } else if (r.system && r.reference && !(r.reference.toString() in orgAppIds)) {
+        } else if (r.system && r.reference && !orgAppIds.has(r.reference.toString())) {
           // if there is a firewall rule with reference that don't exists for any reason
           // filter it out.
         } else {
