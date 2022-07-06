@@ -177,6 +177,12 @@ class ApplicationLogic extends IApplication {
       return val;
     };
 
+    const orgAppIds = {};
+    const orgApps = await applicationsModel.find({ org: device.org }, '_id').lean();
+    orgApps.forEach(a => {
+      orgAppIds[a._id.toString()] = 1;
+    });
+
     const query = {};
 
     const version = app.appStoreApp.versions.find(v => {
@@ -194,6 +200,9 @@ class ApplicationLogic extends IApplication {
       device.firewall.rules.forEach(r => {
         if (r.system && r.reference && r.reference.toString() === app._id.toString()) {
           existingRules[r.referenceNumber] = r;
+        } else if (r.system && r.reference && !(r.reference.toString() in orgAppIds)) {
+          // if there is a firewall rule with reference that don't exists for any reason
+          // filter it out.
         } else {
           updatedFirewallRules.push(r.toObject()); // reference to application
         }
