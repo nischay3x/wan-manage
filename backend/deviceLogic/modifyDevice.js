@@ -143,6 +143,7 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       useStun: ifc.useStun,
       useFixedPublicPort: ifc.useFixedPublicPort,
       monitorInternet: ifc.monitorInternet,
+      bandwidthMbps: ifc.bandwidthMbps,
       gateway: ifc.gateway,
       metric: ifc.metric,
       mtu: ifc.mtu,
