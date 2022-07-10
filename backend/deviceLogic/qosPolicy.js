@@ -136,7 +136,7 @@ const convertParameters = (policy) => {
   const { bandwidthLimitPercent, dscpRewrite } = outbound.realtime || {};
   const scheduling = {
     realtimeQueue: {
-      bandwidthLimitPercent: bandwidthLimitPercent,
+      bandwidthLimitPercent: +bandwidthLimitPercent,
       dscpRewrite: advanced && dscpRewrite ? dscpRewrite : 'CS0'
     }
   };
@@ -144,7 +144,7 @@ const convertParameters = (policy) => {
     if (outbound[queueName]) {
       const { weight, dscpRewrite } = outbound[queueName];
       scheduling[toCamelCase(queueName) + 'Queue'] = {
-        weight: weight,
+        weight: +weight,
         dscpRewrite: advanced && dscpRewrite ? dscpRewrite : 'CS0'
       };
     }
