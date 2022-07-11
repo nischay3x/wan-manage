@@ -117,7 +117,7 @@ const configEnv = {
     // Client static root directory
     clientStaticDir: 'public',
     // Mgmt-Agent protocol version
-    agentApiVersion: '5.0.0',
+    agentApiVersion: '6.0.0',
     // Mgmt log files
     logFilePath: './logs/app.log',
     reqLogFilePath: './logs/req.log',
@@ -221,7 +221,7 @@ const configEnv = {
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
-    agentApiVersion: '5.0.0',
+    agentApiVersion: '6.0.0',
     // Kue prefix
     kuePrefix: 'testq',
     logLevel: 'debug'
