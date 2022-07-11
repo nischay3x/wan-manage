@@ -1795,6 +1795,7 @@ class DevicesService {
             firewall: origDevice.policies.firewall.toObject()
           };
         }
+        deviceToValidate.versions = origDevice.versions;
         const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets, orgBgp);
 
         if (!valid) {

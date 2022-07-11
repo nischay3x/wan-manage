@@ -40,6 +40,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const { validateQOSPolicy } = require('../deviceLogic/validators');
 
 const { toCamelCase } = require('../utils/helpers');
 
@@ -408,24 +409,6 @@ const apply = async (deviceList, user, data) => {
     deviceIds = data.devices
       ? await getOpDevices(data.devices, org, qosPolicy)
       : [deviceList[0]._id];
-
-    if (op === 'install') {
-      /*
-      const reqDevices = await devices.find(
-        { org: org, _id: { $in: deviceIds } },
-        { name: 1, interfaces: 1, deviceSpecificRulesEnabled: 1 }
-      ).lean();
-      for (const dev of reqDevices) {
-        const { valid, err } = validateFirewallRules(
-          [...firewallPolicy.rules, ...dev.firewall.rules],
-          dev.interfaces
-        );
-        if (!valid) {
-          throw createError(500, `Can't install policy on ${dev.name}: ${err}`);
-        }
-      }
-      */
-    }
   } catch (err) {
     throw err.name === 'MongoError'
       ? new Error() : err;
@@ -449,6 +432,14 @@ const apply = async (deviceList, user, data) => {
  * @param  {String}  org              Org ID
  */
 const applyPolicy = async (opDevices, qosPolicy, op, user, org) => {
+  // validate QoS on devices
+  if (op === 'install') {
+    const { valid, err } = validateQOSPolicy(qosPolicy, opDevices);
+    if (!valid) {
+      throw createError(500, `Can't install QoS policy: ${err}`);
+    }
+  }
+
   const deviceIds = opDevices.map(device => device._id);
   const requestTime = Date.now();
 
@@ -684,7 +675,7 @@ const sync = async (deviceId, org) => {
   }
   // if no QOS global policy then interfaces specific policies will be sent
   const params = getQOSParameters(qosPolicy, device);
-  if (params) {
+  if (params && Object.keys(params).length > 0) {
     // Push policy task and relevant data for sync complete handler
     requests.push({ entity: 'agent', message: 'add-qos-policy', params });
     completeCbData.push({
