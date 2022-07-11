@@ -247,6 +247,7 @@ class QOSPoliciesService {
         {
           name: 1,
           machineId: 1,
+          versions: 1,
           interfaces: 1
         }
       )
