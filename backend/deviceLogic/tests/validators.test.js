@@ -36,6 +36,9 @@ describe('validateDevice', () => {
       bgp: {
         neighbors: []
       },
+      versions: {
+        agent: '6.0.1'
+      },
       interfaces: [{
         name: 'eth0',
         devId: '00:02.00',
