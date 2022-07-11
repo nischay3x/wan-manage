@@ -54,7 +54,7 @@ const getDevicesQOSJobInfo = async (device) => {
   let op = 'install';
   const { policy: qosPolicy } = device.policies.qos;
   const policyParams = getQOSParameters(qosPolicy, device);
-  if (!policyParams) op = 'uninstall';
+  if (!policyParams || !Object.keys(policyParams).length) op = 'uninstall';
   // Extract QoS traffic map information
   const trafficMap = await getDevicesTrafficMapJobInfo(device.org, [device._id]);
   // Extract applications information
@@ -175,10 +175,14 @@ const convertParameters = (policy) => {
  * Gets QOS policy parameters of the device, needed for creating a job
  * @param   {Object} policy - a global QOS policy applied on the device
  * @param   {Object} device - the device where to send the QOS parameters
+ * @param   {String} op     - requested action {install|uninstall}
  * @return  {Object} parameters to include in the job or null if nothing to send
  */
-const getQOSParameters = (policy, device) => {
+const getQOSParameters = (policy, device, op = 'install') => {
   const params = {};
+  if (op !== 'install') {
+    return params;
+  }
   // global police applied on the device
   if (policy) {
     params.default = convertParameters(policy);
@@ -210,8 +214,8 @@ const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org)
   );
 
   deviceList.forEach(dev => {
-    const policyParams = getQOSParameters(policy, dev);
-    if (!policyParams) op = 'uninstall';
+    const policyParams = getQOSParameters(policy, dev, op);
+    if (!policyParams || !Object.keys(policyParams).length) op = 'uninstall';
 
     const jobTitle = op === 'install'
       ? policy ? `Install policy ${policy.name}` : 'Install interfaces specific policies'
@@ -417,7 +421,11 @@ const apply = async (deviceList, user, data) => {
   const opDevices = filterDevices(deviceList, deviceIdsSet, op);
   if (opDevices.length === 0) {
     // no need to apply if not installed on any of devices
-    return;
+    return {
+      ids: [],
+      status: 'completed',
+      message: 'The policy is not installed on any of the devices'
+    };
   }
   return applyPolicy(opDevices, qosPolicy, op, user, org);
 };
