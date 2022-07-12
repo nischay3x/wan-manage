@@ -33,8 +33,6 @@ const modifyDeviceApply = require('./modifyDevice').apply;
 const appsLogic = require('../applicationLogic/applications')();
 
 const handleInstallOp = async (app, device, deviceConfiguration, idx) => {
-  const appId = app._id.toString();
-
   await device.populate('policies.firewall.policy', '_id name rules').execPopulate();
 
   const identifier = app.appStoreApp.identifier;
@@ -49,14 +47,14 @@ const handleInstallOp = async (app, device, deviceConfiguration, idx) => {
   const query = { _id: device._id, org: device.org };
   const update = {};
 
-  const appExists =
-    device.applications &&
-    device.applications.length > 0 &&
-    device.applications.some(a => a.app && a.app.toString() === appId);
+  // make sure a device has no other application with this identifier.
+  // a device cannot has multiple applications with the same identifier
+  const appExists = (device.applications ?? []).some(a => a.identifier === identifier);
 
   if (appExists) {
-    query['applications.app'] = appId;
+    query['applications.identifier'] = identifier;
     update.$set = {
+      'applications.$.app': app._id, // ensure app reference is valid for the existing identifier
       'applications.$.status': 'installing',
       'applications.$.configuration': deviceSpecificConfigurations
     };

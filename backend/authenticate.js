@@ -52,7 +52,7 @@ exports.jwtPassport = passport.use('jwt', new JwtStrategy(opts, async (jwtPayloa
   }
 
   // check if account exists on payload
-  if (!jwtPayload.account) return done(null, false, { message: 'Invalid token' });
+  if (!jwtPayload.account) return done(null, false, { message: 'Account not found' });
 
   // check if token exists
   let token = null;
@@ -197,6 +197,8 @@ exports.verifyUserLocal = async function (req, res, next) {
         req.user = user;
         // Try to update organization if null
         await orgUpdateFromNull(req, res);
+        // If there's no account found after login generate an error
+        if (!req.user.defaultAccount) return next(createError(401, 'Account not found'));
         // Add userId to the request for logging purposes.
         req.userId = useUserName ? user.username : user.id;
         return next();
@@ -299,7 +301,7 @@ exports.verifyUserJWT = function (req, res, next) {
 exports.verifyAdmin = function (req, res, next) {
   // Allow access to admin users only
   return !req.user.admin
-    ? next(createError(403, 'not authorized')) : next();
+    ? next(createError(403, 'You are not authorized for this operation')) : next();
 };
 
 /**

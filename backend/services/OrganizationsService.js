@@ -399,17 +399,27 @@ class OrganizationsService {
         {
           $group: {
             _id: null,
-            // Connected tunnels
+            // Tunnels unknown - devices not connected
+            tunUnknown: { $sum: { $cond: [{ $ne: ['$devices', []] }, 1, 0] } },
+            // Tunnels with warning (pending) - devices connected and isPending
+            tunWarning: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $eq: ['$isPending', true] }, { $eq: ['$devices', []] }] }, 1, 0]
+              }
+            },
+            // Connected tunnels - devices connected, not pending, and status up
             tunConnected: {
               $sum: {
                 $cond: [
-                  { $and: [{ $eq: ['$status', 'up'] }, { $eq: ['$devices', []] }] }, 1, 0]
+                  {
+                    $and: [
+                      { $eq: ['$status', 'up'] },
+                      { $eq: ['$isPending', false] },
+                      { $eq: ['$devices', []] }]
+                  }, 1, 0]
               }
             },
-            // Tunnels with warning
-            tunWarning: { $sum: { $cond: [{ $eq: ['$isPending', true] }, 1, 0] } },
-            // Tunnels unknown - devices not connected
-            tunUnknown: { $sum: { $cond: [{ $ne: ['$devices', []] }, 1, 0] } },
             // Total tunnels
             tunTotal: { $sum: 1 }
           }

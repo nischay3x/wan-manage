@@ -56,6 +56,7 @@ const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
  * @return {Array}            the same array after removing unnecessary fields
  */
 const prepareIfcParams = (interfaces, newDevice) => {
+  const bridges = getBridges(newDevice.interfaces);
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
@@ -77,9 +78,11 @@ const prepareIfcParams = (interfaces, newDevice) => {
     // between bridges from the "flexiManage" perspective.
     // We put this field only if the interface is LAN
     // and other assigned interfaces have the same IP.
-    newIfc.bridge_addr = ifc.type === 'LAN' && ifc.isAssigned && newDevice.interfaces.some(i => {
-      return newIfc.dev_id !== i.devId && i.isAssigned && newIfc.addr === i.IPv4 + '/' + i.IPv4Mask;
-    }) ? newIfc.addr : null;
+    if (bridges[newIfc.addr]) {
+      newIfc.bridge_addr = newIfc.addr;
+    } else {
+      newIfc.bridge_addr = null;
+    }
 
     if (ifc.isAssigned) {
       if (ifc.type !== 'WAN') {
@@ -1643,7 +1646,10 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  if (bgp?.enable) {
+  const majorVersion = getMajorVersion(versions.agent);
+  const minorVersion = getMinorVersion(versions.agent);
+  const isBgpSupported = majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3);
+  if (isBgpSupported && bgp?.enable) {
     const bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned));
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({
