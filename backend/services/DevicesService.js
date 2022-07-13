@@ -205,6 +205,10 @@ class DevicesService {
           'ospf'
         ]);
         retIf._id = retIf._id.toString();
+        if (retIf.qosPolicy) {
+          retIf.qosPolicy = (retIf.qosPolicy._id ? retIf.qosPolicy._id : retIf.qosPolicy)
+            .toString();
+        }
         // if device is not connected then internet access status is unknown
         retIf.internetAccess = retDevice.isConnected ? retIf.internetAccess : '';
         retIf.linkStatus = retDevice.isConnected ? retIf.linkStatus : '';
@@ -687,7 +691,6 @@ class DevicesService {
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description')
         .populate('policies.qos.policy', '_id name description')
-        .populate('interfaces.qosPolicy', '_id name description')
         .populate({
           path: 'applications.app',
           populate: {

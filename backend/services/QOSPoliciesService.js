@@ -252,6 +252,7 @@ class QOSPoliciesService {
         }
       )
         .populate('interfaces.qosPolicy')
+        .populate('policies.qos.policy')
         .lean();
 
       // Verify request schema
@@ -293,7 +294,7 @@ class QOSPoliciesService {
       }
 
       // apply on devices
-      const applied = await applyPolicy(opDevices, qosPolicy, 'install', user, orgList[0]);
+      const applied = await applyPolicy(opDevices, qosPolicy, 'install', user, orgList[0], true);
 
       const converted = JSON.parse(JSON.stringify(qosPolicy));
       return Service.successResponse({ ...converted, ...applied });

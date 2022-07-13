@@ -1235,6 +1235,7 @@ const apply = async (device, user, data) => {
   device[0] = await device[0]
     .populate('interfaces.pathlabels', '_id name type')
     .populate('interfaces.qosPolicy')
+    .populate('policies.qos')
     .populate({
       path: 'applications.app',
       populate: {
@@ -1472,7 +1473,10 @@ const apply = async (device, user, data) => {
     data.newDevice.interfaces,
     device[0].interfaces,
     (origIfc, newIfc) => {
-      return newIfc.isAssigned && isEqual(origIfc.qosPolicy, newIfc.qosPolicy);
+      return isEqual(
+        pick(origIfc, ['devId', 'isAssigned', 'type', 'qosPolicy']),
+        pick(newIfc, ['devId', 'isAssigned', 'type', 'qosPolicy'])
+      );
     }
   );
 

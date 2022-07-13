@@ -9563,8 +9563,13 @@ components:
           description: Specifies whether the IP or port address for this interface changes at a high rate
         bandwidthMbps:
           type: object
+          properties:
+            tx:
+              type: number
+            rx:
+              type: number
         qosPolicy:
-          type: object
+          type: string
           nullable: true
       type: object
     DeviceVersion:
