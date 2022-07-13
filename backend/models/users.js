@@ -144,6 +144,22 @@ const User = new Schema({
     enabled: {
       type: Boolean,
       default: false
+    },
+    backupPhoneNumber: {
+      type: String,
+      validate: {
+        validator: (number) => validators.validateIsPhoneNumber(number),
+        message: 'should be a valid phone number'
+      },
+      maxlength: [20, 'Phone number length must be at most 20']
+    },
+    backupEmailAddress: {
+      type: String,
+      maxlength: [255, 'Email length must be at most 255'],
+      validate: {
+        validator: validators.validateEmail,
+        message: 'should be a valid email address'
+      }
     }
   }
 });

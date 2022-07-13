@@ -554,7 +554,7 @@ router.route('/mfa/verify')
     }
 
     if (!validated) {
-      return next(createError(401, 'Code is invalid'));
+      return next(createError(403, 'Code is invalid'));
     }
 
     const updateQuery = { $set: {} };
@@ -564,6 +564,14 @@ router.route('/mfa/verify')
 
     if (!req.user.mfa.enabled) {
       updateQuery.$set['mfa.enabled'] = true;
+
+      // in order to enable MFA, the user must send his username and password
+      if (!req.body.backupPhoneNumber || !req.body.backupEmailAddress) {
+        return next(createError(403, 'A phone or email number for backup is missing'));
+      }
+
+      updateQuery.$set['mfa.backupPhoneNumber'] = req.body.backupPhoneNumber;
+      updateQuery.$set['mfa.backupEmailAddress'] = req.body.backupEmailAddress;
     }
 
     if (req.user.mfa.unverifiedSecrets.length > 0) {
