@@ -580,8 +580,8 @@ router.route('/mfa/verify')
     }
 
     // Create token with user id and username
-    const token = await getToken(req);
-    const refreshToken = await getRefreshToken(req);
+    const token = await getToken(req, { mfaVerified: validated !== null });
+    const refreshToken = await getRefreshToken(req, { mfaVerified: validated !== null });
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Refresh-JWT', token);

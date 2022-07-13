@@ -88,6 +88,6 @@ exports.getLoginProcessToken = async (user, phase = 0) => {
       mfaEnabled: user?.mfa?.enabled ?? false
     },
     configs.get('userTokenSecretKey'),
-    { expiresIn: 300 }
+    { expiresIn: 180 } // 3 minutes to complete login process
   );
 };
