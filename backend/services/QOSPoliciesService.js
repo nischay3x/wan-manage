@@ -143,7 +143,7 @@ class QOSPoliciesService {
       // installed on at least one device
       const count = await devices.countDocuments({
         'policies.qos.policy': id,
-        'policies.qos.status': { $in: ['installing', 'installed'] },
+        'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] },
         org: { $in: orgList }
       });
 
@@ -155,7 +155,7 @@ class QOSPoliciesService {
       await devices.updateMany({
         org: { $in: orgList },
         'policies.qos.policy': id,
-        'policies.qos.status': { $nin: ['installing', 'installed'] }
+        'policies.qos.status': { $nin: ['installing', 'installed', 'installation failed'] }
       }, {
         $set: {
           'policies.qos.policy': null,
@@ -242,7 +242,7 @@ class QOSPoliciesService {
             { 'policies.qos.policy': id },
             { 'interfaces.qosPolicy': id }
           ],
-          'policies.qos.status': { $in: ['installing', 'installed'] }
+          'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] }
         },
         {
           name: 1,

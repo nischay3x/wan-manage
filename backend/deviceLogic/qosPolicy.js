@@ -73,8 +73,8 @@ const prepareQOSJobInfo = (device, policyParams, op, org, apps, trafficMap, requ
   const tasks = [
     {
       entity: 'agent',
-      message: `${op === 'install' ? 'add' : 'remove'}-qos-policy`,
-      params: policyParams
+      message: `${op === 'install' || policyParams ? 'add' : 'remove'}-qos-policy`,
+      params: policyParams || {}
     }
   ];
   const data = {
@@ -191,13 +191,15 @@ const getQOSParameters = (policy, device, op = 'install') => {
   }
   // interfaces specific policies
   for (const ifc of device.interfaces.filter(i => i.isAssigned && i.type === 'WAN')) {
-    if (policy && (!ifc.qosPolicy || ifc.qosPolicy._id === policy._id)) {
+    if (policy && op === 'install' && (!ifc.qosPolicy || ifc.qosPolicy._id === policy._id)) {
       devicePolicies[policy._id].interfaces.push(ifc.devId);
     } else if (ifc.qosPolicy?._id) {
       if (!devicePolicies[ifc.qosPolicy._id]) {
         devicePolicies[ifc.qosPolicy._id] = convertParameters(ifc.qosPolicy);
       }
-      devicePolicies[ifc.qosPolicy._id].interfaces.push(ifc.devId);
+      if (op === 'install' || ifc.qosPolicy._id !== (policy?._id || '').toString()) {
+        devicePolicies[ifc.qosPolicy._id].interfaces.push(ifc.devId);
+      }
     }
   }
   const policies = [];
@@ -227,12 +229,15 @@ const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org,
   );
 
   deviceList.forEach(dev => {
-    const policyParams = getQOSParameters(installed ? dev.policies?.qos?.policy : policy, dev, op);
-    if (!policyParams) op = 'uninstall';
+    const policyParams = getQOSParameters(
+      installed && op === 'install' ? dev.policies?.qos?.policy : policy, dev, op
+    );
 
     const jobTitle = op === 'install'
       ? policy ? `Install policy ${policy.name}` : 'Install interfaces specific policies'
       : `Uninstall policy ${policy ? policy.name : ''}`;
+
+    if (!policyParams) op = 'uninstall';
 
     const { tasks, data } = prepareQOSJobInfo(
       dev, policyParams, op, org, apps, trafficMap, requestTime
@@ -262,12 +267,12 @@ const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org,
   return Promise.allSettled(jobs);
 };
 
-const getOpDevices = async (devicesObj, org, policy) => {
+const getOpDevices = async (devicesObj, org, policy, op) => {
   // If the list of devices is provided in the request
   // return their IDs, otherwise, extract device IDs
   // of all devices that are currently running the policy
   const devicesList = Object.keys(devicesObj);
-  if (devicesList.length > 0) return devicesList;
+  if (devicesList.length > 0 && op === 'install') return devicesList;
   if (!policy) return [];
 
   // Select only devices on which the policy is already
@@ -275,26 +280,30 @@ const getOpDevices = async (devicesObj, org, policy) => {
   // sure the policy is not reinstalled on devices that
   // are in the process of uninstalling the policy.
   const { _id } = policy;
-  const result = await devices.find(
-    {
-      org: org,
-      'policies.qos.policy': _id,
-      'policies.qos.status': { $in: ['installing', 'installed'] }
-    },
-    { _id: 1 }
-  );
+  const filter = {
+    org: org,
+    $or: [
+      { 'policies.qos.policy': _id },
+      { 'interfaces.qosPolicy': _id }
+    ],
+    'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] }
+  };
+  if (op !== 'install' && devicesList.length > 0) {
+    filter._id = { $in: devicesList };
+  }
+  const result = await devices.find(filter, { _id: 1 });
 
   return result.map(device => device._id);
 };
 
 const filterDevices = (devices, deviceIds, op) => {
   const filteredDevices = devices.filter(device => {
-    const { status, policy } = device.policies.qos || {};
+    const { status } = device.policies.qos || {};
     // Don't attempt to uninstall a policy if the device
     // doesn't have one, or if its policy is already in
     // the process of being uninstalled.
     const skipUninstall =
-      op === 'uninstall' && (!policy || status === 'uninstalling');
+      op === 'uninstall' && status === 'uninstalling';
     const id = device._id.toString();
     return !skipUninstall && deviceIds.has(id);
   });
@@ -340,11 +349,16 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
     });
   } else if (qosPolicy) {
     // uninstalling an exact policy
+    // set 'uninstall' to all devices with only this policy applied
     updateOps.push({
       updateMany: {
         filter: {
           _id: { $in: deviceIds },
           org: org,
+          $or: [
+            { 'policies.qos.policy': qosPolicy._id },
+            { 'policies.qos.policy': null }
+          ],
           interfaces: {
             $not: {
               $elemMatch: {
@@ -365,11 +379,13 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
         upsert: false
       }
     });
+    // set 'installing' and clear the selected policy (keeping others)
     updateOps.push({
       updateMany: {
         filter: {
           _id: { $in: deviceIds },
           org: org,
+          'policies.qos.policy': qosPolicy._id,
           interfaces: {
             $elemMatch: {
               $and: [
@@ -391,6 +407,34 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
         upsert: false
       }
     });
+    // set 'installing' and keep others policies
+    updateOps.push({
+      updateMany: {
+        filter: {
+          _id: { $in: deviceIds },
+          org: org,
+          'policies.qos.policy': { $ne: qosPolicy._id },
+          interfaces: {
+            $elemMatch: {
+              $and: [
+                { qosPolicy: { $ne: null } },
+                { qosPolicy: { $ne: qosPolicy._id } }
+              ]
+            }
+          }
+        },
+        update: {
+          $set: {
+            'policies.qos': {
+              status: 'installing',
+              requestTime: requestTime
+            }
+          }
+        },
+        upsert: false
+      }
+    });
+    // clear all interface specific records with the selected policy
     updateOps.push({
       updateMany: {
         filter: {
@@ -470,7 +514,7 @@ const apply = async (deviceList, user, data) => {
 
     // Extract the device IDs to operate on
     deviceIds = data.devices
-      ? await getOpDevices(data.devices, org, qosPolicy)
+      ? await getOpDevices(data.devices, org, qosPolicy, op)
       : [deviceList[0]._id];
   } catch (err) {
     throw err.name === 'MongoError'

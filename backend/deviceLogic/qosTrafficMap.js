@@ -252,7 +252,7 @@ const getDevicesTrafficMapJobInfo = async (org, deviceIdList, sync = false) => {
   const { trafficMap, updatedAt } = await getFullTrafficMap([org], true);
   const filter = {
     $and: [
-      { 'policies.qos.status': { $in: ['installing', 'installed'] } }
+      { 'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] } }
     ]
   };
   if (deviceIdList.length) {
