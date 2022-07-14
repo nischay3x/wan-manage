@@ -131,7 +131,7 @@ const User = new Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'organizations'
   },
-  // Default user organization
+  // MFA configuration
   mfa: {
     unverifiedSecrets: {
       type: [String],
@@ -161,6 +161,9 @@ const User = new Schema({
         message: 'should be a valid email address'
       }
     }
+  },
+  recoveryCodes: {
+    type: [String]
   }
 });
 

@@ -1,8 +1,6 @@
 const base32Decode = require('base32-decode');
 const crypto = require('crypto');
-// const util = require('util');
 const speakeasy = require('speakeasy');
-// const base32Encode = require('base32-encode');
 
 const generateHOTP = (secret, counter) => {
   const decodedSecret = base32Decode(secret, 'RFC4648');

@@ -79,11 +79,10 @@ exports.verifyToken = (token) => {
   return jwt.verify(token, configs.get('userTokenSecretKey'));
 };
 
-exports.getLoginProcessToken = async (user, phase = 0) => {
+exports.getLoginProcessToken = async (user) => {
   return jwt.sign(
     {
       type: 'login',
-      phase: phase,
       userId: user._id,
       mfaEnabled: user?.mfa?.enabled ?? false
     },

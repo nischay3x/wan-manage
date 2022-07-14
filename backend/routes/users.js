@@ -39,8 +39,10 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { getUiServerUrl } = require('../utils/httpUtils');
 const flexibilling = require('../flexibilling');
 const { getUserOrganizations } = require('../utils/membershipUtils');
+const { randomString } = require('../utils/utils');
 const { generateSecret, verifyTOTP } = require('../otp');
-// const { generateTOTP } = require('../otp');
+const SHA256 = require('crypto-js/sha256');
+
 router.use(bodyParser.json());
 
 // Error formatter
@@ -449,23 +451,34 @@ router.route('/reset-password')
 router.route('/login')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.corsWithOptions, auth.verifyUserLocal, async (req, res, next) => {
-    // const { mfa } = req.user;
-    // const { enabled, secret } = mfa;
-    // if (!secret || !enabled) {
-    //   return next(createError(461, '2FA is not configured'));
-    // } else if (secret && enabled) {
-    //   return next(createError(460, '2FA verification required'));
-    // } else {
-    //   return next(createError(401, 'Not able to authorize'));
-    // }
+    // username and password is correct
+    const token = await getLoginProcessToken(req.user);
 
-    // Create token with user id and username
-    const token = await getLoginProcessToken(req.user, 1);
+    res.status(200).json({ name: req.user.name, token });
+
     // const refreshToken = await getRefreshToken(req);
     // res.statusCode = 200;
     // res.setHeader('Content-Type', 'application/json');
     // res.setHeader('Login-JWT', token);
-    res.status(200).json({ name: req.user.name, token });
+  });
+
+router.route('/login/methods')
+  .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
+  .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+    const methods = {
+      recoveryCodes: 0,
+      backupEmailAddress: 0
+    };
+
+    if (req.user?.recoveryCodes?.length > 0) {
+      methods.recoveryCodes = 1;
+    }
+
+    if (req.user?.mfa?.backupEmailAddress !== '') {
+      methods.backupEmailAddress = 1;
+    }
+
+    res.status(200).json({ methods });
   });
 
 // Authentication check is done within passport, if passed, no login error exists
@@ -507,8 +520,7 @@ router.route('/mfa/getSecret')
     await User.findOneAndUpdate(
       { _id: req.user._id },
       { $push: { 'mfa.unverifiedSecrets': { $each: [secret.base32], $slice: 100 } } },
-      { upsert: false }
-    );
+      { upsert: false });
 
     const userName = req.user.email;
 
@@ -595,6 +607,27 @@ router.route('/mfa/verify')
     res.setHeader('Refresh-JWT', token);
     res.setHeader('refresh-token', refreshToken);
     res.json({ name: req.user.name, status: 'logged in' });
+  });
+
+router.route('/mfa/getRecoveryCodes')
+  .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
+  .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+    const codes = []; // send to user as clear text
+    const hashed = []; // store hashed in DB
+
+    for (let i = 0; i < 10; i++) {
+      const code = randomString();
+      codes.push(code);
+      hashed.push(SHA256(code));
+    };
+
+    await User.findOneAndUpdate(
+      { _id: req.user._id },
+      { $set: { recoveryCodes: hashed } },
+      { upsert: false }
+    );
+
+    res.json({ codes });
   });
 
 // Default exports
