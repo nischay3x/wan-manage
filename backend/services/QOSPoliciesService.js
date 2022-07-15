@@ -235,26 +235,6 @@ class QOSPoliciesService {
       const { name, description, advanced, outbound, inbound } = qosPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const opDevices = await devices.find(
-        {
-          org: orgList[0],
-          $or: [
-            { 'policies.qos.policy': id },
-            { 'interfaces.qosPolicy': id }
-          ],
-          'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] }
-        },
-        {
-          name: 1,
-          machineId: 1,
-          versions: 1,
-          interfaces: 1
-        }
-      )
-        .populate('interfaces.qosPolicy')
-        .populate('policies.qos.policy')
-        .lean();
-
       // Verify request schema
       const { valid, message } = await QOSPoliciesService.verifyRequestSchema(
         qosPolicyRequest, orgList[0]
@@ -292,6 +272,26 @@ class QOSPoliciesService {
       if (!qosPolicy) {
         return Service.rejectResponse('Not found', 404);
       }
+
+      const opDevices = await devices.find(
+        {
+          org: orgList[0],
+          $or: [
+            { 'policies.qos.policy': id },
+            { 'interfaces.qosPolicy': id }
+          ],
+          'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] }
+        },
+        {
+          name: 1,
+          machineId: 1,
+          versions: 1,
+          interfaces: 1
+        }
+      )
+        .populate('interfaces.qosPolicy')
+        .populate('policies.qos.policy')
+        .lean();
 
       // apply on devices
       const applied = await applyPolicy(opDevices, qosPolicy, 'install', user, orgList[0], true);

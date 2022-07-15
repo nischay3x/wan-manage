@@ -1235,7 +1235,7 @@ const apply = async (device, user, data) => {
   device[0] = await device[0]
     .populate('interfaces.pathlabels', '_id name type')
     .populate('interfaces.qosPolicy')
-    .populate('policies.qos')
+    .populate('policies.qos.policy')
     .populate({
       path: 'applications.app',
       populate: {

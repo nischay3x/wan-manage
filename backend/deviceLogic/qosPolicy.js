@@ -186,8 +186,13 @@ const getQOSParameters = (policy, device, op = 'install') => {
   }
   const devicePolicies = {};
   // global policy applied on the device
+  const currentDevPolicyId = (device.policies.qos.policy?._id || '').toString();
   if (policy) {
     devicePolicies[policy._id] = convertParameters(policy);
+    if (currentDevPolicyId && currentDevPolicyId !== policy._id && op !== 'install') {
+      // uninstalling another policy, need to keep sending the currently applied policy
+      devicePolicies[currentDevPolicyId] = convertParameters(device.policies.qos.policy);
+    }
   }
   // interfaces specific policies
   for (const ifc of device.interfaces.filter(i => i.isAssigned && i.type === 'WAN')) {
@@ -200,6 +205,8 @@ const getQOSParameters = (policy, device, op = 'install') => {
       if (op === 'install' || ifc.qosPolicy._id !== (policy?._id || '').toString()) {
         devicePolicies[ifc.qosPolicy._id].interfaces.push(ifc.devId);
       }
+    } else if (currentDevPolicyId && currentDevPolicyId !== policy._id && op !== 'install') {
+      devicePolicies[currentDevPolicyId].interfaces.push(ifc.devId);
     }
   }
   const policies = [];
@@ -491,7 +498,7 @@ const apply = async (deviceList, user, data) => {
   const { op, id } = data.meta;
 
   deviceList = await Promise.all(deviceList.map(d => d
-    .populate('policies.qos')
+    .populate('policies.qos.policy')
     .populate('interfaces.qosPolicy')
     .execPopulate()
   ));
@@ -513,9 +520,7 @@ const apply = async (deviceList, user, data) => {
     }
 
     // Extract the device IDs to operate on
-    deviceIds = data.devices
-      ? await getOpDevices(data.devices, org, qosPolicy, op)
-      : [deviceList[0]._id];
+    deviceIds = await getOpDevices(data.devices || {[deviceList[0]._id]: true}, org, qosPolicy, op);
   } catch (err) {
     throw err.name === 'MongoError'
       ? new Error() : err;
