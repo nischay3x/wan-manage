@@ -598,6 +598,52 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         continue;
       }
 
+      const sendModifyTunnel = (tunnel, device, remoteIfc) => {
+        const tasks = [{
+          entity: 'agent',
+          message: 'modify-tunnel',
+          params: {
+            'tunnel-id': tunnel.num,
+            remoteBandwidthMbps: {
+              tx: +remoteIfc.bandwidthMbps.tx,
+              rx: +remoteIfc.bandwidthMbps.rx
+            }
+          }
+        }];
+        deviceQueues.addJob(device.machineId, 'system', org,
+          // Data
+          { title: `Modify tunnel parameters on device ${device.hostname}`, tasks },
+          // Response data
+          {
+            method: 'tunnels',
+            data: {
+              deviceId: device._id,
+              org: org,
+              username: user,
+              tunnelId: tunnel.num
+            }
+          },
+          // Metadata
+          { priority: 'normal', attempts: 1, removeOnComplete: false },
+          // Complete callback
+          null
+        );
+      };
+
+      // if the device modification doesn't require the tunnels reconstruction
+      // we will send the modify-tunnel message only
+      const checkIfModifyTunnelRequired = (tunnel, ifcA, ifcB, modIfcA, modIfcB) => {
+        if (tunnel.peer) {
+          return;
+        }
+        if (isObject(modIfcB) && !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps)) {
+          sendModifyTunnel(tunnel, tunnel.deviceA, modIfcB);
+        }
+        if (isObject(modIfcA) && !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps)) {
+          sendModifyTunnel(tunnel, tunnel.deviceB, modIfcA);
+        }
+      };
+
       // only rebuild tunnels when IP, Public IP or port is changed
       const tunnelParametersModified = (origIfc, modifiedIfc) => {
         if (!isObject(modifiedIfc)) {
@@ -620,6 +666,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       const ifcBModified = peer ? false : tunnelParametersModified(ifcB, modifiedIfcB);
 
       if (!ifcAModified && !ifcBModified) {
+        checkIfModifyTunnelRequired(tunnel, ifcA, ifcB, modifiedIfcA, modifiedIfcB);
         continue;
       }
 
@@ -636,6 +683,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
 
       if (skipLocal) {
+        checkIfModifyTunnelRequired(tunnel, ifcA, ifcB, modifiedIfcA, modifiedIfcB);
         continue;
       }
 

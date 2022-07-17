@@ -1937,8 +1937,14 @@ const prepareTunnelParams = (
         labels: pathLabel ? [pathLabel] : []
       }
     };
-    paramsDeviceA.remoteBandwidthMbps = +deviceBIntf.bandwidthMbps;
-    paramsDeviceB.remoteBandwidthMbps = +deviceAIntf.bandwidthMbps;
+    paramsDeviceA.remoteBandwidthMbps = {
+      tx: +deviceBIntf.bandwidthMbps.tx,
+      rx: +deviceBIntf.bandwidthMbps.rx
+    };
+    paramsDeviceB.remoteBandwidthMbps = {
+      tx: +deviceAIntf.bandwidthMbps.tx,
+      rx: +deviceAIntf.bandwidthMbps.rx
+    };
     if (mssClamp !== 'no') {
       paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = minMtu;
       paramsDeviceB['loopback-iface']['tcp-mss-clamp'] = minMtu;
