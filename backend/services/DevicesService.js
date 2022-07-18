@@ -1632,6 +1632,13 @@ class DevicesService {
               'The device does not run the required flexiWAN version for BGP. ' +
               'Please disable BGP or upgrade the device');
           }
+        } else {
+          // if bgp disabled, make sure no tunnel created with BGP on this device
+          if (origTunnels.some(t => t?.advancedOptions?.routing === 'bgp')) {
+            throw createError(400,
+              'BGP cannot be disabled because there are tunnels created with BGP ' +
+              'routing protocol. Please delete them first');
+          }
         }
 
         // validate static routes

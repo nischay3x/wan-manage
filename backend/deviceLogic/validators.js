@@ -573,6 +573,14 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
 
+    const neighborIp = bgpNeighbor.ip + '/32';
+    if (cidr.overlap(neighborIp, '10.100.0.0/16') && (outboundFilter || inboundFilter)) {
+      return {
+        valid: false,
+        err: `A routing filter cannot be set on a BGP neighbor (${bgpNeighbor.ip})`
+      };
+    }
+
     if (bgpNeighbor.ip in usedNeighborIps) {
       return {
         valid: false,
