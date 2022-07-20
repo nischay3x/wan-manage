@@ -88,7 +88,7 @@ exports.jwtPassport = passport.use('jwt', new JwtStrategy(opts, async (jwtPayloa
 passport.use('jwt-login', new JwtStrategy(opts, async (jwtPayload, done) => {
   // prevent access sensitive resources with login token
   if (jwtPayload.type !== 'login') {
-    return done(null, false, { message: 'A login token is unauthorized to access this resource' });
+    return done(null, false, { message: 'The JWT token is unauthorized to access this resource' });
   }
 
   User

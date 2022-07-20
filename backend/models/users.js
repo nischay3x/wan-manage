@@ -48,6 +48,15 @@ const emailTokens = new Schema({
   }
 });
 
+const tmpCodeSchema = new Schema({
+  code: {
+    type: String
+  },
+  validUntil: {
+    type: Date
+  }
+}, { timestamps: false });
+
 /**
  * user schema
  */
@@ -160,10 +169,14 @@ const User = new Schema({
         validator: validators.validateEmail,
         message: 'should be a valid email address'
       }
+    },
+    recoveryCodes: {
+      type: [String]
+    },
+    backupEmailCodes: {
+      type: [tmpCodeSchema],
+      default: []
     }
-  },
-  recoveryCodes: {
-    type: [String]
   }
 });
 

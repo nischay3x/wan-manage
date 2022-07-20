@@ -163,7 +163,7 @@ class ExpressServer {
       store: inMemoryStore,
       // Rate limit for requests in 5 min per IP address
       max: configs.get('userIpReqRateLimit', 'number'),
-      message: 'Request rate limit exceeded',
+      message: { error: 'Request rate limit exceeded' },
       onLimitReached: (req, res, options) => {
         logger.error(
           'Request rate limit exceeded. blocking request', {
