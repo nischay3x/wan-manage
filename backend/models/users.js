@@ -157,7 +157,7 @@ const User = new Schema({
     backupPhoneNumber: {
       type: String,
       validate: {
-        validator: (number) => validators.validateIsPhoneNumber(number),
+        validator: (number) => number === '' || validators.validateIsPhoneNumber(number),
         message: 'should be a valid phone number'
       },
       maxlength: [20, 'Phone number length must be at most 20']
@@ -166,7 +166,7 @@ const User = new Schema({
       type: String,
       maxlength: [255, 'Email length must be at most 255'],
       validate: {
-        validator: validators.validateEmail,
+        validator: (email) => email === '' || validators.validateEmail(email),
         message: 'should be a valid email address'
       }
     },

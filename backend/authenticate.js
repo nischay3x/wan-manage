@@ -137,6 +137,9 @@ const setUserPerms = async (user, jwtPayload, token = null) => {
     }
   }
 
+  // save if user passed mfa to login
+  user.isLoggedInWithMfa = jwtPayload.mfaVerified ?? true;
+
   return true;
 };
 
@@ -359,6 +362,22 @@ exports.verifyUserLoginJWT = function (req, res, next) {
   }
 
   passport.authenticate('jwt-login', { session: false }, async (err, user, info) => {
+    if (err || !user) {
+      logger.warn('JWT verification failed', { params: { err: err?.message }, req: req });
+      return next(createError(401));
+    }
+    req.user = user;
+    return next();
+  })(req, res, next);
+};
+
+exports.verifyUserLoginJWT = function (req, res, next) {
+  // Allow options to pass through without verification for preflight options requests
+  if (!req.originalUrl.startsWith('/api/users')) {
+    return next(createError(403, "You don't have permission to perform this operation"));
+  }
+
+  passport.authenticate(['jwt-login', 'jwt'], { session: false }, async (err, user, info) => {
     if (err || !user) {
       logger.warn('JWT verification failed', { params: { err: err?.message }, req: req });
       return next(createError(401));

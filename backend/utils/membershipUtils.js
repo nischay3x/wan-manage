@@ -148,9 +148,14 @@ const getUserAccounts = async (user, offset = 0, limit = 0) => {
       .skip(offset)
       .limit(limit)
       .populate('account');
-    accounts.forEach((entry) => { resultSet[entry.account._id] = entry.account.name; });
+    accounts.forEach((entry) => {
+      resultSet[entry.account._id] = {
+        name: entry.account.name,
+        forceMfa: entry.account?.forceMfa
+      };
+    });
     const result = Object.keys(resultSet).map(key => {
-      return { _id: key, name: resultSet[key] };
+      return { _id: key, name: resultSet[key].name, forceMfa: resultSet[key].forceMfa };
     });
     return result;
   } catch (err) {

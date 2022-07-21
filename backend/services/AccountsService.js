@@ -92,10 +92,13 @@ class AccountsService {
           'No permission to access this account', 403
         );
       }
-      const { name, companyType, companyDesc, country, enableNotifications } = accountRequest;
+      const {
+        name, companyType, companyDesc, country, enableNotifications, forceMfa
+      } = accountRequest;
+
       const account = await Accounts.findOneAndUpdate(
         { _id: id },
-        { $set: { name, companyType, companyDesc, country, enableNotifications } },
+        { $set: { name, companyType, companyDesc, country, enableNotifications, forceMfa } },
         { upsert: false, new: true, runValidators: true });
 
       // Update token
@@ -143,9 +146,19 @@ class AccountsService {
       }
 
       const accounts = await getUserAccounts(user);
-      if (!accounts.find(acc => acc._id === account)) {
+      const requestedAccount = accounts.find(acc => acc._id === account);
+      if (!requestedAccount) {
         return Service.rejectResponse(
           'No permission to access this account', 403
+        );
+      }
+
+      // if user logged in to account that doesn't force MFA on user,
+      // but now wants to switch to account that does force it,
+      // we don't allow it, The user should configure MFA for himself.
+      if (!req.user.isLoggedInWithMfa && requestedAccount.forceMfa) {
+        return Service.rejectResponse(
+          'No permission to access this account. MFA is required', 403
         );
       }
 

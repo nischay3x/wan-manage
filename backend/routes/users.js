@@ -452,15 +452,16 @@ router.route('/reset-password')
 router.route('/login')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.corsWithOptions, auth.verifyUserLocal, async (req, res, next) => {
-    // username and password is correct
-    const token = await getLoginProcessToken(req.user);
-
-    res.status(200).json({ name: req.user.name, token });
-
-    // const refreshToken = await getRefreshToken(req);
-    // res.statusCode = 200;
-    // res.setHeader('Content-Type', 'application/json');
-    // res.setHeader('Login-JWT', token);
+    // if user enabled 2fa or account forces using it- send login process token
+    // else, allow login without mfa
+    const isUserEnabledMfa = req.user?.mfa?.enabled;
+    const isAccountForcesIt = req.user?.defaultAccount?.forceMfa;
+    if (isUserEnabledMfa || isAccountForcesIt) {
+      const token = await getLoginProcessToken(req.user);
+      res.status(200).json({ name: req.user.name, token });
+    } else {
+      return await sendJwtToken(req, res, false);
+    }
   });
 
 router.route('/login/methods')
@@ -537,7 +538,7 @@ router.route('/mfa/getSecret')
 
     const userName = req.user.email;
 
-    const issuer = 'flexiManage';
+    const issuer = configs.get('companyName');
     const algorithm = 'SHA1';
     const digits = '6';
     const period = '30';
@@ -750,12 +751,12 @@ const generateBackupEmailCode = async (req) => {
     configs.get('mailerEnvelopeFromAddress'),
     configs.get('mailerFromAddress'),
     req.user.mfa.backupEmailAddress,
-    `Code for signing in to ${configs.get('companyName')} Account`,
+    `Code for signing in to your ${configs.get('companyName')} Account`,
     `<p>
       Hi ${req.user.name || ''} ${req.user.lastName || ''}
     </p>
     <p>
-      Enter the code below to sign in to ${configs.get('companyName')} Account.
+      Enter the code below to sign in to your ${configs.get('companyName')} Account.
     </p>
     <p>
       <span style="padding-bottom: 20px;
