@@ -683,7 +683,7 @@ router.route('/mfa/verifyRecoveryCode')
 
 const apiLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 20, // Limit each IP to 2 requests per `window` (here, per 1 minutes)
+  max: 20, // Limit each IP to 20 requests per `window` (here, per 5 minutes)
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   message: { error: 'Using backup email address is limiting. Please try again later' }

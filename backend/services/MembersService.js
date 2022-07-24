@@ -613,7 +613,7 @@ class MembersService {
     }
 
     // reset user mfa settings
-    await Users.updateOne(
+    await Users.findOneAndUpdate(
       { _id: id },
       {
         $set: {
@@ -627,7 +627,8 @@ class MembersService {
             backupEmailCodes: []
           }
         }
-      }
+      },
+      { upsert: false }
     );
 
     const token = await getToken({ user }, { mfaVerified: false });
