@@ -1309,54 +1309,7 @@ const addTunnel = async (
     throw new Error(`Tunnel #${tunnelnum} set as pending - ${pendingReason}`);
   }
 
-  const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
-    tunnel,
-    deviceAIntf,
-    deviceBIntf,
-    pathLabel,
-    deviceA,
-    deviceB,
-    advancedOptions,
-    peer
-  );
-
-  let title = '';
-  if (peer) {
-    title += 'Create peer tunnel between (' +
-      deviceA.hostname +
-      ',' +
-      deviceAIntf.name +
-      ') and peer (' +
-      peer.name +
-      ')';
-  } else {
-    title += 'Create tunnel between (' +
-      deviceA.hostname +
-      ',' +
-      deviceAIntf.name +
-      ') and (' +
-      deviceB.hostname +
-      ',' +
-      deviceBIntf.name +
-      ')';
-  }
-  const tunnelJobs = await queueTunnel(
-    true,
-    title,
-    tasksDeviceA,
-    tasksDeviceB,
-    user,
-    org,
-    deviceA.machineId,
-    peer ? null : deviceB.machineId,
-    deviceA._id,
-    peer ? null : deviceB._id,
-    tunnelnum,
-    pathLabel,
-    peer
-  );
-
-  return tunnelJobs;
+  return await sendAddTunnelsJobs([tunnel._id], user);
 };
 
 /**
@@ -1445,7 +1398,7 @@ const applyTunnelDel = async (devices, user, data) => {
     const delPromises = [];
     tunnelIds.forEach(tunnelID => {
       try {
-        const delPromise = oneTunnelDel(tunnelID, userName, org);
+        const delPromise = delTunnel(tunnelID, userName, org);
         delPromises.push(delPromise);
       } catch (err) {
         logger.error('Delete tunnel error', { params: { tunnelID, error: err.message } });
@@ -1516,7 +1469,7 @@ const applyTunnelDel = async (devices, user, data) => {
  * @param  {string}   org        the user's organization id
  * @return {array}    jobs created
  */
-const oneTunnelDel = async (tunnelID, user, org) => {
+const delTunnel = async (tunnelID, user, org) => {
   const tunnelResp = await tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
     .populate('deviceA')
     .populate('deviceB')
@@ -1529,7 +1482,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   };
 
   // Define devices
-  const { num, deviceA, deviceB, pathLabel, peer, advancedOptions } = tunnelResp;
+  const { num, deviceA, deviceB, peer, advancedOptions } = tunnelResp;
 
   // Check is tunnel used by any static route
   const { ip1, ip2 } = generateTunnelParams(num);
@@ -1545,17 +1498,11 @@ const oneTunnelDel = async (tunnelID, user, org) => {
     );
   };
 
-  // Populate interface details
-  const deviceAIntf = tunnelResp.deviceA.interfaces
-    .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceA; })[0];
-  const deviceBIntf = peer ? null : tunnelResp.deviceB.interfaces
-    .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
-
   let tunnelJobs = [];
+
   // don't send remove jobs for pending tunnels
   if (!tunnelResp.isPending) {
-    tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
-      deviceAIntf, deviceBIntf, pathLabel, peer);
+    tunnelJobs = await sendRemoveTunnelsJobs([tunnelID], user);
   }
 
   logger.info('Deleting tunnels from database');
@@ -1648,78 +1595,6 @@ const prepareTunnelRemoveJob = (tunnel, deviceAIntf, deviceBIntf, peer = null) =
   }
 
   return [tasksDeviceA, tasksDeviceB];
-};
-
-/**
- * Calls the necessary APIs for deleting a single tunnel
- * @param  {string}   user         user id of requesting user
- * @param  {string}   org          id of the organization of the user
- * @param  {Object}   tunnel       the tunnel object to be deleted
- * @param  {Object}   deviceA      details of device A
- * @param  {Object}   deviceB      details of device B
- * @param  {Object}   deviceAIntf device A tunnel interface
- * @param  {Object}   deviceBIntf device B tunnel interface
- * @return {void}
- */
-const delTunnel = async (
-  user,
-  org,
-  tunnel,
-  deviceA,
-  deviceB,
-  deviceAIntf,
-  deviceBIntf,
-  pathLabel,
-  peer = null
-) => {
-  const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
-    tunnel,
-    deviceAIntf,
-    deviceBIntf,
-    peer
-  );
-  try {
-    let title = '';
-    if (peer) {
-      title = 'Delete peer tunnel between (' +
-      deviceA.hostname +
-      ',' +
-      deviceAIntf.name +
-      ') and peer (' +
-      peer.name +
-      ')';
-    } else {
-      title = 'Delete tunnel between (' +
-      deviceA.hostname +
-      ',' +
-      deviceAIntf.name +
-      ') and (' +
-      deviceB.hostname +
-      ',' +
-      deviceBIntf.name +
-      ')';
-    };
-    const tunnelJobs = await queueTunnel(
-      false,
-      title,
-      tasksDeviceA,
-      tasksDeviceB,
-      user,
-      org,
-      deviceA.machineId,
-      peer ? null : deviceB.machineId,
-      deviceA._id,
-      peer ? null : deviceB._id,
-      tunnel.num,
-      pathLabel,
-      peer
-    );
-    logger.debug('Tunnel jobs queued', { params: { jobA: tunnelJobs[0], jobB: tunnelJobs[1] } });
-    return tunnelJobs;
-  } catch (err) {
-    logger.error('Delete tunnel error', { params: { reason: err.message } });
-    throw err;
-  }
 };
 
 /**
@@ -1954,52 +1829,184 @@ const prepareTunnelParams = (
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };
 
-const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
+/**
+ * Send tunnels remove jobs
+ * @param  {Array}   tunnelIds an array of ids of the tunnels to remove
+ * @param  {string}  username  the name of the user that requested the device change
+ * @return {Array}             array of add-tunnel jobs
+ */
+const sendRemoveTunnelsJobs = async (tunnelIds, username = 'system') => {
   let tunnelsJobs = [];
 
   const tunnels = await tunnelsModel.find(
-    { _id: { $in: tunnelsIds }, isActive: true }
+    { _id: { $in: tunnelIds }, isActive: true }
   ).populate('deviceA').populate('deviceB').populate('peer');
 
   for (const tunnel of tunnels) {
-    const ifcA = tunnel.deviceA.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceA.toString();
+    const { org, deviceA, deviceB, interfaceA, interfaceB, pathlabel, peer } = tunnel;
+
+    const ifcA = deviceA.interfaces.find(ifc => {
+      return ifc._id.toString() === interfaceA.toString();
     });
-    const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceB.toString();
+    const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
+      return ifc._id.toString() === interfaceB.toString();
     });
 
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel, ifcA, ifcB, tunnel.peer);
-
-    let title = null;
-    if (tunnel.peer) {
-      // eslint-disable-next-line max-len
-      title = `Delete peer tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.peer.name})`;
-    } else {
-      // eslint-disable-next-line max-len
-      title = `Delete tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.deviceB.hostname}, ${ifcB.name})`;
-    }
-
-    const removeTunnelJobs = await queueTunnel(
-      false,
-      title,
-      tasksDeviceA,
-      tasksDeviceB,
-      username,
-      tunnel.org,
-      tunnel.deviceA.machineId,
-      tunnel.peer ? null : tunnel.deviceB.machineId,
-      tunnel.deviceA._id,
-      tunnel.peer ? null : tunnel.deviceB._id,
-      tunnel.num,
-      tunnel.pathlabel,
-      tunnel.peer
+    const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
+      tunnel,
+      ifcA,
+      ifcB,
+      peer
     );
 
-    tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
+    try {
+      let title = '';
+      if (peer) {
+        title = 'Delete peer tunnel between (' +
+        deviceA.hostname +
+        ',' +
+        ifcA.name +
+        ') and peer (' +
+        peer.name +
+        ')';
+      } else {
+        title = 'Delete tunnel between (' +
+        deviceA.hostname +
+        ',' +
+        ifcA.name +
+        ') and (' +
+        deviceB.hostname +
+        ',' +
+        ifcB.name +
+        ')';
+      };
+
+      const removeTunnelJobs = await queueTunnel(
+        false,
+        title,
+        tasksDeviceA,
+        tasksDeviceB,
+        username,
+        org,
+        deviceA.machineId,
+        peer ? null : deviceB.machineId,
+        deviceA._id,
+        peer ? null : deviceB._id,
+        tunnel.num,
+        pathlabel,
+        peer
+      );
+      logger.debug('Tunnel jobs queued', {
+        params: { jobA: removeTunnelJobs[0], jobB: removeTunnelJobs[1] }
+      });
+
+      tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
+    } catch (err) {
+      logger.error('Delete tunnel error', { params: { reason: err.message } });
+      throw err;
+    }
   }
 
   return tunnelsJobs;
+};
+
+/**
+ * Send tunnels add jobs
+ * @param  {Array}   tunnelIds an array of ids of the tunnels to create
+ * @param  {string}  username  the name of the user that requested the device change
+ * @return {Array}             array of add-tunnel jobs
+ */
+const sendAddTunnelsJobs = async (tunnelIds, username) => {
+  let jobs = [];
+  let org = null;
+  try {
+    const tunnels = await tunnelsModel
+      .find({
+        _id: { $in: tunnelIds },
+        isActive: true,
+        isPending: { $ne: true }
+      })
+      .populate('deviceA')
+      .populate('deviceB')
+      .populate('peer');
+
+    for (const tunnel of tunnels) {
+      org = tunnel.org;
+
+      const {
+        deviceA,
+        deviceB,
+        num,
+        pathlabel,
+        peer,
+        advancedOptions,
+        interfaceA,
+        interfaceB
+      } = tunnel;
+
+      const ifcA = deviceA.interfaces.find(ifc => {
+        return ifc._id.toString() === interfaceA.toString();
+      });
+
+      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
+        return ifc._id.toString() === interfaceB.toString();
+      });
+
+      const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
+        tunnel,
+        ifcA,
+        ifcB,
+        pathlabel,
+        deviceA,
+        deviceB,
+        advancedOptions,
+        peer
+      );
+
+      let title = '';
+      if (peer) {
+        title += 'Create peer tunnel between (' +
+          deviceA.hostname +
+          ',' +
+          ifcA.name +
+          ') and peer (' +
+          peer.name +
+          ')';
+      } else {
+        title += 'Create tunnel between (' +
+          deviceA.hostname +
+          ',' +
+          ifcA.name +
+          ') and (' +
+          deviceB.hostname +
+          ',' +
+          ifcB.name +
+          ')';
+      }
+      const tunnelJobs = await queueTunnel(
+        true,
+        title,
+        tasksDeviceA,
+        tasksDeviceB,
+        username,
+        org,
+        deviceA.machineId,
+        peer ? null : deviceB.machineId,
+        deviceA._id,
+        peer ? null : deviceB._id,
+        num,
+        pathlabel,
+        peer
+      );
+
+      jobs = jobs.concat(tunnelJobs);
+    }
+  } catch (err) {
+    logger.error('Failed to queue Add tunnel jobs', {
+      params: { err: err.message, tunnelIds }
+    });
+  };
+  return jobs;
 };
 
 const getInterfacesWithPathLabels = device => {
@@ -2033,9 +2040,6 @@ module.exports = {
   },
   sync: sync,
   completeSync: completeSync,
-  prepareTunnelRemoveJob: prepareTunnelRemoveJob,
-  prepareTunnelAddJob: prepareTunnelAddJob,
-  queueTunnel: queueTunnel,
-  oneTunnelDel: oneTunnelDel,
-  sendRemoveTunnelsJobs: sendRemoveTunnelsJobs
+  sendRemoveTunnelsJobs: sendRemoveTunnelsJobs,
+  sendAddTunnelsJobs: sendAddTunnelsJobs
 };

@@ -22,9 +22,9 @@ const notificationsMgr = require('../notifications/notifications')();
 const cidr = require('cidr-tools');
 const keyBy = require('lodash/keyBy');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
-const { sendRemoveTunnelsJobs } = require('./tunnels');
+const { sendRemoveTunnelsJobs, sendAddTunnelsJobs } = require('./tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const { apply, reconstructTunnels } = require('./modifyDevice');
+const { apply } = require('./modifyDevice');
 const eventsReasons = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
 const { getMajorVersion } = require('../versioning');
@@ -523,7 +523,7 @@ class Events {
   async sendTunnelsCreateJobs () {
     const reconstructTunnelIds = Array.from(this.activeTunnels);
     if (reconstructTunnelIds.length > 0) {
-      await reconstructTunnels(reconstructTunnelIds, 'system');
+      await sendAddTunnelsJobs(reconstructTunnelIds, 'system');
     }
   }
 

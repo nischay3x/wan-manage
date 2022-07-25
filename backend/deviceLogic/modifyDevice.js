@@ -21,9 +21,8 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const {
-  prepareTunnelRemoveJob,
-  prepareTunnelAddJob,
-  queueTunnel
+  sendAddTunnelsJobs,
+  sendRemoveTunnelsJobs
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg, validateDhcpConfig } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
@@ -502,14 +501,15 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     });
   }
 
-  // Prepare device modification job, if nothing requires modification, return
-  const tasks = prepareModificationMessage(messageParams, device, newDevice);
+  let tasks = [];
+  let jobs = [];
 
-  if (tasks.length === 0 || tasks[0].length === 0) {
-    return [];
+  // Send modify device job only if required parameters were changed
+  const skipModifyJob = _isNeedToSkipModifyJob(messageParams, modifiedIfcsMap, device);
+  if (!skipModifyJob) {
+    tasks = prepareModificationMessage(messageParams, device, newDevice);
   }
 
-  let tunnelsJobs = [];
   for (const ifc of interfacesIdsSet) {
     // First, remove all active tunnels connected
     // via this interface, on all relevant devices.
@@ -524,7 +524,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       .populate('peer');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, pathlabel, num, peer } = tunnel;
+      let { deviceA, deviceB, peer } = tunnel;
       // IMPORTANT: Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
       if (deviceA._id.toString() === device._id.toString()) {
@@ -547,8 +547,6 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       // but rather only queue remove/add tunnel jobs to the devices.
       // For interfaces that are unassigned, or which path labels have
       // been removed, we remove the tunnel from both the devices and the MGMT
-      const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
-        tunnel, ifcA, ifcB, peer);
 
       const modifiedIfcA = modifiedIfcsMap[tunnel.interfaceA.toString()];
       const modifiedIfcB = peer ? null : modifiedIfcsMap[tunnel.interfaceB.toString()];
@@ -632,72 +630,11 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       }
 
       await setTunnelsPendingInDB([tunnel._id], org, true);
-      let title = '';
-      if (peer) {
-        // eslint-disable-next-line max-len
-        title = `Delete peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${peer.name})`;
-      } else {
-        // eslint-disable-next-line max-len
-        title = `Delete tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
-      }
-      const removeTunnelJobs = await queueTunnel(
-        false,
-        title,
-        tasksDeviceA,
-        tasksDeviceB,
-        user.username,
-        org,
-        deviceA.machineId,
-        peer ? null : deviceB.machineId,
-        deviceA._id,
-        peer ? null : deviceB._id,
-        num,
-        pathlabel,
-        peer
-      );
-      tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
+      const removeTunnelJobs = await sendRemoveTunnelsJobs([tunnel._id], user.username);
+      jobs = jobs.concat(removeTunnelJobs);
       removedTunnels.push(tunnel._id);
     }
   }
-  // Send modify device job only if required
-  const skipModifyJob = !has(messageParams, 'modify_router') &&
-    !has(messageParams, 'modify_routes') &&
-    !has(messageParams, 'modify_dhcp_config') &&
-    !has(messageParams, 'modify_ospf') &&
-    !has(messageParams, 'modify_bgp') &&
-    !has(messageParams, 'modify_routing_filters') &&
-    !has(messageParams, 'modify_firewall') &&
-    Object.values(modifiedIfcsMap).every(modifiedIfc => {
-      const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
-      const propsModified = Object.keys(modifiedIfc).filter(prop => {
-        // There is a case that origIfc.IPv6 is an empty string and origIfc.IPv6Mask is undefined,
-        // So the result of the combination of them is "/".
-        // If modifiedIfc.addr6 is an empty string, it always different than "/", and
-        // we send unnecessary modify-interface job.
-        // So if the origIfc.IPv6 is empty, we ignore the IPv6 undefined.
-        const origIPv6 = origIfc.IPv6 === '' ? '' : `${origIfc.IPv6}/${origIfc.IPv6Mask}`;
-        switch (prop) {
-          case 'pathlabels':
-            return !isEqual(
-              modifiedIfc[prop].filter(pl => pl.type === 'DIA'),
-              origIfc[prop].filter(pl => pl.type === 'DIA')
-            );
-          case 'addr':
-            return modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
-          case 'addr6':
-            return modifiedIfc.addr6 !== origIPv6;
-          default:
-            return !isEqual(modifiedIfc[prop], origIfc[prop]);
-        }
-      });
-      // skip modify-device job if only PublicIP or PublicPort are modified
-      // or if dhcp==='yes' and only IPv4, IPv6, gateway are modified
-      // these parameters are set by device
-      const propsToSkip = modifiedIfc.dhcp !== 'yes'
-        ? ['PublicIP', 'PublicPort', 'useFixedPublicPort']
-        : ['PublicIP', 'PublicPort', 'addr', 'addr6', 'gateway', 'useFixedPublicPort'];
-      return differenceWith(propsModified, propsToSkip, isEqual).length === 0;
-    });
 
   // Additional job response data
   const jobResponse = {};
@@ -705,142 +642,19 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     jobResponse.firewallPolicy = messageParams.modify_firewall.data;
   }
 
-  // Queue device modification job
-  const job = !skipModifyJob
-    ? await queueJob(org, user.username, tasks, device, jobResponse) : null;
+  const modifyJob = await queueJob(org, user.username, tasks, device, jobResponse);
+  jobs.push(modifyJob);
 
   // Queue tunnel reconstruction jobs
   try {
-    const addTunnelJobs = await reconstructTunnels(removedTunnels, user.username);
-    tunnelsJobs = tunnelsJobs.concat(addTunnelJobs);
+    const addTunnelJobs = await sendAddTunnelsJobs(removedTunnels, user.username);
+    jobs = jobs.concat(addTunnelJobs);
   } catch (err) {
     logger.error('Tunnel reconstruction failed', {
-      params: { jobId: job.id, device, err: err.message }
+      params: { jobId: modifyJob.id, device, err: err.message }
     });
   }
 
-  let jobs = [];
-  if (job) jobs.push(job);
-  if (tunnelsJobs.length) {
-    jobs = jobs.concat(tunnelsJobs);
-  }
-  return jobs;
-};
-
-/**
- * Reconstructs tunnels that were removed before
- * sending a modify-device message to a device.
- * @param  {Array}   removedTunnels an array of ids of the removed tunnels
- * @param  {string}  username       name of the user that requested the device change
- * @param  {boolean} sendRemoveJobs indicate if need to send remove tunnels first
- * @return {Array}                  array of add-tunnel jobs
- */
-const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) => {
-  let jobs = [];
-  let org = null;
-  try {
-    const tunnels = await tunnelsModel
-      .find({
-        _id: { $in: tunnelsIds },
-        isActive: true,
-        isPending: { $ne: true }
-      })
-      .populate('deviceA')
-      .populate('deviceB')
-      .populate('peer');
-
-    for (const tunnel of tunnels) {
-      org = tunnel.org;
-
-      let tasksDeviceA = [];
-      let tasksDeviceB = [];
-
-      const { deviceA, deviceB, pathlabel, peer, advancedOptions } = tunnel;
-      const ifcA = deviceA.interfaces.find(ifc => {
-        return ifc._id.toString() === tunnel.interfaceA.toString();
-      });
-
-      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
-        return ifc._id.toString() === tunnel.interfaceB.toString();
-      });
-
-      // IMPORTANT: If the tunnels was removed via modify-device process,
-      // the order of jobs is: remove-tunnels, modify-router, add-tunnels.
-      // But if tunnels needs to be recreated without a modify device job,
-      // we can send remove and add tunnels jobs in one aggregated request.
-      if (sendRemoveJobs) {
-        await setTunnelsPendingInDB([tunnel._id], org, true);
-        const [removeTasksA, removeTasksB] = prepareTunnelRemoveJob(tunnel, ifcA, ifcB, peer);
-        tasksDeviceA = tasksDeviceA.concat(removeTasksA);
-        tasksDeviceB = tasksDeviceB.concat(removeTasksB);
-      }
-
-      const [addTasksA, addTasksB] = await prepareTunnelAddJob(
-        tunnel,
-        ifcA,
-        ifcB,
-        pathlabel,
-        deviceA,
-        deviceB,
-        advancedOptions,
-        peer
-      );
-      tasksDeviceA = tasksDeviceA.concat(addTasksA);
-      tasksDeviceB = tasksDeviceB.concat(addTasksB);
-
-      let title = '';
-      const actionType = sendRemoveJobs ? 'Reconstruct' : 'Add';
-      if (peer) {
-        // eslint-disable-next-line max-len
-        title = `${actionType} peer tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${peer.name})`;
-      } else {
-        // eslint-disable-next-line max-len
-        title = `${actionType} tunnel between (${deviceA.hostname}, ${ifcA.name}) and (${deviceB.hostname}, ${ifcB.name})`;
-      };
-
-      // if sendRemoveJobs is true, we need to send aggregated request with pair
-      // of remove-tunnel and add-tunnel
-      [tasksDeviceA, tasksDeviceB] = [tasksDeviceA, tasksDeviceB].map(tasks => {
-        if (tasks.length > 1) {
-          return [{
-            entity: 'agent',
-            message: 'aggregated',
-            params: { requests: tasks }
-          }];
-        }
-        return tasks;
-      });
-
-      const tunnelJobs = await queueTunnel(
-        true,
-        // eslint-disable-next-line max-len
-        title,
-        tasksDeviceA,
-        tasksDeviceB,
-        username,
-        tunnel.org,
-        deviceA.machineId,
-        peer ? null : deviceB.machineId,
-        deviceA._id,
-        peer ? null : deviceB._id,
-        tunnel.num,
-        pathlabel,
-        peer
-      );
-      jobs = jobs.concat(tunnelJobs);
-    }
-  } catch (err) {
-    logger.error('Failed to queue Add tunnel jobs', {
-      params: { err: err.message, tunnelsIds }
-    });
-  };
-  try {
-    await setTunnelsPendingInDB(tunnelsIds, org, false);
-  } catch (err) {
-    logger.error('Failed to set tunnel pending flag in db', {
-      params: { err: err.message, tunnelsIds }
-    });
-  }
   return jobs;
 };
 
@@ -1755,12 +1569,52 @@ const remove = async (job) => {
   }
 };
 
+const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
+  return !has(messageParams, 'modify_router') &&
+    !has(messageParams, 'modify_routes') &&
+    !has(messageParams, 'modify_dhcp_config') &&
+    !has(messageParams, 'modify_ospf') &&
+    !has(messageParams, 'modify_bgp') &&
+    !has(messageParams, 'modify_routing_filters') &&
+    !has(messageParams, 'modify_firewall') &&
+    Object.values(modifiedIfcsMap).every(modifiedIfc => {
+      const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
+      const propsModified = Object.keys(modifiedIfc).filter(prop => {
+        // There is a case that origIfc.IPv6 is an empty string and origIfc.IPv6Mask is undefined,
+        // So the result of the combination of them is "/".
+        // If modifiedIfc.addr6 is an empty string, it always different than "/", and
+        // we send unnecessary modify-interface job.
+        // So if the origIfc.IPv6 is empty, we ignore the IPv6 undefined.
+        const origIPv6 = origIfc.IPv6 === '' ? '' : `${origIfc.IPv6}/${origIfc.IPv6Mask}`;
+        switch (prop) {
+          case 'pathlabels':
+            return !isEqual(
+              modifiedIfc[prop].filter(pl => pl.type === 'DIA'),
+              origIfc[prop].filter(pl => pl.type === 'DIA')
+            );
+          case 'addr':
+            return modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
+          case 'addr6':
+            return modifiedIfc.addr6 !== origIPv6;
+          default:
+            return !isEqual(modifiedIfc[prop], origIfc[prop]);
+        }
+      });
+      // skip modify-device job if only PublicIP or PublicPort are modified
+      // or if dhcp==='yes' and only IPv4, IPv6, gateway are modified
+      // these parameters are set by device
+      const propsToSkip = modifiedIfc.dhcp !== 'yes'
+        ? ['PublicIP', 'PublicPort', 'useFixedPublicPort']
+        : ['PublicIP', 'PublicPort', 'addr', 'addr6', 'gateway', 'useFixedPublicPort'];
+      return differenceWith(propsModified, propsToSkip, isEqual).length === 0;
+    });
+};
+
 module.exports = {
   apply: apply,
   complete: complete,
   completeSync: completeSync,
   sync: sync,
-  reconstructTunnels,
   error: error,
   remove: remove
 };
