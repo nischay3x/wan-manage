@@ -21,8 +21,8 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const {
-  sendAddTunnelsJobs,
-  sendRemoveTunnelsJobs
+  prepareTunnelAddJob,
+  prepareTunnelRemoveJob
 } = require('../deviceLogic/tunnels');
 const { validateModifyDeviceMsg, validateDhcpConfig } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
@@ -36,6 +36,7 @@ const {
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const has = require('lodash/has');
 const omit = require('lodash/omit');
+const uniqWith = require('lodash/uniqWith');
 const differenceWith = require('lodash/differenceWith');
 const pullAllWith = require('lodash/pullAllWith');
 const omitBy = require('lodash/omitBy');
@@ -175,17 +176,11 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
  *
  * @param {*} messageParams input device modification params
  * @param {Object}  device the device to which the job should be queued
- * @returns object of the following format:
- * {
- *   message: 'aggregated',
- *   params: { requests: [] }
- * }
- * where 'requests' is an array of individual device modification
- * commands.
+ * @returns list of the messages
  */
-const prepareModificationMessage = (messageParams, device, newDevice) => {
+const prepareModificationMessages = (messageParams, device, newDevice) => {
   const requests = [];
-  const tasks = [];
+
   // Check against the old configured interfaces.
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
@@ -304,7 +299,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
           params: {
             addr: item.addr,
             via: item.old_route,
-            devId: item.devId || undefined,
+            dev_id: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined,
             redistributeViaOSPF: item.redistributeViaOSPF,
             redistributeViaBGP: item.redistributeViaBGP,
@@ -319,7 +314,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
           params: {
             addr: item.addr,
             via: item.new_route,
-            devId: item.devId || undefined,
+            dev_id: item.devId || undefined,
             metric: item.metric ? parseInt(item.metric, 10) : undefined,
             redistributeViaOSPF: item.redistributeViaOSPF,
             redistributeViaBGP: item.redistributeViaBGP,
@@ -416,17 +411,7 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     requests.push(...messageParams.modify_firewall.tasks);
   }
 
-  if (requests.length !== 0) {
-    tasks.push(
-      {
-        entity: 'agent',
-        message: 'aggregated',
-        params: { requests: requests }
-      }
-    );
-  }
-
-  return tasks;
+  return requests;
 };
 
 /**
@@ -473,8 +458,11 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
  * @param  {string}  org           organization to which the user belongs
  * @return {Job}                   The queued modify-device job
  */
-const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org) => {
-  const removedTunnels = [];
+const queueModifyDeviceJob = async (
+  device, newDevice, messageParams, user, org, addTunnelIds, removeTunnelIds
+) => {
+  const jobs = [];
+
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
 
@@ -500,31 +488,108 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       modifiedIfcsMap[ifc._id] = ifc;
     });
   }
+  const modifiedInterfaces = Array.from(interfacesIdsSet);
 
-  let tasks = [];
-  let jobs = [];
+  // key: deviceId, value: list of tasks to send
+  const tasks = {
+    [device._id]: {
+      device,
+      tasks: []
+    }
+  };
 
   // Send modify device job only if required parameters were changed
   const skipModifyJob = _isNeedToSkipModifyJob(messageParams, modifiedIfcsMap, device);
   if (!skipModifyJob) {
-    tasks = prepareModificationMessage(messageParams, device, newDevice);
+    tasks[device._id].tasks = prepareModificationMessages(messageParams, device, newDevice);
   }
 
-  for (const ifc of interfacesIdsSet) {
-    // First, remove all active tunnels connected
-    // via this interface, on all relevant devices.
+  // Additional job response data
+  if (messageParams.modify_firewall) {
+    tasks[device._id].jobResponse = { firewallPolicy: messageParams.modify_firewall.data };
+  }
+
+  // at this point we need to take care of tunnels.
+  // Tunneling changes can be required here for two reasons:
+  // 1. Interface that has a tunnel on it is changed by the user.
+  //    IP might be changed by DHCP or user can change static IP of this interface.
+  // 2. Nothing changed on the interface but system need to create/remove tunnel.
+  //    It can happens with events, for example if interface's public port
+  //    changed in high rate, we send remove jobs.
+  //    Of if interface was pending due to high rate and not it stabilized,
+  //    We need to send add tunnel job regardless of interface configuration change.
+  //
+  // For these reason, we need sometimes to remove or add tunnels.
+  // Here is the code that takes care of it.
+  const modifiedTunnelIds = [];
+  try {
     const tunnels = await tunnelsModel
       .find({
-        isActive: true,
-        isPending: { $ne: true }, // no need to reconstruct pending tunnels
-        $or: [{ interfaceA: ifc._id }, { interfaceB: ifc._id }]
+        $or: [
+          // Runnels that configured on modified interface - Reason 1 above
+          {
+            $and: [
+              { isActive: true },
+              { isPending: { $ne: true } }, // no need to reconstruct pending tunnels
+              {
+                $or: [
+                  { interfaceA: { $in: modifiedInterfaces } },
+                  { interfaceB: { $in: modifiedInterfaces } }
+                ]
+              }
+            ]
+          },
+          // Tunnels regardless of interfaces' changes - - Reason 2 above
+          { _id: { $in: [...addTunnelIds, ...removeTunnelIds] } }
+        ]
       })
       .populate('deviceA')
       .populate('deviceB')
       .populate('peer');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, peer } = tunnel;
+      let { deviceA, deviceB, peer, pathlabel, _id, advancedOptions } = tunnel;
+
+      const ifcA = deviceA.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceA.toString();
+      });
+
+      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
+        return ifc._id.toString() === tunnel.interfaceB.toString();
+      });
+
+      // First check if need to send tunnel jobs regardless of interface change.
+      const [removeTasksDeviceA, removeTasksDeviceB] = await prepareTunnelRemoveJob(
+        tunnel, deviceA, deviceB, peer, true);
+
+      const isNeedToRemoveTunnel = removeTunnelIds.find(i => i === _id.toString());
+      if (isNeedToRemoveTunnel) {
+        _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
+        continue;
+      }
+
+      const [addTasksDeviceA, addTasksDeviceB] = await prepareTunnelAddJob(
+        tunnel,
+        ifcA,
+        ifcB,
+        pathlabel,
+        deviceA,
+        deviceB,
+        advancedOptions,
+        peer,
+        true
+      );
+
+      const isNeedToAddTunnel = addTunnelIds.find(i => i === _id.toString());
+      if (isNeedToAddTunnel) {
+        _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
+        continue;
+      }
+
+      // Now check if need to send tunnel jobs due to interface change.
+      // In this case we need to check few things and decide based on them
+      // if to trigger jobs or not.
+      //
       // IMPORTANT: Since the interface changes have already been updated in the database
       // we have to use the original device for creating the tunnel-remove message.
       if (deviceA._id.toString() === device._id.toString()) {
@@ -533,11 +598,11 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         deviceB = device;
       };
 
-      const ifcA = deviceA.interfaces.find(ifc => {
+      const origIfcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
       });
 
-      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
+      const origIfcB = peer ? null : deviceB.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceB.toString();
       });
 
@@ -568,10 +633,10 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       // if dhcp was changed from 'no' to 'yes'
       // then we need to wait for a new config from the agent
       const waitingDhcpInfoA =
-        (isObject(modifiedIfcA) && modifiedIfcA.dhcp === 'yes' && ifcA.dhcp !== 'yes');
+        (isObject(modifiedIfcA) && modifiedIfcA.dhcp === 'yes' && origIfcA.dhcp !== 'yes');
       const waitingDhcpInfoB = peer
         ? false
-        : (isObject(modifiedIfcB) && modifiedIfcB.dhcp === 'yes' && ifcB.dhcp !== 'yes');
+        : (isObject(modifiedIfcB) && modifiedIfcB.dhcp === 'yes' && origIfcB.dhcp !== 'yes');
 
       if (waitingDhcpInfoA || waitingDhcpInfoB) {
         logger.info('Waiting a new config from DHCP, the tunnel will not be rebuilt', {
@@ -606,8 +671,8 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
           modifiedIfc.useFixedPublicPort !== origIfc.useFixedPublicPort
         );
       };
-      const ifcAModified = tunnelParametersModified(ifcA, modifiedIfcA);
-      const ifcBModified = peer ? false : tunnelParametersModified(ifcB, modifiedIfcB);
+      const ifcAModified = tunnelParametersModified(origIfcA, modifiedIfcA);
+      const ifcBModified = peer ? false : tunnelParametersModified(origIfcB, modifiedIfcB);
 
       if (!ifcAModified && !ifcBModified) {
         continue;
@@ -620,42 +685,130 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
       };
       const skipLocal = peer
         ? false
-        : (isObject(modifiedIfcA) && modifiedIfcA.addr === `${ifcA.IPv4}/${ifcA.IPv4Mask}` &&
-          isLocal(modifiedIfcA, ifcB) && isLocal(ifcA, ifcB)) ||
-          (isObject(modifiedIfcB) && modifiedIfcB.addr === `${ifcB.IPv4}/${ifcB.IPv4Mask}` &&
-          isLocal(modifiedIfcB, ifcA) && isLocal(ifcB, ifcA));
+        : (
+          isObject(modifiedIfcA) &&
+          modifiedIfcA.addr === `${origIfcA.IPv4}/${origIfcA.IPv4Mask}` &&
+          isLocal(modifiedIfcA, origIfcB) &&
+          isLocal(origIfcA, origIfcB)) ||
+          (
+            isObject(modifiedIfcB) &&
+            modifiedIfcB.addr === `${origIfcB.IPv4}/${origIfcB.IPv4Mask}` &&
+            isLocal(modifiedIfcB, origIfcA) &&
+            isLocal(origIfcB, origIfcA)
+          );
 
       if (skipLocal) {
         continue;
       }
 
+      _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
+      _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
+
+      modifiedTunnelIds.push(tunnel._id);
       await setTunnelsPendingInDB([tunnel._id], org, true);
-      const removeTunnelJobs = await sendRemoveTunnelsJobs([tunnel._id], user.username);
-      jobs = jobs.concat(removeTunnelJobs);
-      removedTunnels.push(tunnel._id);
+    }
+
+    // at this point, list of jobs is ready.
+    // Order it by the right order and send it to the devices
+    const addOrder = [
+      'add-ospf', 'add-routing-filter', 'add-routing-bgp', 'add-switch',
+      'add-interface', 'modify-interface', 'add-tunnel', 'add-route', 'add-dhcp-config',
+      'add-application', 'add-multilink-policy', 'add-firewall-policy'
+    ];
+    const removeOrder = addOrder.map(a => a.replace('add-', 'remove-')).reverse();
+
+    for (const deviceId in tasks) {
+      let finalTasks = [];
+
+      const deviceTasks = tasks[deviceId].tasks;
+
+      // order the tasks by the above order.
+      for (const msg of removeOrder) {
+        for (const task of deviceTasks) {
+          if (msg === task.message) {
+            finalTasks.push(task);
+          }
+        }
+      }
+      for (const msg of addOrder) {
+        for (const task of deviceTasks) {
+          if (msg === task.message) {
+            finalTasks.push(task);
+          }
+        }
+      }
+
+      // filter job duplications that can come with tunnel dependencies
+      finalTasks = uniqWith(finalTasks, isEqual);
+
+      if (finalTasks.length > 1) {
+        // convert the tasks to one aggregated request
+        finalTasks = [{
+          entity: 'agent',
+          message: 'aggregated',
+          params: { requests: finalTasks }
+        }];
+      }
+
+      tasks[deviceId].jobResponse ??= {};
+
+      if (finalTasks.length > 0) {
+        try {
+          const modifyJob = await queueJob(
+            org,
+            user.username,
+            finalTasks,
+            tasks[deviceId].device,
+            tasks[deviceId].jobResponse
+          );
+
+          jobs.push(modifyJob);
+        } catch (err) {
+          logger.error('Failed to queue device modification message', {
+            params: { err: err.message, finalTasks, deviceId }
+          });
+        }
+      }
+    }
+  } catch (err) {
+    logger.error('Failed to handle device modification process', {
+      params: { err: err.message }
+    });
+  } finally {
+    if (modifiedTunnelIds.length > 0) {
+      await setTunnelsPendingInDB(modifiedTunnelIds, org, false);
     }
   }
 
-  // Additional job response data
-  const jobResponse = {};
-  if (messageParams.modify_firewall) {
-    jobResponse.firewallPolicy = messageParams.modify_firewall.data;
-  }
-
-  const modifyJob = await queueJob(org, user.username, tasks, device, jobResponse);
-  jobs.push(modifyJob);
-
-  // Queue tunnel reconstruction jobs
-  try {
-    const addTunnelJobs = await sendAddTunnelsJobs(removedTunnels, user.username);
-    jobs = jobs.concat(addTunnelJobs);
-  } catch (err) {
-    logger.error('Tunnel reconstruction failed', {
-      params: { jobId: modifyJob.id, device, err: err.message }
-    });
-  }
-
   return jobs;
+};
+
+const _addTunnelTasks = (tasks, tunnel, tasksDeviceA, tasksDeviceB) => {
+  const deviceAId = tunnel.deviceA?._id;
+  const deviceBId = tunnel.deviceB?._id;
+
+  if (!(deviceAId in tasks)) {
+    tasks[deviceAId] = {
+      device: tunnel.deviceA,
+      tasks: []
+    };
+  }
+  tasks[deviceAId].tasks.push(...tasksDeviceA);
+
+  // peer has no deviceB
+  if (!deviceBId) {
+    return tasks;
+  }
+
+  if (!(deviceBId in tasks)) {
+    tasks[deviceBId] = {
+      device: tunnel.deviceB,
+      tasks: []
+    };
+  }
+  tasks[deviceBId].tasks.push(...tasksDeviceB);
+
+  return tasks;
 };
 
 /**
@@ -1324,8 +1477,20 @@ const apply = async (device, user, data) => {
     ]);
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
     await setJobPendingInDB(device[0]._id, org, true);
+
+    data.addTunnelIds ??= [];
+    data.removeTunnelIds ??= [];
+
     // Queue device modification job
-    const jobs = await queueModifyDeviceJob(device[0], data.newDevice, modifyParams, user, org);
+    const jobs = await queueModifyDeviceJob(
+      device[0],
+      data.newDevice,
+      modifyParams,
+      user,
+      org,
+      data.addTunnelIds,
+      data.removeTunnelIds
+    );
 
     return {
       ids: jobs.flat().map(job => job.id),

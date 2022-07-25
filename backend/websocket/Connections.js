@@ -544,8 +544,8 @@ class Connections {
             }
           });
 
-          // add tunnels jobs before modify
-          await events.sendTunnelsCreateJobs();
+          const addTunnelIds = Array.from(events.activeTunnels);
+          const removeTunnelIds = Array.from(events.pendingTunnels);
 
           // modify jobs
           const modifyDevices = await events.prepareModifyDispatcherParameters();
@@ -555,13 +555,12 @@ class Connections {
               { username: 'system' },
               {
                 org: modifyDevices[modified].orig.org.toString(),
-                newDevice: modifyDevices[modified].updated
+                newDevice: modifyDevices[modified].updated,
+                addTunnelIds,
+                removeTunnelIds
               }
             );
           }
-
-          // remove tunnels jobs after modify
-          await events.sendTunnelsRemoveJobs();
 
           // remove the variable from the memory.
           events = null;

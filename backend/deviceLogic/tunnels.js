@@ -993,7 +993,8 @@ const prepareTunnelAddJob = async (
   deviceA,
   deviceB,
   advancedOptions,
-  peer = null
+  peer = null,
+  includeDeviceConfigDependencies = false
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -1159,6 +1160,14 @@ const prepareTunnelAddJob = async (
       paramsIpsecDeviceB['remote-sa'] = { ...paramsSaAB };
     }
     paramsDeviceB.ipsec = paramsIpsecDeviceB;
+  }
+
+  if (includeDeviceConfigDependencies) {
+    const [configTasksDeviceA, configTasksDeviceB] = await getTunnelConfigDependenciesTasks(
+      tunnel, true);
+
+    tasksDeviceA.push(...configTasksDeviceA);
+    tasksDeviceB.push(...configTasksDeviceB);
   }
 
   // Saving configuration for device A
@@ -1573,18 +1582,30 @@ const completeTunnelDel = (jobId, res) => {
  * the jobs that should be queued for each of the devices connected
  * by the tunnel.
  * @param  {Object} tunnel      the tunnel object to be deleted
- * @param  {Object} deviceAIntf device A tunnel interface
- * @param  {Object} deviceBIntf device B tunnel interface
  * @param  {Object} peer        peer configurations
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelRemoveJob = (tunnel, deviceAIntf, deviceBIntf, peer = null) => {
+const prepareTunnelRemoveJob = async (
+  tunnel,
+  deviceA,
+  deviceB,
+  peer = null,
+  includeDeviceConfigDependencies = false
+) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
 
   const removeParams = {
     'tunnel-id': tunnel.num
   };
+
+  if (includeDeviceConfigDependencies) {
+    const [configTasksDeviceA, configTasksDeviceB] = await getTunnelConfigDependenciesTasks(
+      tunnel, false);
+
+    tasksDeviceA.push(...configTasksDeviceA);
+    tasksDeviceB.push(...configTasksDeviceB);
+  }
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: removeParams });
@@ -1595,6 +1616,58 @@ const prepareTunnelRemoveJob = (tunnel, deviceAIntf, deviceBIntf, peer = null) =
   }
 
   return [tasksDeviceA, tasksDeviceB];
+};
+
+/**
+ * Get all devices configurations that depend on the tunnel.
+ * e.g. static route via the tunnel
+ * @return Array
+ */
+const getTunnelConfigDependenciesTasks = async (tunnel, isAdd) => {
+  const deviceATasks = [];
+  const deviceBTasks = [];
+
+  const dependedDevices = await getTunnelConfigDependencies(tunnel, true);
+  for (const dependedDevice of dependedDevices) {
+    const deviceId = dependedDevice._id.toString();
+
+    let deviceTasksArray = null;
+    if (deviceId === tunnel.deviceA._id.toString()) {
+      deviceTasksArray = deviceATasks;
+    } else {
+      deviceTasksArray = deviceBTasks;
+    }
+
+    for (const staticRoute of dependedDevice.staticroutes) {
+      const {
+        ifname,
+        gateway,
+        destination,
+        metric,
+        redistributeViaOSPF,
+        redistributeViaBGP,
+        onLink
+      } = staticRoute;
+
+      const params = {
+        addr: destination,
+        via: gateway,
+        dev_id: ifname || undefined,
+        metric: metric ? parseInt(metric, 10) : undefined,
+        redistributeViaOSPF: redistributeViaOSPF,
+        redistributeViaBGP: redistributeViaBGP,
+        onLink: onLink
+      };
+
+      deviceTasksArray.push({
+        entity: 'agent',
+        message: `${isAdd ? 'add' : 'remove'}-route`,
+        params
+      });
+    }
+  }
+
+  return [deviceATasks, deviceBTasks];
 };
 
 /**
@@ -1852,10 +1925,10 @@ const sendRemoveTunnelsJobs = async (tunnelIds, username = 'system') => {
       return ifc._id.toString() === interfaceB.toString();
     });
 
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
+    const [tasksDeviceA, tasksDeviceB] = await prepareTunnelRemoveJob(
       tunnel,
-      ifcA,
-      ifcB,
+      deviceA,
+      deviceB,
       peer
     );
 
@@ -2026,6 +2099,47 @@ const getInterfacesWithPathLabels = device => {
   return deviceIntfs;
 };
 
+/**
+ * Get all devices with config depend on the tunnel
+ * @param  {object} tunnel tunnel object
+ * @return {[{object}]} array of devices with config
+*/
+const getTunnelConfigDependencies = async (tunnel, ignorePending = false) => {
+  const { ip1, ip2 } = generateTunnelParams(tunnel.num);
+
+  const staticRouteArrayFilters = {
+    $and: [{
+      $or: [
+        { $eq: ['$$route.gateway', ip1] },
+        { $eq: ['$$route.gateway', ip2] }
+      ]
+    }]
+  };
+
+  if (ignorePending) {
+    staticRouteArrayFilters.$and.push({
+      $ne: ['$$route.isPending', true]
+    });
+  }
+
+  const devicesStaticRoutes = await devicesModel.aggregate([
+    { $match: { org: tunnel.org } }, // org match is very important here
+    {
+      $addFields: {
+        staticroutes: {
+          $filter: {
+            input: '$staticroutes',
+            as: 'route',
+            cond: staticRouteArrayFilters
+          }
+        }
+      }
+    }
+  ]).allowDiskUse(true);
+
+  return devicesStaticRoutes;
+};
+
 module.exports = {
   apply: {
     applyTunnelAdd: applyTunnelAdd,
@@ -2041,5 +2155,8 @@ module.exports = {
   sync: sync,
   completeSync: completeSync,
   sendRemoveTunnelsJobs: sendRemoveTunnelsJobs,
-  sendAddTunnelsJobs: sendAddTunnelsJobs
+  prepareTunnelAddJob: prepareTunnelAddJob,
+  prepareTunnelRemoveJob: prepareTunnelRemoveJob,
+  sendAddTunnelsJobs: sendAddTunnelsJobs,
+  getTunnelConfigDependencies: getTunnelConfigDependencies
 };
