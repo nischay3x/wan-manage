@@ -128,8 +128,8 @@ class PeersService {
 
           let jobs = [];
           if (isNeedToReconstructTunnels) {
-            const removeJobs = await sendRemoveTunnelsJobs(ids, user.username);
-            const addJobs = await sendAddTunnelsJobs(ids, user.username);
+            const removeJobs = await sendRemoveTunnelsJobs(ids, user.username, true);
+            const addJobs = await sendAddTunnelsJobs(ids, user.username, true);
             jobs = jobs.concat([...removeJobs, ...addJobs]);
           } else {
             for (const tunnel of tunnels) {

@@ -24,6 +24,7 @@ const {
   prepareTunnelAddJob,
   prepareTunnelRemoveJob
 } = require('../deviceLogic/tunnels');
+const { generateTunnelParams } = require('../utils/tunnelUtils');
 const { validateModifyDeviceMsg, validateDhcpConfig } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
@@ -36,7 +37,6 @@ const {
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const has = require('lodash/has');
 const omit = require('lodash/omit');
-const uniqWith = require('lodash/uniqWith');
 const differenceWith = require('lodash/differenceWith');
 const pullAllWith = require('lodash/pullAllWith');
 const omitBy = require('lodash/omitBy');
@@ -46,6 +46,7 @@ const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
 const { getBridges } = require('../utils/deviceUtils');
+const { orderTasks } = require('../utils/jobs');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
@@ -559,8 +560,9 @@ const queueModifyDeviceJob = async (
       });
 
       // First check if need to send tunnel jobs regardless of interface change.
-      const [removeTasksDeviceA, removeTasksDeviceB] = await prepareTunnelRemoveJob(
-        tunnel, deviceA, deviceB, peer, true);
+      const [
+        removeTasksDeviceA, removeTasksDeviceB
+      ] = await prepareTunnelRemoveJob(tunnel, peer, true);
 
       const isNeedToRemoveTunnel = removeTunnelIds.find(i => i === _id.toString());
       if (isNeedToRemoveTunnel) {
@@ -710,36 +712,11 @@ const queueModifyDeviceJob = async (
 
     // at this point, list of jobs is ready.
     // Order it by the right order and send it to the devices
-    const addOrder = [
-      'add-ospf', 'add-routing-filter', 'add-routing-bgp', 'add-switch',
-      'add-interface', 'modify-interface', 'add-tunnel', 'add-route', 'add-dhcp-config',
-      'add-application', 'add-multilink-policy', 'add-firewall-policy'
-    ];
-    const removeOrder = addOrder.map(a => a.replace('add-', 'remove-')).reverse();
 
     for (const deviceId in tasks) {
-      let finalTasks = [];
-
       const deviceTasks = tasks[deviceId].tasks;
 
-      // order the tasks by the above order.
-      for (const msg of removeOrder) {
-        for (const task of deviceTasks) {
-          if (msg === task.message) {
-            finalTasks.push(task);
-          }
-        }
-      }
-      for (const msg of addOrder) {
-        for (const task of deviceTasks) {
-          if (msg === task.message) {
-            finalTasks.push(task);
-          }
-        }
-      }
-
-      // filter job duplications that can come with tunnel dependencies
-      finalTasks = uniqWith(finalTasks, isEqual);
+      let finalTasks = orderTasks(deviceTasks);
 
       if (finalTasks.length > 1) {
         // convert the tasks to one aggregated request
@@ -983,7 +960,10 @@ const transformOSPF = (ospf, bgp) => {
  * @param  {Object} interfaces  assigned interfaces of device
  * @return {Object}            an object containing an array of routes
  */
-const transformBGP = (bgp, interfaces) => {
+const transformBGP = async (device, includeTunnelNeighbors = false) => {
+  let { bgp, interfaces, org, _id } = device;
+  interfaces = interfaces.filter(i => i.isAssigned);
+
   const neighbors = bgp.neighbors.map(n => {
     return {
       ip: n.ip,
@@ -995,6 +975,43 @@ const transformBGP = (bgp, interfaces) => {
       keepaliveInterval: bgp.keepaliveInterval
     };
   });
+
+  if (includeTunnelNeighbors) {
+    const tunnels = await tunnelsModel.find(
+      {
+        $and: [
+          { org },
+          { $or: [{ deviceA: _id }, { deviceB: _id }] },
+          { isActive: true },
+          { peer: null }, // don't send peer neighbors
+          { isPending: { $ne: true } } // skip pending tunnels
+        ]
+      }
+    )
+      .populate('deviceA', 'bgp')
+      .populate('deviceB', 'bgp')
+      .lean();
+
+    for (const tunnel of tunnels) {
+      const { num, deviceA, deviceB } = tunnel;
+      const { ip1, ip2 } = generateTunnelParams(num);
+      const isDeviceA = deviceA._id.toString() === _id.toString();
+
+      const remoteIp = isDeviceA ? ip2 : ip1;
+      const remoteAsn = isDeviceA ? deviceB.bgp.localASN : deviceA.bgp.localASN;
+      const bgpConfig = isDeviceA ? deviceA.bgp : deviceB.bgp;
+
+      neighbors.push({
+        ip: remoteIp,
+        remoteAsn: remoteAsn,
+        password: '',
+        inboundFilter: '',
+        outboundFilter: '',
+        holdInterval: bgpConfig.holdInterval,
+        keepaliveInterval: bgpConfig.keepaliveInterval
+      });
+    }
+  }
 
   const networks = [];
   interfaces.filter(i => i.routing.includes('BGP')).forEach(i => {
@@ -1019,9 +1036,13 @@ const transformBGP = (bgp, interfaces) => {
  * @return {Object}            an object containing add and remove ospf parameters
  */
 const prepareModifyBGP = async (origDevice, newDevice) => {
+  const majorVersion = getMajorVersion(newDevice.versions.agent);
+  const minorVersion = getMinorVersion(newDevice.versions.agent);
+  const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
+
   const [origBGP, newBGP] = [
-    transformBGP(origDevice.bgp, origDevice.interfaces.filter(i => i.isAssigned)),
-    transformBGP(newDevice.bgp, newDevice.interfaces.filter(i => i.isAssigned))
+    await transformBGP(origDevice, includeTunnelNeighbors),
+    await transformBGP(newDevice, includeTunnelNeighbors)
   ];
 
   const origEnable = origDevice.bgp.enable;
@@ -1544,9 +1565,7 @@ const completeSync = async (jobId, jobsData) => {
  * @return Array
  */
 const sync = async (deviceId, org) => {
-  const {
-    interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions
-  } = await devices.findOne(
+  const device = await devices.findOne(
     { _id: deviceId },
     {
       interfaces: 1,
@@ -1561,6 +1580,10 @@ const sync = async (deviceId, org) => {
     .lean()
     // no need to populate pathLabel name here, since we need only the id's
     .populate('interfaces.pathlabels', '_id type');
+
+  const {
+    interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions
+  } = device;
 
   // Prepare add-interface message
   const deviceConfRequests = [];
@@ -1628,8 +1651,9 @@ const sync = async (deviceId, org) => {
   const majorVersion = getMajorVersion(versions.agent);
   const minorVersion = getMinorVersion(versions.agent);
   const isBgpSupported = majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3);
+  const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
   if (isBgpSupported && bgp?.enable) {
-    const bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned));
+    const bgpData = await transformBGP(device, includeTunnelNeighbors);
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({
         entity: 'agent',
@@ -1781,5 +1805,6 @@ module.exports = {
   completeSync: completeSync,
   sync: sync,
   error: error,
-  remove: remove
+  remove: remove,
+  transformBGP: transformBGP
 };
