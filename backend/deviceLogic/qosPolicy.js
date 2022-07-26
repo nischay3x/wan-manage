@@ -52,8 +52,9 @@ const { toCamelCase } = require('../utils/helpers');
 */
 const getDevicesQOSJobInfo = async (device) => {
   let op = 'install';
-  const { policy: qosPolicy } = device.policies.qos;
-  const policyParams = getQOSParameters(qosPolicy, device, op);
+  const { status, policy: qosPolicy } = device.policies.qos;
+  const policyParams =
+    getQOSParameters(status.startsWith('install') ? qosPolicy : null, device, op);
   if (!policyParams) op = 'uninstall';
   // Extract QoS traffic map information
   const trafficMap = await getDevicesTrafficMapJobInfo(device.org, [device._id]);
@@ -185,29 +186,40 @@ const getQOSParameters = (policy, device, op = 'install') => {
     return null;
   }
   const devicePolicies = {};
+  // requested policy id
+  const reqPolicyId = (policy?._id || '').toString();
   // global policy applied on the device
-  const currentDevPolicyId = (device.policies.qos.policy?._id || '').toString();
-  if (policy) {
-    devicePolicies[policy._id] = convertParameters(policy);
-    if (currentDevPolicyId && currentDevPolicyId !== policy._id && op !== 'install') {
-      // uninstalling another policy, need to keep sending the currently applied policy
-      devicePolicies[currentDevPolicyId] = convertParameters(device.policies.qos.policy);
-    }
-  }
+  const devPolicyId = (device.policies.qos.policy?._id || '').toString();
   // interfaces specific policies
   for (const ifc of device.interfaces.filter(i => i.isAssigned && i.type === 'WAN')) {
-    if (policy && op === 'install' && (!ifc.qosPolicy || ifc.qosPolicy._id === policy._id)) {
-      devicePolicies[policy._id].interfaces.push(ifc.devId);
-    } else if (ifc.qosPolicy?._id) {
-      if (!devicePolicies[ifc.qosPolicy._id]) {
-        devicePolicies[ifc.qosPolicy._id] = convertParameters(ifc.qosPolicy);
+    const ifcPolicyId = (ifc.qosPolicy?._id || '').toString();
+    if (op === 'install') {
+      if (ifcPolicyId) {
+        if (!devicePolicies[ifcPolicyId]) {
+          devicePolicies[ifcPolicyId] = convertParameters(ifc.qosPolicy);
+        }
+        devicePolicies[ifcPolicyId].interfaces.push(ifc.devId);
+      } else if (reqPolicyId) {
+        if (!devicePolicies[reqPolicyId]) {
+          devicePolicies[reqPolicyId] = convertParameters(policy);
+        }
+        devicePolicies[reqPolicyId].interfaces.push(ifc.devId);
       }
-      if (op === 'install' || ifc.qosPolicy._id !== (policy?._id || '').toString()) {
-        devicePolicies[ifc.qosPolicy._id].interfaces.push(ifc.devId);
+    } else {
+      // uninstalling
+      if (devPolicyId && devPolicyId !== reqPolicyId &&
+        (!ifcPolicyId || ifcPolicyId === reqPolicyId)) {
+        if (!devicePolicies[devPolicyId]) {
+          devicePolicies[devPolicyId] = convertParameters(device.policies.qos.policy);
+        }
+        devicePolicies[devPolicyId].interfaces.push(ifc.devId);
+      } else if (ifcPolicyId && ifcPolicyId !== reqPolicyId) {
+        if (!devicePolicies[ifcPolicyId]) {
+          devicePolicies[ifcPolicyId] = convertParameters(ifc.qosPolicy);
+        }
+        devicePolicies[ifcPolicyId].interfaces.push(ifc.devId);
       }
-    } else if (currentDevPolicyId && currentDevPolicyId !== policy._id && op !== 'install') {
-      devicePolicies[currentDevPolicyId].interfaces.push(ifc.devId);
-    }
+    };
   }
   const policies = [];
   for (const policyId in devicePolicies) {
@@ -280,13 +292,12 @@ const getOpDevices = async (devicesObj, org, policy, op) => {
   // of all devices that are currently running the policy
   const devicesList = Object.keys(devicesObj);
   if (devicesList.length > 0 && op === 'install') return devicesList;
-  if (!policy) return [];
 
   // Select only devices on which the policy is already
   // installed or in the process of installation, to make
   // sure the policy is not reinstalled on devices that
   // are in the process of uninstalling the policy.
-  const { _id } = policy;
+  const { _id } = policy || { _id: null };
   const filter = {
     org: org,
     $or: [
@@ -303,16 +314,17 @@ const getOpDevices = async (devicesObj, org, policy, op) => {
   return result.map(device => device._id);
 };
 
-const filterDevices = (devices, deviceIds, op) => {
+const filterDevices = (devices, deviceIds, op, policyIdRequest) => {
   const filteredDevices = devices.filter(device => {
-    const { status } = device.policies.qos || {};
+    const { status, policy } = device.policies.qos || {};
+    const policyExist = (policy && policyIdRequest === policy._id.toString()) ||
+      device.interfaces.some(ifc => (ifc.qosPolicy?._id || '').toString() === policyIdRequest);
     // Don't attempt to uninstall a policy if the device
     // doesn't have one, or if its policy is already in
     // the process of being uninstalled.
-    const skipUninstall =
-      op === 'uninstall' && status === 'uninstalling';
+    const skipUninstall = op === 'uninstall' && (status === 'uninstalling' || !policyExist);
     const id = device._id.toString();
-    return !skipUninstall && deviceIds.has(id);
+    return !skipUninstall && ((deviceIds.size === 0 && op === 'uninstall') || deviceIds.has(id));
   });
 
   return filteredDevices;
@@ -432,10 +444,8 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
         },
         update: {
           $set: {
-            'policies.qos': {
-              status: 'installing',
-              requestTime: requestTime
-            }
+            'policies.qos.status': 'installing',
+            'policies.qos.requestTime': requestTime
           }
         },
         upsert: false
@@ -459,10 +469,13 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
       updateMany: {
         filter: {
           _id: { $in: deviceIds },
+          interfaces: { $elemMatch: { qosPolicy: { $ne: null } } },
           org: org
         },
         update: {
           $set: {
+            'interfaces.$.qosPolicy': null,
+            'policies.qos.policy': null,
             'policies.qos.status': 'uninstalling',
             'policies.qos.requestTime': requestTime
           }
@@ -495,7 +508,7 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
  */
 const apply = async (deviceList, user, data) => {
   const { org } = data;
-  const { op, id } = data.meta;
+  const { op, id: policyId } = data.meta;
 
   deviceList = await Promise.all(deviceList.map(d => d
     .populate('policies.qos.policy')
@@ -505,28 +518,30 @@ const apply = async (deviceList, user, data) => {
 
   let qosPolicy, deviceIds;
 
-  if (op === 'install' && !id) {
+  if (op === 'install' && !policyId) {
     throw createError(400, 'QOS policy id is required');
   }
 
   try {
-    if (id) {
+    if (policyId) {
       // Retrieve policy from database
-      qosPolicy = await getQOSPolicy(id, org);
+      qosPolicy = await getQOSPolicy(policyId, org);
 
       if (!qosPolicy) {
-        throw createError(404, `QOS policy ${id} does not exist`);
+        throw createError(404, `QOS policy ${policyId} does not exist`);
       }
     }
 
     // Extract the device IDs to operate on
-    deviceIds = await getOpDevices(data.devices || {[deviceList[0]._id]: true}, org, qosPolicy, op);
+    deviceIds = await getOpDevices(
+      data.devices || { [deviceList[0]._id]: true }, org, qosPolicy, op
+    );
   } catch (err) {
     throw err.name === 'MongoError'
       ? new Error() : err;
   }
   const deviceIdsSet = new Set(deviceIds.map(id => id.toString()));
-  const opDevices = filterDevices(deviceList, deviceIdsSet, op);
+  const opDevices = filterDevices(deviceList, deviceIdsSet, op, policyId);
   if (opDevices.length === 0) {
     // no need to apply if not installed on any of devices
     return {
