@@ -1613,8 +1613,8 @@ const sync = async (deviceId, org) => {
       peer: 1
     }
   )
-    .populate('deviceA', 'machineId interfaces versions IKEv2')
-    .populate('deviceB', 'machineId interfaces versions IKEv2')
+    .populate('deviceA', 'machineId interfaces versions IKEv2 bgp')
+    .populate('deviceB', 'machineId interfaces versions IKEv2 bgp')
     .populate('peer')
     .lean();
 
@@ -1813,10 +1813,25 @@ const prepareTunnelParams = (
     }
 
     if (routing === 'bgp') {
-      const bgpAsnDeviceA = deviceA.bgp.localASN;
-      const bgpAsnDeviceB = deviceB.bgp.localASN;
-      paramsDeviceA['loopback-iface']['bgp-remote-asn'] = bgpAsnDeviceB;
-      paramsDeviceB['loopback-iface']['bgp-remote-asn'] = bgpAsnDeviceA;
+      const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
+      const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
+
+      const majorAgentVersionB = deviceB ? getMajorVersion(deviceB.versions.agent) : null;
+      const minorAgentVersionB = deviceB ? getMinorVersion(deviceB.versions.agent) : null;
+
+      const isNeedToSendRemoteAsnA =
+        majorAgentVersionA >= 6 || (majorAgentVersionA === 5 && minorAgentVersionA >= 4);
+      const isNeedToSendRemoteAsnB =
+        majorAgentVersionB >= 6 || (majorAgentVersionB === 5 && minorAgentVersionB >= 4);
+
+      if (isNeedToSendRemoteAsnA) {
+        const bgpAsnDeviceB = deviceB.bgp.localASN;
+        paramsDeviceA['loopback-iface']['bgp-remote-asn'] = bgpAsnDeviceB;
+      }
+      if (isNeedToSendRemoteAsnB) {
+        const bgpAsnDeviceA = deviceA.bgp.localASN;
+        paramsDeviceB['loopback-iface']['bgp-remote-asn'] = bgpAsnDeviceA;
+      }
     }
   }
 

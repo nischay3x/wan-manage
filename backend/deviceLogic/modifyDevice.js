@@ -1569,6 +1569,7 @@ const sync = async (deviceId, org) => {
     { _id: deviceId },
     {
       interfaces: 1,
+      org: 1,
       staticroutes: 1,
       dhcp: 1,
       ospf: 1,
