@@ -598,18 +598,8 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         continue;
       }
 
-      const sendModifyTunnel = (tunnel, device, remoteIfc) => {
-        const tasks = [{
-          entity: 'agent',
-          message: 'modify-tunnel',
-          params: {
-            'tunnel-id': tunnel.num,
-            remoteBandwidthMbps: {
-              tx: +remoteIfc.bandwidthMbps.tx,
-              rx: +remoteIfc.bandwidthMbps.rx
-            }
-          }
-        }];
+      const sendModifyTunnel = (tunnel, device, tasks) => {
+        tasks[0].message = 'modify-tunnel';
         deviceQueues.addJob(device.machineId, 'system', org,
           // Data
           { title: `Modify tunnel parameters on device ${device.hostname}`, tasks },
@@ -632,16 +622,29 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
 
       // if the device modification doesn't require the tunnels reconstruction
       // we will send the modify-tunnel message only
-      const checkIfModifyTunnelRequired = (tunnel, ifcA, ifcB, modIfcA, modIfcB) => {
+      const checkIfModifyTunnelRequired = async (tunnel, ifcA, ifcB, modIfcA, modIfcB) => {
         if (tunnel.peer) {
           return;
         }
-        if (isObject(modIfcB) && !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps)) {
-          sendModifyTunnel(tunnel, tunnel.deviceA, modIfcB);
-        }
-        if (isObject(modIfcA) && !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps)) {
-          sendModifyTunnel(tunnel, tunnel.deviceB, modIfcA);
-        }
+        const aModified = isObject(modIfcA) && !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps);
+        const bModified = isObject(modIfcB) && !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps);
+        if (aModified || bModified) {
+          const [tasksA, tasksB] = await prepareTunnelAddJob(
+            tunnel,
+            isObject(modIfcA) ? { ...ifcA.toObject(), bandwidthMbps: modIfcA.bandwidthMbps } : ifcA,
+            isObject(modIfcB) ? { ...ifcB.toObject(), bandwidthMbps: modIfcB.bandwidthMbps } : ifcB,
+            tunnel.pathlabel,
+            deviceA,
+            deviceB,
+            tunnel.advancedOptions
+          );
+          if (aModified) {
+            sendModifyTunnel(tunnel, tunnel.deviceB, tasksB);
+          }
+          if (bModified) {
+            sendModifyTunnel(tunnel, tunnel.deviceA, tasksA);
+          }
+        };
       };
 
       // only rebuild tunnels when IP, Public IP or port is changed
