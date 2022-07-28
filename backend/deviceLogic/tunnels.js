@@ -1540,7 +1540,7 @@ const getTunnelConfigDependenciesTasks = async (tunnel, isAdd) => {
   const deviceATasks = [];
   const deviceBTasks = [];
 
-  const dependedDevices = await getTunnelConfigDependencies(tunnel, true);
+  const dependedDevices = await getTunnelConfigDependencies(tunnel, isAdd);
   for (const dependedDevice of dependedDevices) {
     const deviceId = dependedDevice._id.toString();
 

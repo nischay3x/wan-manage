@@ -460,9 +460,10 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
  * @return {Job}                   The queued modify-device job
  */
 const queueModifyDeviceJob = async (
-  device, newDevice, messageParams, user, org, addTunnelIds, removeTunnelIds
+  device, newDevice, messageParams, user, org, addTunnelIds, removeTunnelIds, ignoreTasks
 ) => {
   const jobs = [];
+  const sentTasks = {};
 
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
@@ -718,6 +719,16 @@ const queueModifyDeviceJob = async (
 
       let finalTasks = orderTasks(deviceTasks);
 
+      // remove the ignored tasks
+      for (const ignoreTask of ignoreTasks) {
+        const index = finalTasks.findIndex(f => isEqual(ignoreTask, f));
+        if (index > -1) {
+          finalTasks.splice(index, 1);
+        }
+      }
+
+      sentTasks[deviceId] = finalTasks;
+
       if (finalTasks.length > 1) {
         // convert the tasks to one aggregated request
         finalTasks = [{
@@ -757,7 +768,7 @@ const queueModifyDeviceJob = async (
     }
   }
 
-  return jobs;
+  return { jobs, sentTasks };
 };
 
 const _addTunnelTasks = (tasks, tunnel, tasksDeviceA, tasksDeviceB) => {
@@ -1470,6 +1481,7 @@ const apply = async (device, user, data) => {
     });
     return {
       ids: [],
+      tasks: {},
       status: 'completed',
       message: ''
     };
@@ -1501,20 +1513,23 @@ const apply = async (device, user, data) => {
 
     data.addTunnelIds ??= [];
     data.removeTunnelIds ??= [];
+    data.ignoreTasks ??= [];
 
     // Queue device modification job
-    const jobs = await queueModifyDeviceJob(
+    const { jobs, sentTasks } = await queueModifyDeviceJob(
       device[0],
       data.newDevice,
       modifyParams,
       user,
       org,
       data.addTunnelIds,
-      data.removeTunnelIds
+      data.removeTunnelIds,
+      data.ignoreTasks
     );
 
     return {
       ids: jobs.flat().map(job => job.id),
+      tasks: sentTasks,
       status: 'completed',
       message: ''
     };
