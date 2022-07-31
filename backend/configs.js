@@ -400,6 +400,9 @@ class Configs {
     }
 
     this.config_values = combinedConfig;
+
+    this.config_values.nodeVersion = process.version;
+
     console.log('Configuration used:\n' + JSON.stringify(this.config_values, null, 2));
   }
 
