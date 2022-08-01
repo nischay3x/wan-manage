@@ -34,7 +34,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const { routerVersionsCompatible, getMajorVersion, getMinorVersion } = require('../versioning');
+const { routerVersionsCompatible, getVersion, getMajorVersion } = require('../versioning');
 const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const keyBy = require('lodash/keyBy');
@@ -1160,7 +1160,6 @@ const prepareTunnelAddJob = async (
     message: 'add-tunnel',
     params: paramsDeviceA
   });
-  tasksDeviceA = orderTasks(tasksDeviceA);
 
   if (!peer) {
     // Saving configuration for device B
@@ -1170,6 +1169,17 @@ const prepareTunnelAddJob = async (
       params: paramsDeviceB
     });
   }
+
+  const [bgpTasksDeviceA, bgpTasksDeviceB] = await addBgpNeighborsIfNeeded(tunnel);
+  if (bgpTasksDeviceA.length > 0) {
+    tasksDeviceA.push(...bgpTasksDeviceA); // modify-bgp after add-tunnel
+  }
+
+  if (bgpTasksDeviceB.length > 0) {
+    tasksDeviceB.push(...bgpTasksDeviceB); // modify-bgp after add-tunnel
+  }
+
+  tasksDeviceA = orderTasks(tasksDeviceA);
   tasksDeviceB = orderTasks(tasksDeviceB);
 
   return [tasksDeviceA, tasksDeviceB];
@@ -1528,6 +1538,15 @@ const prepareTunnelRemoveJob = async (
     tasksDeviceB.push({ entity: 'agent', message: 'remove-tunnel', params: removeParams });
   }
 
+  const [bgpTasksDeviceA, bgpTasksDeviceB] = await addBgpNeighborsIfNeeded(tunnel);
+  if (bgpTasksDeviceA.length > 0) {
+    tasksDeviceA.unshift(...bgpTasksDeviceA); // modify-bgp before remove-tunnel
+  }
+
+  if (bgpTasksDeviceB.length > 0) {
+    tasksDeviceB.unshift(...bgpTasksDeviceB); // modify-bgp before remove-tunnel
+  }
+
   return [tasksDeviceA, tasksDeviceB];
 };
 
@@ -1813,11 +1832,8 @@ const prepareTunnelParams = (
     }
 
     if (routing === 'bgp') {
-      const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
-      const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
-
-      const majorAgentVersionB = deviceB ? getMajorVersion(deviceB.versions.agent) : null;
-      const minorAgentVersionB = deviceB ? getMinorVersion(deviceB.versions.agent) : null;
+      const [majorAgentVersionA, minorAgentVersionA] = getVersion(deviceA.versions.agent);
+      const [majorAgentVersionB, minorAgentVersionB] = getVersion(deviceB?.versions.agent);
 
       const isNeedToSendRemoteAsnA =
         majorAgentVersionA >= 6 || (majorAgentVersionA === 5 && minorAgentVersionA >= 4);
@@ -1868,8 +1884,6 @@ const sendRemoveTunnelsJobs = async (
       peer,
       includeDeviceConfigDependencies
     );
-
-    [tasksDeviceA, tasksDeviceB] = await addRelatedTasks(tunnel, tasksDeviceA, tasksDeviceB, false);
 
     if (tasksDeviceA.length > 1) {
       tasksDeviceA = [{
@@ -1992,9 +2006,6 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
         includeDeviceConfigDependencies
       );
 
-      [tasksDeviceA, tasksDeviceB] = await addRelatedTasks(
-        tunnel, tasksDeviceA, tasksDeviceB, true);
-
       if (tasksDeviceA.length > 1) {
         tasksDeviceA = [{
           entity: 'agent',
@@ -2057,44 +2068,47 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
   return jobs;
 };
 
-const addRelatedTasks = async (tunnel, tasksDeviceA, tasksDeviceB, isAdd = true) => {
+const addBgpNeighborsIfNeeded = async tunnel => {
   const { deviceA, deviceB, advancedOptions } = tunnel;
   const { routing } = advancedOptions;
 
+  const deviceATasks = [];
+  const deviceBTasks = [];
+
   if (routing === 'bgp') {
-    const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
-    const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
+    const [majorA, minorA] = getVersion(deviceA.versions.agent);
+    const [majorB, minorB] = getVersion(deviceB?.versions.agent);
 
-    const majorAgentVersionB = deviceB ? getMajorVersion(deviceB.versions.agent) : null;
-    const minorAgentVersionB = deviceB ? getMinorVersion(deviceB.versions.agent) : null;
-
-    const isNeedToSendNeighborsA = majorAgentVersionA === 5 && minorAgentVersionA === 3;
-    const isNeedToSendNeighborsB = majorAgentVersionB === 5 && minorAgentVersionB === 3;
+    const isNeedToSendNeighborsA = majorA === 5 && minorA === 3;
+    const isNeedToSendNeighborsB = majorB === 5 && minorB === 3;
     if (isNeedToSendNeighborsA || isNeedToSendNeighborsB) {
       if (isNeedToSendNeighborsA) {
-        tasksDeviceA = await _addRelatedModifyBgpJobs(deviceA, tasksDeviceA, isAdd);
+        const bgpTasks = await _addRelatedModifyBgpJobs(deviceA);
+        deviceATasks.push(...bgpTasks);
       }
 
       if (isNeedToSendNeighborsB) {
-        tasksDeviceB = await _addRelatedModifyBgpJobs(deviceB, tasksDeviceB, isAdd);
+        const bgpTasks = await _addRelatedModifyBgpJobs(deviceB);
+        deviceBTasks.push(...bgpTasks);
       }
     }
   }
 
-  return [tasksDeviceA, tasksDeviceB];
+  return [deviceATasks, deviceBTasks];
 };
 
-const _addRelatedModifyBgpJobs = async (device, tasksArray, isAdd) => {
+const _addRelatedModifyBgpJobs = async device => {
   const transformBGP = require('./modifyDevice').transformBGP;
   const bgpParams = await transformBGP(device, true);
 
-  if (isAdd) { // send modify-bgp after add tunnel
-    tasksArray.push({ entity: 'agent', message: 'modify-routing-bgp', params: bgpParams });
-  } else { // send modify-bgp before add tunnel
-    tasksArray.unshift({ entity: 'agent', message: 'modify-routing-bgp', params: bgpParams });
-  }
+  const bgpJobs = [{ entity: 'agent', message: 'modify-routing-bgp', params: bgpParams }];
+  // if (isAdd) { // send modify-bgp after add tunnel
+  // bgpJobs.push({ entity: 'agent', message: 'modify-routing-bgp', params: bgpParams });
+  // } else { // send modify-bgp before add tunnel
+  //   bgpJobs.unshift({ entity: 'agent', message: 'modify-routing-bgp', params: bgpParams });
+  // }
 
-  return tasksArray;
+  return bgpJobs;
 };
 
 const getInterfacesWithPathLabels = device => {

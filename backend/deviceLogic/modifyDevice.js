@@ -467,6 +467,7 @@ const queueModifyDeviceJob = async (
 
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
+  const modifiedBgp = [];
 
   // Changes in the interfaces require reconstruction of all tunnels
   // connected to these interfaces (since the tunnels parameters change).
@@ -491,6 +492,16 @@ const queueModifyDeviceJob = async (
     });
   }
   const modifiedInterfaces = Array.from(interfacesIdsSet);
+
+  if (has(messageParams, 'modify_bgp')) {
+    const { remove, add } = messageParams.modify_bgp;
+    const oldAsn = remove?.localAsn;
+    const newAsn = add?.localAsn;
+    if (oldAsn && newAsn && oldAsn !== newAsn) {
+      // reconstruct bgp tunnels with the new remote asn number
+      modifiedBgp.push(newDevice._id.toString());
+    }
+  }
 
   // key: deviceId, value: list of tasks to send
   const tasks = {
@@ -536,7 +547,18 @@ const queueModifyDeviceJob = async (
               {
                 $or: [
                   { interfaceA: { $in: modifiedInterfaces } },
-                  { interfaceB: { $in: modifiedInterfaces } }
+                  { interfaceB: { $in: modifiedInterfaces } },
+                  { // check if need to reconstruct due to remote ASN change
+                    $and: [
+                      { 'advancedOptions.routing': 'bgp' },
+                      {
+                        $or: [
+                          { deviceA: { $in: modifiedBgp } },
+                          { deviceB: { $in: modifiedBgp } }
+                        ]
+                      }
+                    ]
+                  }
                 ]
               }
             ]
@@ -585,6 +607,15 @@ const queueModifyDeviceJob = async (
 
       const isNeedToAddTunnel = addTunnelIds.find(i => i === _id.toString());
       if (isNeedToAddTunnel) {
+        _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
+        continue;
+      }
+
+      // Now check if need to send remove and add tunnel jobs due to BGP ASN change.
+      const reconstructDueBgpChange = modifiedBgp.find(
+        m => m === deviceA._id.toString() || m === deviceB?._id.toString());
+      if (reconstructDueBgpChange) {
+        _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
         _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
         continue;
       }
