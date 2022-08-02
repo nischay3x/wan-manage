@@ -205,6 +205,13 @@ connectRouter.route('/register')
                 device: req.body.device_version || ''
               };
 
+              const cpuInfo = {
+                hwCores: req.body.cpuInfo?.hwCores || 1,
+                grubCores: req.body.cpuInfo?.grubCores || 1,
+                vppCores: req.body.cpuInfo?.vppCores || 1,
+                powerSaving: req.body.cpuInfo?.powerSaving === true
+              };
+
               // Check that account didn't cross its device limit
               const account = decoded.account;
               // Get max allowed devices for free from the ChargeBee plan
@@ -255,6 +262,7 @@ connectRouter.route('/register')
                     isApproved: false,
                     isConnected: false,
                     coords: ll,
+                    cpuInfo: cpuInfo,
                     versions: versions
                   }], { session: session })
                     .then(async (result) => {

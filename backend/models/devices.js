@@ -1048,7 +1048,37 @@ const deviceSchema = new Schema({
   routingFilters: {
     type: [deviceRoutingFiltersSchema]
   },
-  applications: [deviceApplicationSchema]
+  applications: [deviceApplicationSchema],
+  cpuInfo: {
+    hwCores: {
+      type: Number,
+      default: 1,
+      validate: {
+        validator: validators.validateCpuCoresNumber,
+        message: props => `${props.value} should be a valid integer`
+      }
+    },
+    grubCores: {
+      type: Number,
+      default: 2,
+      validate: {
+        validator: validators.validateCpuCoresNumber,
+        message: props => `${props.value} should be a valid integer`
+      }
+    },
+    vppCores: {
+      type: Number,
+      default: 1,
+      validate: {
+        validator: validators.validateCpuCoresNumber,
+        message: props => `${props.value} should be a valid integer`
+      }
+    },
+    powerSaving: {
+      type: Boolean,
+      default: false
+    }
+  }
 },
 {
   timestamps: true

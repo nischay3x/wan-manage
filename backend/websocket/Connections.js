@@ -629,7 +629,8 @@ class Connections {
         ikev2: Joi.object({
           certificateExpiration: Joi.string().allow('').optional(),
           error: Joi.string().allow('').optional()
-        }).allow({}).optional()
+        }).allow({}).optional(),
+        cpuInfo: Joi.object().optional()
       }).custom((obj, helpers) => {
         for (const [component, info] of Object.entries(
           obj.components
@@ -676,10 +677,16 @@ class Connections {
       )) {
         versions[component] = info.version;
       }
+      const cpuInfo = {
+        hwCores: deviceInfo.message.cpuInfo?.hwCores || 1,
+        grubCores: deviceInfo.message.cpuInfo?.grubCores || 1,
+        vppCores: deviceInfo.message.cpuInfo?.vppCores || 1,
+        powerSaving: deviceInfo.message.cpuInfo?.powerSaving === true
+      };
 
       const origDevice = await devices.findOneAndUpdate(
         { _id: deviceId },
-        { $set: { versions: versions } },
+        { $set: { versions, cpuInfo } },
         { new: true, runValidators: true }
       ).populate('interfaces.pathlabels', '_id name type');
 

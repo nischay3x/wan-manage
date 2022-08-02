@@ -9153,6 +9153,9 @@ components:
             remoteASN: 65002
             inboundFilter: routingFilterName
             outboundFilter: routingFilterName
+        cpuInfo:
+          powerSaving: true
+          vppCores: 3
       properties:
         machineId:
           type: string
@@ -9216,6 +9219,8 @@ components:
           type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
+        cpuInfo:
+          $ref: '#/components/schemas/DeviceCpuInfo'
       type: object
     Device:
       example:
@@ -9391,6 +9396,8 @@ components:
           type: array
         versions:
           $ref: '#/components/schemas/DeviceVersion'
+        cpuInfo:
+          $ref: '#/components/schemas/DeviceCpuInfo'
         sync:
           $ref: '#/components/schemas/DeviceSyncStatus'
         pendingNotifications:
@@ -9625,6 +9632,28 @@ components:
         - state
         - autoSync
         - trials
+    DeviceCpuInfo:
+      example:
+        hwCores: 1
+        grubCores: 1
+        vppCores: 1
+        powerSaving: false
+      properties:
+        hwCores:
+          type: number
+          minimum: 1
+          maximum: 65535
+        grubCores:
+          type: number
+          minimum: 1
+          maximum: 65535
+        vppCores:
+          type: number
+          minimum: 1
+          maximum: 65535
+        powerSaving:
+          type: boolean
+      type: object
     Role:
       enum:
       - owner

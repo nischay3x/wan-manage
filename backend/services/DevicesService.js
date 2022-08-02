@@ -158,7 +158,8 @@ class DevicesService {
       'ospf',
       'coords',
       'bgp',
-      'routingFilters'
+      'routingFilters',
+      'cpuInfo'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -452,6 +453,7 @@ class DevicesService {
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
             'policies.qos': { status: 1, policy: { name: 1, description: 1 } },
             applications: 1,
+            cpuInfo: 1,
             deviceState: '$deviceStatus.state'
           }
         });
@@ -486,6 +488,7 @@ class DevicesService {
           'ospf',
           'isConnected',
           'deviceState',
+          'cpuInfo',
           'coords'
         ];
         // populate pathlabels for every interface
@@ -1799,6 +1802,13 @@ class DevicesService {
           };
         }
         deviceToValidate.versions = origDevice.versions;
+        deviceToValidate.cpuInfo = {
+          hwCores: origDevice.cpuInfo?.hwCores || 1,
+          grubCores: origDevice.cpuInfo?.grubCores || 2,
+          vppCores: deviceRequest.cpuInfo?.vppCores || origDevice.cpuInfo?.vppCores || 1,
+          powerSaving: deviceRequest.cpuInfo?.powerSaving === true
+        };
+        deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
         const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets, orgBgp);
 
         if (!valid) {

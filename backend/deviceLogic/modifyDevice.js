@@ -425,6 +425,17 @@ const prepareModificationMessage = (messageParams, device, newDevice) => {
     requests.push(...messageParams.modify_qos.tasks);
   }
 
+  if (has(messageParams, 'modify_cpu')) {
+    requests.push({
+      entity: 'agent',
+      message: 'modify-cpu-info',
+      params: {
+        vppCores: messageParams.modify_cpu.vppCores,
+        powerSaving: messageParams.modify_cpu.powerSaving
+      }
+    });
+  }
+
   if (requests.length !== 0) {
     tasks.push(
       {
@@ -727,6 +738,7 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
     !has(messageParams, 'modify_routing_filters') &&
     !has(messageParams, 'modify_firewall') &&
     !has(messageParams, 'modify_qos') &&
+    !has(messageParams, 'modify_cpu') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
       const propsModified = Object.keys(modifiedIfc).filter(prop => {
@@ -1535,6 +1547,10 @@ const apply = async (device, user, data) => {
     modifyParams.modify_qos = await getDevicesQOSJobInfo(updDevice.toObject());
   }
 
+  if (!isEqual(data.newDevice.cpuInfo, device[0].cpuInfo)) {
+    modifyParams.modify_cpu = data.newDevice.cpuInfo;
+  }
+
   const modified =
       has(modifyParams, 'modify_routes') ||
       has(modifyParams, 'modify_router') ||
@@ -1544,6 +1560,7 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_bgp') ||
       has(modifyParams, 'modify_firewall') ||
       has(modifyParams, 'modify_qos') ||
+      has(modifyParams, 'modify_cpu') ||
       has(modifyParams, 'modify_dhcp_config');
 
   // Queue job only if the device has changed

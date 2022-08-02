@@ -572,7 +572,12 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
   }
-
+  if (device.cpuInfo.vppCores > device.cpuInfo.grubCores) {
+    return {
+      valid: false,
+      err: 'VPP CPU cores number should be less than defined in GRUB'
+    };
+  }
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
