@@ -628,10 +628,10 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
   }
-  if (device.cpuInfo.vppCores > device.cpuInfo.grubCores) {
+  if (device.cpuInfo.vppCores > device.cpuInfo.hwCores - 1) {
     return {
       valid: false,
-      err: 'VPP CPU cores number should be less than defined in GRUB'
+      err: 'vRouter cores number should be less than HW cores - 1'
     };
   }
   /*

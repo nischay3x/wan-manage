@@ -678,8 +678,8 @@ class Connections {
         versions[component] = info.version;
       }
       const cpuInfo = {
-        hwCores: deviceInfo.message.cpuInfo?.hwCores || 1,
-        grubCores: deviceInfo.message.cpuInfo?.grubCores || 1,
+        hwCores: deviceInfo.message.cpuInfo?.hwCores || 2,
+        grubCores: deviceInfo.message.cpuInfo?.grubCores || 2,
         vppCores: deviceInfo.message.cpuInfo?.vppCores || 1,
         powerSaving: deviceInfo.message.cpuInfo?.powerSaving === true
       };

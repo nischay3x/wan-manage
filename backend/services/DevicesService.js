@@ -1811,7 +1811,7 @@ class DevicesService {
         }
         deviceToValidate.versions = origDevice.versions;
         deviceToValidate.cpuInfo = {
-          hwCores: origDevice.cpuInfo?.hwCores || 1,
+          hwCores: origDevice.cpuInfo?.hwCores || 2,
           grubCores: origDevice.cpuInfo?.grubCores || 2,
           vppCores: deviceRequest.cpuInfo?.vppCores || origDevice.cpuInfo?.vppCores || 1,
           powerSaving: deviceRequest.cpuInfo?.powerSaving === true

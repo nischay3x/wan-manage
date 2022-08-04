@@ -208,8 +208,8 @@ connectRouter.route('/register')
               };
 
               const cpuInfo = {
-                hwCores: req.body.cpuInfo?.hwCores || 1,
-                grubCores: req.body.cpuInfo?.grubCores || 1,
+                hwCores: req.body.cpuInfo?.hwCores || 2,
+                grubCores: req.body.cpuInfo?.grubCores || 2,
                 vppCores: req.body.cpuInfo?.vppCores || 1,
                 powerSaving: req.body.cpuInfo?.powerSaving === true
               };

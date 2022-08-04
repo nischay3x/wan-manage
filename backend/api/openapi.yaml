@@ -9634,8 +9634,8 @@ components:
         - trials
     DeviceCpuInfo:
       example:
-        hwCores: 1
-        grubCores: 1
+        hwCores: 2
+        grubCores: 2
         vppCores: 1
         powerSaving: false
       properties:

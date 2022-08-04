@@ -1052,7 +1052,7 @@ const deviceSchema = new Schema({
   cpuInfo: {
     hwCores: {
       type: Number,
-      default: 1,
+      default: 2,
       validate: {
         validator: validators.validateCpuCoresNumber,
         message: props => `${props.value} should be a valid integer`
