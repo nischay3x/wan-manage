@@ -628,7 +628,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
   }
-  if (device.cpuInfo.vppCores > device.cpuInfo.hwCores - 1) {
+  if (device.cpuInfo && device.cpuInfo.vppCores > device.cpuInfo.hwCores - 1) {
     return {
       valid: false,
       err: 'vRouter cores number should be less than HW cores - 1'
