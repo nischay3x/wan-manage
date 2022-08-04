@@ -1535,7 +1535,8 @@ class DevicesService {
 
               if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
                 throw new Error(
-                  `Can't set BGP on (${origIntf.name}). BGP is disabled`
+                  `Can't set BGP on ${origIntf.name}. ` +
+                  'BGP is disabled, please configure BGP from routing settings first'
                 );
               }
 
@@ -1657,6 +1658,13 @@ class DevicesService {
             throw createError(400,
               'The device does not run the required flexiWAN version for BGP. ' +
               'Please disable BGP or upgrade the device');
+          }
+        } else {
+          // if bgp disabled, make sure no tunnel created with BGP on this device
+          if (origTunnels.some(t => t?.advancedOptions?.routing === 'bgp')) {
+            throw createError(400,
+              'BGP cannot be disabled because there are tunnels created with BGP ' +
+              'routing protocol. Please delete them first');
           }
         }
 

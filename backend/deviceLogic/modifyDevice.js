@@ -62,6 +62,7 @@ const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
  * @return {Array}            the same array after removing unnecessary fields
  */
 const prepareIfcParams = (interfaces, newDevice) => {
+  const bridges = getBridges(newDevice.interfaces);
   return interfaces.map(ifc => {
     const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
 
@@ -83,9 +84,11 @@ const prepareIfcParams = (interfaces, newDevice) => {
     // between bridges from the "flexiManage" perspective.
     // We put this field only if the interface is LAN
     // and other assigned interfaces have the same IP.
-    newIfc.bridge_addr = ifc.type === 'LAN' && ifc.isAssigned && newDevice.interfaces.some(i => {
-      return newIfc.dev_id !== i.devId && i.isAssigned && newIfc.addr === i.IPv4 + '/' + i.IPv4Mask;
-    }) ? newIfc.addr : null;
+    if (bridges[newIfc.addr]) {
+      newIfc.bridge_addr = newIfc.addr;
+    } else {
+      newIfc.bridge_addr = null;
+    }
 
     if (ifc.isAssigned) {
       if (ifc.type !== 'WAN') {
@@ -830,7 +833,7 @@ const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) 
       let tasksDeviceA = [];
       let tasksDeviceB = [];
 
-      const { deviceA, deviceB, pathlabel, peer, mtu, mssClamp, ospfCost } = tunnel;
+      const { deviceA, deviceB, pathlabel, peer, advancedOptions } = tunnel;
       const ifcA = deviceA.interfaces.find(ifc => {
         return ifc._id.toString() === tunnel.interfaceA.toString();
       });
@@ -857,7 +860,7 @@ const reconstructTunnels = async (tunnelsIds, username, sendRemoveJobs = false) 
         pathlabel,
         deviceA,
         deviceB,
-        { mtu, mssClamp, ospfCost },
+        advancedOptions,
         peer
       );
       tasksDeviceA = tasksDeviceA.concat(addTasksA);
@@ -1063,15 +1066,26 @@ const transformRoutingFilters = (routingFilters) => {
 
 /**
  * Creates a modify-ospf object
- * @param  {Object} origDevice device object before changes in the database
- * @param  {Object} newDevice  device object after changes in the database
- * @return {Object}            an object containing an array of routes
+ * @param  {Object} ospf device OSPF object
+ * @param  {Object} bgp  device BGP OSPF object
+ * @return {Object}      an object containing the OSPF parameters
  */
-const transformOSPF = (ospf) => {
+const transformOSPF = (ospf, bgp) => {
   // Extract only global fields from ospf
   // The rest fields are per interface and sent to device via add/modify-interface jobs
-  const globalFields = ['routerId', 'redistributeBgp'];
-  return pick(ospf, globalFields);
+  // const globalFields = ['routerId', 'redistributeBgp'];
+  const ospfParams = {
+    routerId: ospf.routerId
+  };
+
+  // if bgp is disabled, send this field as false to the device.
+  if (bgp.enable) {
+    ospfParams.redistributeBgp = ospf.redistributeBgp;
+  } else {
+    ospfParams.redistributeBgp = false;
+  }
+
+  return ospfParams;
 };
 
 /**
@@ -1187,8 +1201,8 @@ const prepareModifyRoutingFilters = (origDevice, newDevice) => {
  */
 const prepareModifyOSPF = (origDevice, newDevice) => {
   const [origOSPF, newOSPF] = [
-    transformOSPF(origDevice.ospf),
-    transformOSPF(newDevice.ospf)
+    transformOSPF(origDevice.ospf, origDevice.bgp),
+    transformOSPF(newDevice.ospf, newDevice.bgp)
   ];
 
   if (isEqual(origOSPF, newOSPF)) {
@@ -1718,7 +1732,7 @@ const sync = async (deviceId, org) => {
   }
 
   // IMPORTANT: routing data should be before static routes!
-  let ospfData = transformOSPF(ospf);
+  let ospfData = transformOSPF(ospf, bgp);
   // remove empty values because they are optional
   ospfData = omitBy(ospfData, val => val === '');
   if (!isEmpty(ospfData)) {
@@ -1739,7 +1753,10 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  if (bgp?.enable) {
+  const majorVersion = getMajorVersion(versions.agent);
+  const minorVersion = getMinorVersion(versions.agent);
+  const isBgpSupported = majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3);
+  if (isBgpSupported && bgp?.enable) {
     const bgpData = transformBGP(bgp, interfaces.filter(i => i.isAssigned));
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({

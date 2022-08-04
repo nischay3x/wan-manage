@@ -21,6 +21,7 @@ const Joi = require('joi');
 const omitBy = require('lodash/omitBy');
 const omit = require('lodash/omit');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+const { getBridges } = require('../utils/deviceUtils');
 
 /**
  * Builds collection of interfaces to be sent to device
@@ -35,6 +36,8 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
 
   const majorVersion = getMajorVersion(deviceVersion);
   const minorVersion = getMinorVersion(deviceVersion);
+
+  const bridges = getBridges(deviceInterfaces);
 
   for (const ifc of deviceInterfaces) {
     // Skip unassigned/un-typed interfaces, as they
@@ -121,9 +124,11 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
       ifcInfo.ospf = omit(ifcInfo.ospf, omitFields);
     }
 
-    ifcInfo.bridge_addr = ifc.type === 'LAN' && deviceInterfaces.some(i => {
-      return devId !== i.devId && i.isAssigned && IPv4 === i.IPv4 && IPv4Mask === i.IPv4Mask;
-    }) ? ifcInfo.addr : null;
+    if (bridges[ifcInfo.addr]) {
+      ifcInfo.bridge_addr = ifcInfo.addr;
+    } else {
+      ifcInfo.bridge_addr = null;
+    }
 
     interfaces.push(ifcInfo);
   }

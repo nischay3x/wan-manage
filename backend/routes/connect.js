@@ -72,7 +72,7 @@ const checkDeviceVersion = async (req, res, next) => {
     });
     const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
     const { versions } = await swUpdater.getLatestSwVersions();
-    console.log('versions=' + versions);
+    // console.log('versions=' + versions);
     res.setHeader('latestVersion', versions.device); // set last device version
     return next(createError(statusCode, err));
   }
@@ -191,7 +191,9 @@ connectRouter.route('/register')
                   }
                 } else {
                   intf.type = 'LAN';
-                  intf.dhcp = intf.dhcp || 'no';
+                  // set LAN as DHCP only if it's DHCP in Linux and has IP address.
+                  // Otherwise set it to static on registration.
+                  intf.dhcp = intf.dhcp === 'yes' && intf.IPv4 !== '' ? 'yes' : 'no';
                   intf.routing = 'OSPF';
                   intf.gateway = '';
                   intf.metric = '';

@@ -169,6 +169,15 @@ const orgUpdateFromNull = async ({ user }, res) => {
   if (user.defaultOrg == null) {
     let org0 = null;
 
+    // Check if account is set, if not try to set one for the user
+    if (user._id && !user.defaultAccount) {
+      const account = await membership.findOne({ user: user._id }).populate('account');
+      if (account) {
+        user.defaultAccount = account.account;
+        await User.updateOne({ _id: user._id }, { defaultAccount: account.account._id });
+      }
+    }
+
     try {
       const orgs = await getUserOrganizations(user);
       org0 = orgs[Object.keys(orgs)[0]];

@@ -543,12 +543,13 @@ const secretFields = [
 const vpnConfigSchema = Joi.object().keys({
   networkId: Joi.string().pattern(/^[A-Za-z0-9]+$/).min(3).max(20)
     .invalid(
-      'flexiWAN', 'flexiwan', 'FLEXIWAN', 'company', 'acme', 'SASE', 'sase', 'security', 'info'
-    ).required()
+      'company', 'acme', 'SASE', 'sase', 'security', 'info'
+    ).pattern(/flexiwan/i, { invert: true }).required()
     .error(errors => {
       errors.forEach(err => {
         switch (err.code) {
           case 'any.invalid':
+          case 'string.pattern.invert.base':
             err.message = `${err.local.value} is not allowed for Workspace name`;
             break;
           default:

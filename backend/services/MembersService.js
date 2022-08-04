@@ -142,7 +142,7 @@ class MembersService {
         });
       }
       // to=organization, role=(manager or viewer) => user must be this organization
-      // manager or group manager for that organizatio or account owner/manager
+      // manager or group manager for that organization or account owner/manager
       if (permissionTo === 'organization') {
         const org = await Organizations.findOne({
           _id: mongoose.Types.ObjectId(permissionEntity)
@@ -385,9 +385,39 @@ class MembersService {
         }
       }
 
-      // TBD: Should we also remove defaultAccount and defaultOrg?
+      // If user has other permissions on the same account, keep the account and set org to null
+      // If user has permissions to other account, switch the account and set org to null
+      // Otherwise, set both the account and org to null,
+      //   this will not allow the user to make operations or login
+      const userAccountPipeline = [
+        { $match: { user: membershipData.user } },
+        {
+          $group: {
+            _id: '$account',
+            count: { $sum: 1 }
+          }
+        }
+      ];
+      const userAccounts = await membership.aggregate(userAccountPipeline).allowDiskUse(true);
+      const curAccountIndex = userAccounts.findIndex((m) => m._id.equals(membershipData.account));
+      if (curAccountIndex === -1) throw (new Error('User account not found'));
+      const curAccountUserCount = userAccounts[curAccountIndex];
+      if (curAccountUserCount.count > 1) {
+        // user has other permissions for this account, keep it and set org to null
+        // This will find another organization on next request
+        await Users.updateOne({ _id: membershipData.user }, { defaultOrg: null });
+      } else if (userAccounts.length > 1) {
+        // user has permission ot other account, switch to it
+        const otherUserAccount = userAccounts.find((m) => !m._id.equals(membershipData.account));
+        await Users.updateOne({ _id: membershipData.user },
+          { defaultAccount: otherUserAccount._id, defaultOrg: null });
+      } else {
+        // No account found for the user, reset both account and organization
+        await Users.updateOne({ _id: membershipData.user },
+          { defaultAccount: null, defaultOrg: null });
+      }
 
-      // Delete member
+      // Delete membership entry, user may have other permissions to that account
       await membership.deleteOne({
         _id: id,
         account: user.defaultAccount._id

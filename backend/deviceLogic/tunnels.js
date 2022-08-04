@@ -41,6 +41,8 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'j
 const keyBy = require('lodash/keyBy');
 
 const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
+const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
+const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -534,6 +536,8 @@ const applyTunnelAdd = async (devices, user, data) => {
   }
 
   const { pathLabels, advancedOptions, peers, topology, hub } = data.meta;
+  // If ospfCost is not defined, use the default cost
+  advancedOptions.ospfCost = Number(advancedOptions.ospfCost || defaultTunnelOspfCost);
   const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
 
   if (mtu !== undefined && mtu !== '' && (isNaN(mtu) || mtu < 500 || mtu > 1500)) {
@@ -546,9 +550,9 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('MSS Clamping must be "yes" or "no"');
   }
 
-  if (ospfCost !== undefined && ospfCost !== '' && isNaN(ospfCost)) {
+  if (isNaN(ospfCost) || ospfCost <= 0) {
     logger.error('Wrong OSPF cost when creating tunnels', { params: { ospfCost } });
-    throw new Error('OSPF cost must be numeric value or empty');
+    throw new Error('OSPF cost must be a positive numeric value or empty');
   }
 
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
@@ -1896,7 +1900,7 @@ const prepareTunnelParams = (
     paramsDeviceA.peer.urls = peer.urls;
     paramsDeviceA.peer.ips = peer.ips;
     if (mssClamp !== 'no') {
-      paramsDeviceA.peer['tcp-mss-clamp'] = minMtu;
+      paramsDeviceA.peer['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
     }
     if (ospfCost) {
       paramsDeviceA.peer['ospf-cost'] = ospfCost;
@@ -1946,8 +1950,8 @@ const prepareTunnelParams = (
       rx: +deviceAIntf.bandwidthMbps.rx
     };
     if (mssClamp !== 'no') {
-      paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = minMtu;
-      paramsDeviceB['loopback-iface']['tcp-mss-clamp'] = minMtu;
+      paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
+      paramsDeviceB['loopback-iface']['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
     }
     if (ospfCost) {
       paramsDeviceA['loopback-iface']['ospf-cost'] = ospfCost;

@@ -57,6 +57,12 @@ const RateLimitStore = require('./rateLimitStore');
 
 // Internal routers definition
 const adminRouter = require('./routes/admin');
+const ticketsRouter = require('./routes/tickets')(
+  configs.get('ticketingSystemUsername', 'string'),
+  configs.get('ticketingSystemToken', 'string'),
+  configs.get('ticketingSystemUrl', 'string'),
+  configs.get('ticketingSystemAccountId', 'string')
+);
 
 // WSS
 const WebSocket = require('ws');
@@ -94,10 +100,10 @@ class ExpressServer {
 
   async setupMiddleware () {
     // this.setupAllowedMedia();
-    this.app.use((req, res, next) => {
-      console.log(`${req.method}: ${req.url}`);
-      return next();
-    });
+    // this.app.use((req, res, next) => {
+    //   console.log(`${req.method}: ${req.url}`);
+    //   return next();
+    // });
 
     // A middleware that adds a unique request ID for each request
     // or uses the existing request ID, if there is one.
@@ -236,6 +242,7 @@ class ExpressServer {
 
     // Intialize routes
     this.app.use('/api/admin', adminRouter);
+    this.app.use('/api/tickets', ticketsRouter);
 
     // reserved for future use
     // this.app.get('/login-redirect', (req, res) => {
