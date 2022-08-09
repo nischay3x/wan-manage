@@ -33,6 +33,7 @@ const { TypedError, ErrorTypes } = require('../utils/errors');
 const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const getRandom = require('../utils/random-key');
+const { getCpuInfo } = require('../utils/deviceUtils');
 
 class Connections {
   constructor () {
@@ -677,12 +678,7 @@ class Connections {
       )) {
         versions[component] = info.version;
       }
-      const cpuInfo = {
-        hwCores: deviceInfo.message.cpuInfo?.hwCores || 2,
-        grubCores: deviceInfo.message.cpuInfo?.grubCores || 2,
-        vppCores: deviceInfo.message.cpuInfo?.vppCores || 1,
-        powerSaving: deviceInfo.message.cpuInfo?.powerSaving === true
-      };
+      const cpuInfo = getCpuInfo(deviceInfo.message.cpuInfo);
 
       const origDevice = await devices.findOneAndUpdate(
         { _id: deviceId },

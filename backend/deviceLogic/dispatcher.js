@@ -33,6 +33,7 @@ const appIdentification = require('./appIdentification');
 const sync = require('./sync');
 const IKEv2 = require('./IKEv2');
 const replace = require('./replace');
+const modifyHardware = require('./modifyHardware');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -128,6 +129,12 @@ const methods = {
     complete: qosTrafficMap.complete,
     error: qosTrafficMap.error,
     remove: qosTrafficMap.remove
+  },
+  modifyHardware: {
+    apply: modifyHardware.apply,
+    complete: modifyHardware.complete,
+    error: modifyHardware.error,
+    remove: modifyHardware.remove
   },
   appIdentification: {
     apply: appIdentification.apply,

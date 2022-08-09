@@ -31,7 +31,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const url = require('url');
 // billing support
 const flexibilling = require('../flexibilling');
-const { mapLteNames } = require('../utils/deviceUtils');
+const { mapLteNames, getCpuInfo } = require('../utils/deviceUtils');
 const geoip = require('geoip-lite');
 
 const connectRouter = express.Router();
@@ -207,12 +207,7 @@ connectRouter.route('/register')
                 device: req.body.device_version || ''
               };
 
-              const cpuInfo = {
-                hwCores: req.body.cpuInfo?.hwCores || 2,
-                grubCores: req.body.cpuInfo?.grubCores || 2,
-                vppCores: req.body.cpuInfo?.vppCores || 1,
-                powerSaving: req.body.cpuInfo?.powerSaving === true
-              };
+              const cpuInfo = getCpuInfo(req.body.cpuInfo);
 
               // Check that account didn't cross its device limit
               const account = decoded.account;

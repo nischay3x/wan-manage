@@ -170,11 +170,26 @@ const getBridges = interfaces => {
   return bridges;
 };
 
+/**
+ * Get CPU info or set default values
+ * @param {object}  cpuInfo object with CPU info
+ * @return {object} object with CPU info or default values
+ */
+const getCpuInfo = cpuInfo => {
+  return {
+    hwCores: cpuInfo?.hwCores ? parseInt(cpuInfo.hwCores) : 2,
+    grubCores: cpuInfo?.grubCores ? parseInt(cpuInfo.grubCores) : 2,
+    vppCores: cpuInfo?.vppCores ? parseInt(cpuInfo?.vppCores) : 1,
+    powerSaving: cpuInfo?.powerSaving === true
+  };
+};
+
 // Default exports
 module.exports = {
   getDefaultGateway,
   getBridges,
   mapLteNames,
   parseLteStatus,
-  mapWifiNames
+  mapWifiNames,
+  getCpuInfo
 };

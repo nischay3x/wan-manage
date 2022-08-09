@@ -43,7 +43,7 @@ const {
   validateStaticRoute
 } = require('../deviceLogic/validators');
 const {
-  mapLteNames, mapWifiNames, getBridges, parseLteStatus
+  mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
 } = require('../utils/deviceUtils');
 const { getAllOrganizationSubnets, getAllOrganizationBGPDevices } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -1809,14 +1809,12 @@ class DevicesService {
             firewall: origDevice.policies.firewall.toObject()
           };
         }
+
+        // don't  allow to change "versions" and "cpuInfo"
         deviceToValidate.versions = origDevice.versions;
-        deviceToValidate.cpuInfo = {
-          hwCores: origDevice.cpuInfo?.hwCores || 2,
-          grubCores: origDevice.cpuInfo?.grubCores || 2,
-          vppCores: deviceRequest.cpuInfo?.vppCores || origDevice.cpuInfo?.vppCores || 1,
-          powerSaving: deviceRequest.cpuInfo?.powerSaving === true
-        };
+        deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
+
         const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets, orgBgp);
 
         if (!valid) {
