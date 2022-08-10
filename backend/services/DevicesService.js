@@ -40,7 +40,8 @@ const { validateOperations } = require('../deviceLogic/interfaces');
 const {
   validateDevice,
   validateDhcpConfig,
-  validateStaticRoute
+  validateStaticRoute,
+  validateQOSPolicy
 } = require('../deviceLogic/validators');
 const {
   mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
@@ -1409,6 +1410,15 @@ class DevicesService {
                   }
                 }
               }
+
+              // check interface specific validation
+              if (updIntf?.qosPolicy) {
+                const { valid, err } = validateQOSPolicy([origDevice]);
+                if (!valid) {
+                  throw new Error(err);
+                }
+              }
+
               // check firewall rules
               if (deviceRequest.firewall) {
                 let hadInbound = false;

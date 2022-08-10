@@ -779,11 +779,10 @@ const validateMultilinkPolicy = (policy, devices) => {
 
 /**
  * Checks whether QoS policy is valid on devices
- * @param {Object} policy     - a QoS policy to validate
  * @param {Array}  devices    - an array of devices
  * @return {{valid: boolean, err: string}}  test result + error, if invalid
  */
-const validateQOSPolicy = (policy, devices) => {
+const validateQOSPolicy = (devices) => {
   // QoS is supported from version 6
   if (devices.some(device => getMajorVersion(device.versions.agent) < 6)) {
     return {

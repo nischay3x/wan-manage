@@ -566,7 +566,7 @@ const apply = async (deviceList, user, data) => {
 const applyPolicy = async (opDevices, qosPolicy, op, user, org, installed = false) => {
   // validate QoS on devices
   if (op === 'install') {
-    const { valid, err } = validateQOSPolicy(qosPolicy, opDevices);
+    const { valid, err } = validateQOSPolicy(opDevices);
     if (!valid) {
       throw createError(500, `Can't install QoS policy: ${err}`);
     }
