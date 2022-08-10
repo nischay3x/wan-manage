@@ -57,15 +57,25 @@ const apply = async (devicesList, user, data) => {
       // don't allow to change grub and hw cores. Only the vpp and power saving
       meta.cpuInfo = getCpuInfo({
         ...cpuInfo,
-        vppCores: meta.cpuInfo.vppCores,
+        configuredVppCores: meta.cpuInfo.configuredVppCores,
         powerSaving: meta.cpuInfo.powerSaving
       });
 
-      // TODO: VALIDATE data.cpuInfo
-      // 1. vppCors must be up to hw cores - 1
-      // 2. Cannot reduce vpp cores to less than two if QOS is installed.
+      if (meta.cpuInfo.configuredVppCores > meta.cpuInfo.hwCores - 1) {
+        throw new Error('vRouter cores number should be less than HW cores - 1');
+      }
+
+      const hasQosInstalled = device.policies?.qos?.policy;
+      if (meta.cpuInfo.configuredVppCores < 2 && hasQosInstalled) {
+        throw new Error(
+          'Reducing device CPU cannot be applied on a device with QoS policy installed');
+      }
 
       await updateCpuInfo(_id, org, meta.cpuInfo);
+
+      // for device job, set the vppCores value to be as configuredVppCores
+      meta.cpuInfo.vppCores = meta.cpuInfo.configuredVppCores;
+      delete meta.cpuInfo.configuredVppCores;
 
       applyPromises.push(deviceQueues.addJob(
         machineId, username, org,
@@ -86,8 +96,8 @@ const apply = async (devicesList, user, data) => {
           data: {
             device: _id,
             org: org,
-            hardwareChange: 'cpuInfo',
-            meta: { oldCpuInfo: cpuInfo }
+            machineId: machineId,
+            hardwareChange: 'cpuInfo'
           }
         },
         // Metadata
@@ -147,7 +157,7 @@ const complete = async (jobId, res) => {
     params: { result: res, jobId: jobId }
   });
 
-  const { hardwareChange, agentMessage, device, org } = res;
+  const { hardwareChange, device, agentMessage, org } = res;
   if (hardwareChange === 'cpuInfo' && agentMessage?.cpuInfo) {
     await updateCpuInfo(device, org, getCpuInfo(agentMessage.cpuInfo));
   }
@@ -167,7 +177,7 @@ const updateCpuInfo = async (deviceId, orgId, cpuInfo) => {
  * @param  {Object} res   device object ID and organization
  * @return {void}
  */
-const error = (jobId, res) => {
+const error = async (jobId, res) => {
   logger.error('Modify device hardware job failed', {
     params: { result: res, jobId: jobId }
   });

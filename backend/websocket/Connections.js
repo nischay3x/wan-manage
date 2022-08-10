@@ -678,12 +678,9 @@ class Connections {
       )) {
         versions[component] = info.version;
       }
-      const cpuInfo = getCpuInfo(deviceInfo.message.cpuInfo);
 
-      const origDevice = await devices.findOneAndUpdate(
-        { _id: deviceId },
-        { $set: { versions, cpuInfo } },
-        { new: true, runValidators: true }
+      const origDevice = await devices.findOne(
+        { _id: deviceId }
       ).populate('interfaces.pathlabels', '_id name type');
 
       if (!origDevice) {
@@ -693,6 +690,15 @@ class Connections {
         this.deviceDisconnect(machineId);
         return;
       }
+
+      // when receiving cpuInfo from device, we need to keep the configured value
+      const cpuInfo = getCpuInfo({
+        ...deviceInfo.message.cpuInfo,
+        configuredVppCores: origDevice.cpuInfo.configuredVppCores
+      });
+      origDevice.cpuInfo = cpuInfo;
+      origDevice.versions = versions;
+      await origDevice.save();
 
       const { expireTime, jobQueued } = origDevice.IKEv2;
 

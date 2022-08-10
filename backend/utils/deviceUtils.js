@@ -176,10 +176,20 @@ const getBridges = interfaces => {
  * @return {object} object with CPU info or default values
  */
 const getCpuInfo = cpuInfo => {
+  // device vpp cores
+  const vppCores = cpuInfo?.vppCores ? parseInt(cpuInfo?.vppCores) : 1;
+
+  // configured vpp cores. It might be different than vppCores,
+  // since vppCores reflects the current value of the device
+  // and configuredVppCores is what user configured.
+  const configuredVppCores =
+    cpuInfo?.configuredVppCores ? parseInt(cpuInfo?.configuredVppCores) : vppCores;
+
   return {
     hwCores: cpuInfo?.hwCores ? parseInt(cpuInfo.hwCores) : 2,
     grubCores: cpuInfo?.grubCores ? parseInt(cpuInfo.grubCores) : 2,
-    vppCores: cpuInfo?.vppCores ? parseInt(cpuInfo?.vppCores) : 1,
+    vppCores: vppCores,
+    configuredVppCores: configuredVppCores,
     powerSaving: cpuInfo?.powerSaving === true
   };
 };

@@ -1074,6 +1074,14 @@ const deviceSchema = new Schema({
         message: props => `${props.value} should be a valid integer`
       }
     },
+    configuredVppCores: {
+      type: Number,
+      default: 1,
+      validate: {
+        validator: validators.validateCpuCoresNumber,
+        message: props => `${props.value} should be a valid integer`
+      }
+    },
     powerSaving: {
       type: Boolean,
       default: false

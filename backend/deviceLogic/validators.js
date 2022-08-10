@@ -19,7 +19,7 @@ const net = require('net');
 const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
-const { getBridges } = require('../utils/deviceUtils');
+const { getBridges, getCpuInfo } = require('../utils/deviceUtils');
 const { getMajorVersion } = require('../versioning');
 const keyBy = require('lodash/keyBy');
 const { isEqual } = require('lodash');
@@ -628,12 +628,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
   }
-  if (device.cpuInfo && device.cpuInfo.vppCores > device.cpuInfo.hwCores - 1) {
-    return {
-      valid: false,
-      err: 'vRouter cores number should be less than HW cores - 1'
-    };
-  }
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -797,6 +791,15 @@ const validateQOSPolicy = (policy, devices) => {
       err: 'QoS is supported from version 6'
     };
   }
+
+  // QoS requires multi-core
+  if (devices.some(device => getCpuInfo(device.cpuInfo).vppCores < 2)) {
+    return {
+      valid: false,
+      err: 'QoS cannot be installed on a device without 2 vRouter cores at least'
+    };
+  }
+
   return { valid: true, err: '' };
 };
 
