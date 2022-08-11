@@ -27,19 +27,14 @@ const predefinedServiceClasses = [
   'default',
   'real-time',
   'signaling',
+  'telephony',
+  'broadcast-video',
   'network-control',
   'oam',
   'high-throughput',
+  'multimedia-conferencing',
   'multimedia-streaming',
-  'custom-1',
-  'custom-2',
-  'custom-3',
-  'custom-4',
-  'custom-5',
-  'custom-6',
-  'custom-7',
-  'custom-8',
-  'custom-9'
+  'low-latency'
 ];
 
 /**
