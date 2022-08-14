@@ -5482,15 +5482,13 @@ paths:
     get:
       operationId: invoicesGET
       parameters:
-      - description: The number of items to skip before starting to collect the result
-          set
+      - description: The next items to collect next, should be the offset received on previous iteration
         explode: true
         in: query
-        name: offset
+        name: offsetPos
         required: false
         schema:
-          type: integer
-        style: form
+          type: string
       - description: The numbers of items to return
         explode: true
         in: query
