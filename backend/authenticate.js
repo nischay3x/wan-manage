@@ -355,23 +355,7 @@ exports.validatePassword = function (password) {
   return (password !== null && password !== undefined && password.length >= 8);
 };
 
-exports.verifyUserLoginJWT = function (req, res, next) {
-  // Allow options to pass through without verification for preflight options requests
-  if (!req.originalUrl.startsWith('/api/users')) {
-    return next(createError(403, "You don't have permission to perform this operation"));
-  }
-
-  passport.authenticate('jwt-login', { session: false }, async (err, user, info) => {
-    if (err || !user) {
-      logger.warn('JWT verification failed', { params: { err: err?.message }, req: req });
-      return next(createError(401));
-    }
-    req.user = user;
-    return next();
-  })(req, res, next);
-};
-
-exports.verifyUserLoginJWT = function (req, res, next) {
+exports.verifyUserOrLoginJWT = function (req, res, next) {
   // Allow options to pass through without verification for preflight options requests
   if (!req.originalUrl.startsWith('/api/users')) {
     return next(createError(403, "You don't have permission to perform this operation"));

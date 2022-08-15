@@ -39,7 +39,6 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { getUiServerUrl } = require('../utils/httpUtils');
 const flexibilling = require('../flexibilling');
 const { getUserOrganizations } = require('../utils/membershipUtils');
-const { randomString } = require('../utils/utils');
 const { generateSecret, verifyTOTP } = require('../otp');
 const SHA256 = require('crypto-js/sha256');
 
@@ -450,7 +449,7 @@ router.route('/reset-password')
 // Authentication check is done within passport, if passed, no login error exists
 router.route('/login')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .post(cors.corsWithOptions, auth.verifyUserLocal, async (req, res, next) => {
+  .post(cors.corsWithOptions, auth.verifyUserLocal, async (req, res) => {
     // if user enabled 2fa or account forces using it- send login process token
     // else, allow login without mfa
     const isUserEnabledMfa = req.user?.mfa?.enabled;
@@ -465,7 +464,7 @@ router.route('/login')
 
 router.route('/login/methods')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+  .get(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res) => {
     const methods = {
       recoveryCodes: 0,
       authenticatorApp: 0
@@ -507,14 +506,14 @@ router.route('/logout')
 // Authentication check is done within passport, if passed, no login error exists
 router.route('/mfa/isEnabled')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+  .get(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res) => {
     res.status(200).json({ isEnabled: req?.user?.mfa?.enabled });
   });
 
 // Authentication check is done within passport, if passed, no login error exists
-router.route('/mfa/getSecret')
+router.route('/mfa/getMfaConfigUri')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+  .get(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res, next) => {
     // if verified - don't generate
     if (req.user.mfa.enabled) {
       return next(createError(500, 'Secret already verified'));
@@ -550,7 +549,7 @@ secret=${secret.base32}`;
 // Authentication check is done within passport, if passed, no login error exists
 router.route('/mfa/verify')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .post(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+  .post(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res, next) => {
     if (!req.body.token) {
       return next(createError(401, 'Token is required'));
     }
@@ -574,7 +573,7 @@ router.route('/mfa/verify')
     }
 
     if (!validated) {
-      return next(createError(403, 'Code is invalid'));
+      return next(createError(403, 'Invalid Code'));
     }
 
     const updateQuery = { $set: {} };
@@ -612,9 +611,9 @@ const sendJwtToken = async (req, res, mfaVerified) => {
   res.json({ name: req.user.name, status: 'logged in' });
 };
 
-router.route('/mfa/getRecoveryCodes')
+router.route('/mfa/generateRecoveryCodes')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+  .get(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res, next) => {
     if (req?.user?.mfa?.enabled && req?.user?.mfa?.recoveryCodes?.length > 0) {
       return next(createError(403, 'Recovery codes already generated'));
     }
@@ -623,7 +622,7 @@ router.route('/mfa/getRecoveryCodes')
     const hashed = []; // store hashed in DB
 
     for (let i = 0; i < 10; i++) {
-      const code = randomString();
+      const code = randomKey(40);
       codes.push(code);
       hashed.push({ code: SHA256(code).toString(), usedTime: null });
     };
@@ -639,7 +638,7 @@ router.route('/mfa/getRecoveryCodes')
 
 router.route('/mfa/verifyRecoveryCode')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .post(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
+  .post(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res, next) => {
     const userRecoveryCodes = req.user?.mfa?.recoveryCodes ?? [];
     if (userRecoveryCodes.length === 0) {
       return next(createError(401, 'Recovery codes are not generated for the user'));

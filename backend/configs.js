@@ -220,9 +220,7 @@ const configEnv = {
     // URL for account qualification
     qualifiedAccountsURL: 'https://www.flexiwan.com',
     // VPN portal URL
-    vpnBaseUrl: ['https://localvpn.flexiwan.com:8000'],
-    // When login with tmp code to email address, the code valid for the following minutes
-    loginBackupEmailCodeValid: 10
+    vpnBaseUrl: ['https://localvpn.flexiwan.com:8000']
   },
   // Override for development environment, default environment if not specified
   development: {
