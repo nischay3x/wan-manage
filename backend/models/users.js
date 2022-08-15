@@ -48,15 +48,6 @@ const emailTokens = new Schema({
   }
 });
 
-const tmpCodeSchema = new Schema({
-  code: {
-    type: String
-  },
-  validUntil: {
-    type: Date
-  }
-}, { timestamps: false });
-
 /**
  * user schema
  */
@@ -154,28 +145,8 @@ const User = new Schema({
       type: Boolean,
       default: false
     },
-    backupPhoneNumber: {
-      type: String,
-      validate: {
-        validator: (number) => number === '' || validators.validateIsPhoneNumber(number),
-        message: 'should be a valid phone number'
-      },
-      maxlength: [20, 'Phone number length must be at most 20']
-    },
-    backupEmailAddress: {
-      type: String,
-      maxlength: [255, 'Email length must be at most 255'],
-      validate: {
-        validator: (email) => email === '' || validators.validateEmail(email),
-        message: 'should be a valid email address'
-      }
-    },
     recoveryCodes: {
-      type: [String]
-    },
-    backupEmailCodes: {
-      type: [tmpCodeSchema],
-      default: []
+      type: []
     }
   }
 });

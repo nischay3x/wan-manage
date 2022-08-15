@@ -158,7 +158,7 @@ class AccountsService {
       // we don't allow it, The user should configure MFA for himself.
       if (!req.user.isLoggedInWithMfa && requestedAccount.forceMfa) {
         return Service.rejectResponse(
-          'No permission to access this account. MFA is required', 403
+          'No permission to access this account. Two-Factor-authenticator is required', 403
         );
       }
 

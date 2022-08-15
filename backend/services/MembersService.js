@@ -621,10 +621,7 @@ class MembersService {
             enabled: false,
             secret: null,
             unverifiedSecrets: [],
-            backupPhoneNumber: '',
-            backupEmailAddress: '',
-            recoveryCodes: [],
-            backupEmailCodes: []
+            recoveryCodes: []
           }
         }
       },

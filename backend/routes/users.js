@@ -33,7 +33,6 @@ const mailer = require('../utils/mailer')(
   configs.get('mailerPort'),
   configs.get('mailerBypassCert', 'boolean')
 );
-const rateLimit = require('express-rate-limit');
 const reCaptcha = require('../utils/recaptcha')(configs.get('captchaKey'));
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -469,16 +468,11 @@ router.route('/login/methods')
   .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
     const methods = {
       recoveryCodes: 0,
-      authenticatorApp: 0,
-      backupEmailAddress: 0
+      authenticatorApp: 0
     };
 
     if (req.user?.mfa?.recoveryCodes?.length > 0) {
       methods.recoveryCodes = 1;
-    }
-
-    if (req.user?.mfa?.backupEmailAddress !== '') {
-      methods.backupEmailAddress = 1;
     }
 
     if (req.user?.mfa?.enabled) {
@@ -590,14 +584,6 @@ router.route('/mfa/verify')
 
     if (!req.user.mfa.enabled) {
       updateQuery.$set['mfa.enabled'] = true;
-
-      // in order to enable MFA, the user must send his username and password
-      if (!req.body.backupPhoneNumber || !req.body.backupEmailAddress) {
-        return next(createError(403, 'A phone or email number for backup is missing'));
-      }
-
-      updateQuery.$set['mfa.backupPhoneNumber'] = req.body.backupPhoneNumber;
-      updateQuery.$set['mfa.backupEmailAddress'] = req.body.backupEmailAddress;
     }
 
     if (req.user.mfa.unverifiedSecrets.length > 0) {
@@ -629,7 +615,7 @@ const sendJwtToken = async (req, res, mfaVerified) => {
 router.route('/mfa/getRecoveryCodes')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
-    if (req?.user?.mfa?.recoveryCodes?.length > 0) {
+    if (req?.user?.mfa?.enabled && req?.user?.mfa?.recoveryCodes?.length > 0) {
       return next(createError(403, 'Recovery codes already generated'));
     }
 
@@ -639,7 +625,7 @@ router.route('/mfa/getRecoveryCodes')
     for (let i = 0; i < 10; i++) {
       const code = randomString();
       codes.push(code);
-      hashed.push(SHA256(code));
+      hashed.push({ code: SHA256(code).toString(), usedTime: null });
     };
 
     await User.findOneAndUpdate(
@@ -656,19 +642,36 @@ router.route('/mfa/verifyRecoveryCode')
   .post(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
     const userRecoveryCodes = req.user?.mfa?.recoveryCodes ?? [];
     if (userRecoveryCodes.length === 0) {
-      return next(createError(401, 'Recovery code is not generated for the user'));
+      return next(createError(401, 'Recovery codes are not generated for the user'));
     }
 
     const requestedCode = req.body?.recoveryCode;
     if (!requestedCode) {
-      return next(createError(403, 'Recovery code is missing'));
+      return next(createError(403, 'Recovery codes are missing'));
     }
 
     let validated = false;
 
     const hashedRequestedCode = SHA256(requestedCode).toString();
     for (const userRecoveryCode of userRecoveryCodes) {
-      if (hashedRequestedCode === userRecoveryCode) {
+      const { code, usedTime } = userRecoveryCode;
+
+      // recovery code can be used once
+      if (usedTime) {
+        return next(createError(403, 'This recovery code is already used'));
+      };
+
+      if (hashedRequestedCode === code) {
+        // mark recovery code as used
+        await User.findOneAndUpdate(
+          {
+            _id: req.user._id,
+            'mfa.recoveryCodes.code': code
+          },
+          { $set: { 'mfa.recoveryCodes.$.usedTime': new Date() } },
+          { upsert: false }
+        );
+
         validated = true;
         break;
       }
@@ -677,148 +680,6 @@ router.route('/mfa/verifyRecoveryCode')
     if (!validated) {
       return next(createError(403, 'Recovery code is invalid'));
     }
-
-    return await sendJwtToken(req, res, validated);
-  });
-
-const apiLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 20, // Limit each IP to 20 requests per `window` (here, per 5 minutes)
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  message: { error: 'Using backup email address is limiting. Please try again later' }
-});
-router.route('/mfa/sendCodeToBackupEmail')
-  .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .get(cors.corsWithOptions, apiLimiter, auth.verifyUserLoginJWT, async (req, res, next) => {
-    if (req?.user?.mfa?.backupEmailAddress === '') {
-      return next(createError(403, 'Backup Email address is not configured'));
-    }
-
-    // if code generated in the last 10 minutes, don't generate new one.
-    // The user needs to click on Resend and pass captcha challenge
-    const existsCodes = (req?.user?.mfa?.backupEmailCodes ?? []);
-    if (existsCodes.length > 0) {
-      const last = existsCodes[existsCodes.length - 1];
-      const lastDate = last.validUntil;
-
-      const now = new Date();
-      if (lastDate > now) {
-        res.json({ emailAddress: req.user.mfa.backupEmailAddress });
-        return;
-      }
-    }
-
-    await generateBackupEmailCode(req);
-
-    res.json({ emailAddress: req.user.mfa.backupEmailAddress });
-  });
-
-router.route('/mfa/resendCodeToBackupEmail')
-  .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .post(cors.corsWithOptions, apiLimiter, auth.verifyUserLoginJWT, async (req, res, next) => {
-    if (req?.user?.mfa?.backupEmailAddress === '') {
-      return next(createError(403, 'Backup Email address is not configured'));
-    }
-
-    // on Resend Verify captcha
-    if (!await reCaptcha.verifyReCaptcha(req.body.captcha)) {
-      return next(createError(401, 'Wrong Captcha'));
-    }
-
-    await generateBackupEmailCode(req);
-
-    res.json({ emailAddress: req.user.mfa.backupEmailAddress });
-  });
-
-const generateBackupEmailCode = async (req) => {
-  // generate temporary random code
-  const code = Math.floor(100000 + Math.random() * 900000);
-
-  const now = new Date();
-  const validUntil = now.setMinutes(
-    now.getMinutes() + configs.get('loginBackupEmailCodeValid', 'number')
-  );
-
-  await User.findOneAndUpdate(
-    { _id: req.user._id },
-    // keep only the last 10 codes
-    { $push: { 'mfa.backupEmailCodes': { $each: [{ code, validUntil }], $slice: -8 } } },
-    { upsert: false });
-
-  // send the email
-  await mailer.sendMailHTML(
-    configs.get('mailerEnvelopeFromAddress'),
-    configs.get('mailerFromAddress'),
-    req.user.mfa.backupEmailAddress,
-    `Code for signing in to your ${configs.get('companyName')} Account`,
-    `<p>
-      Hi ${req.user.name || ''} ${req.user.lastName || ''}
-    </p>
-    <p>
-      Enter the code below to sign in to your ${configs.get('companyName')} Account.
-    </p>
-    <p>
-      <span style="padding-bottom: 20px;
-        font-family: 'Lato',Helvetica,sans-serif;
-        font-size: 28px;
-        line-height: 32px;
-        font-weight: 400;
-        color: #000000;
-        letter-spacing: 0.2em;
-        text-align: left;
-        font-weight: bold;">
-        ${code}
-      </span>
-    </p>
-    <p>
-      The code will expire in ${configs.get('loginBackupEmailCodeValid', 'number')} minutes.
-    </p>
-    <br/>
-    <p>Your friends @ ${configs.get('companyName')}</p>`
-  );
-};
-
-router.route('/mfa/verifyCodeToBackupEmail')
-  .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .post(cors.corsWithOptions, auth.verifyUserLoginJWT, async (req, res, next) => {
-    if (req?.user?.mfa?.backupEmailAddress === '') {
-      return next(createError(403, 'Backup Email address is not configured'));
-    }
-
-    const backupEmailCodes = req.user?.mfa?.backupEmailCodes ?? [];
-    if (backupEmailCodes.length === 0) {
-      return next(createError(401, 'Code is not generated'));
-    }
-
-    const requestedCode = req.body?.code;
-    if (!requestedCode) {
-      return next(createError(403, 'Code is missing'));
-    }
-
-    let validated = false;
-    for (const backupEmailCode of backupEmailCodes) {
-      const dbCode = backupEmailCode.code;
-      const dbCodeValidUntil = new Date(backupEmailCode.validUntil);
-      if (requestedCode === dbCode) {
-        // validate expiration time
-        const now = new Date();
-        if (now <= dbCodeValidUntil) {
-          validated = true;
-          break;
-        }
-      }
-    }
-
-    if (!validated) {
-      return next(createError(403, 'Code is invalid'));
-    }
-
-    await User.findOneAndUpdate(
-      { _id: req.user._id },
-      // reset the temp codes
-      { $set: { 'mfa.backupEmailCodes': [] } },
-      { upsert: false });
 
     return await sendJwtToken(req, res, validated);
   });
