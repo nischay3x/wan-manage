@@ -19,7 +19,7 @@ const net = require('net');
 const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
-const { getBridges } = require('../utils/deviceUtils');
+const { getBridges, getCpuInfo } = require('../utils/deviceUtils');
 const { getMajorVersion } = require('../versioning');
 const keyBy = require('lodash/keyBy');
 const { isEqual } = require('lodash');
@@ -281,6 +281,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     assignedIfs.filter(ifc => { return ifc.type === 'WAN'; }),
     assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
+  const majorVersion = getMajorVersion(device.versions.agent);
 
   if (isRunning && (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0))) {
     return {
@@ -379,6 +380,12 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
           err: 'All WAN interfaces should be assigned a default GW'
         };
       }
+    }
+    if (ifc.qosPolicy && majorVersion < 6) {
+      return {
+        valid: false,
+        err: 'QoS is supported from version 6'
+      };
     }
   }
 
@@ -621,7 +628,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
   }
-
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -771,6 +777,31 @@ const validateMultilinkPolicy = (policy, devices) => {
   return { valid: true, err: '' };
 };
 
+/**
+ * Checks whether QoS policy is valid on devices
+ * @param {Array}  devices    - an array of devices
+ * @return {{valid: boolean, err: string}}  test result + error, if invalid
+ */
+const validateQOSPolicy = (devices) => {
+  // QoS is supported from version 6
+  if (devices.some(device => getMajorVersion(device.versions.agent) < 6)) {
+    return {
+      valid: false,
+      err: 'QoS is supported from version 6'
+    };
+  }
+
+  // QoS requires multi-core
+  if (devices.some(device => getCpuInfo(device.cpuInfo).vppCores < 2)) {
+    return {
+      valid: false,
+      err: 'QoS cannot be installed on a device without 2 vRouter cores at least'
+    };
+  }
+
+  return { valid: true, err: '' };
+};
+
 module.exports = {
   isIPv4Address,
   validateDevice,
@@ -778,5 +809,6 @@ module.exports = {
   validateStaticRoute,
   validateModifyDeviceMsg,
   validateMultilinkPolicy,
+  validateQOSPolicy,
   validateFirewallRules
 };

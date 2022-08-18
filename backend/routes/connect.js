@@ -31,7 +31,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const url = require('url');
 // billing support
 const flexibilling = require('../flexibilling');
-const { mapLteNames } = require('../utils/deviceUtils');
+const { mapLteNames, getCpuInfo } = require('../utils/deviceUtils');
 const geoip = require('geoip-lite');
 
 const connectRouter = express.Router();
@@ -207,6 +207,8 @@ connectRouter.route('/register')
                 device: req.body.device_version || ''
               };
 
+              const cpuInfo = getCpuInfo(req.body.cpuInfo);
+
               // Check that account didn't cross its device limit
               const account = decoded.account;
               // Get max allowed devices for free from the ChargeBee plan
@@ -257,6 +259,7 @@ connectRouter.route('/register')
                     isApproved: false,
                     isConnected: false,
                     coords: ll,
+                    cpuInfo: cpuInfo,
                     versions: versions
                   }], { session: session })
                     .then(async (result) => {
