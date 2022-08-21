@@ -52,6 +52,7 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
       IPv6Mask,
       useStun,
       monitorInternet,
+      bandwidthMbps,
       routing,
       type,
       pathlabels,
@@ -98,6 +99,7 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
       ifcInfo.metric = metric;
       ifcInfo.useStun = useStun;
       ifcInfo.monitorInternet = monitorInternet;
+      ifcInfo.bandwidthMbps = bandwidthMbps;
       ifcInfo.dnsServers = dnsServers;
       ifcInfo.dnsDomains = dnsDomains;
 
