@@ -446,7 +446,9 @@ router.route('/reset-password')
     else return updatePassword(req, res, next);
   });
 
-// Authentication check is done within passport, if passed, no login error exists
+// This endpoint receives the username and password from the initial screen of the login process.
+// Here, a check is made as to whether to allow the user to enter,
+// or whether he needs to pass another identification factor (like 2FA)
 router.route('/login')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.corsWithOptions, auth.verifyUserLocal, async (req, res) => {
@@ -462,6 +464,8 @@ router.route('/login')
     }
   });
 
+// This endpoint returns to the user his options,
+// which he can use to identify himself and enter the system
 router.route('/login/methods')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res) => {
@@ -470,7 +474,10 @@ router.route('/login/methods')
       authenticatorApp: 0
     };
 
-    if (req.user?.mfa?.recoveryCodes?.length > 0) {
+    const recoveryCodes = req.user?.mfa?.recoveryCodes ?? [];
+    // Check if there is a recovery code,
+    // and also if there is at least one that has not been used yet
+    if (recoveryCodes.length > 0 && recoveryCodes.some(c => c.usedTime === null)) {
       methods.recoveryCodes = 1;
     }
 
@@ -503,14 +510,16 @@ router.route('/logout')
     res.json({ status: 'logged out' });
   });
 
-// Authentication check is done within passport, if passed, no login error exists
+// This endpoint checks if user enabled and verified 2FA for himself.
+// Once user enabled it, he cannot login without it.
 router.route('/mfa/isEnabled')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res) => {
     res.status(200).json({ isEnabled: req?.user?.mfa?.enabled });
   });
 
-// Authentication check is done within passport, if passed, no login error exists
+// This endpoint generates for the user the URI that will be displayed in the UI as a QR code
+// that can be scanned by an authenticator application
 router.route('/mfa/getMfaConfigUri')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .get(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res, next) => {
@@ -546,7 +555,7 @@ secret=${secret.base32}`;
     res.status(200).json({ configUri });
   });
 
-// Authentication check is done within passport, if passed, no login error exists
+// This endpoint verifies user code with his unique secret.
 router.route('/mfa/verify')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
   .post(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res, next) => {
@@ -555,9 +564,14 @@ router.route('/mfa/verify')
     }
 
     let secrets = [];
+
+    // Check with which secret we need to verify the code.
     if (req.user.mfa.secret) {
+      // if user already enabled and verified 2fa, verify code with this verified secret.
       secrets.push(req.user.mfa.secret);
     } else if (req.user.mfa.unverifiedSecrets.length > 0) {
+      // if user didn't enabled 2fa and wants to verify it on first time,
+      // verify code with this unverifiedSecrets secrets code.
       secrets = req.user.mfa.unverifiedSecrets;
     } else {
       return next(createError(401, 'Multi-Factor is not configured'));
@@ -601,6 +615,8 @@ router.route('/mfa/verify')
     return await sendJwtToken(req, res, validated !== null);
   });
 
+// This function generates the JWT after the authentication process is complete.
+// With this token, the user can access and receive the organization's information.
 const sendJwtToken = async (req, res, mfaVerified) => {
   const token = await getToken(req, { mfaVerified });
   const refreshToken = await getRefreshToken(req, { mfaVerified });
