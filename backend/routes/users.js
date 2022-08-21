@@ -39,7 +39,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { getUiServerUrl } = require('../utils/httpUtils');
 const flexibilling = require('../flexibilling');
 const { getUserOrganizations } = require('../utils/membershipUtils');
-const { generateSecret, verifyTOTP } = require('../otp');
+const { generateSecret, verifyCode } = require('../otp');
 const SHA256 = require('crypto-js/sha256');
 
 router.use(bodyParser.json());
@@ -530,29 +530,16 @@ router.route('/mfa/getMfaConfigUri')
 
     // generate unique secret for user
     // this secret will be used to check the verification code sent by user
-    const secret = await generateSecret();
+    const userName = req.user.email;
+    const secret = await generateSecret(configs.get('companyName'), userName);
 
     // save secret for the user
     await User.findOneAndUpdate(
       { _id: req.user._id },
-      { $push: { 'mfa.unverifiedSecrets': { $each: [secret.base32], $slice: 100 } } },
+      { $push: { 'mfa.unverifiedSecrets': { $each: [secret.secret], $slice: 100 } } },
       { upsert: false });
 
-    const userName = req.user.email;
-
-    const issuer = configs.get('companyName');
-    const algorithm = 'SHA1';
-    const digits = '6';
-    const period = '30';
-    const otpType = 'totp';
-    const configUri = `otpauth://${otpType}/${issuer}:${userName}\
-?algorithm=${algorithm}&\
-digits=${digits}&\
-period=${period}&\
-issuer=${issuer}&\
-secret=${secret.base32}`;
-
-    res.status(200).json({ configUri });
+    res.status(200).json({ configUri: secret.uri });
   });
 
 // This endpoint verifies user code with his unique secret.
@@ -579,7 +566,7 @@ router.route('/mfa/verify')
 
     let validated = null;
     for (const secret of secrets) {
-      const isValid = verifyTOTP(req.body.token, secret);
+      const isValid = verifyCode(req.body.token, secret);
       if (isValid) {
         validated = secret;
         break;

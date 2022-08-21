@@ -1,55 +1,48 @@
-const base32Decode = require('base32-decode');
-const crypto = require('crypto');
-const speakeasy = require('speakeasy');
+// flexiWAN SD-WAN software - flexiEdge,flexiManage.
+// For more information go to https://flexiwan.com
+// Copyright (C) 2022  flexiWAN Ltd.
 
-const generateHOTP = (secret, counter) => {
-  const decodedSecret = base32Decode(secret, 'RFC4648');
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as
+// published by the Free Software Foundation, either version 3 of the
+// License, or (at your option) any later version.
 
-  const buffer = Buffer.alloc(8);
-  for (let i = 0; i < 8; i++) {
-    buffer[7 - i] = counter & 0xff;
-    counter = counter >> 8;
-  }
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
 
-  // Step 1: Generate an HMAC-SHA-1 value
-  const hmac = crypto.createHmac('sha1', Buffer.from(decodedSecret));
-  hmac.update(buffer);
-  const hmacResult = hmac.digest();
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-  // Step 2: Generate a 4-byte string (Dynamic Truncation)
-  const offset = hmacResult[hmacResult.length - 1] & 0xf;
-  const code =
-    ((hmacResult[offset] & 0x7f) << 24) |
-    ((hmacResult[offset + 1] & 0xff) << 16) |
-    ((hmacResult[offset + 2] & 0xff) << 8) |
-    (hmacResult[offset + 3] & 0xff);
+const twofactor = require('node-2fa');
 
-  // Step 3: Compute an HOTP value
-  return `${code % 10 ** 6}`.padStart(6, '0');
+const generateSecret = (name, account) => {
+  const newSecret = twofactor.generateSecret({ name, account });
+  return newSecret;
 };
 
-const generateTOTP = (secret, window = 0) => {
-  const counter = Math.floor(Date.now() / 30000);
-  return generateHOTP(secret, counter + window);
-};
-
-const verifyTOTP = (token, secret, window = 1) => {
-  for (let errorWindow = -window; errorWindow <= +window; errorWindow++) {
-    const totp = generateTOTP(secret, errorWindow);
-    if (token === totp) {
-      return true;
-    }
+const verifyCode = (token, secret) => {
+  const result = twofactor.verifyToken(secret, token);
+  if (!result) { // result is null in case of not match
+    return false;
   }
+
+  // "delta" is an integer of how for behind/forward the code time sync is in terms
+  // of how many new codes have been generated since entry
+  // delta -1  means that the client entered the key too late (a newer key was meant to be used).
+  // delta 1 means the client entered the key too early (an older key was meant to be used).
+  // delta 0 means the client was within the time frame of the current key.
+  // delta can be up to 4.
+  const { delta } = result;
+  if (delta >= -1 && delta <= 1) {
+    return true;
+  }
+
   return false;
 };
 
-const generateSecret = async () => {
-  const secret = speakeasy.generateSecret();
-  return secret;
-};
-
 module.exports = {
-  verifyTOTP,
-  generateTOTP,
+  verifyCode,
   generateSecret
 };
