@@ -536,7 +536,7 @@ router.route('/mfa/getMfaConfigUri')
     // save secret for the user
     await User.findOneAndUpdate(
       { _id: req.user._id },
-      { $push: { 'mfa.unverifiedSecrets': { $each: [secret.secret], $slice: 100 } } },
+      { $push: { 'mfa.unverifiedSecrets': { $each: [secret.secret], $slice: 30 } } },
       { upsert: false });
 
     res.status(200).json({ configUri: secret.uri });
