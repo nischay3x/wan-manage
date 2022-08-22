@@ -122,6 +122,11 @@ const Accounts = new Schema({
   isSubscriptionValid: {
     type: Boolean,
     default: true
+  },
+  // Is forceMfa enabled, all account's users will not be able login without configuring 2fa
+  forceMfa: {
+    type: Boolean,
+    default: false
   }
 });
 

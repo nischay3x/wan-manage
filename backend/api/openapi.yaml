@@ -4766,6 +4766,60 @@ paths:
       x-swagger-router-controller: Members
       x-openapi-router-controller: MembersController
       x-openapi-router-service: MembersService
+  /members/{id}/resetMfa:
+    get:
+      operationId: membersIdResetMfaGET
+      parameters:
+      - description: Numeric ID of the Member to reset for
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Reset Member Two-Factor-authenticator
+      tags:
+      - Members
+      x-swagger-router-controller: Members
+      x-openapi-router-controller: MembersController
+      x-openapi-router-service: MembersService
   /members/options/{type}:
     get:
       operationId: membersOptionsTypeGET
@@ -8758,6 +8812,7 @@ components:
         companyType: companyType
         companyDesc: companyDesc
         enableNotifications: true
+        forceMfa: false
         name: name
       properties:
         name:
@@ -8771,6 +8826,9 @@ components:
           type: string
         enableNotifications:
           default: true
+          type: boolean
+        forceMfa:
+          default: false
           type: boolean
       type: object
     OrganizationRequest:
