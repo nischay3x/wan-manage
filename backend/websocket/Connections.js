@@ -33,6 +33,7 @@ const { TypedError, ErrorTypes } = require('../utils/errors');
 const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const getRandom = require('../utils/random-key');
+const { getCpuInfo } = require('../utils/deviceUtils');
 
 class Connections {
   constructor () {
@@ -663,7 +664,8 @@ class Connections {
         ikev2: Joi.object({
           certificateExpiration: Joi.string().allow('').optional(),
           error: Joi.string().allow('').optional()
-        }).allow({}).optional()
+        }).allow({}).optional(),
+        cpuInfo: Joi.object().optional()
       }).custom((obj, helpers) => {
         for (const [component, info] of Object.entries(
           obj.components
@@ -711,10 +713,8 @@ class Connections {
         versions[component] = info.version;
       }
 
-      const origDevice = await devices.findOneAndUpdate(
-        { _id: deviceId },
-        { $set: { versions: versions } },
-        { new: true, runValidators: true }
+      const origDevice = await devices.findOne(
+        { _id: deviceId }
       ).populate('interfaces.pathlabels', '_id name type');
 
       if (!origDevice) {
@@ -724,6 +724,15 @@ class Connections {
         this.deviceDisconnect(machineId);
         return;
       }
+
+      // when receiving cpuInfo from device, we need to keep the configured value
+      const cpuInfo = getCpuInfo({
+        ...deviceInfo.message.cpuInfo,
+        configuredVppCores: origDevice.cpuInfo.configuredVppCores
+      });
+      origDevice.cpuInfo = cpuInfo;
+      origDevice.versions = versions;
+      await origDevice.save();
 
       const { expireTime, jobQueued } = origDevice.IKEv2;
 

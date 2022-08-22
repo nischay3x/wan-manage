@@ -40,10 +40,11 @@ const { validateOperations } = require('../deviceLogic/interfaces');
 const {
   validateDevice,
   validateDhcpConfig,
-  validateStaticRoute
+  validateStaticRoute,
+  validateQOSPolicy
 } = require('../deviceLogic/validators');
 const {
-  mapLteNames, mapWifiNames, getBridges, parseLteStatus
+  mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
 } = require('../utils/deviceUtils');
 const { getAllOrganizationSubnets, getAllOrganizationBGPDevices } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
@@ -158,7 +159,8 @@ class DevicesService {
       'ospf',
       'coords',
       'bgp',
-      'routingFilters'
+      'routingFilters',
+      'cpuInfo'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -197,12 +199,18 @@ class DevicesService {
           'deviceType',
           'configuration',
           'deviceParams',
+          'qosPolicy',
+          'bandwidthMbps',
           'dnsServers',
           'dnsDomains',
           'useDhcpDnsServers',
           'ospf'
         ]);
         retIf._id = retIf._id.toString();
+        if (retIf.qosPolicy) {
+          retIf.qosPolicy = (retIf.qosPolicy._id ? retIf.qosPolicy._id : retIf.qosPolicy)
+            .toString();
+        }
         // if device is not connected then internet access status is unknown
         retIf.internetAccess = retDevice.isConnected ? retIf.internetAccess : '';
         retIf.linkStatus = retDevice.isConnected ? retIf.linkStatus : '';
@@ -365,6 +373,20 @@ class DevicesService {
         },
         {
           $lookup: {
+            from: 'qospolicies',
+            localField: 'policies.qos.policy',
+            foreignField: '_id',
+            as: 'policies.qos.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.qos.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
             from: 'pathlabels',
             localField: 'interfaces.pathlabels',
             foreignField: '_id',
@@ -430,7 +452,9 @@ class DevicesService {
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            'policies.qos': { status: 1, policy: { name: 1, description: 1 } },
             applications: 1,
+            cpuInfo: 1,
             deviceState: '$deviceStatus.state'
           }
         });
@@ -458,11 +482,14 @@ class DevicesService {
           'dhcp',
           'deviceSpecificRulesEnabled',
           'firewall',
+          'qosPolicy',
+          'bandwidthMbps',
           'upgradeSchedule',
           'sync',
           'ospf',
           'isConnected',
           'deviceState',
+          'cpuInfo',
           'coords'
         ];
         // populate pathlabels for every interface
@@ -667,6 +694,7 @@ class DevicesService {
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description')
+        .populate('policies.qos.policy', '_id name description')
         .populate({
           path: 'applications.app',
           populate: {
@@ -1382,6 +1410,15 @@ class DevicesService {
                   }
                 }
               }
+
+              // check interface specific validation
+              if (updIntf?.qosPolicy) {
+                const { valid, err } = validateQOSPolicy([origDevice]);
+                if (!valid) {
+                  throw new Error(err);
+                }
+              }
+
               // check firewall rules
               if (deviceRequest.firewall) {
                 let hadInbound = false;
@@ -1782,6 +1819,12 @@ class DevicesService {
             firewall: origDevice.policies.firewall.toObject()
           };
         }
+
+        // don't  allow to change "versions" and "cpuInfo"
+        deviceToValidate.versions = origDevice.versions;
+        deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
+        deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
+
         const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets, orgBgp);
 
         if (!valid) {
@@ -1818,6 +1861,7 @@ class DevicesService {
           .populate('interfaces.pathlabels', '_id name description color type')
           .populate('policies.firewall.policy', '_id name description rules')
           .populate('policies.multilink.policy', '_id name description')
+          .populate('policies.qos.policy', '_id name description')
           .populate({
             path: 'applications.app',
             populate: {

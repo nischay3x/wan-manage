@@ -85,7 +85,7 @@ class FlexiBilling {
    * @async
    */
   async retrieveInvoices (options) {
-    return [];
+    return { list: [] };
   }
 
   /**

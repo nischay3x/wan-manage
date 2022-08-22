@@ -269,6 +269,19 @@ const interfacesSchema = new Schema({
     type: Object,
     default: {}
   },
+  bandwidthMbps: {
+    type: Object,
+    required: true,
+    default: {
+      tx: 100,
+      rx: 100
+    }
+  },
+  qosPolicy: {
+    type: Schema.Types.ObjectId,
+    ref: 'QOSPolicies',
+    default: null
+  },
   ospf: {
     area: {
       type: Schema.Types.Mixed,
@@ -620,13 +633,13 @@ const deviceRoutingFiltersSchema = new Schema({
 });
 
 /**
- * Device multilink policy schema
+ * Device policy schema
  */
-const deviceMultilinkPolicySchema = new Schema({
+const devicePolicySchema = (ref) => new Schema({
   _id: false,
   policy: {
     type: Schema.Types.ObjectId,
-    ref: 'MultiLinkPolicies',
+    ref: ref,
     default: null
   },
   status: {
@@ -642,24 +655,33 @@ const deviceMultilinkPolicySchema = new Schema({
 });
 
 /**
- * Device firewall policy schema
+ * Device QoS traffic map install schema
  */
-const deviceFirewallPolicySchema = new Schema({
-  _id: false,
-  policy: {
-    type: Schema.Types.ObjectId,
-    ref: 'FirewallPolicies',
+const QOSTrafficMapSchema = new Schema({
+  /**
+   * This indicates the last time requested to update.
+   * Its purpose is to prevent multiple identical requests
+   * Updated when a new job request is sent or when the job removed/failed
+   * Possible values:
+   *  - null: last request indicated to remove the QoS traffic map
+   *  - <Latest Date>: last request indicated to add the QoS traffic map
+   */
+  lastRequestTime: {
+    type: Date,
     default: null
   },
-  status: {
-    type: String,
-    enum: statusEnums,
-    default: ''
-  },
-  requestTime: {
+  /**
+   * This indicates what is installed on the device, only updated by QOS Policy complete callback
+   * Possible values:
+   *  - null: last request indicated to remove the QoS Traffic Map
+   *  - <Latest Date>: last request indicated to install the QoS Traffic Map
+   */
+  lastUpdateTime: {
     type: Date,
     default: null
   }
+}, {
+  timestamps: false
 });
 
 /**
@@ -920,12 +942,16 @@ const deviceSchema = new Schema({
   labels: [String],
   policies: {
     multilink: {
-      type: deviceMultilinkPolicySchema,
-      default: deviceMultilinkPolicySchema
+      type: devicePolicySchema('MultiLinkPolicies'),
+      default: devicePolicySchema('MultiLinkPolicies')
     },
     firewall: {
-      type: deviceFirewallPolicySchema,
-      default: deviceFirewallPolicySchema
+      type: devicePolicySchema('FirewallPolicies'),
+      default: devicePolicySchema('FirewallPolicies')
+    },
+    qos: {
+      type: devicePolicySchema('QOSPolicies'),
+      default: devicePolicySchema('QOSPolicies')
     }
   },
   deviceSpecificRulesEnabled: {
@@ -935,6 +961,7 @@ const deviceSchema = new Schema({
   firewall: {
     rules: [firewallRuleSchema]
   },
+  qosTrafficMap: QOSTrafficMapSchema,
   sync: {
     type: deviceSyncSchema,
     default: deviceSyncSchema
@@ -1021,7 +1048,45 @@ const deviceSchema = new Schema({
   routingFilters: {
     type: [deviceRoutingFiltersSchema]
   },
-  applications: [deviceApplicationSchema]
+  applications: [deviceApplicationSchema],
+  cpuInfo: {
+    hwCores: {
+      type: Number,
+      default: 2,
+      validate: {
+        validator: validators.validateCpuCoresNumber,
+        message: props => `${props.value} should be a valid integer`
+      }
+    },
+    grubCores: {
+      type: Number,
+      default: 2,
+      validate: {
+        validator: validators.validateCpuCoresNumber,
+        message: props => `${props.value} should be a valid integer`
+      }
+    },
+    vppCores: {
+      type: Number,
+      default: 1,
+      validate: {
+        validator: validators.validateCpuCoresNumber,
+        message: props => `${props.value} should be a valid integer`
+      }
+    },
+    configuredVppCores: {
+      type: Number,
+      default: 1,
+      validate: {
+        validator: validators.validateCpuCoresNumber,
+        message: props => `${props.value} should be a valid integer`
+      }
+    },
+    powerSaving: {
+      type: Boolean,
+      default: false
+    }
+  }
 },
 {
   timestamps: true

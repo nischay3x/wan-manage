@@ -1822,6 +1822,14 @@ const prepareTunnelParams = (
         labels: pathLabel ? [pathLabel] : []
       }
     };
+    paramsDeviceA.remoteBandwidthMbps = {
+      tx: +deviceBIntf.bandwidthMbps.tx,
+      rx: +deviceBIntf.bandwidthMbps.rx
+    };
+    paramsDeviceB.remoteBandwidthMbps = {
+      tx: +deviceAIntf.bandwidthMbps.tx,
+      rx: +deviceAIntf.bandwidthMbps.rx
+    };
     if (mssClamp !== 'no') {
       paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
       paramsDeviceB['loopback-iface']['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
@@ -2083,13 +2091,13 @@ const addBgpNeighborsIfNeeded = async tunnel => {
     const isNeedToSendNeighborsB = majorB === 5 && minorB === 3;
     if (isNeedToSendNeighborsA || isNeedToSendNeighborsB) {
       if (isNeedToSendNeighborsA) {
-        const bgpTasks = await _addRelatedModifyBgpJobs(deviceA);
-        deviceATasks.push(...bgpTasks);
+        const modifyBgp = await buildModifyBgpJob(deviceA);
+        deviceATasks.push(modifyBgp);
       }
 
       if (isNeedToSendNeighborsB) {
-        const bgpTasks = await _addRelatedModifyBgpJobs(deviceB);
-        deviceBTasks.push(...bgpTasks);
+        const modifyBgp = await buildModifyBgpJob(deviceB);
+        deviceBTasks.push(modifyBgp);
       }
     }
   }
@@ -2097,18 +2105,10 @@ const addBgpNeighborsIfNeeded = async tunnel => {
   return [deviceATasks, deviceBTasks];
 };
 
-const _addRelatedModifyBgpJobs = async device => {
+const buildModifyBgpJob = async device => {
   const transformBGP = require('./modifyDevice').transformBGP;
   const bgpParams = await transformBGP(device, true);
-
-  const bgpJobs = [{ entity: 'agent', message: 'modify-routing-bgp', params: bgpParams }];
-  // if (isAdd) { // send modify-bgp after add tunnel
-  // bgpJobs.push({ entity: 'agent', message: 'modify-routing-bgp', params: bgpParams });
-  // } else { // send modify-bgp before add tunnel
-  //   bgpJobs.unshift({ entity: 'agent', message: 'modify-routing-bgp', params: bgpParams });
-  // }
-
-  return bgpJobs;
+  return { entity: 'agent', message: 'modify-routing-bgp', params: bgpParams };
 };
 
 const getInterfacesWithPathLabels = device => {

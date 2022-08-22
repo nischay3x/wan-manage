@@ -34,6 +34,12 @@ const {
   remove: firewallPolicyRemove,
   getDevicesFirewallJobInfo
 } = require('./firewallPolicy');
+const {
+  complete: qosPolicyComplete,
+  error: qosPolicyError,
+  remove: qosPolicyRemove,
+  getDevicesQOSJobInfo
+} = require('./qosPolicy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const has = require('lodash/has');
 const omit = require('lodash/omit');
@@ -141,6 +147,7 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       useStun: ifc.useStun,
       useFixedPublicPort: ifc.useFixedPublicPort,
       monitorInternet: ifc.monitorInternet,
+      bandwidthMbps: ifc.bandwidthMbps,
       gateway: ifc.gateway,
       metric: ifc.metric,
       mtu: ifc.mtu,
@@ -412,6 +419,10 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
     requests.push(...messageParams.modify_firewall.tasks);
   }
 
+  if (has(messageParams, 'modify_qos')) {
+    requests.push(...messageParams.modify_qos.tasks);
+  }
+
   return requests;
 };
 
@@ -519,7 +530,16 @@ const queueModifyDeviceJob = async (
 
   // Additional job response data
   if (messageParams.modify_firewall) {
+    if (!('jobResponse' in tasks[device._id])) {
+      tasks[device._id].jobResponse = {};
+    }
     tasks[device._id].jobResponse = { firewallPolicy: messageParams.modify_firewall.data };
+  }
+  if (messageParams.modify_qos) {
+    if (!('jobResponse' in tasks[device._id])) {
+      tasks[device._id].jobResponse = {};
+    }
+    tasks[device._id].jobResponse.qosPolicy = messageParams.modify_qos.data;
   }
 
   // at this point we need to take care of tunnels.
@@ -687,6 +707,26 @@ const queueModifyDeviceJob = async (
         continue;
       }
 
+      // if the device modification doesn't require the tunnels reconstruction
+      // we will send the modify-tunnel message only
+      const checkIfModifyTunnelRequired = async (tunnel, ifcA, ifcB, modIfcA, modIfcB) => {
+        if (tunnel.peer) {
+          return;
+        }
+        const aModified = isObject(modIfcA) && !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps);
+        const bModified = isObject(modIfcB) && !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps);
+        if (aModified || bModified) {
+          if (aModified) {
+            const addTunnelTask = addTasksDeviceB.find(t => t.message === 'add-tunnel');
+            _addTunnelTasks(tasks, tunnel, [], [{ ...addTunnelTask, message: 'modify-tunnel' }]);
+          }
+          if (bModified) {
+            const addTunnelTask = addTasksDeviceA.find(t => t.message === 'add-tunnel');
+            _addTunnelTasks(tasks, tunnel, [{ ...addTunnelTask, message: 'modify-tunnel' }], []);
+          }
+        };
+      };
+
       // only rebuild tunnels when IP, Public IP or port is changed
       const tunnelParametersModified = (origIfc, modifiedIfc) => {
         if (!isObject(modifiedIfc)) {
@@ -709,6 +749,7 @@ const queueModifyDeviceJob = async (
       const ifcBModified = peer ? false : tunnelParametersModified(origIfcB, modifiedIfcB);
 
       if (!ifcAModified && !ifcBModified) {
+        checkIfModifyTunnelRequired(tunnel, ifcA, ifcB, modifiedIfcA, modifiedIfcB);
         continue;
       }
 
@@ -732,6 +773,7 @@ const queueModifyDeviceJob = async (
           );
 
       if (skipLocal) {
+        checkIfModifyTunnelRequired(tunnel, ifcA, ifcB, modifiedIfcA, modifiedIfcB);
         continue;
       }
 
@@ -1263,6 +1305,8 @@ const apply = async (device, user, data) => {
 
   device[0] = await device[0]
     .populate('interfaces.pathlabels', '_id name type')
+    .populate('interfaces.qosPolicy')
+    .populate('policies.qos.policy')
     .populate({
       path: 'applications.app',
       populate: {
@@ -1273,6 +1317,8 @@ const apply = async (device, user, data) => {
   data.newDevice = await data.newDevice
     .populate('interfaces.pathlabels', '_id name type')
     .populate('policies.firewall.policy', '_id name rules')
+    .populate('interfaces.qosPolicy')
+    .populate('policies.qos.policy')
     .execPopulate();
 
   // Create the default/static routes modification parameters
@@ -1494,6 +1540,21 @@ const apply = async (device, user, data) => {
     modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice.toObject());
   }
 
+  const qosDiff = differenceWith(
+    data.newDevice.interfaces,
+    device[0].interfaces,
+    (origIfc, newIfc) => {
+      return isEqual(
+        pick(origIfc, ['devId', 'isAssigned', 'type', 'qosPolicy']),
+        pick(newIfc, ['devId', 'isAssigned', 'type', 'qosPolicy'])
+      );
+    }
+  );
+
+  if (qosDiff.length > 0) {
+    modifyParams.modify_qos = await getDevicesQOSJobInfo(updDevice.toObject());
+  }
+
   const modified =
       has(modifyParams, 'modify_routes') ||
       has(modifyParams, 'modify_router') ||
@@ -1502,6 +1563,7 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_routing_filters') ||
       has(modifyParams, 'modify_bgp') ||
       has(modifyParams, 'modify_firewall') ||
+      has(modifyParams, 'modify_qos') ||
       has(modifyParams, 'modify_dhcp_config');
 
   // Queue job only if the device has changed
@@ -1585,9 +1647,13 @@ const complete = async (jobId, res) => {
     logger.warn('Got an invalid job result', { params: { res: res, jobId: jobId } });
     return;
   }
-  // Call firewallPolicy complete callback if needed
-  if (res.firewallPolicy) {
-    firewallPolicyComplete(jobId, res.firewallPolicy);
+  // Call 'complete' callbacks if needed
+  const { firewallPolicy, qosPolicy } = res;
+  if (firewallPolicy) {
+    firewallPolicyComplete(jobId, firewallPolicy);
+  }
+  if (qosPolicy) {
+    qosPolicyComplete(jobId, qosPolicy);
   }
 };
 
@@ -1777,9 +1843,13 @@ const error = async (jobId, res) => {
     params: { result: res, jobId: jobId }
   });
 
-  // Call firewallPolicy error callback if needed
-  if (res && res.firewallPolicy) {
-    firewallPolicyError(jobId, res.firewallPolicy);
+  // Call 'error' callbacks if needed
+  const { firewallPolicy, qosPolicy } = res || {};
+  if (firewallPolicy) {
+    firewallPolicyError(jobId, firewallPolicy);
+  }
+  if (qosPolicy) {
+    qosPolicyError(jobId, qosPolicy);
   }
 };
 
@@ -1796,11 +1866,15 @@ const remove = async (job) => {
     logger.info('Modify device job removed', {
       params: { jobId: job.id }
     });
-    // Call firewallPolicy remove callback if needed
-    const { firewallPolicy } = job.data.response.data;
+    // Call 'remove' callbacks if needed
+    const { firewallPolicy, qosPolicy } = job.data.response.data || {};
     if (firewallPolicy) {
       job.data.response.data = firewallPolicy;
       firewallPolicyRemove(job);
+    }
+    if (qosPolicy) {
+      job.data.response.data = qosPolicy;
+      qosPolicyRemove(job);
     }
   }
 };
@@ -1813,6 +1887,7 @@ const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
     !has(messageParams, 'modify_bgp') &&
     !has(messageParams, 'modify_routing_filters') &&
     !has(messageParams, 'modify_firewall') &&
+    !has(messageParams, 'modify_qos') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
       const propsModified = Object.keys(modifiedIfc).filter(prop => {
