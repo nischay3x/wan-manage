@@ -665,7 +665,7 @@ const activatePendingTunnelsOfDevice = async (device) => {
       {
         org: modifyDevices[modified].orig.org.toString(),
         newDevice: modifyDevices[modified].updated,
-        addTunnelIds
+        sendAddTunnels: addTunnelIds
       }
     );
   }

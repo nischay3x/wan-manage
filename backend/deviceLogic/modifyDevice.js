@@ -464,14 +464,20 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
  * Performs required tasks before device modification
  * can take place. It removes all tunnels connected to
  * the modified interfaces and then queues the modify device job.
- * @param  {Object}  device        original device object, before the changes
- * @param  {Object}  messageParams device changes that will be sent to the device
- * @param  {Object}  user          the user that created the request
- * @param  {string}  org           organization to which the user belongs
- * @return {Job}                   The queued modify-device job
+ * @param  {Object}  device         original device object, before the changes
+ * @param  {Object}  newDevice      updated device object, after the changes
+ * @param  {Object}  messageParams  object with all changes that will be sent to the device
+ * @param  {Object}  user           the user that created the request
+ * @param  {string}  org            organization to which the user belongs
+ * @param  {array}   sendAddTunnels array of tunnel ids to send add-tunnel job for
+ * @param  {array}   sendRemoveTunnels array of tunnel ids to send remove-tunnel job for
+ * @param  {array}   ignoreTasks array of tasks that should be ignored.
+ *                               Usually it means that in the current process,
+                                 these jobs already sent and no need to resend them.
+ * @return {Job}                    The queued modify-device job
  */
 const queueModifyDeviceJob = async (
-  device, newDevice, messageParams, user, org, addTunnelIds, removeTunnelIds, ignoreTasks
+  device, newDevice, messageParams, user, org, sendAddTunnels, sendRemoveTunnels, ignoreTasks
 ) => {
   const jobs = [];
   const sentTasks = {};
@@ -514,7 +520,7 @@ const queueModifyDeviceJob = async (
     }
   }
 
-  // key: deviceId, value: list of tasks to send
+  // key: deviceId, value: object with 'device' (device object) and 'tasks' (list of tasks to send)
   const tasks = {
     [device._id]: {
       device,
@@ -543,23 +549,25 @@ const queueModifyDeviceJob = async (
   }
 
   // at this point we need to take care of tunnels.
-  // Tunneling changes can be required here for two reasons:
+  // Tunnel changes can be required here for several reasons:
   // 1. Interface that has a tunnel on it is changed by the user.
-  //    IP might be changed by DHCP or user can change static IP of this interface.
-  // 2. Nothing changed on the interface but system need to create/remove tunnel.
+  //    e.g. IP might be changed by DHCP or user can change static IP of this interface.
+  // 2. BGP ASN is changed and there is a tunnel that uses BGP protocol.
+  //    In such case, we need to acknowledge the remote device of the tunnel
+  //    with the new device ASN so it can configure the BGP neighbor correctly.
+  // 3. Nothing changed on the interface but system needs to create/remove tunnel.
   //    It can happens with events, for example if interface's public port
   //    changed in high rate, we send remove jobs.
-  //    Of if interface was pending due to high rate and not it stabilized,
+  //    Or if interface was pending due to high rate and now it becomes stabilized,
   //    We need to send add tunnel job regardless of interface configuration change.
   //
-  // For these reason, we need sometimes to remove or add tunnels.
-  // Here is the code that takes care of it.
+  // For these reasons, we need sometimes to remove or add tunnels.
   const modifiedTunnelIds = [];
   try {
     const tunnels = await tunnelsModel
       .find({
         $or: [
-          // Runnels that configured on modified interface - Reason 1 above
+          // Tunnels that depends on a modified interface - Reason 1 above
           {
             $and: [
               { isActive: true },
@@ -568,7 +576,7 @@ const queueModifyDeviceJob = async (
                 $or: [
                   { interfaceA: { $in: modifiedInterfaces } },
                   { interfaceB: { $in: modifiedInterfaces } },
-                  { // check if need to reconstruct due to remote ASN change
+                  { // check if need to reconstruct due to remote ASN change, not interface
                     $and: [
                       { 'advancedOptions.routing': 'bgp' },
                       {
@@ -584,7 +592,7 @@ const queueModifyDeviceJob = async (
             ]
           },
           // Tunnels regardless of interfaces' changes - - Reason 2 above
-          { _id: { $in: [...addTunnelIds, ...removeTunnelIds] } }
+          { _id: { $in: [...sendAddTunnels, ...sendRemoveTunnels] } }
         ]
       })
       .populate('deviceA')
@@ -607,7 +615,7 @@ const queueModifyDeviceJob = async (
         removeTasksDeviceA, removeTasksDeviceB
       ] = await prepareTunnelRemoveJob(tunnel, peer, true);
 
-      const isNeedToRemoveTunnel = removeTunnelIds.find(i => i === _id.toString());
+      const isNeedToRemoveTunnel = sendRemoveTunnels.find(i => i === _id.toString());
       if (isNeedToRemoveTunnel) {
         _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
         continue;
@@ -625,7 +633,7 @@ const queueModifyDeviceJob = async (
         true
       );
 
-      const isNeedToAddTunnel = addTunnelIds.find(i => i === _id.toString());
+      const isNeedToAddTunnel = sendAddTunnels.find(i => i === _id.toString());
       if (isNeedToAddTunnel) {
         _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
         continue;
@@ -713,8 +721,10 @@ const queueModifyDeviceJob = async (
         if (tunnel.peer) {
           return;
         }
-        const aModified = isObject(modIfcA) && !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps);
-        const bModified = isObject(modIfcB) && !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps);
+        const aModified = isObject(modIfcA) &&
+          !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps);
+        const bModified = isObject(modIfcB) &&
+          !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps);
         if (aModified || bModified) {
           if (aModified) {
             const addTunnelTask = addTasksDeviceB.find(t => t.message === 'add-tunnel');
@@ -749,7 +759,7 @@ const queueModifyDeviceJob = async (
       const ifcBModified = peer ? false : tunnelParametersModified(origIfcB, modifiedIfcB);
 
       if (!ifcAModified && !ifcBModified) {
-        checkIfModifyTunnelRequired(tunnel, ifcA, ifcB, modifiedIfcA, modifiedIfcB);
+        checkIfModifyTunnelRequired(tunnel, origIfcA, origIfcB, modifiedIfcA, modifiedIfcB);
         continue;
       }
 
@@ -773,7 +783,7 @@ const queueModifyDeviceJob = async (
           );
 
       if (skipLocal) {
-        checkIfModifyTunnelRequired(tunnel, ifcA, ifcB, modifiedIfcA, modifiedIfcB);
+        checkIfModifyTunnelRequired(tunnel, origIfcA, origIfcB, modifiedIfcA, modifiedIfcB);
         continue;
       }
 
@@ -1604,8 +1614,8 @@ const apply = async (device, user, data) => {
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
     await setJobPendingInDB(device[0]._id, org, true);
 
-    data.addTunnelIds ??= [];
-    data.removeTunnelIds ??= [];
+    data.sendAddTunnels ??= [];
+    data.sendRemoveTunnels ??= [];
     data.ignoreTasks ??= [];
 
     // Queue device modification job
@@ -1615,8 +1625,8 @@ const apply = async (device, user, data) => {
       modifyParams,
       user,
       org,
-      data.addTunnelIds,
-      data.removeTunnelIds,
+      data.sendAddTunnels,
+      data.sendRemoveTunnels,
       data.ignoreTasks
     );
 

@@ -559,8 +559,8 @@ class Connections {
               {
                 org: modifyDevices[modified].orig.org.toString(),
                 newDevice: modifyDevices[modified].updated,
-                addTunnelIds,
-                removeTunnelIds,
+                sendAddTunnels: addTunnelIds,
+                sendRemoveTunnels: removeTunnelIds,
                 ignoreTasks: completedTasks[modifyDevices[modified].orig._id] ?? []
               }
             );
@@ -572,20 +572,17 @@ class Connections {
             // the events logic set the tunnel and all the routes (in both devices) to pending state
             // and we need to send jobs to both devices to remove the pending configurations.
             //
-            // On the first iteration of this loop,
+            // On the first iteration of this "modifyDevices" loop,
             // the modifyDevice detects that it needs to send remove tunnels and routes jobs
             // for both devices.
             //
             // So once we come to the second iteration of the loop,
             // we need to prevent job duplications and don't send remove tunnel and routes again.
             //
-            // In other words,
-            // the first iteration of loop might send configuration to multiple devices.
-            //
-            // Hance on every iteration, we save the sent jobs in a map object
+            // Hance, on every iteration, we save the sent jobs in a map object
             //  { deviceId: sentTasksArray }
-            // And we pass the sent jobs as a parameter of modifyDevice of the given device.
-            // The modifyDevice knows to ignore those tasks.
+            // And we pass the devices' sent jobs as a parameter. Then,
+            // the modifyDevice logic knows to ignore those tasks.
             for (const deviceId in tasks) {
               if (!(deviceId in completedTasks)) {
                 completedTasks[deviceId] = [];
