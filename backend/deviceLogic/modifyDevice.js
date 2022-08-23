@@ -1536,8 +1536,8 @@ const apply = async (device, user, data) => {
 
   // Send QoS policy job only when interfaces specific policy modified
   // or the device's policy applied and interface type or assignment changed
-  const newQosPolicy = device[0].policies.qos?.policy?._id;
-  const affectingParameters = !newQosPolicy ? ['qosPolicy']
+  const isQosPolicyApplied = !isEmpty(device[0].policies.qos?.policy?._id);
+  const affectingParameters = !isQosPolicyApplied ? ['devId', 'qosPolicy']
     : ['devId', 'isAssigned', 'type', 'qosPolicy'];
 
   const qosDiff = differenceWith(
