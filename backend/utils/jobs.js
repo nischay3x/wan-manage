@@ -20,7 +20,8 @@ const isEqual = require('lodash/isEqual');
 const addOrder = [
   'add-ospf', 'add-routing-filter', 'add-routing-bgp',
   'add-switch', 'add-interface', 'add-tunnel',
-  'add-route', 'add-dhcp-config', 'add-application', 'add-multilink-policy', 'add-firewall-policy'
+  'add-route', 'add-dhcp-config', 'add-application', 'add-multilink-policy', 'add-firewall-policy',
+  'add-qos-traffic-map', 'add-qos-policy'
 ];
 
 const removeOrder = addOrder.map(a => a.replace('add-', 'remove-')).reverse();
@@ -33,6 +34,8 @@ const getTaskKey = job => {
     case 'add-application':
     case 'add-multilink-policy':
     case 'add-firewall-policy':
+    case 'add-qos-policy':
+    case 'add-qos-traffic-map':
       key = message;
       break;
 
