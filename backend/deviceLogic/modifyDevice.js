@@ -1534,13 +1534,19 @@ const apply = async (device, user, data) => {
     modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice.toObject());
   }
 
+  // Send QoS policy job only when interfaces specific policy modified
+  // or the device's policy applied and interface type or assignment changed
+  const isQosPolicyApplied = !isEmpty(device[0].policies.qos?.policy?._id);
+  const affectingParameters = !isQosPolicyApplied ? ['devId', 'qosPolicy']
+    : ['devId', 'isAssigned', 'type', 'qosPolicy'];
+
   const qosDiff = differenceWith(
     data.newDevice.interfaces,
     device[0].interfaces,
     (origIfc, newIfc) => {
       return isEqual(
-        pick(origIfc, ['devId', 'isAssigned', 'type', 'qosPolicy']),
-        pick(newIfc, ['devId', 'isAssigned', 'type', 'qosPolicy'])
+        pick(origIfc, affectingParameters),
+        pick(newIfc, affectingParameters)
       );
     }
   );
