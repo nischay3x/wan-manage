@@ -185,6 +185,7 @@ const getQOSParameters = (policy, device, op = 'install') => {
     // remove all policies from the device
     return null;
   }
+  // we will collect device and interface specific policies with arrays of devIds
   const devicePolicies = {};
   // requested policy id
   const reqPolicyId = (policy?._id || '').toString();
@@ -198,11 +199,13 @@ const getQOSParameters = (policy, device, op = 'install') => {
         if (!devicePolicies[ifcPolicyId]) {
           devicePolicies[ifcPolicyId] = convertParameters(ifc.qosPolicy);
         }
+        // push devId if interface specific policy installed
         devicePolicies[ifcPolicyId].interfaces.push(ifc.devId);
       } else if (reqPolicyId) {
         if (!devicePolicies[reqPolicyId]) {
           devicePolicies[reqPolicyId] = convertParameters(policy);
         }
+        // push devId to the requested or applied already device specific policy
         devicePolicies[reqPolicyId].interfaces.push(ifc.devId);
       }
     } else {
@@ -212,11 +215,13 @@ const getQOSParameters = (policy, device, op = 'install') => {
         if (!devicePolicies[devPolicyId]) {
           devicePolicies[devPolicyId] = convertParameters(device.policies.qos.policy);
         }
+        // push devId if device specific policy installed and not requested to remove
         devicePolicies[devPolicyId].interfaces.push(ifc.devId);
       } else if (ifcPolicyId && ifcPolicyId !== reqPolicyId) {
         if (!devicePolicies[ifcPolicyId]) {
           devicePolicies[ifcPolicyId] = convertParameters(ifc.qosPolicy);
         }
+        // push devId if interface specific policy installed and not requested to remove
         devicePolicies[ifcPolicyId].interfaces.push(ifc.devId);
       }
     };
@@ -350,6 +355,8 @@ const getQOSPolicy = async (id, org) => {
  * Update devices policy status in DB before sending jobs
  */
 const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org, installed) => {
+  // QoS policy can be applied for device and for every interface
+  // so even if we uninstall some policy we still keep others and set status as 'installing'
   const updateOps = [];
   if (op === 'install') {
     const qosUpdates = {
