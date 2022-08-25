@@ -629,9 +629,9 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
         if (tunnel.peer) {
           return;
         }
-        const aModified = isObject(modIfcA) && !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps);
-        const bModified = isObject(modIfcB) && !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps);
-        if (aModified || bModified) {
+        const sendJobA = isObject(modIfcA) && !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps);
+        const sendJobB = isObject(modIfcB) && !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps);
+        if (sendJobA || sendJobB) {
           const [tasksA, tasksB] = await prepareTunnelAddJob(
             tunnel,
             isObject(modIfcA) ? { ...ifcA.toObject(), bandwidthMbps: modIfcA.bandwidthMbps } : ifcA,
@@ -641,10 +641,10 @@ const queueModifyDeviceJob = async (device, newDevice, messageParams, user, org)
             deviceB,
             tunnel.advancedOptions
           );
-          if (aModified) {
+          if (sendJobA) {
             sendModifyTunnel(tunnel, tunnel.deviceB, tasksB);
           }
-          if (bModified) {
+          if (sendJobB) {
             sendModifyTunnel(tunnel, tunnel.deviceA, tasksA);
           }
         };
