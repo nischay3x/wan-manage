@@ -9056,7 +9056,7 @@ components:
         priority:
           type: integer
         error:
-          type: string
+          type: object
         progress:
           type: string
         state:
