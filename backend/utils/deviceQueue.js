@@ -213,7 +213,8 @@ class DeviceQueues {
         target: deviceId,
         username: (username) || 'unknown',
         org: (org) || 'unknown',
-        init: init
+        init: init,
+        jobUpdated: false
       };
 
       const job = this.queue

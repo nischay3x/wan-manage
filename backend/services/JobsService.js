@@ -54,7 +54,33 @@ class JobsService {
       'progress' // type: string
     ]);
 
-    retJob.error = item._error;
+    if (!item?._error) {
+      return retJob;
+    }
+
+    const buildDefaultErrorMessage = (retJob, itemError) => {
+      return {
+        errors: [{
+          command: {
+            func: retJob.data.message.title
+          },
+          error: itemError
+        }]
+      };
+    };
+
+    // old timeout errors appear as 'Error: Send Timeout' string, so this check is
+    // to cover for backward compatibility.
+    if (item._error === 'Error: Send Timeout') {
+      retJob.error = buildDefaultErrorMessage(retJob, item._error);
+      return retJob;
+    }
+
+    try {
+      retJob.error = JSON.parse(item._error);
+    } catch (e) {
+      retJob.error = buildDefaultErrorMessage(retJob, item._error);
+    }
 
     return retJob;
   }
