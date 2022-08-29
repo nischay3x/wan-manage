@@ -2915,10 +2915,16 @@ class DevicesService {
           pin: {
             job: false,
             message: 'modify-lte-pin',
-            onError: async (jobId, err) => {
+            onError: async (jobId, agentError, parsedError) => {
               try {
-                err = JSON.parse(err.replace(/'/g, '"'));
-                const data = mapLteNames(err.data);
+                const regex = new RegExp(/(?<='data': {).+?(?=})/g);
+                let data = agentError.match(regex);
+                if (data) {
+                  data = data[0].replace(/'/g, '"');
+                }
+
+                data = JSON.parse(`{${data}}`);
+                data = mapLteNames(data);
                 await devices.updateOne(
                   { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
                   {
@@ -2927,7 +2933,7 @@ class DevicesService {
                     }
                   }
                 );
-                return JSON.stringify({ err_msg: err.err_msg, data: data });
+                return JSON.stringify({ err_msg: parsedError, data: data });
               } catch (err) { }
             },
             onComplete: async (jobId, response) => {
@@ -3038,14 +3044,30 @@ class DevicesService {
               }
             });
 
-            const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
-            let err = response.message.match(regex).join(',');
+            // The error message is *a string* that looks as follows:
+            // 'modify-lte-pin({'enable': True, ....'}): {'err_msg': '...', 'data': {....}}'
+            // Here, prase it and get the 'err_mgs' and the 'data' if exists.
+            let error = null;
 
-            if (agentAction.onError) {
-              err = await agentAction.onError(null, err);
+            let fullErrMsg = null;
+            if (Array.isArray(response?.message?.errors) && response.message.errors?.[0]) {
+              // from agent version 6, the error message contains 'errors' list.
+              fullErrMsg = response.message.errors[0];
+            } else {
+              fullErrMsg = response.message;
             }
 
-            return Service.rejectResponse(err, 500);
+            const regex = new RegExp(/(?<='err_msg': ').+?(?=')/g);
+            const errMsg = fullErrMsg.match(regex);
+            if (errMsg) {
+              error = errMsg[0];
+            }
+
+            if (agentAction.onError) {
+              error = await agentAction.onError(null, fullErrMsg, error);
+            }
+
+            return Service.rejectResponse(error, 500);
           }
 
           if (agentAction.onComplete) {
