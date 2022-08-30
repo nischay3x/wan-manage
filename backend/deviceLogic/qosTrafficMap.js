@@ -19,7 +19,7 @@ const configs = require('../configs')();
 const mongoose = require('mongoose');
 const { devices } = require('../models/devices');
 const qosTrafficMapModel = require('../models/qosTrafficMap');
-const { getAllServiceClasses, predefinedServiceClasses } = require('../models/appIdentifications');
+const { predefinedServiceClasses } = require('../models/appIdentifications');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -197,13 +197,10 @@ const remove = async (job) => {
  * @returns {Object} Object with QOS Traffic Map and last update timestamp
  */
 const getFullTrafficMap = async (orgList, toAgent) => {
-  const serviceClasses = (await getAllServiceClasses(orgList)).filter(
-    sc => predefinedServiceClasses.includes(sc)
-  );
   const convert = toAgent ? v => toCamelCase(v) + 'Queue' : v => v;
   const trafficMap = {};
   let updatedAt = new Date(0);
-  for (const serviceClass of serviceClasses) {
+  for (const serviceClass of predefinedServiceClasses) {
     trafficMap[serviceClass] = {};
     trafficMap[serviceClass].low = convert('best-effort');
     trafficMap[serviceClass].medium = convert('standard-select');
