@@ -117,8 +117,7 @@ class QOSPoliciesService {
         .skip(offset)
         .limit(limit);
 
-      const converted = JSON.parse(JSON.stringify(qosPolicies));
-      return Service.successResponse(converted);
+      return Service.successResponse(qosPolicies);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -212,8 +211,8 @@ class QOSPoliciesService {
         return Service.rejectResponse('Not found', 404);
       }
 
-      const converted = JSON.parse(JSON.stringify(qosPolicy));
-      return Service.successResponse(converted);
+      qosPolicy._id = qosPolicy._id.toString();
+      return Service.successResponse(qosPolicy);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -295,10 +294,10 @@ class QOSPoliciesService {
         .lean();
 
       // apply on devices
+      qosPolicy._id = qosPolicy._id.toString();
       const applied = await applyPolicy(opDevices, qosPolicy, 'install', user, orgList[0], true);
 
-      const converted = JSON.parse(JSON.stringify(qosPolicy));
-      return Service.successResponse({ ...converted, ...applied });
+      return Service.successResponse({ ...qosPolicy, ...applied });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

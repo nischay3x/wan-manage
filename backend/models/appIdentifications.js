@@ -383,7 +383,7 @@ const getAppIdentificationUpdateAt = async (orgList) => {
  * @param {*} orgList Organization filter
  * @returns {Array} an array of existing service classes
  */
-const getAllServiceClasses = async (orgList) => {
+const getExistingServiceClasses = async (orgList) => {
   const importedRes = await importedAppIdentifications.aggregate([
     { $project: { 'appIdentifications.serviceClass': 1 } },
     { $unwind: '$appIdentifications' },
@@ -420,7 +420,7 @@ module.exports = {
   getAllAppIdentifications,
   getAppIdentificationUpdateAt,
   getAppIdentificationById,
-  getAllServiceClasses,
+  getExistingServiceClasses,
   predefinedServiceClasses,
   appIdentifications,
   importedAppIdentifications,
