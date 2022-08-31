@@ -536,7 +536,8 @@ router.route('/mfa/getMfaConfigUri')
     // save secret for the user
     await User.findOneAndUpdate(
       { _id: req.user._id },
-      { $push: { 'mfa.unverifiedSecrets': { $each: [secret.secret], $slice: 30 } } },
+      // keep the last 30
+      { $push: { 'mfa.unverifiedSecrets': { $each: [secret.secret], $slice: -30 } } },
       { upsert: false });
 
     res.status(200).json({ configUri: secret.uri });
@@ -616,9 +617,15 @@ const sendJwtToken = async (req, res, mfaVerified) => {
 
 router.route('/mfa/generateRecoveryCodes')
   .options(cors.corsWithOptions, (req, res) => { res.sendStatus(200); })
-  .get(cors.corsWithOptions, auth.verifyUserOrLoginJWT, async (req, res, next) => {
-    if (req?.user?.mfa?.enabled && req?.user?.mfa?.recoveryCodes?.length > 0) {
-      return next(createError(403, 'Recovery codes already generated'));
+  .get(cors.corsWithOptions, auth.verifyUserJWT, async (req, res, next) => {
+    if (!req?.user?.mfa?.enabled) {
+      return next(createError(403, 'Two-Factor authentication is not configured'));
+    }
+
+    if (req?.user?.mfa?.recoveryCodes?.length > 0) {
+      const availableCodes = req?.user?.mfa?.recoveryCodes.filter(r => r.usedTime === null);
+      res.json({ codes: availableCodes.map(c => c.code) });
+      return;
     }
 
     const codes = []; // send to user as clear text
