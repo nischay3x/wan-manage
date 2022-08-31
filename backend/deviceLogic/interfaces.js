@@ -156,10 +156,15 @@ const shared = {
   password: Joi.when('enable', {
     is: true,
     then: Joi.when('securityMode', {
-      is: 'wep',
-      then: Joi.string()
-        .regex(/^([a-z0-9]{5}|[a-z0-9]{13}|[a-z0-9]{16})$/)
-        .error(() => 'Password length must be 5, 13 or 16'),
+      switch: [
+        {
+          is: 'wep',
+          then: Joi.string()
+            .regex(/^([a-z0-9]{5}|[a-z0-9]{13}|[a-z0-9]{16})$/)
+            .error(() => 'Password length must be 5, 13 or 16')
+        },
+        { is: 'open', then: Joi.string().allow(null, '') }
+      ],
       otherwise: Joi.string().min(8)
     }).required(),
     otherwise: Joi.string().allow(null, '')
@@ -203,28 +208,27 @@ const WifiConfigurationSchema = Joi.object({
 }).or('2.4GHz', '5GHz', { separator: false });
 
 const validateWifiCountryCode = (configurationReq) => {
-  const regions = Object.values(wifiChannels);
   let err = null;
   for (const band in configurationReq) {
     if (configurationReq[band].enable === false) {
       continue;
     }
 
-    const region = configurationReq[band].region;
-    const exists = regions.find(r => r.code === region);
-    if (!exists) {
-      err = `Region ${region} is not valid`;
-      break;
-    };
-
     const channel = parseInt(configurationReq[band].channel);
-
     if (channel < 0) {
       err = 'Channel must be greater than or equal to 0';
       break;
     }
 
+    const region = configurationReq[band].region;
+
     if (band === '2.4GHz') {
+      const allowedRegions = ['AU', 'CN', 'DE', 'JP', 'RU', 'TW', 'US'];
+      if (!allowedRegions.includes(region)) {
+        err = `Region ${region} is not valid`;
+        break;
+      }
+
       if ((region === 'US' || region === 'TW') && channel > 11) {
         err = 'Channel must be between 0 to 11';
         break;
@@ -237,6 +241,13 @@ const validateWifiCountryCode = (configurationReq) => {
     }
 
     if (band === '5GHz') {
+      const allowedRegions = Object.values(wifiChannels);
+      const exists = allowedRegions.find(r => r.code === region);
+      if (!exists) {
+        err = `Region ${region} is not valid`;
+        break;
+      };
+
       const validChannels = exists.channels;
       if (channel > 0 && validChannels.findIndex(c => c === channel) === -1) {
         err = `Channel ${channel} is not valid number for country ${region}`;

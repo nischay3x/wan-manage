@@ -30,7 +30,7 @@ const bodyParser = require('body-parser');
 const { OpenApiValidator } = require('express-openapi-validator');
 const openapiRouter = require('./utils/openapiRouter');
 const createError = require('http-errors');
-
+// const session = require('express-session');
 const passport = require('passport');
 const auth = require('./authenticate');
 const { connectRouter } = require('./routes/connect');
@@ -163,7 +163,7 @@ class ExpressServer {
       store: inMemoryStore,
       // Rate limit for requests in 5 min per IP address
       max: configs.get('userIpReqRateLimit', 'number'),
-      message: 'Request rate limit exceeded',
+      message: { error: 'Request rate limit exceeded' },
       onLimitReached: (req, res, options) => {
         logger.error(
           'Request rate limit exceeded. blocking request', {

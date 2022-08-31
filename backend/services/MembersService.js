@@ -28,7 +28,7 @@ const mailer = require('../utils/mailer')(
   configs.get('mailerBypassCert', 'boolean')
 );
 const webHooks = require('../utils/webhooks')();
-
+const { getToken } = require('../tokens');
 const Users = require('../models/users');
 const Accounts = require('../models/accounts');
 const Organizations = require('../models/organizations');
@@ -62,7 +62,8 @@ class MembersService {
         'group',
         'organization.name',
         'organization._id',
-        'role'
+        'role',
+        'user.mfa.enabled'
       )(mem);
 
       memItem._id = memItem._id.toString();
@@ -590,6 +591,47 @@ class MembersService {
         e.status || 500
       );
     }
+  }
+
+  /**
+   * Reset member mfa
+   * id String numeric ID of the user to reset MFA for
+   * returns 204
+   */
+  static async membersIdResetMfaGET ({ id }, { user }, response) {
+    // check that requested user is account owner.
+    // Only account owner can reset 2fa
+    const isAccountOwner = await membership.findOne({
+      user: user._id,
+      account: user.defaultAccount._id,
+      to: 'account',
+      role: 'owner'
+    });
+    if (!isAccountOwner) {
+      return Service.rejectResponse(
+        'No sufficient permissions for this operation', 400);
+    }
+
+    // reset user mfa settings
+    await Users.findOneAndUpdate(
+      { _id: id },
+      {
+        $set: {
+          mfa: {
+            enabled: false,
+            secret: null,
+            unverifiedSecrets: [],
+            recoveryCodes: []
+          }
+        }
+      },
+      { upsert: false }
+    );
+
+    const token = await getToken({ user }, { mfaVerified: false });
+    response.setHeader('Refresh-JWT', token);
+
+    return Service.successResponse(null, 204);
   }
 
   static async membersOptionsTypeGET ({ type }, { user }) {

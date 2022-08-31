@@ -721,19 +721,19 @@ const queueModifyDeviceJob = async (
         if (tunnel.peer) {
           return;
         }
-        const aModified = isObject(modIfcA) &&
-          !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps);
-        const bModified = isObject(modIfcB) &&
+        const sendJobToA = isObject(modIfcB) &&
           !isEqual(ifcB.bandwidthMbps, modIfcB.bandwidthMbps);
-        if (aModified || bModified) {
-          if (aModified) {
-            const addTunnelTask = addTasksDeviceB.find(t => t.message === 'add-tunnel');
-            _addTunnelTasks(tasks, tunnel, [], [{ ...addTunnelTask, message: 'modify-tunnel' }]);
-          }
-          if (bModified) {
-            const addTunnelTask = addTasksDeviceA.find(t => t.message === 'add-tunnel');
-            _addTunnelTasks(tasks, tunnel, [{ ...addTunnelTask, message: 'modify-tunnel' }], []);
-          }
+        const sendJobToB = isObject(modIfcA) &&
+          !isEqual(ifcA.bandwidthMbps, modIfcA.bandwidthMbps);
+
+        if (sendJobToA) {
+          const addTunnelTask = addTasksDeviceA.find(t => t.message === 'add-tunnel');
+          _addTunnelTasks(tasks, tunnel, [{ ...addTunnelTask, message: 'modify-tunnel' }], []);
+        }
+
+        if (sendJobToB) {
+          const addTunnelTask = addTasksDeviceB.find(t => t.message === 'add-tunnel');
+          _addTunnelTasks(tasks, tunnel, [], [{ ...addTunnelTask, message: 'modify-tunnel' }]);
         };
       };
 
@@ -1550,13 +1550,19 @@ const apply = async (device, user, data) => {
     modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice.toObject());
   }
 
+  // Send QoS policy job only when interfaces specific policy modified
+  // or the device's policy applied and interface type or assignment changed
+  const isQosPolicyApplied = !isEmpty(device[0].policies.qos?.policy?._id);
+  const affectingParameters = !isQosPolicyApplied ? ['devId', 'qosPolicy']
+    : ['devId', 'isAssigned', 'type', 'qosPolicy'];
+
   const qosDiff = differenceWith(
     data.newDevice.interfaces,
     device[0].interfaces,
     (origIfc, newIfc) => {
       return isEqual(
-        pick(origIfc, ['devId', 'isAssigned', 'type', 'qosPolicy']),
-        pick(newIfc, ['devId', 'isAssigned', 'type', 'qosPolicy'])
+        pick(origIfc, affectingParameters),
+        pick(newIfc, affectingParameters)
       );
     }
   );
