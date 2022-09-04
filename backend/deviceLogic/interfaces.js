@@ -20,16 +20,25 @@ const wifiChannels = require('../utils/wifi-channels');
 const Joi = require('joi');
 const omitBy = require('lodash/omitBy');
 const omit = require('lodash/omit');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
+const { getBridges } = require('../utils/deviceUtils');
 
 /**
  * Builds collection of interfaces to be sent to device
  *
  * @param {array} deviceInterfaces interfaces stored in db
  * @param {object} globalOSPF global OSPF configuration to apply on each interfaces
+ * @param {string} deviceVersion device version
  * @returns array of interfaces
  */
-const buildInterfaces = (deviceInterfaces, globalOSPF) => {
+const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
   const interfaces = [];
+
+  const majorVersion = getMajorVersion(deviceVersion);
+  const minorVersion = getMinorVersion(deviceVersion);
+
+  const bridges = getBridges(deviceInterfaces);
+
   for (const ifc of deviceInterfaces) {
     // Skip unassigned/un-typed interfaces, as they
     // cannot be part of the device configuration
@@ -43,6 +52,7 @@ const buildInterfaces = (deviceInterfaces, globalOSPF) => {
       IPv6Mask,
       useStun,
       monitorInternet,
+      bandwidthMbps,
       routing,
       type,
       pathlabels,
@@ -72,17 +82,24 @@ const buildInterfaces = (deviceInterfaces, globalOSPF) => {
       addr: `${(IPv4 && IPv4Mask ? `${IPv4}/${IPv4Mask}` : '')}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
       mtu,
-      routing,
       type,
       multilink: { labels: labels.map((label) => label._id.toString()) },
       deviceType,
       configuration
     };
+
+    if (majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3)) {
+      ifcInfo.routing = routing.split(/,\s*/); // send as a list
+    } else {
+      ifcInfo.routing = routing.includes('OSPF') ? 'OSPF' : 'NONE';
+    }
+
     if (ifc.type === 'WAN') {
       ifcInfo.gateway = gateway;
       ifcInfo.metric = metric;
       ifcInfo.useStun = useStun;
       ifcInfo.monitorInternet = monitorInternet;
+      ifcInfo.bandwidthMbps = bandwidthMbps;
       ifcInfo.dnsServers = dnsServers;
       ifcInfo.dnsDomains = dnsDomains;
 
@@ -92,10 +109,11 @@ const buildInterfaces = (deviceInterfaces, globalOSPF) => {
       }
     }
 
-    if (ifc.routing === 'OSPF') {
+    if (routing.includes('OSPF')) {
       ifcInfo.ospf = {
         ...ospf,
-        ...globalOSPF
+        helloInterval: globalOSPF.helloInterval,
+        deadInterval: globalOSPF.deadInterval
       };
 
       // remove empty values since they are optional
@@ -106,9 +124,11 @@ const buildInterfaces = (deviceInterfaces, globalOSPF) => {
       ifcInfo.ospf = omit(ifcInfo.ospf, omitFields);
     }
 
-    ifcInfo.bridge_addr = ifc.type === 'LAN' && deviceInterfaces.some(i => {
-      return devId !== i.devId && i.isAssigned && IPv4 === i.IPv4 && IPv4Mask === i.IPv4Mask;
-    }) ? ifcInfo.addr : null;
+    if (bridges[ifcInfo.addr]) {
+      ifcInfo.bridge_addr = ifcInfo.addr;
+    } else {
+      ifcInfo.bridge_addr = null;
+    }
 
     interfaces.push(ifcInfo);
   }
@@ -136,10 +156,15 @@ const shared = {
   password: Joi.when('enable', {
     is: true,
     then: Joi.when('securityMode', {
-      is: 'wep',
-      then: Joi.string()
-        .regex(/^([a-z0-9]{5}|[a-z0-9]{13}|[a-z0-9]{16})$/)
-        .error(() => 'Password length must be 5, 13 or 16'),
+      switch: [
+        {
+          is: 'wep',
+          then: Joi.string()
+            .regex(/^([a-z0-9]{5}|[a-z0-9]{13}|[a-z0-9]{16})$/)
+            .error(() => 'Password length must be 5, 13 or 16')
+        },
+        { is: 'open', then: Joi.string().allow(null, '') }
+      ],
       otherwise: Joi.string().min(8)
     }).required(),
     otherwise: Joi.string().allow(null, '')
@@ -183,28 +208,27 @@ const WifiConfigurationSchema = Joi.object({
 }).or('2.4GHz', '5GHz', { separator: false });
 
 const validateWifiCountryCode = (configurationReq) => {
-  const regions = Object.values(wifiChannels);
   let err = null;
   for (const band in configurationReq) {
     if (configurationReq[band].enable === false) {
       continue;
     }
 
-    const region = configurationReq[band].region;
-    const exists = regions.find(r => r.code === region);
-    if (!exists) {
-      err = `Region ${region} is not valid`;
-      break;
-    };
-
     const channel = parseInt(configurationReq[band].channel);
-
     if (channel < 0) {
       err = 'Channel must be greater than or equal to 0';
       break;
     }
 
+    const region = configurationReq[band].region;
+
     if (band === '2.4GHz') {
+      const allowedRegions = ['AU', 'CN', 'DE', 'JP', 'RU', 'TW', 'US'];
+      if (!allowedRegions.includes(region)) {
+        err = `Region ${region} is not valid`;
+        break;
+      }
+
       if ((region === 'US' || region === 'TW') && channel > 11) {
         err = 'Channel must be between 0 to 11';
         break;
@@ -217,6 +241,13 @@ const validateWifiCountryCode = (configurationReq) => {
     }
 
     if (band === '5GHz') {
+      const allowedRegions = Object.values(wifiChannels);
+      const exists = allowedRegions.find(r => r.code === region);
+      if (!exists) {
+        err = `Region ${region} is not valid`;
+        break;
+      };
+
       const validChannels = exists.channels;
       if (channel > 0 && validChannels.findIndex(c => c === channel) === -1) {
         err = `Channel ${channel} is not valid number for country ${region}`;

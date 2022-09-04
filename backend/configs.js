@@ -117,7 +117,7 @@ const configEnv = {
     // Client static root directory
     clientStaticDir: 'public',
     // Mgmt-Agent protocol version
-    agentApiVersion: '5.0.0',
+    agentApiVersion: '6.0.0',
     // Mgmt log files
     logFilePath: './logs/app.log',
     reqLogFilePath: './logs/req.log',
@@ -181,11 +181,23 @@ const configEnv = {
     // Tunnel MTU in bytes. Now provisioned globally per server. Specify number to set specific MTU.
     // Use 0 to set the MTU based on the WAN interface MTU - tunnel header size
     globalTunnelMtu: 1500,
+    // Default tunnel ospf cost, this value will be used if no value specified in the advanced tunnel config
+    defaultTunnelOspfCost: 100,
+    // TCP clamping header size, this value will be reduced from the MTU when calculating the mss clamping size
+    tcpClampingHeaderSize: 40,
     // flexiVpn server portal url
     flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
     // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
     // On the following renegotiations, the OpenVPN client will pass this token instead of the users password
     vpnTmpTokenTime: 43200,
+    // Ticketing system username
+    ticketingSystemUsername: '',
+    // Ticketing system token
+    ticketingSystemToken: '',
+    // Ticketing system url
+    ticketingSystemUrl: '',
+    // Ticketing system account ID to view
+    ticketingSystemAccountId: '',
     /****************************************************/
     /*         Client Fields                            */
     /****************************************************/
@@ -221,7 +233,7 @@ const configEnv = {
   },
   testing: {
     // Mgmt-Agent protocol version for testing purposes
-    agentApiVersion: '5.0.0',
+    agentApiVersion: '6.0.0',
     // Kue prefix
     kuePrefix: 'testq',
     logLevel: 'debug'
@@ -388,6 +400,9 @@ class Configs {
     }
 
     this.config_values = combinedConfig;
+
+    this.config_values.nodeVersion = process.version;
+
     console.log('Configuration used:\n' + JSON.stringify(this.config_values, null, 2));
   }
 
@@ -442,7 +457,7 @@ class Configs {
       const usedServer = servers.findIndex(s => s.includes(req.hostname));
       if (usedServer > -1) {
         baseUrl = servers[usedServer];
-        if (vpnServers.at(usedServer)) {
+        if (vpnServers[usedServer]) {
           vpnBaseUrl = vpnServers[usedServer];
         }
       }

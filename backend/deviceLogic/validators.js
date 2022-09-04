@@ -19,8 +19,12 @@ const net = require('net');
 const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
+const { getBridges, getCpuInfo } = require('../utils/deviceUtils');
 const { getMajorVersion } = require('../versioning');
+const keyBy = require('lodash/keyBy');
+const { isEqual } = require('lodash');
 const maxMetric = 2 * 10 ** 9;
+
 /**
  * Checks whether a value is empty
  * @param  {string}  val the value to be checked
@@ -92,6 +96,7 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
 const validateFirewallRules = (rules, interfaces = undefined) => {
   const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
   const usedInboundPorts = [];
+  let inboundPortsCount = 0;
   const enabledRules = rules.filter(r => r.enabled);
   // Common rules validation
   for (const rule of enabledRules) {
@@ -146,6 +151,7 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
           }
         }
         usedInboundPorts.push([portLow, portHigh]);
+        inboundPortsCount += (portHigh - portLow + 1);
       }
     }
     for (const side of ['source', 'destination']) {
@@ -179,6 +185,10 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
       }
     }
   };
+
+  if (inboundPortsCount > 1000) {
+    return { valid: false, err: 'Inbound ports range is limited to 1000' };
+  }
 
   // Device-specific rules validation
   if (interfaces) {
@@ -253,9 +263,10 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
  * @param {Object}  device                 the device to check
  * @param {Boolean} isRunning              is the device running
  * @param {[_id: objectId, name: string, type: string, subnet: string]} orgSubnets to check overlaps
+ * @param {[_id: objectId, bgp: object]} orgBgpDevices
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, isRunning = false, orgSubnets = []) => {
+const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevices = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -270,6 +281,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
     assignedIfs.filter(ifc => { return ifc.type === 'WAN'; }),
     assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
+  const majorVersion = getMajorVersion(device.versions.agent);
 
   if (isRunning && (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0))) {
     return {
@@ -285,6 +297,8 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
     };
   }
 
+  const bridges = getBridges(assignedIfs);
+  const assignedByDevId = keyBy(assignedIfs, 'devId');
   for (const ifc of assignedIfs) {
     // Assigned interfaces must be either WAN or LAN
     if (!['WAN', 'LAN'].includes(ifc.type)) {
@@ -301,6 +315,26 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
           ? `Invalid IP address for ${ifc.name}: ${ifc.IPv4}/${ifc.IPv4Mask}`
           : `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
                       ? 'IPv4 mask' : 'IP address'}`
+      };
+    }
+
+    const ipv4 = `${ifc.IPv4}/${ifc.IPv4Mask}`;
+    // if interface in a bridge - make sure all bridged interface has no conflicts in configuration
+    if (ipv4 in bridges) {
+      for (const devId of bridges[ipv4]) {
+        if (!isEqual(assignedByDevId[devId].ospf, ifc.ospf)) {
+          return {
+            valid: false,
+            err: 'There is a conflict between the OSPF configuration of the bridge interfaces'
+          };
+        }
+      }
+    }
+
+    if ((ifc.routing === 'BGP' || ifc.routing === 'OSPF,BGP') && !device.bgp.enable) {
+      return {
+        valid: false,
+        err: `Cannot set BGP routing protocol for interface ${ifc.name}. BGP is not enabled`
       };
     }
 
@@ -322,10 +356,11 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
       }
 
       // DHCP client is not allowed on LAN interface
-      if (ifc.dhcp === 'yes') {
+      if (ifc.dhcp === 'yes' && device.dhcp.find(d => d.interface === ifc.devId)) {
         return {
           valid: false,
-          err: 'LAN interfaces should not be set to DHCP'
+          err: `Configure DHCP server on interface ${ifc.name} is not allowed \
+          while the interface configured with DHCP client`
         };
       }
     }
@@ -346,6 +381,12 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
         };
       }
     }
+    if (ifc.qosPolicy && majorVersion < 6) {
+      return {
+        valid: false,
+        err: 'QoS is supported from version 6'
+      };
+    }
   }
 
   // Assigned interfaces must not be on the same subnet
@@ -354,7 +395,15 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
     for (const ifc2 of assignedNotEmptyIfs.filter(i => i.devId !== ifc1.devId)) {
       const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
       const ifc2Subnet = `${ifc2.IPv4}/${ifc2.IPv4Mask}`;
-      if (ifc1Subnet !== ifc2Subnet && cidr.overlap(ifc1Subnet, ifc2Subnet)) {
+
+      // Allow only LANs with the same IP on the same device for the LAN bridge feature.
+      // Note, for the LAN bridge feature, we allow only the same IP on multiple LANs,
+      // but overlapping is not allowed.
+      if (ifc1.type === 'LAN' && ifc2.type === 'LAN' && ifc1Subnet === ifc2Subnet) {
+        continue;
+      }
+
+      if (cidr.overlap(ifc1Subnet, ifc2Subnet)) {
         return {
           valid: false,
           err: 'IP addresses of the assigned interfaces have an overlap'
@@ -398,6 +447,11 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
         const subnet = orgSubnet.subnet;
         const currentSubnet = `${currentLanIfc.IPv4}/${currentLanIfc.IPv4Mask}`;
 
+        // Allow DHCP LAN without ip
+        if (currentLanIfc.dhcp === 'yes' && currentLanIfc.IPv4 === '') {
+          continue;
+        }
+
         // Don't check interface overlapping with same device
         if (
           orgSubnet.type === 'interface' &&
@@ -427,6 +481,12 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
     // Prevent setting LAN network that overlaps the network we are using for tunnels.
     for (const lanIfc of lanIfcs) {
       const subnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
+
+      // Allow DHCP LAN without ip
+      if (lanIfc.dhcp === 'yes' && lanIfc.IPv4 === '') {
+        continue;
+      }
+
       if (cidr.overlap(subnet, '10.100.0.0/16')) {
         return {
           valid: false,
@@ -484,6 +544,90 @@ const validateDevice = (device, isRunning = false, orgSubnets = []) => {
       return { valid, err };
     }
   }
+
+  // routing filters validation
+  if (device.routingFilters) {
+    for (const filter of device.routingFilters) {
+      const name = filter.name;
+      const duplicateName = device.routingFilters.filter(l => l.name === name).length > 1;
+      if (duplicateName) {
+        return {
+          valid: false,
+          err: 'Routing filters with the same name are not allowed'
+        };
+      }
+    }
+  }
+
+  const routingFilterNames = keyBy(device.routingFilters, 'name');
+  const usedNeighborIps = {};
+  for (const bgpNeighbor of device.bgp?.neighbors ?? []) {
+    const inboundFilter = bgpNeighbor.inboundFilter;
+    const outboundFilter = bgpNeighbor.outboundFilter;
+    if (inboundFilter && !(inboundFilter in routingFilterNames)) {
+      return {
+        valid: false,
+        err: `BGP neighbor ${bgpNeighbor.ip} uses an  \
+        unrecognized routing filter name ("${inboundFilter}")`
+      };
+    }
+
+    if (outboundFilter && !(outboundFilter in routingFilterNames)) {
+      return {
+        valid: false,
+        err: `BGP neighbor ${bgpNeighbor.ip} uses an \
+        unrecognized routing filter name ("${outboundFilter}")`
+      };
+    }
+
+    const neighborIp = bgpNeighbor.ip + '/32';
+    if (cidr.overlap(neighborIp, '10.100.0.0/16') && (outboundFilter || inboundFilter)) {
+      return {
+        valid: false,
+        err: `A routing filter cannot be set on a BGP neighbor (${bgpNeighbor.ip})`
+      };
+    }
+
+    if (bgpNeighbor.ip in usedNeighborIps) {
+      return {
+        valid: false,
+        err: 'Duplication in BGP neighbor IP is not allowed'
+      };
+    } else {
+      usedNeighborIps[bgpNeighbor.ip] = 1;
+    }
+  }
+
+  if (device.bgp?.enable) {
+    const routerId = device.bgp.routerId;
+    const localASN = device.bgp.localASN;
+    let errMsg = '';
+    const routerIdExists = orgBgpDevices.find(d => {
+      if (d._id.toString() === device._id.toString()) return false;
+
+      if (d.bgp.localASN === localASN) {
+        errMsg = `Device ${d.name} already configured the requests BGP local ASN`;
+        return true;
+      }
+
+      if (!routerId || routerId === '') {
+        // allow multiple routerIds to be empty string or undefined
+        return;
+      }
+
+      if (d.bgp.routerId === routerId) {
+        errMsg = `Device ${d.name} already configured the requests BGP router ID`;
+        return true;
+      }
+    });
+
+    if (routerIdExists) {
+      return {
+        valid: false,
+        err: errMsg
+      };
+    }
+  }
   /*
     if (!cidr.overlap(wanSubnet, defaultGwSubnet)) {
         return {
@@ -505,7 +649,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
-    if (ifc.type === 'WAN' && ifc.dhcp === 'yes' && ifc.addr === '') {
+    if (ifc.dhcp === 'yes' && ifc.addr === '') {
       // allow empty IP on WAN with dhcp client
       continue;
     }
@@ -550,8 +694,15 @@ const isIPv4Address = (ip, mask) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateStaticRoute = (device, tunnels, route) => {
-  const { ifname, gateway, isPending } = route;
+  const { ifname, gateway, isPending, redistributeViaBGP, onLink } = route;
   const gatewaySubnet = `${gateway}/32`;
+
+  if (redistributeViaBGP && !device.bgp.enable) {
+    return {
+      valid: false,
+      err: 'Cannot redistribute static route via BGP. Please enable BGP first'
+    };
+  }
 
   if (ifname) {
     const ifc = device.interfaces.find(i => i.devId === ifname);
@@ -561,18 +712,15 @@ const validateStaticRoute = (device, tunnels, route) => {
         err: `Static route interface not found '${ifname}'`
       };
     };
-    if (!ifc.isAssigned) {
-      return {
-        valid: false,
-        err: `Static routes not allowed on unassigned interfaces '${ifname}'`
-      };
-    }
+
     if (!isPending && !cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
       // A pending route may not overlap with an interface
-      return {
-        valid: false,
-        err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
-      };
+      if (onLink !== true) {
+        return {
+          valid: false,
+          err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+        };
+      }
     }
 
     // Don't allow putting static route on a bridged interface
@@ -629,6 +777,31 @@ const validateMultilinkPolicy = (policy, devices) => {
   return { valid: true, err: '' };
 };
 
+/**
+ * Checks whether QoS policy is valid on devices
+ * @param {Array}  devices    - an array of devices
+ * @return {{valid: boolean, err: string}}  test result + error, if invalid
+ */
+const validateQOSPolicy = (devices) => {
+  // QoS is supported from version 6
+  if (devices.some(device => getMajorVersion(device.versions.agent) < 6)) {
+    return {
+      valid: false,
+      err: 'QoS is supported from version 6'
+    };
+  }
+
+  // QoS requires multi-core
+  if (devices.some(device => getCpuInfo(device.cpuInfo).vppCores < 2)) {
+    return {
+      valid: false,
+      err: 'QoS cannot be installed on a device without 2 vRouter cores at least'
+    };
+  }
+
+  return { valid: true, err: '' };
+};
+
 module.exports = {
   isIPv4Address,
   validateDevice,
@@ -636,5 +809,6 @@ module.exports = {
   validateStaticRoute,
   validateModifyDeviceMsg,
   validateMultilinkPolicy,
+  validateQOSPolicy,
   validateFirewallRules
 };

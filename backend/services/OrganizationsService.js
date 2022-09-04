@@ -30,6 +30,7 @@ const MultiLinkPolicies = require('../models/mlpolicies');
 const PathLabels = require('../models/pathlabels');
 const { deviceAggregateStats } = require('../models/analytics/deviceStats');
 const { membership } = require('../models/membership');
+const QosPolicies = require('../models/qosPolicies');
 const Connections = require('../websocket/Connections')();
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const Flexibilling = require('../flexibilling');
@@ -399,17 +400,27 @@ class OrganizationsService {
         {
           $group: {
             _id: null,
-            // Connected tunnels
+            // Tunnels unknown - devices not connected
+            tunUnknown: { $sum: { $cond: [{ $ne: ['$devices', []] }, 1, 0] } },
+            // Tunnels with warning (pending) - devices connected and isPending
+            tunWarning: {
+              $sum: {
+                $cond: [
+                  { $and: [{ $eq: ['$isPending', true] }, { $eq: ['$devices', []] }] }, 1, 0]
+              }
+            },
+            // Connected tunnels - devices connected, not pending, and status up
             tunConnected: {
               $sum: {
                 $cond: [
-                  { $and: [{ $eq: ['$status', 'up'] }, { $eq: ['$devices', []] }] }, 1, 0]
+                  {
+                    $and: [
+                      { $eq: ['$status', 'up'] },
+                      { $eq: ['$isPending', false] },
+                      { $eq: ['$devices', []] }]
+                  }, 1, 0]
               }
             },
-            // Tunnels with warning
-            tunWarning: { $sum: { $cond: [{ $eq: ['$isPending', true] }, 1, 0] } },
-            // Tunnels unknown - devices not connected
-            tunUnknown: { $sum: { $cond: [{ $ne: ['$devices', []] }, 1, 0] } },
             // Total tunnels
             tunTotal: { $sum: 1 }
           }
@@ -504,6 +515,45 @@ class OrganizationsService {
       );
 
       if (!updAccount) throw new Error('Error adding organization to account');
+
+      // Create a default QoS policy
+      const qosPolicy = await QosPolicies.create([{
+        org: org,
+        name: 'Default policy',
+        description: 'Created automatically',
+        outbound: {
+          realtime: {
+            bandwidthLimitPercent: '30',
+            dscpRewrite: 'CS0'
+          },
+          'control-signaling': {
+            weight: '40',
+            dscpRewrite: 'CS0'
+          },
+          'prime-select': {
+            weight: '30',
+            dscpRewrite: 'CS0'
+          },
+          'standard-select': {
+            weight: '20',
+            dscpRewrite: 'CS0'
+          },
+          'best-effort': {
+            weight: '10',
+            dscpRewrite: 'CS0'
+          }
+        },
+        inbound: {
+          bandwidthLimitPercentHigh: 90,
+          bandwidthLimitPercentMedium: 80,
+          bandwidthLimitPercentLow: 70
+        },
+        advanced: false
+      }], {
+        session: session
+      });
+      if (!qosPolicy) throw new Error('Error default QoS policy adding');
+
       session.commitTransaction();
 
       const token = await getToken({ user }, { org: org._id, orgName: org.name });

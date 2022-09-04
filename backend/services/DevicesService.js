@@ -32,7 +32,6 @@ const validator = require('validator');
 const net = require('net');
 const pick = require('lodash/pick');
 const isEqual = require('lodash/isEqual');
-
 const uniqBy = require('lodash/uniqBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
@@ -41,12 +40,13 @@ const { validateOperations } = require('../deviceLogic/interfaces');
 const {
   validateDevice,
   validateDhcpConfig,
-  validateStaticRoute
+  validateStaticRoute,
+  validateQOSPolicy
 } = require('../deviceLogic/validators');
 const {
-  mapLteNames, mapWifiNames, getBridges, parseLteStatus
+  mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
 } = require('../utils/deviceUtils');
-const { getAllOrganizationSubnets } = require('../utils/orgUtils');
+const { getAllOrganizationSubnets, getAllOrganizationBGPDevices } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const deviceQueues = require('../utils/deviceQueue')(
@@ -61,7 +61,7 @@ const eventsReasons = require('../deviceLogic/events/eventReasons');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const applications = require('../models/applications');
 const applicationStore = require('../models/applicationStore');
-const { getMajorVersion } = require('../versioning');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
 
 class DevicesService {
@@ -157,7 +157,10 @@ class DevicesService {
       'upgradeSchedule',
       'sync',
       'ospf',
-      'coords'
+      'coords',
+      'bgp',
+      'routingFilters',
+      'cpuInfo'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -196,12 +199,18 @@ class DevicesService {
           'deviceType',
           'configuration',
           'deviceParams',
+          'qosPolicy',
+          'bandwidthMbps',
           'dnsServers',
           'dnsDomains',
           'useDhcpDnsServers',
           'ospf'
         ]);
         retIf._id = retIf._id.toString();
+        if (retIf.qosPolicy) {
+          retIf.qosPolicy = (retIf.qosPolicy._id ? retIf.qosPolicy._id : retIf.qosPolicy)
+            .toString();
+        }
         // if device is not connected then internet access status is unknown
         retIf.internetAccess = retDevice.isConnected ? retIf.internetAccess : '';
         retIf.linkStatus = retDevice.isConnected ? retIf.linkStatus : '';
@@ -223,8 +232,10 @@ class DevicesService {
           'ifname',
           'metric',
           'redistributeViaOSPF',
+          'redistributeViaBGP',
           'isPending',
-          'pendingReason'
+          'pendingReason',
+          'onLink'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;
@@ -362,6 +373,20 @@ class DevicesService {
         },
         {
           $lookup: {
+            from: 'qospolicies',
+            localField: 'policies.qos.policy',
+            foreignField: '_id',
+            as: 'policies.qos.policy'
+          }
+        },
+        {
+          $unwind: {
+            path: '$policies.qos.policy',
+            preserveNullAndEmptyArrays: true
+          }
+        },
+        {
+          $lookup: {
             from: 'pathlabels',
             localField: 'interfaces.pathlabels',
             foreignField: '_id',
@@ -427,7 +452,9 @@ class DevicesService {
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
+            'policies.qos': { status: 1, policy: { name: 1, description: 1 } },
             applications: 1,
+            cpuInfo: 1,
             deviceState: '$deviceStatus.state'
           }
         });
@@ -455,11 +482,14 @@ class DevicesService {
           'dhcp',
           'deviceSpecificRulesEnabled',
           'firewall',
+          'qosPolicy',
+          'bandwidthMbps',
           'upgradeSchedule',
           'sync',
           'ospf',
           'isConnected',
           'deviceState',
+          'cpuInfo',
           'coords'
         ];
         // populate pathlabels for every interface
@@ -664,6 +694,7 @@ class DevicesService {
         .populate('interfaces.pathlabels', '_id name description color type')
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description')
+        .populate('policies.qos.policy', '_id name description')
         .populate({
           path: 'applications.app',
           populate: {
@@ -1281,6 +1312,7 @@ class DevicesService {
         if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
           orgSubnets = await getAllOrganizationSubnets(origDevice.org);
         }
+        const orgBgp = await getAllOrganizationBGPDevices(origDevice.org);
 
         const origTunnels = await tunnelsModel.find({
           isActive: true,
@@ -1378,6 +1410,15 @@ class DevicesService {
                   }
                 }
               }
+
+              // check interface specific validation
+              if (updIntf?.qosPolicy) {
+                const { valid, err } = validateQOSPolicy([origDevice]);
+                if (!valid) {
+                  throw new Error(err);
+                }
+              }
+
               // check firewall rules
               if (deviceRequest.firewall) {
                 let hadInbound = false;
@@ -1502,6 +1543,13 @@ class DevicesService {
                 );
               }
 
+              if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
+                throw new Error(
+                  `Can't set BGP on ${origIntf.name}. ` +
+                  'BGP is disabled, please configure BGP from routing settings first'
+                );
+              }
+
               if (updIntf.isAssigned && updIntf.type === 'WAN') {
                 const dhcp = updIntf.dhcp;
                 const servers = updIntf.dnsServers;
@@ -1610,6 +1658,23 @@ class DevicesService {
           // validate DHCP info if it exists
           for (const dhcpRequest of deviceRequest.dhcp) {
             DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
+          }
+        }
+
+        if (deviceRequest?.bgp?.enable) {
+          const major = getMajorVersion(origDevice.versions.agent);
+          const minor = getMinorVersion(origDevice.versions.agent);
+          if (major <= 5 && minor < 3) {
+            throw createError(400,
+              'The device does not run the required flexiWAN version for BGP. ' +
+              'Please disable BGP or upgrade the device');
+          }
+        } else {
+          // if bgp disabled, make sure no tunnel created with BGP on this device
+          if (origTunnels.some(t => t?.advancedOptions?.routing === 'bgp')) {
+            throw createError(400,
+              'BGP cannot be disabled because there are tunnels created with BGP ' +
+              'routing protocol. Please delete them first');
           }
         }
 
@@ -1754,7 +1819,13 @@ class DevicesService {
             firewall: origDevice.policies.firewall.toObject()
           };
         }
-        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets);
+
+        // don't  allow to change "versions" and "cpuInfo"
+        deviceToValidate.versions = origDevice.versions;
+        deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
+        deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
+
+        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets, orgBgp);
 
         if (!valid) {
           logger.warn('Device update failed',
@@ -1790,6 +1861,7 @@ class DevicesService {
           .populate('interfaces.pathlabels', '_id name description color type')
           .populate('policies.firewall.policy', '_id name description rules')
           .populate('policies.multilink.policy', '_id name description')
+          .populate('policies.qos.policy', '_id name description')
           .populate({
             path: 'applications.app',
             populate: {
@@ -2843,10 +2915,16 @@ class DevicesService {
           pin: {
             job: false,
             message: 'modify-lte-pin',
-            onError: async (jobId, err) => {
+            onError: async (jobId, agentError, parsedError) => {
               try {
-                err = JSON.parse(err.replace(/'/g, '"'));
-                const data = mapLteNames(err.data);
+                const regex = new RegExp(/(?<='data': {).+?(?=})/g);
+                let data = agentError.match(regex);
+                if (data) {
+                  data = data[0].replace(/'/g, '"');
+                }
+
+                data = JSON.parse(`{${data}}`);
+                data = mapLteNames(data);
                 await devices.updateOne(
                   { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
                   {
@@ -2855,7 +2933,7 @@ class DevicesService {
                     }
                   }
                 );
-                return JSON.stringify({ err_msg: err.err_msg, data: data });
+                return JSON.stringify({ err_msg: parsedError, data: data });
               } catch (err) { }
             },
             onComplete: async (jobId, response) => {
@@ -2966,14 +3044,30 @@ class DevicesService {
               }
             });
 
-            const regex = new RegExp(/(?<=failed: ).+?(?=\()/g);
-            let err = response.message.match(regex).join(',');
+            // The error message is *a string* that looks as follows:
+            // 'modify-lte-pin({'enable': True, ....'}): {'err_msg': '...', 'data': {....}}'
+            // Here, prase it and get the 'err_mgs' and the 'data' if exists.
+            let error = null;
 
-            if (agentAction.onError) {
-              err = await agentAction.onError(null, err);
+            let fullErrMsg = null;
+            if (Array.isArray(response?.message?.errors) && response.message.errors?.[0]) {
+              // from agent version 6, the error message contains 'errors' list.
+              fullErrMsg = response.message.errors[0];
+            } else {
+              fullErrMsg = response.message;
             }
 
-            return Service.rejectResponse(err, 500);
+            const regex = new RegExp(/(?<='err_msg': ').+?(?=')/g);
+            const errMsg = fullErrMsg.match(regex);
+            if (errMsg) {
+              error = errMsg[0];
+            }
+
+            if (agentAction.onError) {
+              error = await agentAction.onError(null, fullErrMsg, error);
+            }
+
+            return Service.rejectResponse(error, 500);
           }
 
           if (agentAction.onComplete) {

@@ -184,7 +184,7 @@ const rollbackDhcpChanges = async (deviceId, origDhcp) => {
     { arrayFilters: [{ 'elem._id': mongoose.Types.ObjectId(origDhcp._id) }] }
   );
 
-  console.log(JSON.stringify(result));
+  // console.log(JSON.stringify(result));
   if (result.nModified !== 1) throw new Error('Failed to restore DHCP');
 };
 

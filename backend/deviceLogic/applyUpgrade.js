@@ -34,6 +34,16 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'j
  * @return {Promise}               a promise for queuing an upgrade job
  */
 const queueUpgradeJobs = (devices, user, org, targetVersion) => {
+  // GPG key is expired on Mid July 2022 - update the key before upgrade
+  const gpgUpdateTasks = [{
+    entity: 'agent',
+    message: 'exec_timeout',
+    params: {
+      // eslint-disable-next-line max-len
+      cmd: 'if [ -x /usr/bin/curl ]; then curl -s https://deb.flexiwan.com/flexiWAN/gpgkey/flexiwan.ng.source.gpg.key | apt-key add -; else wget -qO- https://deb.flexiwan.com/flexiWAN/gpgkey/flexiwan.ng.source.gpg.key | apt-key add -; fi',
+      timeout: 60
+    }
+  }];
   const tasks = [{
     entity: 'agent',
     message: 'upgrade-device-sw',
@@ -42,6 +52,17 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
   const jobs = [];
   devices.forEach(dev => {
     deviceStatus.setDeviceState(dev.machineId, 'pending');
+    jobs.push(
+      deviceQueues.addJob(dev.machineId, user, org,
+        // Data
+        { title: `Update GPG Key ${dev.hostname}`, tasks: gpgUpdateTasks },
+        // Response data
+        {},
+        // Metadata
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null)
+    );
     jobs.push(
       deviceQueues.addJob(dev.machineId, user, org,
         // Data

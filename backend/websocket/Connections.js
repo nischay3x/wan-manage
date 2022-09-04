@@ -33,6 +33,12 @@ const { TypedError, ErrorTypes } = require('../utils/errors');
 const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const getRandom = require('../utils/random-key');
+const { getCpuInfo } = require('../utils/deviceUtils');
+const jobService = require('../services/JobsService');
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 
 class Connections {
   constructor () {
@@ -362,7 +368,7 @@ class Connections {
     // device version, network information, tunnel keys, etc.)
     // Only after getting the device's response and updating
     // the information, the device can be considered ready.
-    this.sendDeviceInfoMsg(device, info.deviceObj, true);
+    this.sendDeviceInfoMsg(device, info.deviceObj, info.org, true);
   }
 
   /**
@@ -484,6 +490,15 @@ class Connections {
             hasIpOnDevice: updatedConfig.IPv4 !== ''
           };
 
+          // allow to modify the interface type dpdk/pppoe for unassigned interfaces
+          if (!i.isAssigned && ['dpdk', 'pppoe'].includes(updatedConfig.deviceType)) {
+            updInterface.deviceType = updatedConfig.deviceType;
+            updInterface.dhcp = updatedConfig.dhcp;
+            if (updatedConfig.deviceType === 'pppoe') {
+              updInterface.type = 'WAN';
+            }
+          }
+
           if (!i.isAssigned || i.deviceType === 'pppoe') {
             updInterface.metric = updatedConfig.metric;
             if (updatedConfig.mtu) {
@@ -587,9 +602,11 @@ class Connections {
    * @async
    * @param  {string} machineId the device machine id
    * @param  {string} deviceId the device mongodb id
+   * @param  {string} org the device organization id
+   * @param  {boolean} isNewConnection flag to specify whether target device is a new connection
    * @return {void}
    */
-  async sendDeviceInfoMsg (machineId, deviceId, isNewConnection = false) {
+  async sendDeviceInfoMsg (machineId, deviceId, org, isNewConnection = false) {
     const validateDevInfoMessage = msg => {
       const devInfoSchema = Joi.object().keys({
         device: Joi
@@ -616,11 +633,13 @@ class Connections {
         stats: Joi.object().optional(),
         network: Joi.object().optional(),
         tunnels: Joi.array().optional(),
+        jobs: Joi.array().optional(),
         reconfig: Joi.string().allow('').optional(),
         ikev2: Joi.object({
           certificateExpiration: Joi.string().allow('').optional(),
           error: Joi.string().allow('').optional()
-        }).allow({}).optional()
+        }).allow({}).optional(),
+        cpuInfo: Joi.object().optional()
       }).custom((obj, helpers) => {
         for (const [component, info] of Object.entries(
           obj.components
@@ -643,10 +662,26 @@ class Connections {
 
     try {
       const emptyTunnels = await this.getTunnelsWithEmptyKeys(deviceId);
-      const message = { entity: 'agent', message: 'get-device-info', params: {} };
+      const message = { entity: 'agent', message: 'get-device-info', params: { tunnels: [] } };
       if (emptyTunnels.length > 0) {
         message.params.tunnels = emptyTunnels;
       }
+
+      // Get the last 16 failed jobs from the jobs database. The number 16 is because devices
+      // keep only the last 16 run jobs in their jobs database, so no point of
+      // requesting more than that from the jobs database as well.
+      const failedJobs = [];
+      await deviceQueues.iterateJobsByOrg(org,
+        'failed', (job) => {
+          const { _id, error } = jobService.selectJobsParams(job);
+          if (error?.errors?.[0]?.command?.error === 'Send Timeout') {
+            failedJobs.push(_id);
+          }
+          return true;
+        }, 0, -1, 'desc', 0, 16, [{ key: 'type', op: '==', val: machineId }]
+      );
+      message.params.jobs = failedJobs;
+
       const deviceInfo = await this.deviceSendMessage(
         null,
         machineId,
@@ -668,10 +703,8 @@ class Connections {
         versions[component] = info.version;
       }
 
-      const origDevice = await devices.findOneAndUpdate(
-        { _id: deviceId },
-        { $set: { versions: versions } },
-        { new: true, runValidators: true }
+      const origDevice = await devices.findOne(
+        { _id: deviceId }
       ).populate('interfaces.pathlabels', '_id name type');
 
       if (!origDevice) {
@@ -681,6 +714,15 @@ class Connections {
         this.deviceDisconnect(machineId);
         return;
       }
+
+      // when receiving cpuInfo from device, we need to keep the configured value
+      const cpuInfo = getCpuInfo({
+        ...deviceInfo.message.cpuInfo,
+        configuredVppCores: origDevice.cpuInfo.configuredVppCores
+      });
+      origDevice.cpuInfo = cpuInfo;
+      origDevice.versions = versions;
+      await origDevice.save();
 
       const { expireTime, jobQueued } = origDevice.IKEv2;
 
@@ -723,6 +765,34 @@ class Connections {
       const { tunnels } = deviceInfo.message;
       if (Array.isArray(tunnels) && tunnels.length > 0) {
         await this.updateTunnelKeys(origDevice.org, tunnels);
+      }
+
+      const { jobs } = deviceInfo.message;
+      if (jobs && Array.isArray(jobs)) {
+        jobs.forEach(job => {
+          deviceQueues.getJobById(job.job_id).then(jobToUpdate => {
+            if (!jobToUpdate) {
+              // This might happen, for example, when the job was deleted
+              // in the interval between send device info request from the
+              // management and the actual response from device.
+              return;
+            }
+            logger.info('Updating job result received from device', {
+              params: { deviceId: deviceId, job_id: job.job_id, state: job.state }
+            });
+            if (job.state === 'complete') {
+              jobToUpdate.complete();
+              jobToUpdate.error('');
+              jobToUpdate.data.metadata.jobUpdated = true;
+              jobToUpdate.save();
+            }
+            if (job?.errors?.length > 0) {
+              jobToUpdate.error(JSON.stringify({ errors: job.errors }));
+              jobToUpdate.data.metadata.jobUpdated = true;
+              jobToUpdate.save();
+            }
+          });
+        });
       }
 
       // Check if config was modified on the device
@@ -879,7 +949,7 @@ class Connections {
         // Increment seq and update queue with resolve function for this promise,
         // set timeout to clear when no response received
         const tohandle = setTimeout(() => {
-          reject(new TypedError(ErrorTypes.TIMEOUT, 'Error: Send Timeout'));
+          reject(new TypedError(ErrorTypes.TIMEOUT, 'Send Timeout'));
           // delete queue for this seq
           delete msgQ[key];
         }, timeout);

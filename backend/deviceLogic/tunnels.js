@@ -41,6 +41,8 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'j
 const keyBy = require('lodash/keyBy');
 
 const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
+const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
+const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -58,7 +60,7 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
- * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {String}   topology topology of created tunnels (hubAndSpoke|fullMesh)
  * @param  {Number}   hubIdx index of the hub in 'Hub and Spoke' topology
  * @param  {set}      reasons reference to Set of reasons
@@ -292,7 +294,7 @@ const handleTunnels = async (
  * @param  {string}   user user id of the requesting user
  * @param  {array}    opDevices array of selected devices
  * @param  {array}    pathLabels array of selected path labels
- * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {array}    peersIds array of peers ids
  * @param  {set}      reasons reference to Set of reasons
  * @return {array}    A promises array of tunnels creations
@@ -534,7 +536,9 @@ const applyTunnelAdd = async (devices, user, data) => {
   }
 
   const { pathLabels, advancedOptions, peers, topology, hub } = data.meta;
-  const { mtu, mssClamp, ospfCost } = advancedOptions || {};
+  // If ospfCost is not defined, use the default cost
+  advancedOptions.ospfCost = Number(advancedOptions.ospfCost || defaultTunnelOspfCost);
+  const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
 
   if (mtu !== undefined && mtu !== '' && (isNaN(mtu) || mtu < 500 || mtu > 1500)) {
     logger.error('Wrong MTU value when creating tunnels', { params: { mtu } });
@@ -546,9 +550,9 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('MSS Clamping must be "yes" or "no"');
   }
 
-  if (ospfCost !== undefined && ospfCost !== '' && isNaN(ospfCost)) {
+  if (isNaN(ospfCost) || ospfCost <= 0) {
     logger.error('Wrong OSPF cost when creating tunnels', { params: { ospfCost } });
-    throw new Error('OSPF cost must be numeric value or empty');
+    throw new Error('OSPF cost must be a positive numeric value or empty');
   }
 
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
@@ -565,6 +569,13 @@ const applyTunnelAdd = async (devices, user, data) => {
     if (hubIdx === -1) {
       logger.error('Hub device not found', { params: { hub: hub } });
       throw new Error('Hub device not found');
+    }
+  }
+
+  if (routing === 'bgp') {
+    const bothInstalledBGP = devices.every(d => d.bgp.enable === true);
+    if (!bothInstalledBGP) {
+      throw new Error('BGP is not enabled on all selected devices');
     }
   }
 
@@ -599,6 +610,23 @@ const applyTunnelAdd = async (devices, user, data) => {
     };
     return arr;
   }, []);
+
+  // Check if need to trigger modify-device job
+  // bgp neighbors can be added
+  const updDevices = await devicesModel.find({
+    _id: { $in: devices.map(d => d._id) }
+  });
+  const modifyDeviceDispatcher = require('./modifyDevice').apply;
+  for (let i = 0; i < updDevices.length; i++) {
+    await modifyDeviceDispatcher(
+      [devices[i]],
+      { username: 'system' },
+      {
+        org: org.toString(),
+        newDevice: updDevices[i]
+      }
+    );
+  }
 
   const status = fulfilled.length < dbTasks.length
     ? 'partially completed' : 'completed';
@@ -714,7 +742,7 @@ const getTunnel = (org, pathLabel, wanIfcA, wanIfcB, peerId = false) => {
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
  * @param  {string}   encryptionMethod key exchange method [none|ikev2|psk]
- * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {boolean}  peer         peer configurations
  */
 const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
@@ -953,7 +981,7 @@ const queueTunnel = async (
  * @param  {pathLabel} path label used for this tunnel
  * @param  {Object} deviceA details of device A
  * @param  {Object?} deviceB details of device B
- * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {Object?}  peer peer configurations
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
@@ -1162,7 +1190,7 @@ const prepareTunnelAddJob = async (
  * @param  {Object?}  deviceB      details of device B
  * @param  {Object}   deviceAIntf  device A tunnel interface
  * @param  {Object?}  deviceBIntf  device B tunnel interface
- * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object}   advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {Object?}  peer         peer configurations
  * @return {void}
  */
@@ -1193,7 +1221,7 @@ const addTunnel = async (
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
   // Advanced tunnel options
-  const { mtu, mssClamp, ospfCost } = advancedOptions || {};
+  const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
 
   // check if need to create the tunnel as pending
   let isPending = false;
@@ -1235,12 +1263,46 @@ const addTunnel = async (
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,
-      advancedOptions: { mtu, mssClamp, ospfCost },
+      advancedOptions: { mtu, mssClamp, ospfCost, routing },
       peer: peer ? peer._id : null
     },
     // Options
     { upsert: true, new: true }
   );
+
+  // create bgp neighbors automatically for both devices.
+  // for peer tunnel, the user should create the bgp neighbors manually since
+  // we don't know the remote asn and other configurations
+  if (routing === 'bgp' && !peer) {
+    // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
+    const tunnelParams = generateTunnelParams(tunnel.num);
+
+    const deviceANeighbor = {
+      ip: tunnelParams.ip2,
+      remoteASN: deviceB.bgp.localASN
+    };
+
+    const deviceBNeighbor = {
+      ip: tunnelParams.ip1,
+      remoteASN: deviceA.bgp.localASN
+    };
+
+    if (!deviceA.bgp.neighbors.find(n => n.ip === deviceANeighbor.ip)) {
+      await devicesModel.updateOne(
+        { _id: deviceA._id },
+        { $push: { 'bgp.neighbors': deviceANeighbor } },
+        { upsert: false }
+      );
+    }
+
+    if (!deviceB.bgp.neighbors.find(n => n.ip === deviceBNeighbor.ip)) {
+      await devicesModel.updateOne(
+        { _id: deviceB._id },
+        { $push: { 'bgp.neighbors': deviceBNeighbor } },
+        { upsert: false }
+      );
+    }
+  }
 
   // don't send jobs for pending tunnels
   if (isPending) {
@@ -1391,6 +1453,24 @@ const applyTunnelDel = async (devices, user, data) => {
     });
 
     const promiseStatus = await Promise.allSettled(delPromises);
+
+    // After removing the tunnels, check if need to send modify device job
+    // bgp neighbors might be deleted
+    const updDevices = await devicesModel.find({
+      _id: { $in: devices.map(d => d._id) }
+    });
+    const modifyDeviceDispatcher = require('./modifyDevice').apply;
+    for (let i = 0; i < updDevices.length; i++) {
+      await modifyDeviceDispatcher(
+        [devices[i]],
+        { username: 'system' },
+        {
+          org: org.toString(),
+          newDevice: updDevices[i]
+        }
+      );
+    }
+
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
         const job = elem.value;
@@ -1449,7 +1529,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   };
 
   // Define devices
-  const { num, deviceA, deviceB, pathLabel, peer } = tunnelResp;
+  const { num, deviceA, deviceB, pathLabel, peer, advancedOptions } = tunnelResp;
 
   // Check is tunnel used by any static route
   const { ip1, ip2 } = generateTunnelParams(num);
@@ -1494,6 +1574,26 @@ const oneTunnelDel = async (tunnelID, user, org) => {
     // Options
     { upsert: false, new: true }
   );
+
+  // remove the bgp neighbors
+  const { routing } = advancedOptions || {};
+  if (routing === 'bgp' && !peer) {
+    if (deviceA.bgp.neighbors.find(n => n.ip === ip2)) {
+      await devicesModel.updateOne(
+        { _id: deviceA._id },
+        { $pull: { 'bgp.neighbors': { ip: ip2 } } },
+        { upsert: false }
+      );
+    }
+
+    if (deviceB.bgp.neighbors.find(n => n.ip === ip1)) {
+      await devicesModel.updateOne(
+        { _id: deviceB._id },
+        { $pull: { 'bgp.neighbors': { ip: ip1 } } },
+        { upsert: false }
+      );
+    }
+  }
 
   // remove the tunnel status from memory
   const deviceStatus = require('../periodic/deviceStatus')();
@@ -1752,7 +1852,7 @@ const sync = async (deviceId, org) => {
  * @param  {Object} deviceAIntf device A tunnel interface
  * @param  {Object?} deviceBIntf device B tunnel interface
  * @param  {pathLabel?} path label used for this tunnel
- * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost
+ * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {Object?}  peer peer configurations. If exists, fill peer configurations
 */
 const prepareTunnelParams = (
@@ -1771,7 +1871,7 @@ const prepareTunnelParams = (
     deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : 1500
   ) - packetHeaderSize;
 
-  let { mtu, ospfCost, mssClamp } = advancedOptions;
+  let { mtu, ospfCost, mssClamp, routing } = advancedOptions;
   if (!mtu) {
     mtu = (globalTunnelMtu > 0) ? globalTunnelMtu : minMtu;
   }
@@ -1792,7 +1892,7 @@ const prepareTunnelParams = (
 
     // handle peer configurations
     paramsDeviceA.peer.addr = tunnelParams.ip1 + '/31';
-    paramsDeviceA.peer.routing = 'ospf';
+    paramsDeviceA.peer.routing = routing || 'ospf';
     paramsDeviceA.peer.mtu = mtu;
     paramsDeviceA.peer.multilink = {
       labels: pathLabel ? [pathLabel] : []
@@ -1800,7 +1900,7 @@ const prepareTunnelParams = (
     paramsDeviceA.peer.urls = peer.urls;
     paramsDeviceA.peer.ips = peer.ips;
     if (mssClamp !== 'no') {
-      paramsDeviceA.peer['tcp-mss-clamp'] = minMtu;
+      paramsDeviceA.peer['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
     }
     if (ospfCost) {
       paramsDeviceA.peer['ospf-cost'] = ospfCost;
@@ -1817,7 +1917,7 @@ const prepareTunnelParams = (
       addr: tunnelParams.ip1 + '/31',
       mac: tunnelParams.mac1,
       mtu: mtu,
-      routing: 'ospf',
+      routing: routing || 'ospf',
       multilink: {
         labels: pathLabel ? [pathLabel] : []
       }
@@ -1836,14 +1936,22 @@ const prepareTunnelParams = (
       addr: tunnelParams.ip2 + '/31',
       mac: tunnelParams.mac2,
       mtu: mtu,
-      routing: 'ospf',
+      routing: routing || 'ospf',
       multilink: {
         labels: pathLabel ? [pathLabel] : []
       }
     };
+    paramsDeviceA.remoteBandwidthMbps = {
+      tx: +deviceBIntf.bandwidthMbps.tx,
+      rx: +deviceBIntf.bandwidthMbps.rx
+    };
+    paramsDeviceB.remoteBandwidthMbps = {
+      tx: +deviceAIntf.bandwidthMbps.tx,
+      rx: +deviceAIntf.bandwidthMbps.rx
+    };
     if (mssClamp !== 'no') {
-      paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = minMtu;
-      paramsDeviceB['loopback-iface']['tcp-mss-clamp'] = minMtu;
+      paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
+      paramsDeviceB['loopback-iface']['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
     }
     if (ospfCost) {
       paramsDeviceA['loopback-iface']['ospf-cost'] = ospfCost;

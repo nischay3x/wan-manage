@@ -31,7 +31,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const url = require('url');
 // billing support
 const flexibilling = require('../flexibilling');
-const { mapLteNames } = require('../utils/deviceUtils');
+const { mapLteNames, getCpuInfo } = require('../utils/deviceUtils');
 const geoip = require('geoip-lite');
 
 const connectRouter = express.Router();
@@ -72,7 +72,7 @@ const checkDeviceVersion = async (req, res, next) => {
     });
     const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
     const { versions } = await swUpdater.getLatestSwVersions();
-    console.log('versions=' + versions);
+    // console.log('versions=' + versions);
     res.setHeader('latestVersion', versions.device); // set last device version
     return next(createError(statusCode, err));
   }
@@ -191,7 +191,9 @@ connectRouter.route('/register')
                   }
                 } else {
                   intf.type = 'LAN';
-                  intf.dhcp = 'no';
+                  // set LAN as DHCP only if it's DHCP in Linux and has IP address.
+                  // Otherwise set it to static on registration.
+                  intf.dhcp = intf.dhcp === 'yes' && intf.IPv4 !== '' ? 'yes' : 'no';
                   intf.routing = 'OSPF';
                   intf.gateway = '';
                   intf.metric = '';
@@ -204,6 +206,8 @@ connectRouter.route('/register')
                 router: req.body.router_version || '',
                 device: req.body.device_version || ''
               };
+
+              const cpuInfo = getCpuInfo(req.body.cpuInfo);
 
               // Check that account didn't cross its device limit
               const account = decoded.account;
@@ -255,6 +259,7 @@ connectRouter.route('/register')
                     isApproved: false,
                     isConnected: false,
                     coords: ll,
+                    cpuInfo: cpuInfo,
                     versions: versions
                   }], { session: session })
                     .then(async (result) => {
