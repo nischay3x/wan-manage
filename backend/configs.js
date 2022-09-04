@@ -220,7 +220,9 @@ const configEnv = {
     // URL for account qualification
     qualifiedAccountsURL: 'https://www.flexiwan.com',
     // VPN portal URL
-    vpnBaseUrl: ['https://localvpn.flexiwan.com:8000']
+    vpnBaseUrl: ['https://localvpn.flexiwan.com:8000'],
+    // Post registration redirect URL
+    registerRedirectUrl: ''
   },
   // Override for development environment, default environment if not specified
   development: {

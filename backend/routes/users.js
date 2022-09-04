@@ -220,7 +220,7 @@ router.route('/register')
         return Promise.resolve(true);
       })
       .then(() => {
-        return res.redirect(307, 'https://www.flexiwan.com/account-created-thank-you/');
+        return res.status(200).json({ status: 'user registered' });
       })
       .catch(async (err) => {
         if (session) session.abortTransaction();
