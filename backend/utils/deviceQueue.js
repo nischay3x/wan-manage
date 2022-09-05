@@ -354,12 +354,12 @@ class DeviceQueues {
             resolve();
           };
           // if jobs are removed after single batch iteration
-          // we need to start a new iteration from the beginning
+          // we need to start a new iteration shifted by the number of deleted jobs
           let getJobsFrom = batchFrom;
           let getJobsTo = batchTo;
           if (isDelete) {
-            getJobsTo = batchTo - batchFrom;
-            getJobsFrom = 0;
+            getJobsTo = getJobsTo - done;
+            getJobsFrom = getJobsFrom - done;
           }
           if (state === 'all') {
             kue.Job.range(getJobsFrom, getJobsTo, dir, handleFunc);
