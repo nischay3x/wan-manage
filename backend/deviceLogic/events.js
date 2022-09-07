@@ -408,15 +408,10 @@ class Events {
       }]);
     }
 
-    const dependedDevices = await getTunnelConfigDependencies(tunnel);
+    const dependedDevices = await getTunnelConfigDependencies(tunnel, false);
 
     for (const dependedDevice of dependedDevices) {
       for (const staticRoute of dependedDevice.staticroutes) {
-        // no need to update pending static routes
-        if (staticRoute.isPending) {
-          continue;
-        }
-
         const reason = eventsReasons.tunnelIsPending(tunnel.num);
         await this.setIncompleteRouteStatus(staticRoute, true, reason, dependedDevice);
       }
@@ -429,16 +424,11 @@ class Events {
   */
   async tunnelSetToActive (tunnel) {
     // get tunnel static routes
-    const dependedDevices = await getTunnelConfigDependencies(tunnel);
+    const dependedDevices = await getTunnelConfigDependencies(tunnel, true);
 
     for (const dependedDevice of dependedDevices) {
       for (const staticRoute of dependedDevice.staticroutes) {
-        // no need to update non pending routes
-        if (!staticRoute.isPending) {
-          continue;
-        } else {
-          await this.setIncompleteRouteStatus(staticRoute, false, '', dependedDevice);
-        }
+        await this.setIncompleteRouteStatus(staticRoute, false, '', dependedDevice);
       }
     }
   };

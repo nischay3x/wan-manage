@@ -52,7 +52,7 @@ const pick = require('lodash/pick');
 const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
 const { getBridges } = require('../utils/deviceUtils');
-const { orderTasks } = require('../utils/jobs');
+const uniqWith = require('lodash/uniqWith');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
@@ -469,8 +469,8 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
  * @param  {Object}  messageParams  object with all changes that will be sent to the device
  * @param  {Object}  user           the user that created the request
  * @param  {string}  org            organization to which the user belongs
- * @param  {array}   sendAddTunnels array of tunnel ids to send add-tunnel job for
- * @param  {array}   sendRemoveTunnels array of tunnel ids to send remove-tunnel job for
+ * @param  {object}  sendAddTunnels object of tunnel ids as keys to send add-tunnel job for
+ * @param  {object}  sendRemoveTunnels object of tunnel ids as keys to send remove-tunnel job for
  * @param  {array}   ignoreTasks array of tasks that should be ignored.
  *                               Usually it means that in the current process,
                                  these jobs already sent and no need to resend them.
@@ -484,7 +484,7 @@ const queueModifyDeviceJob = async (
 
   const interfacesIdsSet = new Set();
   const modifiedIfcsMap = {};
-  const modifiedBgp = [];
+  let isBgpAsnChanged = false;
 
   // Changes in the interfaces require reconstruction of all tunnels
   // connected to these interfaces (since the tunnels parameters change).
@@ -515,8 +515,7 @@ const queueModifyDeviceJob = async (
     const oldAsn = remove?.localAsn;
     const newAsn = add?.localAsn;
     if (oldAsn && newAsn && oldAsn !== newAsn) {
-      // reconstruct bgp tunnels with the new remote asn number
-      modifiedBgp.push(newDevice._id.toString());
+      isBgpAsnChanged = true;
     }
   }
 
@@ -566,23 +565,26 @@ const queueModifyDeviceJob = async (
   try {
     const tunnels = await tunnelsModel
       .find({
+        org: org,
         $or: [
-          // Tunnels that depends on a modified interface - Reason 1 above
+          // check the first two reasons above
           {
             $and: [
               { isActive: true },
               { isPending: { $ne: true } }, // no need to reconstruct pending tunnels
               {
                 $or: [
+                  // Tunnels that depends on a modified interface - Reason 1 above
                   { interfaceA: { $in: modifiedInterfaces } },
                   { interfaceB: { $in: modifiedInterfaces } },
-                  { // check if need to reconstruct due to remote ASN change, not interface
+                  // check if need to reconstruct due to remote ASN change - Reason 2 above
+                  {
                     $and: [
                       { 'advancedOptions.routing': 'bgp' },
                       {
                         $or: [
-                          { deviceA: { $in: modifiedBgp } },
-                          { deviceB: { $in: modifiedBgp } }
+                          { deviceA: { $in: isBgpAsnChanged ? [newDevice._id.toString()] : [] } },
+                          { deviceB: { $in: isBgpAsnChanged ? [newDevice._id.toString()] : [] } }
                         ]
                       }
                     ]
@@ -591,8 +593,8 @@ const queueModifyDeviceJob = async (
               }
             ]
           },
-          // Tunnels regardless of interfaces' changes - - Reason 2 above
-          { _id: { $in: [...sendAddTunnels, ...sendRemoveTunnels] } }
+          // Tunnels regardless of interfaces' changes - Reason 3 above
+          { _id: { $in: [...Object.keys(sendAddTunnels), ...Object.keys(sendRemoveTunnels)] } }
         ]
       })
       .populate('deviceA')
@@ -615,8 +617,7 @@ const queueModifyDeviceJob = async (
         removeTasksDeviceA, removeTasksDeviceB
       ] = await prepareTunnelRemoveJob(tunnel, peer, true);
 
-      const isNeedToRemoveTunnel = sendRemoveTunnels.find(i => i === _id.toString());
-      if (isNeedToRemoveTunnel) {
+      if (_id.toString() in sendRemoveTunnels) {
         _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
         continue;
       }
@@ -633,16 +634,13 @@ const queueModifyDeviceJob = async (
         true
       );
 
-      const isNeedToAddTunnel = sendAddTunnels.find(i => i === _id.toString());
-      if (isNeedToAddTunnel) {
+      if (_id.toString() in sendAddTunnels) {
         _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
         continue;
       }
 
       // Now check if need to send remove and add tunnel jobs due to BGP ASN change.
-      const reconstructDueBgpChange = modifiedBgp.find(
-        m => m === deviceA._id.toString() || m === deviceB?._id.toString());
-      if (reconstructDueBgpChange) {
+      if (isBgpAsnChanged && advancedOptions.routing === 'bgp') {
         _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
         _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
         continue;
@@ -800,9 +798,14 @@ const queueModifyDeviceJob = async (
     for (const deviceId in tasks) {
       const deviceTasks = tasks[deviceId].tasks;
 
-      let finalTasks = orderTasks(deviceTasks);
+      // during the process, can be duplications in tasks so here we clean it
+      let finalTasks = uniqWith(deviceTasks, isEqual);
 
       // remove the ignored tasks
+      // "ignoreTasks" is array of tasks that should be removed from the final list.
+      // The reason could be that those tasks already sent to the device
+      // and no need to send it once again.
+      // (see the long comment with examples in Connections.js file).
       for (const ignoreTask of ignoreTasks) {
         const index = finalTasks.findIndex(f => isEqual(ignoreTask, f));
         if (index > -1) {
@@ -811,6 +814,11 @@ const queueModifyDeviceJob = async (
       }
 
       sentTasks[deviceId] = finalTasks;
+      tasks[deviceId].jobResponse ??= {};
+
+      if (finalTasks.length === 0) {
+        continue;
+      }
 
       if (finalTasks.length > 1) {
         // convert the tasks to one aggregated request
@@ -821,24 +829,20 @@ const queueModifyDeviceJob = async (
         }];
       }
 
-      tasks[deviceId].jobResponse ??= {};
+      try {
+        const modifyJob = await queueJob(
+          org,
+          user.username,
+          finalTasks,
+          tasks[deviceId].device,
+          tasks[deviceId].jobResponse
+        );
 
-      if (finalTasks.length > 0) {
-        try {
-          const modifyJob = await queueJob(
-            org,
-            user.username,
-            finalTasks,
-            tasks[deviceId].device,
-            tasks[deviceId].jobResponse
-          );
-
-          jobs.push(modifyJob);
-        } catch (err) {
-          logger.error('Failed to queue device modification message', {
-            params: { err: err.message, finalTasks, deviceId }
-          });
-        }
+        jobs.push(modifyJob);
+      } catch (err) {
+        logger.error('Failed to queue device modification message', {
+          params: { err: err.message, finalTasks, deviceId }
+        });
       }
     }
   } catch (err) {
@@ -1077,6 +1081,7 @@ const transformBGP = async (device, includeTunnelNeighbors = false) => {
           { org },
           { $or: [{ deviceA: _id }, { deviceB: _id }] },
           { isActive: true },
+          { 'advancedOptions.routing': 'bgp' },
           { peer: null }, // don't send peer neighbors
           { isPending: { $ne: true } } // skip pending tunnels
         ]
@@ -1620,8 +1625,8 @@ const apply = async (device, user, data) => {
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
     await setJobPendingInDB(device[0]._id, org, true);
 
-    data.sendAddTunnels ??= [];
-    data.sendRemoveTunnels ??= [];
+    data.sendAddTunnels ??= {};
+    data.sendRemoveTunnels ??= {};
     data.ignoreTasks ??= [];
 
     // Queue device modification job

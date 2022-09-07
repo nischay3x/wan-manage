@@ -33,13 +33,6 @@ const getMinorVersion = (versionString) => {
   return parseInt(versionString.split('.')[1], 10);
 };
 
-const getVersion = (versionString) => {
-  if (!versionString) {
-    return [null, null];
-  }
-  return [getMajorVersion(versionString), getMinorVersion(versionString)];
-};
-
 const mgmtMajorVersion = getMajorVersion(mgmtVersion);
 
 const isSemVer = (version) => {
@@ -113,7 +106,6 @@ const verifyAgentVersion = (version) => {
 module.exports = {
   getMajorVersion: getMajorVersion,
   getMinorVersion: getMinorVersion,
-  getVersion: getVersion,
   isAgentVersionCompatible: isAgentVersionCompatible,
   isSemVer: isSemVer,
   isVppVersion: isVppVersion,

@@ -34,11 +34,10 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const { routerVersionsCompatible, getVersion, getMajorVersion } = require('../versioning');
+const { routerVersionsCompatible, getMajorVersion, getMinorVersion } = require('../versioning');
 const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const keyBy = require('lodash/keyBy');
-const { orderTasks } = require('../utils/jobs');
 const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
 const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
 const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
@@ -981,8 +980,8 @@ const prepareTunnelAddJob = async (
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
 
-  let tasksDeviceA = [];
-  let tasksDeviceB = [];
+  const tasksDeviceA = [];
+  const tasksDeviceB = [];
 
   const {
     paramsDeviceA,
@@ -1178,9 +1177,6 @@ const prepareTunnelAddJob = async (
   if (bgpTasksDeviceB.length > 0) {
     tasksDeviceB.push(...bgpTasksDeviceB); // modify-bgp after add-tunnel
   }
-
-  tasksDeviceA = orderTasks(tasksDeviceA);
-  tasksDeviceB = orderTasks(tasksDeviceB);
 
   return [tasksDeviceA, tasksDeviceB];
 };
@@ -1840,8 +1836,10 @@ const prepareTunnelParams = (
     }
 
     if (routing === 'bgp') {
-      const [majorAgentVersionA, minorAgentVersionA] = getVersion(deviceA.versions.agent);
-      const [majorAgentVersionB, minorAgentVersionB] = getVersion(deviceB?.versions.agent);
+      const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
+      const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
+      const majorAgentVersionB = getMajorVersion(deviceB?.versions.agent);
+      const minorAgentVersionB = getMinorVersion(deviceB?.versions.agent);
 
       const isNeedToSendRemoteAsnA =
         majorAgentVersionA >= 6 || (majorAgentVersionA === 5 && minorAgentVersionA >= 4);
@@ -2084,8 +2082,10 @@ const addBgpNeighborsIfNeeded = async tunnel => {
   const deviceBTasks = [];
 
   if (routing === 'bgp') {
-    const [majorA, minorA] = getVersion(deviceA.versions.agent);
-    const [majorB, minorB] = getVersion(deviceB?.versions.agent);
+    const majorA = getMajorVersion(deviceA.versions.agent);
+    const minorA = getMinorVersion(deviceA.versions.agent);
+    const majorB = getMajorVersion(deviceB?.versions.agent);
+    const minorB = getMinorVersion(deviceB?.versions.agent);
 
     const isNeedToSendNeighborsA = majorA === 5 && minorA === 3;
     const isNeedToSendNeighborsB = majorB === 5 && minorB === 3;
@@ -2133,7 +2133,7 @@ const getInterfacesWithPathLabels = device => {
  * @param  {object} tunnel tunnel object
  * @return {[{object}]} array of devices with config
 */
-const getTunnelConfigDependencies = async (tunnel, ignorePending = false) => {
+const getTunnelConfigDependencies = async (tunnel, isPending) => {
   const { ip1, ip2 } = generateTunnelParams(tunnel.num);
 
   const staticRouteArrayFilters = {
@@ -2145,9 +2145,9 @@ const getTunnelConfigDependencies = async (tunnel, ignorePending = false) => {
     }]
   };
 
-  if (ignorePending) {
+  if (isPending === true || isPending === false) {
     staticRouteArrayFilters.$and.push({
-      $ne: ['$$route.isPending', true]
+      [isPending ? '$eq' : '$ne']: ['$$route.isPending', true]
     });
   }
 
@@ -2162,6 +2162,15 @@ const getTunnelConfigDependencies = async (tunnel, ignorePending = false) => {
             cond: staticRouteArrayFilters
           }
         }
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        org: 1,
+        machineId: 1,
+        name: 1,
+        staticroutes: 1
       }
     }
   ]).allowDiskUse(true);

@@ -550,8 +550,10 @@ class Connections {
             }
           });
 
-          let addTunnelIds = Array.from(events.activeTunnels);
-          let removeTunnelIds = Array.from(events.pendingTunnels);
+          let addTunnelIds = Object.assign(
+            ...Array.from(events.activeTunnels, v => ({ [v]: '' })));
+          let removeTunnelIds = Object.assign(
+            ...Array.from(events.pendingTunnels, v => ({ [v]: '' })));
 
           // modify jobs
           const modifyDevices = await events.prepareModifyDispatcherParameters();
@@ -596,8 +598,8 @@ class Connections {
             }
 
             // send tunnel jobs only on the first iteration to prevent job duplications
-            addTunnelIds = [];
-            removeTunnelIds = [];
+            addTunnelIds = {};
+            removeTunnelIds = {};
           }
 
           // remove the variable from the memory.
