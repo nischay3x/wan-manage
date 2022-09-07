@@ -477,7 +477,8 @@ class Configs {
       showDeviceLimitAlert: this.get('showDeviceLimitAlert', 'boolean'),
       removeBranding: this.get('removeBranding', 'boolean'),
       qualifiedAccountsURL: this.get('qualifiedAccountsURL'),
-      vpnBaseUrl: vpnBaseUrl + '/'
+      vpnBaseUrl: vpnBaseUrl + '/',
+      registerRedirectUrl: this.get('registerRedirectUrl')
     };
   }
 }
