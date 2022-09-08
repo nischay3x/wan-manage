@@ -550,9 +550,9 @@ class Connections {
             }
           });
 
-          let addTunnelIds = Object.assign(
+          let addTunnelIds = Object.assign({},
             ...Array.from(events.activeTunnels, v => ({ [v]: '' })));
-          let removeTunnelIds = Object.assign(
+          let removeTunnelIds = Object.assign({},
             ...Array.from(events.pendingTunnels, v => ({ [v]: '' })));
 
           // modify jobs

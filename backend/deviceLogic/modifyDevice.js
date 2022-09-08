@@ -643,6 +643,12 @@ const queueModifyDeviceJob = async (
       if (isBgpAsnChanged && advancedOptions.routing === 'bgp') {
         _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
         _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
+
+        // if "isBgpAsnChanged" we are sending pair of add and remove bgp.
+        // But, the "addTunnelTasks" might add modify-bgp which we don't need after we have the add.
+        // Hence, remove the modify from the list of tasks.
+        tasks[device._id].tasks = tasks[device._id].tasks.filter(
+          t => t.message !== 'modify-routing-bgp');
         continue;
       }
 
@@ -793,8 +799,6 @@ const queueModifyDeviceJob = async (
     }
 
     // at this point, list of jobs is ready.
-    // Order it by the right order and send it to the devices
-
     for (const deviceId in tasks) {
       const deviceTasks = tasks[deviceId].tasks;
 

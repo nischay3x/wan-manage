@@ -1555,7 +1555,13 @@ const getTunnelConfigDependenciesTasks = async (tunnel, isAdd) => {
   const deviceATasks = [];
   const deviceBTasks = [];
 
-  const dependedDevices = await getTunnelConfigDependencies(tunnel, isAdd);
+  // If we are in the process of adding a tunnel,
+  // we need to send tasks only to the non-pending dependent configurations.
+  // Hence. we put "false" as second variable.
+  // When we are in the process of removing a tunnel,
+  // we need to take both, pending and non-pending
+  // dependent configurations, hence we put null.
+  const dependedDevices = await getTunnelConfigDependencies(tunnel, isAdd ? false : null);
   for (const dependedDevice of dependedDevices) {
     const deviceId = dependedDevice._id.toString();
 
