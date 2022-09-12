@@ -26,7 +26,7 @@ async function up () {
       // Create a default QoS policy
       await qosPoliciesModel.create([{
         org: org,
-        name: 'Default policy',
+        name: 'Default QoS',
         description: 'Created automatically',
         outbound: {
           realtime: {

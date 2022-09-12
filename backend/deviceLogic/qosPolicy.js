@@ -189,8 +189,6 @@ const getQOSParameters = (policy, device, op = 'install') => {
   const devicePolicies = {};
   // requested policy id
   const reqPolicyId = (policy?._id || '').toString();
-  // global policy applied on the device
-  const devPolicyId = (device.policies.qos.policy?._id || '').toString();
   // interfaces specific policies
   for (const ifc of device.interfaces.filter(i => i.isAssigned && i.type === 'WAN')) {
     const ifcPolicyId = (ifc.qosPolicy?._id || '').toString();
@@ -201,23 +199,10 @@ const getQOSParameters = (policy, device, op = 'install') => {
         }
         // push devId if interface specific policy installed
         devicePolicies[ifcPolicyId].interfaces.push(ifc.devId);
-      } else if (reqPolicyId) {
-        if (!devicePolicies[reqPolicyId]) {
-          devicePolicies[reqPolicyId] = convertParameters(policy);
-        }
-        // push devId to the requested or applied already device specific policy
-        devicePolicies[reqPolicyId].interfaces.push(ifc.devId);
       }
     } else {
       // uninstalling
-      if (devPolicyId && devPolicyId !== reqPolicyId &&
-        (!ifcPolicyId || ifcPolicyId === reqPolicyId)) {
-        if (!devicePolicies[devPolicyId]) {
-          devicePolicies[devPolicyId] = convertParameters(device.policies.qos.policy);
-        }
-        // push devId if device specific policy installed and not requested to remove
-        devicePolicies[devPolicyId].interfaces.push(ifc.devId);
-      } else if (ifcPolicyId && ifcPolicyId !== reqPolicyId) {
+      if (reqPolicyId && ifcPolicyId && ifcPolicyId !== reqPolicyId) {
         if (!devicePolicies[ifcPolicyId]) {
           devicePolicies[ifcPolicyId] = convertParameters(ifc.qosPolicy);
         }
@@ -253,6 +238,12 @@ const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org,
   );
 
   deviceList.forEach(dev => {
+    if (!installed && op === 'install') {
+      // a new default policy is installing, interfaces QoS policy should be updated
+      dev.interfaces.forEach(ifc => {
+        ifc.qosPolicy = policy;
+      });
+    }
     const policyParams = getQOSParameters(
       installed && op === 'install' ? dev.policies?.qos?.policy : policy, dev, op
     );
@@ -365,6 +356,7 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
     };
     if (!installed) {
       qosUpdates['policies.qos.policy'] = qosPolicy ? qosPolicy._id : null;
+      qosUpdates['interfaces.$[].qosPolicy'] = qosPolicy ? qosPolicy._id : null;
     };
     updateOps.push({
       updateMany: {
@@ -414,10 +406,7 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
           'policies.qos.policy': qosPolicy._id,
           interfaces: {
             $elemMatch: {
-              $and: [
-                { qosPolicy: { $ne: null } },
-                { qosPolicy: { $ne: qosPolicy._id } }
-              ]
+              qosPolicy: { $ne: qosPolicy._id }
             }
           }
         },
@@ -433,6 +422,8 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
         upsert: false
       }
     });
+    // the selected is not the default device policy, and others interface specific exist
+    // clear all interface specific records with the selected policy
     // set 'installing' and keep others policies
     updateOps.push({
       updateMany: {
@@ -442,62 +433,42 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
           'policies.qos.policy': { $ne: qosPolicy._id },
           interfaces: {
             $elemMatch: {
-              $and: [
-                { qosPolicy: { $ne: null } },
-                { qosPolicy: { $ne: qosPolicy._id } }
-              ]
+              qosPolicy: qosPolicy._id
             }
           }
         },
         update: {
           $set: {
+            'interfaces.$[ifc].qosPolicy': null,
             'policies.qos.status': 'installing',
             'policies.qos.requestTime': requestTime
           }
         },
-        upsert: false
-      }
-    });
-    // clear all interface specific records with the selected policy
-    updateOps.push({
-      updateMany: {
-        filter: {
-          _id: { $in: deviceIds },
-          org: org,
-          interfaces: { $elemMatch: { qosPolicy: { $eq: qosPolicy._id } } }
-        },
-        update: { $set: { 'interfaces.$.qosPolicy': null } },
+        arrayFilters: [{ 'ifc.qosPolicy': qosPolicy._id }],
         upsert: false
       }
     });
   } else {
+    // the uninstall policy is not provided
     // uninstalling all policies
     updateOps.push({
       updateMany: {
         filter: {
           _id: { $in: deviceIds },
-          interfaces: { $elemMatch: { qosPolicy: { $ne: null } } },
-          org: org
+          org: org,
+          $or: [
+            { 'policies.qos.policy': { $ne: null } },
+            { interfaces: { $elemMatch: { qosPolicy: { $ne: null } } } }
+          ]
         },
         update: {
           $set: {
-            'interfaces.$.qosPolicy': null,
+            'interfaces.$[].qosPolicy': null,
             'policies.qos.policy': null,
             'policies.qos.status': 'uninstalling',
             'policies.qos.requestTime': requestTime
           }
         },
-        upsert: false
-      }
-    });
-    updateOps.push({
-      updateMany: {
-        filter: {
-          _id: { $in: deviceIds },
-          org: org,
-          interfaces: { $elemMatch: { qosPolicy: { $ne: null } } }
-        },
-        update: { $set: { 'interfaces.$.qosPolicy': null } },
         upsert: false
       }
     });
