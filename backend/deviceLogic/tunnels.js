@@ -41,6 +41,7 @@ const keyBy = require('lodash/keyBy');
 const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
 const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
 const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
+const { transformBGP } = require('./jobParameters');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -2112,7 +2113,6 @@ const addBgpNeighborsIfNeeded = async tunnel => {
 };
 
 const buildModifyBgpJob = async device => {
-  const transformBGP = require('./modifyDevice').transformBGP;
   const bgpParams = await transformBGP(device, true);
   return { entity: 'agent', message: 'modify-routing-bgp', params: bgpParams };
 };
