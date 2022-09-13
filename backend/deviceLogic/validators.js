@@ -526,12 +526,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
         valid: false, err: 'Wifi access point must be enabled'
       };
     } ;
-
-    const key = band2Enable ? '2.4GHz' : '5GHz';
-    const ssid = wifiInterface.configuration[key] && wifiInterface.configuration[key].ssid;
-    const pass = wifiInterface.configuration[key] && wifiInterface.configuration[key].password;
-    if (!ssid) return { valid: false, err: 'SSID is not configured for WIFI interface' };
-    if (!pass) return { valid: false, err: 'Password is not configured for WIFI interface' };
   }
 
   // Firewall rules validation

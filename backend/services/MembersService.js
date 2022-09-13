@@ -599,15 +599,20 @@ class MembersService {
    * returns 204
    */
   static async membersIdResetMfaGET ({ id }, { user }, response) {
-    // check that requested user is account owner.
-    // Only account owner can reset 2fa
-    const isAccountOwner = await membership.findOne({
-      user: user._id,
-      account: user.defaultAccount._id,
-      to: 'account',
-      role: 'owner'
-    });
-    if (!isAccountOwner) {
+    // user can reset MFA for himself only.
+    // Account owner can reset 2fa for all users in his account.
+    let allowedToReset = user._id.toString() === id; // user for himself.
+    if (!allowedToReset) {
+      // if user tried to reset someone else - make sure he is account owner.
+      const isAccountOwner = await membership.findOne({
+        user: user._id,
+        account: user.defaultAccount._id,
+        to: 'account',
+        role: 'owner'
+      });
+      allowedToReset = isAccountOwner !== null;
+    }
+    if (!allowedToReset) {
       return Service.rejectResponse(
         'No sufficient permissions for this operation', 400);
     }

@@ -519,7 +519,7 @@ class OrganizationsService {
       // Create a default QoS policy
       const qosPolicy = await QosPolicies.create([{
         org: org,
-        name: 'Default policy',
+        name: 'Default QoS',
         description: 'Created automatically',
         outbound: {
           realtime: {

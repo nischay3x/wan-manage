@@ -216,7 +216,7 @@ exports.verifyUserJWT = function (req, res, next) {
     logger.debug('verifyUserJWT: OPTIONS request');
     return next();
     // Check if an API call
-  } else if (req.url.startsWith('/api')) {
+  } else if (req.url.startsWith('/api') || req.url.includes('/mfa')) {
     passport.authenticate('jwt', { session: false }, async (err, user, info) => {
       if (err || !user) {
         // If the JWT token has expired, but the request
