@@ -307,6 +307,20 @@ const handlePeers = async (
   // get peers configurations
   const peers = await peersModel.find({ _id: { $in: peersIds }, org: org }).lean();
 
+  const existingPeers = await tunnelsModel.find(
+    {
+      isActive: true,
+      org: org,
+      peer: { $in: peersIds }
+    },
+    {
+      num: 1,
+      interfaceA: 1,
+      peer: 1,
+      pathlabel: 1
+    }
+  );
+
   for (const device of opDevices) {
     // peer is supported for major version 5
     const majorAgentVersion = getMajorVersion(device.versions.agent);
@@ -365,11 +379,11 @@ const handlePeers = async (
 
         // Create peer configuration for the interface
         for (const peer of peers) {
-          // If the peer already exists, skip the configuration
-          const peerFound = await getTunnel(org, null, wanIfc, null, peer._id);
-          if (peerFound.length > 0) {
-            logger.debug('Found existing peer', { params: { peer: peerFound } });
-            reasons.add('Some peers exist already.');
+          // If the peer already exists in the organization, skip the configuration
+          const peerFoundInOrg = existingPeers.find(t => peer._id.equals(t.peer));
+          if (peerFoundInOrg) {
+            logger.debug('Found peer in organization', { params: { peer: peerFoundInOrg } });
+            reasons.add('Some of the selected peer profiles exist already in the organization.');
             continue;
           }
 
@@ -414,11 +428,11 @@ const handlePeers = async (
           }
 
           for (const peer of peers) {
-            const peerFound = await getTunnel(org, label, wanIfc, null, peer._id);
-            if (peerFound.length > 0) {
-              logger.debug('Found existing peer with this path label',
-                { params: { peer: peerFound, label: label } });
-              reasons.add('Some tunnels exist already.');
+            // If the peer already exists in the organization, skip the configuration
+            const peerFoundInOrg = existingPeers.find(t => peer._id.equals(t.peer));
+            if (peerFoundInOrg) {
+              logger.debug('Found peer in organization', { params: { peer: peerFoundInOrg } });
+              reasons.add('Some of the selected peer profiles exist already in the organization.');
               continue;
             }
 
@@ -700,35 +714,6 @@ const errorTunnelAdd = async (jobId, res) => {
   if (!res || !res.deviceA || !res.deviceB || !res.target || !res.username || !res.org) {
     logger.warn('Got an invalid job result', { params: { result: res, jobId: jobId } });
   }
-};
-
-/**
- * Returns an active tunnel object promise from DB
- * @param  {string}   org         organization id the user belongs to
- * @param  {string}   pathLabel   path label id
- * @param  {Object}   wanIfcA     device A tunnel interface
- * @param  {Object?}  wanIfcB     device B tunnel interface
- * @param  {string?}  peerId      peerId
- */
-const getTunnel = (org, pathLabel, wanIfcA, wanIfcB, peerId = false) => {
-  const query = {
-    isActive: true,
-    pathlabel: pathLabel,
-    org: org
-  };
-
-  // peers are not configured with deviceB and interfaceB
-  if (!peerId) {
-    query.$or = [
-      { interfaceA: wanIfcA._id, interfaceB: wanIfcB._id },
-      { interfaceB: wanIfcA._id, interfaceA: wanIfcB._id }
-    ];
-  } else {
-    query.interfaceA = wanIfcA._id;
-    query.peer = peerId;
-  }
-
-  return tunnelsModel.find(query);
 };
 
 /**
