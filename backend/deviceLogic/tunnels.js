@@ -320,6 +320,7 @@ const handlePeers = async (
       pathlabel: 1
     }
   );
+  const existingPeersMap = keyBy(existingPeers, 'peer');
 
   for (const device of opDevices) {
     // peer is supported for major version 5
@@ -380,9 +381,8 @@ const handlePeers = async (
         // Create peer configuration for the interface
         for (const peer of peers) {
           // If the peer already exists in the organization, skip the configuration
-          const peerFoundInOrg = existingPeers.find(t => peer._id.equals(t.peer));
-          if (peerFoundInOrg) {
-            logger.debug('Found peer in organization', { params: { peer: peerFoundInOrg } });
+          if (peer._id.toString() in existingPeersMap) {
+            logger.debug('Found peer in organization', { params: { peer: peer } });
             reasons.add('Some of the selected peer profiles exist already in the organization.');
             continue;
           }
@@ -428,10 +428,8 @@ const handlePeers = async (
           }
 
           for (const peer of peers) {
-            // If the peer already exists in the organization, skip the configuration
-            const peerFoundInOrg = existingPeers.find(t => peer._id.equals(t.peer));
-            if (peerFoundInOrg) {
-              logger.debug('Found peer in organization', { params: { peer: peerFoundInOrg } });
+            if (peer._id.toString() in existingPeersMap) {
+              logger.debug('Found peer in organization', { params: { peer: peer } });
               reasons.add('Some of the selected peer profiles exist already in the organization.');
               continue;
             }
