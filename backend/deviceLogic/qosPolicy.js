@@ -238,6 +238,7 @@ const queueQOSPolicyJob = async (deviceList, op, requestTime, policy, user, org,
   );
 
   deviceList.forEach(dev => {
+    dev = dev.toObject();
     if (!installed && op === 'install') {
       // a new default policy is installing, interfaces QoS policy should be updated
       dev.interfaces.forEach(ifc => {
@@ -296,12 +297,17 @@ const getOpDevices = async (devicesObj, org, policy, op) => {
   const { _id } = policy || { _id: null };
   const filter = {
     org: org,
-    $or: [
-      { 'policies.qos.policy': _id },
-      { 'interfaces.qosPolicy': _id }
-    ],
     'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] }
   };
+
+  // uninstall a specified policy
+  if (op !== 'install' && _id) {
+    filter.$or = [
+      { 'policies.qos.policy': _id },
+      { 'interfaces.qosPolicy': _id }
+    ];
+  }
+
   if (op !== 'install' && devicesList.length > 0) {
     filter._id = { $in: devicesList };
   }
@@ -313,8 +319,13 @@ const getOpDevices = async (devicesObj, org, policy, op) => {
 const filterDevices = (devices, deviceIds, op, policyIdRequest) => {
   const filteredDevices = devices.filter(device => {
     const { status, policy } = device.policies.qos || {};
-    const policyExist = (policy && policyIdRequest === policy._id.toString()) ||
+
+    const hasDeviceDefaultPolicy =
+      policy && (!policyIdRequest || policyIdRequest === policy._id.toString());
+    const hasInterfaceSpecificPolicy =
       device.interfaces.some(ifc => (ifc.qosPolicy?._id || '').toString() === policyIdRequest);
+    const policyExist = hasDeviceDefaultPolicy || hasInterfaceSpecificPolicy;
+
     // Don't attempt to uninstall a policy if the device
     // doesn't have one, or if its policy is already in
     // the process of being uninstalled.
@@ -390,10 +401,12 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
         },
         update: {
           $set: {
+            'interfaces.$[ifc].qosPolicy': null,
             'policies.qos.status': 'uninstalling',
             'policies.qos.requestTime': requestTime
           }
         },
+        arrayFilters: [{ 'ifc.qosPolicy': qosPolicy._id }],
         upsert: false
       }
     });
@@ -412,6 +425,7 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
         },
         update: {
           $set: {
+            'interfaces.$[ifc].qosPolicy': null,
             'policies.qos': {
               policy: null,
               status: 'installing',
@@ -419,6 +433,7 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, qosPolicy, org
             }
           }
         },
+        arrayFilters: [{ 'ifc.qosPolicy': qosPolicy._id }],
         upsert: false
       }
     });
@@ -779,7 +794,7 @@ const sync = async (deviceId, org) => {
   let callComplete = false;
 
   // if no QOS global policy then interfaces specific policies will be sent
-  const params = getQOSParameters(status.startsWith('install') ? policy : null, device);
+  const params = status.startsWith('install') ? getQOSParameters(policy, device) : null;
   if (params) {
     // Push policy task and relevant data for sync complete handler
     requests.push({ entity: 'agent', message: 'add-qos-policy', params });
