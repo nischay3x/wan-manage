@@ -316,11 +316,13 @@ const handlePeers = async (
     {
       num: 1,
       interfaceA: 1,
+      deviceA: 1,
       peer: 1,
       pathlabel: 1
     }
   );
-  const existingPeersMap = keyBy(existingPeers, 'peer');
+  const getDevicePeerKey = (deviceId, peerId) => `${deviceId}_${peerId}`;
+  const existingDevicePeersMap = keyBy(existingPeers, p => getDevicePeerKey(p.deviceA, p.peer));
 
   for (const device of opDevices) {
     // peer is supported for major version 5
@@ -380,10 +382,11 @@ const handlePeers = async (
 
         // Create peer configuration for the interface
         for (const peer of peers) {
-          // If the peer already exists in the organization, skip the configuration
-          if (peer._id.toString() in existingPeersMap) {
-            logger.debug('Found peer in organization', { params: { peer: peer } });
-            reasons.add('Some of the selected peer profiles exist already in the organization.');
+          // each peer can be installed once in a device.
+          const devicePeerKey = getDevicePeerKey(device._id, peer._id);
+          if (devicePeerKey in existingDevicePeersMap) {
+            logger.debug('Found same peer in the device', { params: { peer: peer } });
+            reasons.add('Some of the selected peer profiles installed already in the device.');
             continue;
           }
 
@@ -428,9 +431,11 @@ const handlePeers = async (
           }
 
           for (const peer of peers) {
-            if (peer._id.toString() in existingPeersMap) {
-              logger.debug('Found peer in organization', { params: { peer: peer } });
-              reasons.add('Some of the selected peer profiles exist already in the organization.');
+            // each peer can be installed once in a device.
+            const devicePeerKey = getDevicePeerKey(device._id, peer._id);
+            if (devicePeerKey in existingDevicePeersMap) {
+              logger.debug('Found same peer in the device', { params: { peer: peer } });
+              reasons.add('Some of the selected peer profiles installed already in the device.');
               continue;
             }
 
