@@ -1709,6 +1709,7 @@ const remove = async (job) => {
 };
 
 const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
+  const origIfcs = transformInterfaces(device.interfaces, device.ospf, device.versions.agent);
   return !has(messageParams, 'modify_router') &&
     !has(messageParams, 'modify_routes') &&
     !has(messageParams, 'modify_dhcp_config') &&
@@ -1718,24 +1719,14 @@ const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
     !has(messageParams, 'modify_firewall') &&
     !has(messageParams, 'modify_qos') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
-      const origIfc = device.interfaces.find(o => o._id.toString() === modifiedIfc._id.toString());
+      const origIfc = origIfcs.find(o => o._id.toString() === modifiedIfc._id.toString());
       const propsModified = Object.keys(modifiedIfc).filter(prop => {
-        // There is a case that origIfc.IPv6 is an empty string and origIfc.IPv6Mask is undefined,
-        // So the result of the combination of them is "/".
-        // If modifiedIfc.addr6 is an empty string, it always different than "/", and
-        // we send unnecessary modify-interface job.
-        // So if the origIfc.IPv6 is empty, we ignore the IPv6 undefined.
-        const origIPv6 = origIfc.IPv6 === '' ? '' : `${origIfc.IPv6}/${origIfc.IPv6Mask}`;
         switch (prop) {
           case 'pathlabels':
             return !isEqual(
               modifiedIfc[prop].filter(pl => pl.type === 'DIA'),
               origIfc[prop].filter(pl => pl.type === 'DIA')
             );
-          case 'addr':
-            return modifiedIfc.addr !== `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
-          case 'addr6':
-            return modifiedIfc.addr6 !== origIPv6;
           default:
             return !isEqual(modifiedIfc[prop], origIfc[prop]);
         }
