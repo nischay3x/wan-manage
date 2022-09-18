@@ -575,10 +575,11 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
 
     const neighborIp = bgpNeighbor.ip + '/32';
-    if (cidr.overlap(neighborIp, '10.100.0.0/16') && (outboundFilter || inboundFilter)) {
+    if (cidr.overlap(neighborIp, '10.100.0.0/16')) {
       return {
         valid: false,
-        err: `A routing filter cannot be set on a BGP neighbor (${bgpNeighbor.ip})`
+        err: `The BGP Neighbor ${bgpNeighbor.ip} ` +
+        'overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)'
       };
     }
 

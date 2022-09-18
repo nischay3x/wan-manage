@@ -30,19 +30,18 @@ const {
 const { validateIKEv2 } = require('./IKEv2');
 const eventsReasons = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
-
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const { routerVersionsCompatible, getMajorVersion } = require('../versioning');
+const { routerVersionsCompatible, getMajorVersion, getMinorVersion } = require('../versioning');
 const peersModel = require('../models/peers');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const keyBy = require('lodash/keyBy');
-
 const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
 const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
 const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
+const { transformBGP } = require('./jobParameters');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -611,23 +610,6 @@ const applyTunnelAdd = async (devices, user, data) => {
     return arr;
   }, []);
 
-  // Check if need to trigger modify-device job
-  // bgp neighbors can be added
-  const updDevices = await devicesModel.find({
-    _id: { $in: devices.map(d => d._id) }
-  });
-  const modifyDeviceDispatcher = require('./modifyDevice').apply;
-  for (let i = 0; i < updDevices.length; i++) {
-    await modifyDeviceDispatcher(
-      [devices[i]],
-      { username: 'system' },
-      {
-        org: org.toString(),
-        newDevice: updDevices[i]
-      }
-    );
-  }
-
   const status = fulfilled.length < dbTasks.length
     ? 'partially completed' : 'completed';
 
@@ -993,7 +975,8 @@ const prepareTunnelAddJob = async (
   deviceA,
   deviceB,
   advancedOptions,
-  peer = null
+  peer = null,
+  includeDeviceConfigDependencies = false
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -1009,6 +992,8 @@ const prepareTunnelAddJob = async (
     tunnel,
     deviceAIntf,
     deviceBIntf,
+    deviceA,
+    deviceB,
     pathLabel,
     advancedOptions,
     peer
@@ -1161,6 +1146,14 @@ const prepareTunnelAddJob = async (
     paramsDeviceB.ipsec = paramsIpsecDeviceB;
   }
 
+  if (includeDeviceConfigDependencies) {
+    const [configTasksDeviceA, configTasksDeviceB] = await getTunnelConfigDependenciesTasks(
+      tunnel, true);
+
+    tasksDeviceA.push(...configTasksDeviceA);
+    tasksDeviceB.push(...configTasksDeviceB);
+  }
+
   // Saving configuration for device A
   tasksDeviceA.push({
     entity: 'agent',
@@ -1175,6 +1168,15 @@ const prepareTunnelAddJob = async (
       message: 'add-tunnel',
       params: paramsDeviceB
     });
+  }
+
+  const [bgpTasksDeviceA, bgpTasksDeviceB] = await addBgpNeighborsIfNeeded(tunnel);
+  if (bgpTasksDeviceA.length > 0) {
+    tasksDeviceA.push(...bgpTasksDeviceA); // modify-bgp after add-tunnel
+  }
+
+  if (bgpTasksDeviceB.length > 0) {
+    tasksDeviceB.push(...bgpTasksDeviceB); // modify-bgp after add-tunnel
   }
 
   return [tasksDeviceA, tasksDeviceB];
@@ -1270,93 +1272,12 @@ const addTunnel = async (
     { upsert: true, new: true }
   );
 
-  // create bgp neighbors automatically for both devices.
-  // for peer tunnel, the user should create the bgp neighbors manually since
-  // we don't know the remote asn and other configurations
-  if (routing === 'bgp' && !peer) {
-    // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
-    const tunnelParams = generateTunnelParams(tunnel.num);
-
-    const deviceANeighbor = {
-      ip: tunnelParams.ip2,
-      remoteASN: deviceB.bgp.localASN
-    };
-
-    const deviceBNeighbor = {
-      ip: tunnelParams.ip1,
-      remoteASN: deviceA.bgp.localASN
-    };
-
-    if (!deviceA.bgp.neighbors.find(n => n.ip === deviceANeighbor.ip)) {
-      await devicesModel.updateOne(
-        { _id: deviceA._id },
-        { $push: { 'bgp.neighbors': deviceANeighbor } },
-        { upsert: false }
-      );
-    }
-
-    if (!deviceB.bgp.neighbors.find(n => n.ip === deviceBNeighbor.ip)) {
-      await devicesModel.updateOne(
-        { _id: deviceB._id },
-        { $push: { 'bgp.neighbors': deviceBNeighbor } },
-        { upsert: false }
-      );
-    }
-  }
-
   // don't send jobs for pending tunnels
   if (isPending) {
     throw new Error(`Tunnel #${tunnelnum} set as pending - ${pendingReason}`);
   }
 
-  const [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
-    tunnel,
-    deviceAIntf,
-    deviceBIntf,
-    pathLabel,
-    deviceA,
-    deviceB,
-    advancedOptions,
-    peer
-  );
-
-  let title = '';
-  if (peer) {
-    title += 'Create peer tunnel between (' +
-      deviceA.hostname +
-      ',' +
-      deviceAIntf.name +
-      ') and peer (' +
-      peer.name +
-      ')';
-  } else {
-    title += 'Create tunnel between (' +
-      deviceA.hostname +
-      ',' +
-      deviceAIntf.name +
-      ') and (' +
-      deviceB.hostname +
-      ',' +
-      deviceBIntf.name +
-      ')';
-  }
-  const tunnelJobs = await queueTunnel(
-    true,
-    title,
-    tasksDeviceA,
-    tasksDeviceB,
-    user,
-    org,
-    deviceA.machineId,
-    peer ? null : deviceB.machineId,
-    deviceA._id,
-    peer ? null : deviceB._id,
-    tunnelnum,
-    pathLabel,
-    peer
-  );
-
-  return tunnelJobs;
+  return await sendAddTunnelsJobs([tunnel._id], user);
 };
 
 /**
@@ -1445,7 +1366,7 @@ const applyTunnelDel = async (devices, user, data) => {
     const delPromises = [];
     tunnelIds.forEach(tunnelID => {
       try {
-        const delPromise = oneTunnelDel(tunnelID, userName, org);
+        const delPromise = delTunnel(tunnelID, userName, org);
         delPromises.push(delPromise);
       } catch (err) {
         logger.error('Delete tunnel error', { params: { tunnelID, error: err.message } });
@@ -1453,23 +1374,6 @@ const applyTunnelDel = async (devices, user, data) => {
     });
 
     const promiseStatus = await Promise.allSettled(delPromises);
-
-    // After removing the tunnels, check if need to send modify device job
-    // bgp neighbors might be deleted
-    const updDevices = await devicesModel.find({
-      _id: { $in: devices.map(d => d._id) }
-    });
-    const modifyDeviceDispatcher = require('./modifyDevice').apply;
-    for (let i = 0; i < updDevices.length; i++) {
-      await modifyDeviceDispatcher(
-        [devices[i]],
-        { username: 'system' },
-        {
-          org: org.toString(),
-          newDevice: updDevices[i]
-        }
-      );
-    }
 
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
@@ -1516,7 +1420,7 @@ const applyTunnelDel = async (devices, user, data) => {
  * @param  {string}   org        the user's organization id
  * @return {array}    jobs created
  */
-const oneTunnelDel = async (tunnelID, user, org) => {
+const delTunnel = async (tunnelID, user, org) => {
   const tunnelResp = await tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
     .populate('deviceA')
     .populate('deviceB')
@@ -1529,7 +1433,7 @@ const oneTunnelDel = async (tunnelID, user, org) => {
   };
 
   // Define devices
-  const { num, deviceA, deviceB, pathLabel, peer, advancedOptions } = tunnelResp;
+  const { num, deviceA, deviceB, peer } = tunnelResp;
 
   // Check is tunnel used by any static route
   const { ip1, ip2 } = generateTunnelParams(num);
@@ -1544,19 +1448,6 @@ const oneTunnelDel = async (tunnelID, user, org) => {
       'Some static routes defined via removed tunnel, please remove static routes first'
     );
   };
-
-  // Populate interface details
-  const deviceAIntf = tunnelResp.deviceA.interfaces
-    .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceA; })[0];
-  const deviceBIntf = peer ? null : tunnelResp.deviceB.interfaces
-    .filter((ifc) => { return ifc._id.toString() === '' + tunnelResp.interfaceB; })[0];
-
-  let tunnelJobs = [];
-  // don't send remove jobs for pending tunnels
-  if (!tunnelResp.isPending) {
-    tunnelJobs = await delTunnel(user, org, tunnelResp, deviceA, deviceB,
-      deviceAIntf, deviceBIntf, pathLabel, peer);
-  }
 
   logger.info('Deleting tunnels from database');
   const resp = await tunnelsModel.findOneAndUpdate(
@@ -1575,24 +1466,11 @@ const oneTunnelDel = async (tunnelID, user, org) => {
     { upsert: false, new: true }
   );
 
-  // remove the bgp neighbors
-  const { routing } = advancedOptions || {};
-  if (routing === 'bgp' && !peer) {
-    if (deviceA.bgp.neighbors.find(n => n.ip === ip2)) {
-      await devicesModel.updateOne(
-        { _id: deviceA._id },
-        { $pull: { 'bgp.neighbors': { ip: ip2 } } },
-        { upsert: false }
-      );
-    }
+  let tunnelJobs = [];
 
-    if (deviceB.bgp.neighbors.find(n => n.ip === ip1)) {
-      await devicesModel.updateOne(
-        { _id: deviceB._id },
-        { $pull: { 'bgp.neighbors': { ip: ip1 } } },
-        { upsert: false }
-      );
-    }
+  // don't send remove jobs for pending tunnels
+  if (!tunnelResp.isPending) {
+    tunnelJobs = await sendRemoveTunnelsJobs([tunnelID], user);
   }
 
   // remove the tunnel status from memory
@@ -1626,18 +1504,28 @@ const completeTunnelDel = (jobId, res) => {
  * the jobs that should be queued for each of the devices connected
  * by the tunnel.
  * @param  {Object} tunnel      the tunnel object to be deleted
- * @param  {Object} deviceAIntf device A tunnel interface
- * @param  {Object} deviceBIntf device B tunnel interface
  * @param  {Object} peer        peer configurations
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
-const prepareTunnelRemoveJob = (tunnel, deviceAIntf, deviceBIntf, peer = null) => {
+const prepareTunnelRemoveJob = async (
+  tunnel,
+  peer = null,
+  includeDeviceConfigDependencies = false
+) => {
   const tasksDeviceA = [];
   const tasksDeviceB = [];
 
   const removeParams = {
     'tunnel-id': tunnel.num
   };
+
+  if (includeDeviceConfigDependencies) {
+    const [configTasksDeviceA, configTasksDeviceB] = await getTunnelConfigDependenciesTasks(
+      tunnel, false);
+
+    tasksDeviceA.push(...configTasksDeviceA);
+    tasksDeviceB.push(...configTasksDeviceB);
+  }
 
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: removeParams });
@@ -1647,79 +1535,74 @@ const prepareTunnelRemoveJob = (tunnel, deviceAIntf, deviceBIntf, peer = null) =
     tasksDeviceB.push({ entity: 'agent', message: 'remove-tunnel', params: removeParams });
   }
 
+  const [bgpTasksDeviceA, bgpTasksDeviceB] = await addBgpNeighborsIfNeeded(tunnel);
+  if (bgpTasksDeviceA.length > 0) {
+    tasksDeviceA.unshift(...bgpTasksDeviceA); // modify-bgp before remove-tunnel
+  }
+
+  if (bgpTasksDeviceB.length > 0) {
+    tasksDeviceB.unshift(...bgpTasksDeviceB); // modify-bgp before remove-tunnel
+  }
+
   return [tasksDeviceA, tasksDeviceB];
 };
 
 /**
- * Calls the necessary APIs for deleting a single tunnel
- * @param  {string}   user         user id of requesting user
- * @param  {string}   org          id of the organization of the user
- * @param  {Object}   tunnel       the tunnel object to be deleted
- * @param  {Object}   deviceA      details of device A
- * @param  {Object}   deviceB      details of device B
- * @param  {Object}   deviceAIntf device A tunnel interface
- * @param  {Object}   deviceBIntf device B tunnel interface
- * @return {void}
+ * Get all devices configurations that depend on the tunnel.
+ * e.g. static route via the tunnel
+ * @return Array
  */
-const delTunnel = async (
-  user,
-  org,
-  tunnel,
-  deviceA,
-  deviceB,
-  deviceAIntf,
-  deviceBIntf,
-  pathLabel,
-  peer = null
-) => {
-  const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(
-    tunnel,
-    deviceAIntf,
-    deviceBIntf,
-    peer
-  );
-  try {
-    let title = '';
-    if (peer) {
-      title = 'Delete peer tunnel between (' +
-      deviceA.hostname +
-      ',' +
-      deviceAIntf.name +
-      ') and peer (' +
-      peer.name +
-      ')';
+const getTunnelConfigDependenciesTasks = async (tunnel, isAdd) => {
+  const deviceATasks = [];
+  const deviceBTasks = [];
+
+  // If we are in the process of adding a tunnel,
+  // we need to send tasks only to the non-pending dependent configurations.
+  // Hence. we put "false" as second variable.
+  // When we are in the process of removing a tunnel,
+  // we need to take both, pending and non-pending
+  // dependent configurations, hence we put null.
+  const dependedDevices = await getTunnelConfigDependencies(tunnel, isAdd ? false : null);
+  for (const dependedDevice of dependedDevices) {
+    const deviceId = dependedDevice._id.toString();
+
+    let deviceTasksArray = null;
+    if (deviceId === tunnel.deviceA._id.toString()) {
+      deviceTasksArray = deviceATasks;
     } else {
-      title = 'Delete tunnel between (' +
-      deviceA.hostname +
-      ',' +
-      deviceAIntf.name +
-      ') and (' +
-      deviceB.hostname +
-      ',' +
-      deviceBIntf.name +
-      ')';
-    };
-    const tunnelJobs = await queueTunnel(
-      false,
-      title,
-      tasksDeviceA,
-      tasksDeviceB,
-      user,
-      org,
-      deviceA.machineId,
-      peer ? null : deviceB.machineId,
-      deviceA._id,
-      peer ? null : deviceB._id,
-      tunnel.num,
-      pathLabel,
-      peer
-    );
-    logger.debug('Tunnel jobs queued', { params: { jobA: tunnelJobs[0], jobB: tunnelJobs[1] } });
-    return tunnelJobs;
-  } catch (err) {
-    logger.error('Delete tunnel error', { params: { reason: err.message } });
-    throw err;
+      deviceTasksArray = deviceBTasks;
+    }
+
+    for (const staticRoute of dependedDevice.staticroutes) {
+      const {
+        ifname,
+        gateway,
+        destination,
+        metric,
+        redistributeViaOSPF,
+        redistributeViaBGP,
+        onLink
+      } = staticRoute;
+
+      const params = {
+        addr: destination,
+        via: gateway,
+        dev_id: ifname || undefined,
+        metric: metric ? parseInt(metric, 10) : undefined,
+        redistributeViaOSPF: redistributeViaOSPF,
+        redistributeViaBGP: redistributeViaBGP,
+        onLink: onLink
+      };
+
+      deviceTasksArray.push({
+        entity: 'agent',
+        message: `${isAdd ? 'add' : 'remove'}-route`,
+        params
+      });
+    }
   }
+
+  return [deviceATasks, deviceBTasks];
 };
 
 /**
@@ -1752,8 +1635,8 @@ const sync = async (deviceId, org) => {
       peer: 1
     }
   )
-    .populate('deviceA', 'machineId interfaces versions IKEv2')
-    .populate('deviceB', 'machineId interfaces versions IKEv2')
+    .populate('deviceA', 'machineId interfaces versions IKEv2 bgp')
+    .populate('deviceB', 'machineId interfaces versions IKEv2 bgp')
     .populate('peer')
     .lean();
 
@@ -1856,7 +1739,8 @@ const sync = async (deviceId, org) => {
  * @param  {Object?}  peer peer configurations. If exists, fill peer configurations
 */
 const prepareTunnelParams = (
-  tunnel, deviceAIntf, deviceBIntf, pathLabel = null, advancedOptions = {}, peer = null
+  tunnel, deviceAIntf, deviceBIntf, deviceA, deviceB,
+  pathLabel = null, advancedOptions = {}, peer = null
 ) => {
   const paramsDeviceA = {};
   const paramsDeviceB = {};
@@ -1957,57 +1841,280 @@ const prepareTunnelParams = (
       paramsDeviceA['loopback-iface']['ospf-cost'] = ospfCost;
       paramsDeviceB['loopback-iface']['ospf-cost'] = ospfCost;
     }
+
+    if (routing === 'bgp') {
+      const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
+      const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
+      const majorAgentVersionB = getMajorVersion(deviceB?.versions.agent);
+      const minorAgentVersionB = getMinorVersion(deviceB?.versions.agent);
+
+      const isNeedToSendRemoteAsnA =
+        majorAgentVersionA >= 6 || (majorAgentVersionA === 5 && minorAgentVersionA >= 4);
+      const isNeedToSendRemoteAsnB =
+        majorAgentVersionB >= 6 || (majorAgentVersionB === 5 && minorAgentVersionB >= 4);
+
+      if (isNeedToSendRemoteAsnA) {
+        const bgpAsnDeviceB = deviceB.bgp.localASN;
+        paramsDeviceA['loopback-iface']['bgp-remote-asn'] = bgpAsnDeviceB;
+      }
+      if (isNeedToSendRemoteAsnB) {
+        const bgpAsnDeviceA = deviceA.bgp.localASN;
+        paramsDeviceB['loopback-iface']['bgp-remote-asn'] = bgpAsnDeviceA;
+      }
+    }
   }
 
   return { paramsDeviceA, paramsDeviceB, tunnelParams };
 };
 
-const sendRemoveTunnelsJobs = async (tunnelsIds, username = 'system') => {
+/**
+ * Send tunnels remove jobs
+ * @param  {Array}   tunnelIds an array of ids of the tunnels to remove
+ * @param  {string}  username  the name of the user that requested the device change
+ * @return {Array}             array of add-tunnel jobs
+ */
+const sendRemoveTunnelsJobs = async (
+  tunnelIds, username = 'system', includeDeviceConfigDependencies = false
+) => {
   let tunnelsJobs = [];
 
   const tunnels = await tunnelsModel.find(
-    { _id: { $in: tunnelsIds }, isActive: true }
+    { _id: { $in: tunnelIds } }
   ).populate('deviceA').populate('deviceB').populate('peer');
 
   for (const tunnel of tunnels) {
-    const ifcA = tunnel.deviceA.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceA.toString();
+    const { org, deviceA, deviceB, interfaceA, interfaceB, pathlabel, peer } = tunnel;
+
+    const ifcA = deviceA.interfaces.find(ifc => {
+      return ifc._id.toString() === interfaceA.toString();
     });
-    const ifcB = tunnel.peer ? null : tunnel.deviceB.interfaces.find(ifc => {
-      return ifc._id.toString() === tunnel.interfaceB.toString();
+    const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
+      return ifc._id.toString() === interfaceB.toString();
     });
 
-    const [tasksDeviceA, tasksDeviceB] = prepareTunnelRemoveJob(tunnel, ifcA, ifcB, tunnel.peer);
-
-    let title = null;
-    if (tunnel.peer) {
-      // eslint-disable-next-line max-len
-      title = `Delete peer tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.peer.name})`;
-    } else {
-      // eslint-disable-next-line max-len
-      title = `Delete tunnel between (${tunnel.deviceA.hostname}, ${ifcA.name}) and (${tunnel.deviceB.hostname}, ${ifcB.name})`;
-    }
-
-    const removeTunnelJobs = await queueTunnel(
-      false,
-      title,
-      tasksDeviceA,
-      tasksDeviceB,
-      username,
-      tunnel.org,
-      tunnel.deviceA.machineId,
-      tunnel.peer ? null : tunnel.deviceB.machineId,
-      tunnel.deviceA._id,
-      tunnel.peer ? null : tunnel.deviceB._id,
-      tunnel.num,
-      tunnel.pathlabel,
-      tunnel.peer
+    let [tasksDeviceA, tasksDeviceB] = await prepareTunnelRemoveJob(
+      tunnel,
+      peer,
+      includeDeviceConfigDependencies
     );
 
-    tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
+    if (tasksDeviceA.length > 1) {
+      tasksDeviceA = [{
+        entity: 'agent',
+        message: 'aggregated',
+        params: { requests: tasksDeviceA }
+      }];
+    }
+
+    if (tasksDeviceB.length > 1) {
+      tasksDeviceB = [{
+        entity: 'agent',
+        message: 'aggregated',
+        params: { requests: tasksDeviceB }
+      }];
+    }
+
+    try {
+      let title = '';
+      if (peer) {
+        title = 'Delete peer tunnel between (' +
+        deviceA.hostname +
+        ',' +
+        ifcA.name +
+        ') and peer (' +
+        peer.name +
+        ')';
+      } else {
+        title = 'Delete tunnel between (' +
+        deviceA.hostname +
+        ',' +
+        ifcA.name +
+        ') and (' +
+        deviceB.hostname +
+        ',' +
+        ifcB.name +
+        ')';
+      };
+
+      const removeTunnelJobs = await queueTunnel(
+        false,
+        title,
+        tasksDeviceA,
+        tasksDeviceB,
+        username,
+        org,
+        deviceA.machineId,
+        peer ? null : deviceB.machineId,
+        deviceA._id,
+        peer ? null : deviceB._id,
+        tunnel.num,
+        pathlabel,
+        peer
+      );
+      logger.debug('Tunnel jobs queued', {
+        params: { jobA: removeTunnelJobs[0], jobB: removeTunnelJobs[1] }
+      });
+
+      tunnelsJobs = tunnelsJobs.concat(removeTunnelJobs);
+    } catch (err) {
+      logger.error('Delete tunnel error', { params: { reason: err.message } });
+      throw err;
+    }
   }
 
   return tunnelsJobs;
+};
+
+/**
+ * Send tunnels add jobs
+ * @param  {Array}   tunnelIds an array of ids of the tunnels to create
+ * @param  {string}  username  the name of the user that requested the device change
+ * @return {Array}             array of add-tunnel jobs
+ */
+const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDependencies = false) => {
+  let jobs = [];
+  let org = null;
+  try {
+    const tunnels = await tunnelsModel
+      .find({
+        _id: { $in: tunnelIds },
+        isActive: true,
+        isPending: { $ne: true }
+      })
+      .populate('deviceA')
+      .populate('deviceB')
+      .populate('peer');
+
+    for (const tunnel of tunnels) {
+      org = tunnel.org;
+
+      const {
+        deviceA,
+        deviceB,
+        num,
+        pathlabel,
+        peer,
+        advancedOptions,
+        interfaceA,
+        interfaceB
+      } = tunnel;
+
+      const ifcA = deviceA.interfaces.find(ifc => {
+        return ifc._id.toString() === interfaceA.toString();
+      });
+
+      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
+        return ifc._id.toString() === interfaceB.toString();
+      });
+
+      let [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
+        tunnel,
+        ifcA,
+        ifcB,
+        pathlabel,
+        deviceA,
+        deviceB,
+        advancedOptions,
+        peer,
+        includeDeviceConfigDependencies
+      );
+
+      if (tasksDeviceA.length > 1) {
+        tasksDeviceA = [{
+          entity: 'agent',
+          message: 'aggregated',
+          params: { requests: tasksDeviceA }
+        }];
+      }
+
+      if (tasksDeviceB.length > 1) {
+        tasksDeviceB = [{
+          entity: 'agent',
+          message: 'aggregated',
+          params: { requests: tasksDeviceB }
+        }];
+      }
+
+      let title = '';
+      if (peer) {
+        title += 'Create peer tunnel between (' +
+          deviceA.hostname +
+          ',' +
+          ifcA.name +
+          ') and peer (' +
+          peer.name +
+          ')';
+      } else {
+        title += 'Create tunnel between (' +
+          deviceA.hostname +
+          ',' +
+          ifcA.name +
+          ') and (' +
+          deviceB.hostname +
+          ',' +
+          ifcB.name +
+          ')';
+      }
+      const tunnelJobs = await queueTunnel(
+        true,
+        title,
+        tasksDeviceA,
+        tasksDeviceB,
+        username,
+        org,
+        deviceA.machineId,
+        peer ? null : deviceB.machineId,
+        deviceA._id,
+        peer ? null : deviceB._id,
+        num,
+        pathlabel,
+        peer
+      );
+
+      jobs = jobs.concat(tunnelJobs);
+    }
+  } catch (err) {
+    logger.error('Failed to queue Add tunnel jobs', {
+      params: { err: err.message, tunnelIds }
+    });
+  };
+  return jobs;
+};
+
+const addBgpNeighborsIfNeeded = async tunnel => {
+  const { deviceA, deviceB, advancedOptions } = tunnel;
+  const { routing } = advancedOptions;
+
+  const deviceATasks = [];
+  const deviceBTasks = [];
+
+  if (routing === 'bgp') {
+    const majorA = getMajorVersion(deviceA.versions.agent);
+    const minorA = getMinorVersion(deviceA.versions.agent);
+    const majorB = getMajorVersion(deviceB?.versions.agent);
+    const minorB = getMinorVersion(deviceB?.versions.agent);
+
+    const isNeedToSendNeighborsA = majorA === 5 && minorA === 3;
+    const isNeedToSendNeighborsB = majorB === 5 && minorB === 3;
+    if (isNeedToSendNeighborsA || isNeedToSendNeighborsB) {
+      if (isNeedToSendNeighborsA) {
+        const modifyBgp = await buildModifyBgpJob(deviceA);
+        deviceATasks.push(modifyBgp);
+      }
+
+      if (isNeedToSendNeighborsB) {
+        const modifyBgp = await buildModifyBgpJob(deviceB);
+        deviceBTasks.push(modifyBgp);
+      }
+    }
+  }
+
+  return [deviceATasks, deviceBTasks];
+};
+
+const buildModifyBgpJob = async device => {
+  const bgpParams = await transformBGP(device, true);
+  return { entity: 'agent', message: 'modify-routing-bgp', params: bgpParams };
 };
 
 const getInterfacesWithPathLabels = device => {
@@ -2027,6 +2134,56 @@ const getInterfacesWithPathLabels = device => {
   return deviceIntfs;
 };
 
+/**
+ * Get all devices with config depend on the tunnel
+ * @param  {object} tunnel tunnel object
+ * @return {[{object}]} array of devices with config
+*/
+const getTunnelConfigDependencies = async (tunnel, isPending) => {
+  const { ip1, ip2 } = generateTunnelParams(tunnel.num);
+
+  const staticRouteArrayFilters = {
+    $and: [{
+      $or: [
+        { $eq: ['$$route.gateway', ip1] },
+        { $eq: ['$$route.gateway', ip2] }
+      ]
+    }]
+  };
+
+  if (isPending === true || isPending === false) {
+    staticRouteArrayFilters.$and.push({
+      [isPending ? '$eq' : '$ne']: ['$$route.isPending', true]
+    });
+  }
+
+  const devicesStaticRoutes = await devicesModel.aggregate([
+    { $match: { org: tunnel.org } }, // org match is very important here
+    {
+      $addFields: {
+        staticroutes: {
+          $filter: {
+            input: '$staticroutes',
+            as: 'route',
+            cond: staticRouteArrayFilters
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        org: 1,
+        machineId: 1,
+        name: 1,
+        staticroutes: 1
+      }
+    }
+  ]).allowDiskUse(true);
+
+  return devicesStaticRoutes;
+};
+
 module.exports = {
   apply: {
     applyTunnelAdd: applyTunnelAdd,
@@ -2041,9 +2198,9 @@ module.exports = {
   },
   sync: sync,
   completeSync: completeSync,
-  prepareTunnelRemoveJob: prepareTunnelRemoveJob,
+  sendRemoveTunnelsJobs: sendRemoveTunnelsJobs,
   prepareTunnelAddJob: prepareTunnelAddJob,
-  queueTunnel: queueTunnel,
-  oneTunnelDel: oneTunnelDel,
-  sendRemoveTunnelsJobs: sendRemoveTunnelsJobs
+  prepareTunnelRemoveJob: prepareTunnelRemoveJob,
+  sendAddTunnelsJobs: sendAddTunnelsJobs,
+  getTunnelConfigDependencies: getTunnelConfigDependencies
 };
