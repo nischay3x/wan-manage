@@ -30,6 +30,7 @@ async function up () {
     logger.error('Database migration failed', {
       params: { collections: ['tunnels'], operation: 'up', err: err.message }
     });
+    throw new Error(err.message);
   }
 }
 
