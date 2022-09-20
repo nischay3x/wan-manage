@@ -342,13 +342,21 @@ class Events {
       const s = device.staticroutes[i];
       if (s.isPending) continue;
 
+      // check if the static route configured with the same devId as the missing IP interface
       const isSameIfc = s.ifname === ifc.devId;
-
-      const gatewaySubnet = `${s.gateway}/32`;
-      const isOverlapping = cidr.overlap(`${origIfc.IPv4}/${origIfc.IPv4Mask}`, gatewaySubnet);
-
-      if (isSameIfc || isOverlapping) {
+      if (isSameIfc) {
         await this.setIncompleteRouteStatus(s, true, reason, device);
+        continue;
+      }
+
+      // check if the static route gateway is overlaps with the missing IP interface
+      if (origIfc.IPv4 && origIfc.IPv4Mask && s.gateway) {
+        const gatewaySubnet = `${s.gateway}/32`;
+        const isOverlapping = cidr.overlap(`${origIfc.IPv4}/${origIfc.IPv4Mask}`, gatewaySubnet);
+
+        if (isOverlapping) {
+          await this.setIncompleteRouteStatus(s, true, reason, device);
+        }
       }
     }
   };
