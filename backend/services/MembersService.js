@@ -118,7 +118,7 @@ class MembersService {
     try {
       // make sure that only owners can change/delete other owners settings
       const askingUserRole = await membership.findOne({ user: askingUserId });
-      if (targetUser !== null && targetUser.role === 'owner' && askingUserRole.role !== 'owner') {
+      if (targetUser && targetUser.role === 'owner' && askingUserRole.role !== 'owner') {
         return null;
       }
 
