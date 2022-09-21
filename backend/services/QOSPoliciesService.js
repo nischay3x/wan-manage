@@ -290,8 +290,7 @@ class QOSPoliciesService {
         }
       )
         .populate('interfaces.qosPolicy')
-        .populate('policies.qos.policy')
-        .lean();
+        .populate('policies.qos.policy');
 
       // apply on devices
       qosPolicy._id = qosPolicy._id.toString();

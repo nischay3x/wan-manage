@@ -43,6 +43,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const has = require('lodash/has');
 const omit = require('lodash/omit');
 const differenceWith = require('lodash/differenceWith');
+const xorWith = require('lodash/xorWith');
 const pullAllWith = require('lodash/pullAllWith');
 const omitBy = require('lodash/omitBy');
 const isEqual = require('lodash/isEqual');
@@ -1368,14 +1369,13 @@ const apply = async (device, user, data) => {
   }
 
   // Send QoS policy job only when interfaces specific policy modified
-  // or the device's policy applied and interface type or assignment changed
-  const isQosPolicyApplied = !isEmpty(device[0].policies.qos?.policy?._id);
-  const affectingParameters = !isQosPolicyApplied ? ['devId', 'qosPolicy']
-    : ['devId', 'isAssigned', 'type', 'qosPolicy'];
+  // as installing a default QoS will set policy on every WAN interface
+  const affectingParameters = ['devId', 'isAssigned', 'type', 'qosPolicy'];
+  const qosApplied = i => i.isAssigned && i.type === 'WAN' && i.qosPolicy;
 
-  const qosDiff = differenceWith(
-    data.newDevice.interfaces,
-    device[0].interfaces,
+  const qosDiff = xorWith(
+    data.newDevice.interfaces.filter(qosApplied),
+    device[0].interfaces.filter(qosApplied),
     (origIfc, newIfc) => {
       return isEqual(
         pick(origIfc, affectingParameters),
