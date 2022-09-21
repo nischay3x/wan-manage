@@ -284,7 +284,8 @@ class MembersService {
         throw (new Error('User not found'));
       }
 
-      if (_user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
+      // eslint-disable-next-line max-len
+      if (_user.defaultAccount !== null && _user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
         const orgs = await getUserOrganizations(_user);
         const org = orgs[_user.defaultOrg];
         if (!org) {
