@@ -232,6 +232,12 @@ class MembersService {
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
       if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
+      const targetUser = await membership.findOne({ user: memberRequest.userId });
+      // make sure that no one can change the settings of an owner account
+      if (targetUser.role === 'owner') {
+        return Service.rejectResponse('No sufficient permissions for this operation', 400);
+      }
+
       // make sure user is only allow to define membership under his view
       const verified = await MembersService.checkMemberLevel(
         memberRequest.userPermissionTo,
