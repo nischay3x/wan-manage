@@ -111,18 +111,25 @@ class MembersService {
     permissionTo,
     permissionRole,
     permissionEntity,
-    userId,
-    accountId
+    askingUserId,
+    askingUserAccountId,
+    targetUser = null
   ) {
-    // make sure user is only allow to define membership under his view
     try {
+      // make sure that only owners can change/delete other owners settings
+      const askingUserRole = await membership.findOne({ user: askingUserId });
+      if (targetUser !== null && targetUser.role === 'owner' && askingUserRole.role !== 'owner') {
+        return null;
+      }
+
+      // make sure user is only allow to define membership under his view
       let verifyPromise = null;
       // to=account, role=owner => user must be account owner
       // to=account, role=(manager or viewer) => user must be account owner or manager
       if (permissionTo === 'account') {
         verifyPromise = membership.findOne({
-          user: userId,
-          account: accountId,
+          user: askingUserId,
+          account: askingUserAccountId,
           to: 'account',
           ...(permissionRole === 'owner' && { role: 'owner' }),
           ...(permissionRole !== 'owner' && {
@@ -134,8 +141,8 @@ class MembersService {
       // group manager or account owner/manager
       if (permissionTo === 'group') {
         verifyPromise = membership.findOne({
-          user: userId,
-          account: accountId,
+          user: askingUserId,
+          account: askingUserAccountId,
           $or: [
             { to: 'group', group: permissionEntity, role: 'manager' },
             { to: 'account', $or: [{ role: 'owner' }, { role: 'manager' }] }
@@ -150,8 +157,8 @@ class MembersService {
         });
         if (!org) return null;
         verifyPromise = membership.findOne({
-          user: userId,
-          account: accountId,
+          user: askingUserId,
+          account: askingUserAccountId,
           $or: [
             {
               to: 'organization',
@@ -233,10 +240,6 @@ class MembersService {
       if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
       const targetUser = await membership.findOne({ user: memberRequest.userId });
-      // make sure that no one can change the settings of an owner account
-      if (targetUser.role === 'owner') {
-        return Service.rejectResponse('No sufficient permissions for this operation', 400);
-      }
 
       // make sure user is only allow to define membership under his view
       const verified = await MembersService.checkMemberLevel(
@@ -244,7 +247,8 @@ class MembersService {
         memberRequest.userRole,
         memberRequest.userEntity,
         user._id,
-        user.defaultAccount._id
+        user.defaultAccount._id,
+        targetUser
       );
 
       if (!verified) {
@@ -372,10 +376,11 @@ class MembersService {
       }
 
       // Check that current user is allowed to delete member
+      const targetUser = await membership.findOne({ _id: id });
       const verified = await MembersService.checkMemberLevel(membershipData.to, membershipData.role,
         (membershipData.to === 'organization')
           ? membershipData.organization : membershipData.group,
-        user._id, user.defaultAccount._id);
+        user._id, user.defaultAccount._id, targetUser);
       if (!verified) {
         return Service.rejectResponse(
           'No sufficient permissions for this operation', 400);
