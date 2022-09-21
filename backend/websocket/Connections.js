@@ -550,24 +550,57 @@ class Connections {
             }
           });
 
-          // add tunnels jobs before modify
-          await events.sendTunnelsCreateJobs();
+          let addTunnelIds = Object.assign({},
+            ...Array.from(events.activeTunnels, v => ({ [v]: '' })));
+          let removeTunnelIds = Object.assign({},
+            ...Array.from(events.pendingTunnels, v => ({ [v]: '' })));
 
           // modify jobs
           const modifyDevices = await events.prepareModifyDispatcherParameters();
+          const completedTasks = {};
+
           for (const modified in modifyDevices) {
-            await modifyDeviceDispatcher.apply(
+            const { tasks } = await modifyDeviceDispatcher.apply(
               [modifyDevices[modified].orig],
               { username: 'system' },
               {
                 org: modifyDevices[modified].orig.org.toString(),
-                newDevice: modifyDevices[modified].updated
+                newDevice: modifyDevices[modified].updated,
+                sendAddTunnels: addTunnelIds,
+                sendRemoveTunnels: removeTunnelIds,
+                ignoreTasks: completedTasks[modifyDevices[modified].orig._id] ?? []
               }
             );
-          }
 
-          // remove tunnels jobs after modify
-          await events.sendTunnelsRemoveJobs();
+            // In case of tunnel between two devices (a and b) and static routes
+            // in both devices via the tunnel.
+            //
+            // Once one of the interfaces loses his IP,
+            // the events logic set the tunnel and all the routes (in both devices) to pending state
+            // and we need to send jobs to both devices to remove the pending configurations.
+            //
+            // On the first iteration of this "modifyDevices" loop,
+            // the modifyDevice detects that it needs to send remove tunnels and routes jobs
+            // for both devices.
+            //
+            // So once we come to the second iteration of the loop,
+            // we need to prevent job duplications and don't send remove tunnel and routes again.
+            //
+            // Hance, on every iteration, we save the sent jobs in a map object
+            //  { deviceId: sentTasksArray }
+            // And we pass the devices' sent jobs as a parameter. Then,
+            // the modifyDevice logic knows to ignore those tasks.
+            for (const deviceId in tasks) {
+              if (!(deviceId in completedTasks)) {
+                completedTasks[deviceId] = [];
+              }
+              completedTasks[deviceId].push(...tasks[deviceId]);
+            }
+
+            // send tunnel jobs only on the first iteration to prevent job duplications
+            addTunnelIds = {};
+            removeTunnelIds = {};
+          }
 
           // remove the variable from the memory.
           events = null;

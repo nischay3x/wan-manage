@@ -24,7 +24,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { getMajorVersion } = require('../versioning');
-
+const { transformDHCP } = require('./jobParameters');
 /**
  * Queues an add dhcp or delete dhcp job to a device.
  * @async
@@ -65,14 +65,9 @@ const apply = async (device, user, data) => {
     switch (data.action) {
       case 'add':
         message = 'add-dhcp-config';
+
         titlePrefix = 'Add';
-        params = {
-          interface: data.interface,
-          range_start: data.rangeStart,
-          range_end: data.rangeEnd,
-          dns: data.dns,
-          mac_assign: data.macAssign
-        };
+        params = transformDHCP(data);
         break;
       case 'del':
         titlePrefix = 'Delete';
@@ -86,13 +81,7 @@ const apply = async (device, user, data) => {
         message = 'modify-device';
         params = {
           modify_dhcp_config: {
-            dhcp_configs: [{
-              interface: data.interface,
-              range_start: data.rangeStart,
-              range_end: data.rangeEnd,
-              dns: data.dns,
-              mac_assign: data.macAssign
-            }]
+            dhcp_configs: [transformDHCP(data)]
           }
         };
         break;
