@@ -154,8 +154,9 @@ connectRouter.route('/register')
               const lowestMetric = defaultIntf && defaultIntf.metric
                 ? defaultIntf.metric : '0';
 
-              let autoAssignedMetric = 100;
-              ifs.forEach((intf) => {
+              let highestMetric = 0;
+              const setAutoMetricIndexes = new Set();
+              ifs.forEach((intf, idx) => {
                 intf.isAssigned = false;
                 intf.useStun = true;
                 intf.useFixedPublicPort = false;
@@ -177,17 +178,24 @@ connectRouter.route('/register')
                   intf.dhcp = intf.dhcp || 'no';
                   if (intf.deviceType === 'lte') {
                     intf.deviceParams = mapLteNames(intf.deviceParams);
-                    // LTE devices are not enabled at registration stage so they can't have a metric
-                    intf.metric = '';
+                    intf.metric = null;
                   } else {
                     intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
-                      ? '0' : intf.metric || (autoAssignedMetric++).toString();
+                      ? '0' : intf.metric || null;
                   }
                   intf.PublicIP = intf.public_ip || (intf.metric === lowestMetric ? sourceIP : '');
                   intf.PublicPort = intf.public_port || '';
                   intf.NatType = intf.nat_type || '';
                   if (intf.deviceType === 'pppoe') {
                     intf.dhcp = 'yes';
+                  }
+
+                  // to calculate auto metrics, store the highest configured metric
+                  // and the interfaces that we need to add an auto metric.
+                  if (intf.metric) {
+                    highestMetric = Math.max(highestMetric, parseInt(intf.metric));
+                  } else {
+                    setAutoMetricIndexes.add(idx);
                   }
                 } else {
                   intf.type = 'LAN';
@@ -198,6 +206,13 @@ connectRouter.route('/register')
                   intf.gateway = '';
                   intf.metric = '';
                 }
+              });
+
+              // set auto metrics for interfaces without a metric.
+              // This loop done at the end to avoid metric duplication
+              setAutoMetricIndexes.forEach(i => {
+                highestMetric += 100;
+                ifs[i].metric = highestMetric;
               });
 
               // Prepare device versions array
