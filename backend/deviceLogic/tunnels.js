@@ -964,7 +964,8 @@ const prepareTunnelAddJob = async (
   deviceB,
   advancedOptions,
   peer = null,
-  includeDeviceConfigDependencies = false
+  includeDeviceConfigDependencies = false,
+  isSync = false
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -1158,13 +1159,17 @@ const prepareTunnelAddJob = async (
     });
   }
 
-  const [bgpTasksDeviceA, bgpTasksDeviceB] = await addBgpNeighborsIfNeeded(tunnel);
-  if (bgpTasksDeviceA.length > 0) {
-    tasksDeviceA.push(...bgpTasksDeviceA); // modify-bgp after add-tunnel
-  }
+  // In sync, we don't send modify-X. only add-x.
+  // The BGP neighbors will be sent in add-routing-bgp
+  if (!isSync) {
+    const [bgpTasksDeviceA, bgpTasksDeviceB] = await addBgpNeighborsIfNeeded(tunnel);
+    if (bgpTasksDeviceA.length > 0) {
+      tasksDeviceA.push(...bgpTasksDeviceA); // modify-bgp after add-tunnel
+    }
 
-  if (bgpTasksDeviceB.length > 0) {
-    tasksDeviceB.push(...bgpTasksDeviceB); // modify-bgp after add-tunnel
+    if (bgpTasksDeviceB.length > 0) {
+      tasksDeviceB.push(...bgpTasksDeviceB); // modify-bgp after add-tunnel
+    }
   }
 
   return [tasksDeviceA, tasksDeviceB];
@@ -1623,8 +1628,8 @@ const sync = async (deviceId, org) => {
       peer: 1
     }
   )
-    .populate('deviceA', 'machineId interfaces versions IKEv2 bgp')
-    .populate('deviceB', 'machineId interfaces versions IKEv2 bgp')
+    .populate('deviceA', 'machineId interfaces versions IKEv2 bgp org')
+    .populate('deviceB', 'machineId interfaces versions IKEv2 bgp org')
     .populate('peer')
     .lean();
 
@@ -1673,7 +1678,9 @@ const sync = async (deviceId, org) => {
       deviceA,
       deviceB,
       advancedOptions,
-      peer
+      peer,
+      false,
+      true
     );
     // Add the tunnel only for the device that is being synced
     const deviceTasks =
