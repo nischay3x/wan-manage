@@ -178,7 +178,6 @@ connectRouter.route('/register')
                   intf.dhcp = intf.dhcp || 'no';
                   if (intf.deviceType === 'lte') {
                     intf.deviceParams = mapLteNames(intf.deviceParams);
-                    // LTE devices are not enabled at registration stage so they can't have a metric
                     intf.metric = null;
                   } else {
                     intf.metric = (!intf.metric && intf.gateway === req.body.default_route)
