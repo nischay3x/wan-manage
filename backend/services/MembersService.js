@@ -289,7 +289,7 @@ class MembersService {
       }
 
       // eslint-disable-next-line max-len
-      if (_user.defaultAccount !== null && _user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
+      if (_user.defaultAccount && _user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
         const orgs = await getUserOrganizations(_user);
         const org = orgs[_user.defaultOrg];
         if (!org) {
