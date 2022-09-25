@@ -241,7 +241,7 @@ class MembersService {
 
       const targetUser = await membership.findOne({ user: memberRequest.userId });
 
-      // make sure user is only allow to define membership under his view
+      // make sure user is only allowed to define membership under his view
       const verified = await MembersService.checkMemberLevel(
         memberRequest.userPermissionTo,
         memberRequest.userRole,
@@ -463,7 +463,7 @@ class MembersService {
         return Service.rejectResponse('You can not add yourself', 500);
       }
 
-      // make sure user is only allow to define membership under his view
+      // make sure user is only allowed to define membership under his view
       const verified = await MembersService.checkMemberLevel(
         memberRequest.userPermissionTo,
         memberRequest.userRole,
