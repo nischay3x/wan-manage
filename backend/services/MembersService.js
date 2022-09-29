@@ -1,3 +1,5 @@
+/* eslint-disable no-case-declarations */
+/* eslint-disable max-len */
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
 // Copyright (C) 2020  flexiWAN Ltd.
@@ -122,7 +124,7 @@ class MembersService {
         return null;
       }
 
-      // make sure user is only allow to define membership under his view
+      // make sure user is only allowed to define membership under his view
       let verifyPromise = null;
       // to=account, role=owner => user must be account owner
       // to=account, role=(manager or viewer) => user must be account owner or manager
@@ -507,6 +509,34 @@ class MembersService {
         // Set random password for that user
         if (registerUser) {
           await registerUser.setPassword(randomKey(10));
+        }
+      } else {
+        // avoid giving the same user different roles in the same resource level
+        const errMsg = 'This user already has a role in this ' + memberRequest.userPermissionTo + ', please delete or edit the existing role.';
+        switch (memberRequest.userPermissionTo) {
+          case 'account':
+            const userEntriesWithSameAccount = await membership.find({
+              user: existingUser._id,
+              account: memberRequest.userEntity,
+              organization: null,
+              group: ''
+            });
+            if (userEntriesWithSameAccount.length > 0) {
+              return Service.rejectResponse(errMsg, 400);
+            }
+            break;
+          case 'group':
+            const userEntriesWithSameGroup = await membership.find({ user: existingUser._id, group: memberRequest.userEntity });
+            if (userEntriesWithSameGroup.length > 0) {
+              return Service.rejectResponse(errMsg, 400);
+            }
+            break;
+          case 'organization':
+            const userEntriesWithSameOrg = await membership.find({ user: existingUser._id, organization: memberRequest.userEntity });
+            if (userEntriesWithSameOrg.length > 0) {
+              return Service.rejectResponse(errMsg, 400);
+            }
+            break;
         }
       }
 
