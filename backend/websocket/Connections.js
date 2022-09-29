@@ -707,7 +707,7 @@ class Connections {
       await deviceQueues.iterateJobsByOrg(org,
         'failed', (job) => {
           const { _id, error } = jobService.selectJobsParams(job);
-          if (error?.errors?.[0]?.command?.error === 'Send Timeout') {
+          if (error?.errors?.[0]?.error === 'Send Timeout') {
             failedJobs.push(_id);
           }
           return true;
