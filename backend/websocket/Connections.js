@@ -500,7 +500,10 @@ class Connections {
           }
 
           if (!i.isAssigned || i.deviceType === 'pppoe') {
-            updInterface.metric = updatedConfig.metric;
+            // if LTE unassigned and disabled, don't override metric. keep the auto metric
+            if (i.deviceType !== 'lte' || i?.configuration?.enable) {
+              updInterface.metric = updatedConfig.metric;
+            }
             if (updatedConfig.mtu) {
               updInterface.mtu = updatedConfig.mtu;
             }
