@@ -118,61 +118,55 @@ class MembersService {
     targetUser = null
   ) {
     try {
-      // make sure that only owners can change/delete other owners settings
-      const askingUserRole = await membership.findOne({ user: askingUserId });
-      if (targetUser && targetUser.role === 'owner' && askingUserRole.role !== 'owner') {
-        return null;
-      }
-
       // make sure user is only allowed to define membership under his view
       let verifyPromise = null;
-      // to=account, role=owner => user must be account owner
-      // to=account, role=(manager or viewer) => user must be account owner or manager
-      if (permissionTo === 'account') {
-        verifyPromise = membership.findOne({
-          user: askingUserId,
-          account: askingUserAccountId,
-          to: 'account',
-          ...(permissionRole === 'owner' && { role: 'owner' }),
-          ...(permissionRole !== 'owner' && {
-            $or: [{ role: 'owner' }, { role: 'manager' }]
-          })
-        });
+      switch (permissionTo) {
+        case 'account':
+        // to=account, role=owner => user must be account owner
+        // to=account, role=(manager or viewer) => user must be account owner or manager
+          verifyPromise = membership.findOne({
+            user: askingUserId,
+            account: askingUserAccountId,
+            to: 'account',
+            ...(permissionRole === 'owner' && { role: 'owner' }),
+            ...(permissionRole !== 'owner' && (!targetUser || targetUser.role !== 'owner') && { $or: [{ role: 'owner' }, { role: 'manager' }] }),
+            // make sure that only owners can change/delete other owners settings
+            ...(permissionRole !== 'owner' && targetUser && targetUser.role === 'owner' && { role: 'owner' })
+          });
+          break;
+        case 'group':
+        // to=group, role=(manager or viewer) => user must be this
+        // group manager or account owner/manager
+          verifyPromise = membership.findOne({
+            user: askingUserId,
+            account: askingUserAccountId,
+            $or: [
+              { to: 'group', group: permissionEntity, role: 'manager' },
+              { to: 'account', $or: [{ role: 'owner' }, { role: 'manager' }] }
+            ]
+          });
+          break;
+        case 'organization':
+        // to=organization, role=(manager or viewer) => user must be this organization
+        // manager or group manager for that organization or account owner/manager
+          const org = await Organizations.findOne({
+            _id: mongoose.Types.ObjectId(permissionEntity)
+          });
+          if (!org) return null;
+          verifyPromise = membership.findOne({
+            user: askingUserId,
+            account: askingUserAccountId,
+            $or: [
+              {
+                to: 'organization',
+                organization: permissionEntity,
+                role: 'manager'
+              },
+              { to: 'group', group: org.group, role: 'manager' },
+              { to: 'account', $or: [{ role: 'owner' }, { role: 'manager' }] }
+            ]
+          });
       }
-      // to=group, role=(manager or viewer) => user must be this
-      // group manager or account owner/manager
-      if (permissionTo === 'group') {
-        verifyPromise = membership.findOne({
-          user: askingUserId,
-          account: askingUserAccountId,
-          $or: [
-            { to: 'group', group: permissionEntity, role: 'manager' },
-            { to: 'account', $or: [{ role: 'owner' }, { role: 'manager' }] }
-          ]
-        });
-      }
-      // to=organization, role=(manager or viewer) => user must be this organization
-      // manager or group manager for that organization or account owner/manager
-      if (permissionTo === 'organization') {
-        const org = await Organizations.findOne({
-          _id: mongoose.Types.ObjectId(permissionEntity)
-        });
-        if (!org) return null;
-        verifyPromise = membership.findOne({
-          user: askingUserId,
-          account: askingUserAccountId,
-          $or: [
-            {
-              to: 'organization',
-              organization: permissionEntity,
-              role: 'manager'
-            },
-            { to: 'group', group: org.group, role: 'manager' },
-            { to: 'account', $or: [{ role: 'owner' }, { role: 'manager' }] }
-          ]
-        });
-      }
-
       if (!verifyPromise) return null;
       const verified = await verifyPromise;
       if (!verified) return null;
@@ -241,7 +235,7 @@ class MembersService {
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
       if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
-      const targetUser = await membership.findOne({ user: memberRequest.userId });
+      const targetUser = await membership.findOne({ _id: memberRequest._id });
 
       // make sure user is only allowed to define membership under his view
       const verified = await MembersService.checkMemberLevel(
