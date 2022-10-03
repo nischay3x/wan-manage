@@ -99,13 +99,15 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
       ifcInfo.metric = metric;
       ifcInfo.useStun = useStun;
       ifcInfo.monitorInternet = monitorInternet;
-      ifcInfo.bandwidthMbps = bandwidthMbps;
       ifcInfo.dnsServers = dnsServers;
       ifcInfo.dnsDomains = dnsDomains;
 
       // if useDhcpDnsServers is true, we set empty array to the agent
       if (ifcInfo.dhcp === 'yes' && useDhcpDnsServers === true) {
         ifcInfo.dnsServers = [];
+      }
+      if (majorVersion >= 6) {
+        ifcInfo.bandwidthMbps = bandwidthMbps;
       }
     }
 

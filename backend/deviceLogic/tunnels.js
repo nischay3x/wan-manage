@@ -1740,6 +1740,12 @@ const prepareTunnelParams = (
   const paramsDeviceA = {};
   const paramsDeviceB = {};
 
+  // need to check versions for some parameters compatibility
+  const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
+  const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
+  const majorAgentVersionB = getMajorVersion(deviceB?.versions.agent);
+  const minorAgentVersionB = getMinorVersion(deviceB?.versions.agent);
+
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
 
@@ -1820,13 +1826,17 @@ const prepareTunnelParams = (
         labels: pathLabel ? [pathLabel] : []
       }
     };
-    paramsDeviceA.remoteBandwidthMbps = {
-      tx: +deviceBIntf.bandwidthMbps.tx,
-      rx: +deviceBIntf.bandwidthMbps.rx
+    if (majorAgentVersionA >= 6) {
+      paramsDeviceA.remoteBandwidthMbps = {
+        tx: +deviceBIntf.bandwidthMbps.tx,
+        rx: +deviceBIntf.bandwidthMbps.rx
+      };
     };
-    paramsDeviceB.remoteBandwidthMbps = {
-      tx: +deviceAIntf.bandwidthMbps.tx,
-      rx: +deviceAIntf.bandwidthMbps.rx
+    if (majorAgentVersionB >= 6) {
+      paramsDeviceB.remoteBandwidthMbps = {
+        tx: +deviceAIntf.bandwidthMbps.tx,
+        rx: +deviceAIntf.bandwidthMbps.rx
+      };
     };
     if (mssClamp !== 'no') {
       paramsDeviceA['loopback-iface']['tcp-mss-clamp'] = minMtu - tcpClampingHeaderSize;
@@ -1838,11 +1848,6 @@ const prepareTunnelParams = (
     }
 
     if (routing === 'bgp') {
-      const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
-      const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
-      const majorAgentVersionB = getMajorVersion(deviceB?.versions.agent);
-      const minorAgentVersionB = getMinorVersion(deviceB?.versions.agent);
-
       const isNeedToSendRemoteAsnA =
         majorAgentVersionA >= 6 || (majorAgentVersionA === 5 && minorAgentVersionA >= 4);
       const isNeedToSendRemoteAsnB =
