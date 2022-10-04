@@ -411,7 +411,11 @@ const apply = async (deviceList, user, data) => {
   const opDevices = filterDevices(deviceList, deviceIdsSet, op);
   if (opDevices.length === 0) {
     // no need to apply if not installed on any of devices
-    return;
+    return {
+      ids: [],
+      status: 'completed',
+      message: 'The policy is not installed on any of the devices'
+    };
   }
   return applyPolicy(opDevices, firewallPolicy, op, user, org);
 };
