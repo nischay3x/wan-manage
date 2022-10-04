@@ -590,7 +590,7 @@ const vpnConfigSchema = Joi.object().keys({
     gsuite: Joi.object().keys({
       enabled: Joi.boolean().required(),
       domains: Joi.array().items(Joi.object().keys({
-        domain: Joi.string().required()
+        domain: Joi.string().required().domain({ tlds: true })
           .pattern(/^\S+$/, 'domain without whitespace').invalid('gmail.com')
           .error(errors => {
             errors.forEach(err => {
@@ -625,7 +625,8 @@ const vpnConfigSchema = Joi.object().keys({
     office365: Joi.object().keys({
       enabled: Joi.boolean().required(),
       domains: Joi.array().items(Joi.object().keys({
-        domain: Joi.string().required().pattern(/^\S+$/, 'domain without whitespace'),
+        domain: Joi.string().required()
+          .domain({ tlds: true }).pattern(/^\S+$/, 'domain without whitespace'),
         groups: Joi.string().required().allow('')
       })).required().when('enabled', { is: true, then: Joi.array().min(1) })
     }).required(),
