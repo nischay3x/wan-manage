@@ -154,7 +154,7 @@ class Events {
    * @param  {boolean} state if true, the connectivity is online
   */
   async interfaceConnectivityChanged (device, origIfc, state) {
-    const stateTxt = state ? 'online' : 'offline';
+    const stateTxt = state === 'yes' ? 'online' : 'offline';
     logger.info(`Interface connectivity changed to ${stateTxt}`, { params: { origIfc } });
     await notificationsMgr.sendNotifications([{
       org: device.org,
