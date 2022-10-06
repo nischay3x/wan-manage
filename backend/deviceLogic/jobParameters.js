@@ -45,7 +45,6 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       useStun: ifc.useStun,
       useFixedPublicPort: ifc.useFixedPublicPort,
       monitorInternet: ifc.monitorInternet,
-      bandwidthMbps: ifc.bandwidthMbps,
       gateway: ifc.gateway,
       metric: ifc.metric,
       mtu: ifc.mtu,
@@ -58,6 +57,10 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       dnsDomains: ifc.dnsDomains,
       useDhcpDnsServers: ifc.useDhcpDnsServers
     };
+
+    if (majorVersion >= 6) {
+      ifcObg.bandwidthMbps = ifc.bandwidthMbps;
+    }
 
     if (majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3)) {
       ifcObg.routing = ifc.routing.split(/,\s*/); // send as list
