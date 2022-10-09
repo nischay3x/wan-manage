@@ -1,5 +1,3 @@
-/* eslint-disable no-case-declarations */
-/* eslint-disable max-len */
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
 // Copyright (C) 2020  flexiWAN Ltd.
@@ -115,7 +113,7 @@ class MembersService {
     permissionEntity,
     askingUserId,
     askingUserAccountId,
-    targetUser = null
+    targetUserMembership = null
   ) {
     try {
       // make sure user is only allowed to define membership under his view
@@ -124,14 +122,47 @@ class MembersService {
         case 'account':
         // to=account, role=owner => user must be account owner
         // to=account, role=(manager or viewer) => user must be account owner or manager
+        /* permission to:account
+                  ┌──────────────────┐
+                  │ permission:owner │
+                  └─┬──────────────┬─┘
+                    │              │
+                yes │              │ no
+                    │              │ (manager or viewer)
+                    ▼              ▼
+          user role=owner   ┌─────────────┐
+                            │target user  │
+                            │found        │
+                            └─┬─────────┬─┘
+                              │         │
+                           no │         │ yes
+                              │         │
+                              │         │
+                              │         ▼
+                              │  ┌────────────┐
+                              │  │target user │
+                              │  │role = owner│
+                              │  └─┬─────────┬┘
+                              │    │         │
+                              │ no │         │ yes
+                              │    │         │ (degrade from owner to
+                              │    │         │  manager or viewer)
+                              ▼    ▼         ▼
+                        user role=owner   user role=owner
+                          or manager */
+
           verifyPromise = membership.findOne({
             user: askingUserId,
             account: askingUserAccountId,
             to: 'account',
             ...(permissionRole === 'owner' && { role: 'owner' }),
-            ...(permissionRole !== 'owner' && (!targetUser || targetUser.role !== 'owner') && { $or: [{ role: 'owner' }, { role: 'manager' }] }),
+            ...(permissionRole !== 'owner' && (!targetUserMembership ||
+              targetUserMembership.role !== 'owner') &&
+            { $or: [{ role: 'owner' }, { role: 'manager' }] }),
             // make sure that only owners can change/delete other owners settings
-            ...(permissionRole !== 'owner' && targetUser && targetUser.role === 'owner' && { role: 'owner' })
+            ...(permissionRole !== 'owner' && targetUserMembership &&
+             targetUserMembership.role === 'owner' &&
+            { role: 'owner' })
           });
           break;
         case 'group':
@@ -146,13 +177,15 @@ class MembersService {
             ]
           });
           break;
-        case 'organization':
-        // to=organization, role=(manager or viewer) => user must be this organization
-        // manager or group manager for that organization or account owner/manager
+        case 'organization': {
+          // make sure that the organization exists and belongs to the account of the asking user
           const org = await Organizations.findOne({
-            _id: mongoose.Types.ObjectId(permissionEntity)
+            _id: mongoose.Types.ObjectId(permissionEntity),
+            account: askingUserAccountId
           });
           if (!org) return null;
+          // to=organization, role=(manager or viewer) => user must be this organization
+          // manager or group manager for that organization or account owner/manager
           verifyPromise = membership.findOne({
             user: askingUserId,
             account: askingUserAccountId,
@@ -166,6 +199,7 @@ class MembersService {
               { to: 'account', $or: [{ role: 'owner' }, { role: 'manager' }] }
             ]
           });
+        }
       }
       if (!verifyPromise) return null;
       const verified = await verifyPromise;
@@ -175,6 +209,33 @@ class MembersService {
       return null;
     }
   };
+
+  static getDbQueryParams (
+    existingUserId,
+    askingUserMembership,
+    memberRequest,
+    registerUserId,
+    create) {
+    const queryParams = {
+      ...(existingUserId) && { user: existingUserId },
+      ...(registerUserId) && { user: registerUserId },
+      account: askingUserMembership.defaultAccount._id,
+      to: memberRequest.userPermissionTo,
+      group: memberRequest.userPermissionTo === 'group'
+        ? memberRequest.userEntity : '',
+      organization: memberRequest.userPermissionTo === 'organization'
+        ? memberRequest.userEntity : null,
+      ...(create) && { role: memberRequest.userRole },
+      ...(create) && {
+        perms: preDefinedPermissions[
+          memberRequest.userPermissionTo + '_' + memberRequest.userRole
+        ]
+      }
+    };
+    return {
+      queryParams
+    };
+  }
 
   /**
    * Get all Members
@@ -235,7 +296,25 @@ class MembersService {
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
       if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
-      const targetUser = await membership.findOne({ _id: memberRequest._id });
+      const targetUserMembership = await membership.findOne({
+        _id: memberRequest._id,
+        account: user.defaultAccount._id
+      });
+
+      // avoid giving the same user different roles in the same resource level
+      const errMsg = `This user already has a role in this ${memberRequest.userPermissionTo},
+       please delete or edit the existing role.`;
+      const userMembershipInfo = await membership.findOne(
+        MembersService.getDbQueryParams(
+          memberRequest.userId,
+          user,
+          memberRequest,
+          null,
+          false).queryParams
+      );
+      if (userMembershipInfo && (String(userMembershipInfo._id) !== memberRequest._id)) {
+        return Service.rejectResponse(errMsg, 400);
+      }
 
       // make sure user is only allowed to define membership under his view
       const verified = await MembersService.checkMemberLevel(
@@ -244,7 +323,7 @@ class MembersService {
         memberRequest.userEntity,
         user._id,
         user.defaultAccount._id,
-        targetUser
+        targetUserMembership
       );
 
       if (!verified) {
@@ -280,12 +359,12 @@ class MembersService {
       // user after the change, if not switch to another org
       const _user = await Users.findOne({ _id: memberRequest.userId })
         .populate('defaultAccount');
-      if (!user) {
+      if (!_user) {
         throw (new Error('User not found'));
       }
 
-      // eslint-disable-next-line max-len
-      if (_user.defaultAccount && _user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
+      if (_user.defaultAccount &&
+        _user.defaultAccount._id.toString() === user.defaultAccount._id.toString()) {
         const orgs = await getUserOrganizations(_user);
         const org = orgs[_user.defaultOrg];
         if (!org) {
@@ -360,11 +439,16 @@ class MembersService {
    **/
   static async membersIdDELETE ({ id }, { user }) {
     try {
-      // Find member id data
+      // Find member id data (the member that we ask to delete)
       const membershipData = await membership.findOne({
         _id: id,
         account: user.defaultAccount._id
       });
+
+      if (!membershipData) {
+        return Service.rejectResponse(
+          "Couldn't find the user's membership data in your account", 400);
+      }
 
       // Don't allow to delete self
       if (user._id.toString() === membershipData.user.toString()) {
@@ -372,11 +456,10 @@ class MembersService {
       }
 
       // Check that current user is allowed to delete member
-      const targetUser = await membership.findOne({ _id: id });
       const verified = await MembersService.checkMemberLevel(membershipData.to, membershipData.role,
         (membershipData.to === 'organization')
           ? membershipData.organization : membershipData.group,
-        user._id, user.defaultAccount._id, targetUser);
+        user._id, user.defaultAccount._id, membershipData);
       if (!verified) {
         return Service.rejectResponse(
           'No sufficient permissions for this operation', 400);
@@ -409,7 +492,7 @@ class MembersService {
       ];
       const userAccounts = await membership.aggregate(userAccountPipeline).allowDiskUse(true);
       const curAccountIndex = userAccounts.findIndex((m) => m._id.equals(membershipData.account));
-      if (curAccountIndex === -1) throw (new Error('User account not found'));
+      if (curAccountIndex === -1) throw (new Error('User account was not found'));
       const curAccountUserCount = userAccounts[curAccountIndex];
       if (curAccountUserCount.count > 1) {
         // user has other permissions for this account, keep it and set org to null
@@ -465,7 +548,8 @@ class MembersService {
         memberRequest.userRole,
         memberRequest.userEntity,
         user._id,
-        user.defaultAccount._id
+        user.defaultAccount._id,
+        null
       );
       if (!verified) {
         return Service.rejectResponse(
@@ -506,46 +590,29 @@ class MembersService {
         }
       } else {
         // avoid giving the same user different roles in the same resource level
-        const errMsg = 'This user already has a role in this ' + memberRequest.userPermissionTo + ', please delete or edit the existing role.';
-        switch (memberRequest.userPermissionTo) {
-          case 'account':
-            const userEntriesWithSameAccount = await membership.find({
-              user: existingUser._id,
-              account: memberRequest.userEntity,
-              organization: null,
-              group: ''
-            });
-            if (userEntriesWithSameAccount.length > 0) {
-              return Service.rejectResponse(errMsg, 400);
-            }
-            break;
-          case 'group':
-            const userEntriesWithSameGroup = await membership.find({ user: existingUser._id, group: memberRequest.userEntity });
-            if (userEntriesWithSameGroup.length > 0) {
-              return Service.rejectResponse(errMsg, 400);
-            }
-            break;
-          case 'organization':
-            const userEntriesWithSameOrg = await membership.find({ user: existingUser._id, organization: memberRequest.userEntity });
-            if (userEntriesWithSameOrg.length > 0) {
-              return Service.rejectResponse(errMsg, 400);
-            }
-            break;
+        const errMsg = `This user already has a role in this ${memberRequest.userPermissionTo}
+         , please delete or edit the existing role.`;
+        const userMembershipInfo = await membership.findOne(
+          MembersService.getDbQueryParams(
+            existingUser._id,
+            user,
+            memberRequest,
+            null,
+            false).queryParams
+        );
+        if (userMembershipInfo) {
+          return Service.rejectResponse(errMsg, 400);
         }
       }
 
-      const registeredMember = await membership.create([{
-        user: (existingUser) ? existingUser._id : registerUser._id,
-        account: user.defaultAccount._id,
-        group: memberRequest.userPermissionTo === 'group' ? memberRequest.userEntity : '',
-        organization: memberRequest.userPermissionTo === 'organization'
-          ? memberRequest.userEntity : null,
-        to: memberRequest.userPermissionTo,
-        role: memberRequest.userRole,
-        perms: preDefinedPermissions[
-          memberRequest.userPermissionTo + '_' + memberRequest.userRole
-        ]
-      }], { session: session });
+      const registeredMember = await membership.create([
+        MembersService.getDbQueryParams(
+          existingUser ? existingUser._id : null,
+          user,
+          memberRequest,
+          registerUser ? registerUser._id : null,
+          true).queryParams
+      ], { session: session });
 
       if (registerUser) {
         registerUser.$session(session);
