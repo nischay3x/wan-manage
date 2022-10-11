@@ -210,31 +210,31 @@ class MembersService {
     }
   };
 
-  static getDbQueryParams (
+  static getMembershipQueryParams (
     existingUserId,
     askingUserMembership,
     memberRequest,
-    registerUserId,
+    registeredUserId,
     create) {
-    const queryParams = {
-      ...(existingUserId) && { user: existingUserId },
-      ...(registerUserId) && { user: registerUserId },
-      account: askingUserMembership.defaultAccount._id,
-      to: memberRequest.userPermissionTo,
-      group: memberRequest.userPermissionTo === 'group'
-        ? memberRequest.userEntity : '',
-      organization: memberRequest.userPermissionTo === 'organization'
-        ? memberRequest.userEntity : null,
-      ...(create) && { role: memberRequest.userRole },
-      ...(create) && {
-        perms: preDefinedPermissions[
-          memberRequest.userPermissionTo + '_' + memberRequest.userRole
-        ]
-      }
-    };
-    return {
-      queryParams
-    };
+    if (existingUserId || registeredUserId) {
+      return {
+        ...(existingUserId) && { user: existingUserId },
+        ...(registeredUserId) && { user: registeredUserId },
+        account: askingUserMembership.defaultAccount._id,
+        to: memberRequest.userPermissionTo,
+        group: memberRequest.userPermissionTo === 'group'
+          ? memberRequest.userEntity : '',
+        organization: memberRequest.userPermissionTo === 'organization'
+          ? memberRequest.userEntity : null,
+        ...(create) && { role: memberRequest.userRole },
+        ...(create) && {
+          perms: preDefinedPermissions[
+            memberRequest.userPermissionTo + '_' + memberRequest.userRole
+          ]
+        }
+      };
+    }
+    throw new Error('Either an existing user ID or a new user ID must be provided');
   }
 
   /**
@@ -302,17 +302,17 @@ class MembersService {
       });
 
       // avoid giving the same user different roles in the same resource level
-      const errMsg = `This user already has a role in this ${memberRequest.userPermissionTo},
-       please delete or edit the existing role.`;
       const userMembershipInfo = await membership.findOne(
-        MembersService.getDbQueryParams(
+        MembersService.getMembershipQueryParams(
           memberRequest.userId,
           user,
           memberRequest,
           null,
-          false).queryParams
+          false)
       );
-      if (userMembershipInfo && (String(userMembershipInfo._id) !== memberRequest._id)) {
+      if (userMembershipInfo && (userMembershipInfo._id.toString()) !== memberRequest._id) {
+        const errMsg = `This user already has a role in this ${memberRequest.userPermissionTo},
+         please delete or edit the existing role.`;
         return Service.rejectResponse(errMsg, 400);
       }
 
@@ -447,7 +447,7 @@ class MembersService {
 
       if (!membershipData) {
         return Service.rejectResponse(
-          "Couldn't find the user's membership data in your account", 400);
+          "Couldn't find membership data in your account", 400);
       }
 
       // Don't allow to delete self
@@ -590,28 +590,28 @@ class MembersService {
         }
       } else {
         // avoid giving the same user different roles in the same resource level
-        const errMsg = `This user already has a role in this ${memberRequest.userPermissionTo}
-         , please delete or edit the existing role.`;
         const userMembershipInfo = await membership.findOne(
-          MembersService.getDbQueryParams(
+          MembersService.getMembershipQueryParams(
             existingUser._id,
             user,
             memberRequest,
             null,
-            false).queryParams
+            false)
         );
         if (userMembershipInfo) {
+          const errMsg = `This user already has a role in this ${memberRequest.userPermissionTo}
+           , please delete or edit the existing role.`;
           return Service.rejectResponse(errMsg, 400);
         }
       }
 
       const registeredMember = await membership.create([
-        MembersService.getDbQueryParams(
+        MembersService.getMembershipQueryParams(
           existingUser ? existingUser._id : null,
           user,
           memberRequest,
           registerUser ? registerUser._id : null,
-          true).queryParams
+          true)
       ], { session: session });
 
       if (registerUser) {
