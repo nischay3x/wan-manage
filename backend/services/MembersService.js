@@ -630,10 +630,13 @@ class MembersService {
         configs.get('mailerEnvelopeFromAddress'),
         configs.get('mailerFromAddress'),
         memberRequest.email,
-        `You are invited to a ${configs.get('companyName')} Account`,
-        (`<h2>${configs.get('companyName')} Account Invitation</h2>
+        `You are invited to a ${configs.get('companyName')} ${memberRequest.userPermissionTo}`,
+        (`<h2>${configs.get('companyName')} ${memberRequest.userPermissionTo} Invitation</h2>
         <b>You have been invited to a ${configs.get('companyName')}
-        ${memberRequest.userPermissionTo}. </b>`) + ((registerUser)
+        company ${memberRequest.userPermissionTo} named
+        '${memberRequest.userPermissionTo === 'group'
+        ? populatedMember.group : populatedMember[memberRequest.userPermissionTo].name}'
+          by ${user.username} . </b>`) + ((registerUser)
           ? `<b>Click below to set your password</b>
         <p><a href="${restUiUrl}/reset-password?id=${
           registerUser._id
@@ -644,8 +647,9 @@ class MembersService {
           padding:.375rem .75rem;font-size:1rem;
           line-height:1.5;border-radius:.25rem;
           cursor:pointer">Set Password</button></a></p>`
-          : '<b>You can use your current account credentials to access it</b>') +
-      (`<p>Your friends @ ${configs.get('companyName')}</p>`));
+          // eslint-disable-next-line max-len
+          : '<br>You can login to <a href="https://manage.flexiwan.com"> flexiManage </a> with your current account credentials to access it.</br>') +
+          (`<p>Your friends @ ${configs.get('companyName')}</p>`));
 
       await session.commitTransaction();
       session = null;
