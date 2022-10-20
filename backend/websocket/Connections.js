@@ -492,7 +492,9 @@ class Connections {
 
           // allow to modify the interface type dpdk/pppoe for unassigned interfaces
           if (!i.isAssigned && ['dpdk', 'pppoe'].includes(updatedConfig.deviceType)) {
-            updInterface.deviceType = updatedConfig.deviceType;
+            if (i.deviceType !== 'lte') { // don't allow to change LTE device type dynamically
+              updInterface.deviceType = updatedConfig.deviceType;
+            }
             updInterface.dhcp = updatedConfig.dhcp;
             if (updatedConfig.deviceType === 'pppoe') {
               updInterface.type = 'WAN';
