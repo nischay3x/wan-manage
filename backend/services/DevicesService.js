@@ -194,6 +194,8 @@ class DevicesService {
           'IPv4Mask',
           'name',
           'devId',
+          'parentDevId',
+          'vlanTag',
           '_id',
           'pathlabels',
           'deviceType',
@@ -448,7 +450,16 @@ class DevicesService {
             sync: 1,
             versions: 1,
             coords: 1,
-            interfaces: { isAssigned: 1, name: 1, type: 1, IPv4: 1, PublicIP: 1, devId: 1 },
+            interfaces: {
+              isAssigned: 1,
+              name: 1,
+              type: 1,
+              IPv4: 1,
+              PublicIP: 1,
+              devId: 1,
+              parentDevId: 1,
+              vlanTag: 1
+            },
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
             'policies.multilink': { status: 1, policy: { name: 1, description: 1 } },
             'policies.firewall': { status: 1, policy: { name: 1, description: 1 } },
@@ -1333,7 +1344,25 @@ class DevicesService {
             logger.error('Not allowed path labels', { params: { notAllowedPathLabels } });
             throw createError(400, 'Not allowed to assign path labels of a different organization');
           };
-          deviceRequest.interfaces = await Promise.all(origDevice.interfaces.map(async origIntf => {
+          const newVlanTags = deviceRequest.interfaces.reduce(
+            (res, { devId, vlanTag }) => vlanTag ? [...res, { devId, vlanTag }] : res, []
+          );
+          const origVlanTags = origDevice.interfaces.reduce(
+            (res, { devId, vlanTag }) => vlanTag ? [...res, { devId, vlanTag }] : res, []
+          );
+          const requestedInterfaces = [
+            // existing interfaces
+            ...origDevice.interfaces.filter(ifc => !ifc.vlanTag ||
+              newVlanTags.some(tag => tag.devId === ifc.devId && tag.vlanTag === ifc.vlanTag)
+            ),
+            // added interfaces
+            ...deviceRequest.interfaces.filter(ifc => ifc.vlanTag &&
+              !origVlanTags.some(tag => tag.devId === ifc.devId && tag.vlanTag === ifc.vlanTag)
+            )
+          ];
+
+          deviceRequest.interfaces = await Promise.all(requestedInterfaces.map(async origIntf => {
+            if (!origIntf._id) return;
             const interfaceId = origIntf._id.toString();
             const updIntf = deviceRequest.interfaces.find(rif => interfaceId === rif._id);
             if (updIntf) {
@@ -1550,7 +1579,7 @@ class DevicesService {
                 );
               }
 
-              if (updIntf.isAssigned && updIntf.type === 'WAN') {
+              if (updIntf.isAssigned && (updIntf.type === 'WAN' || updIntf.type === 'TRUNK')) {
                 const dhcp = updIntf.dhcp;
                 const servers = updIntf.dnsServers;
                 const domains = updIntf.dnsDomains;
@@ -1576,6 +1605,12 @@ class DevicesService {
                 if (!isValidDomainList) {
                   throw createError(400, `DNS domain list is not valid for (${origIntf.name})`);
                 }
+              }
+
+              // remove _id for created vlan interfaces
+              if (updIntf.vlanTag && !origVlanTags.some(
+                tag => tag.devId === updIntf.devId && tag.vlanTag === updIntf.vlanTag)) {
+                delete updIntf._id;
               }
 
               if (updIntf.isAssigned !== origIntf.isAssigned ||

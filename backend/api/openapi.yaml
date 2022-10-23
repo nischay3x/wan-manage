@@ -9516,6 +9516,10 @@ components:
           type: string
         devId:
           type: string
+        parentDevId:
+          type: string
+        vlanTag:
+          type: string
         driver:
           type: string
         dhcp:
@@ -9570,6 +9574,7 @@ components:
           enum:
           - WAN
           - LAN
+          - TRUNK
           - NONE
           type: string
         IPv4Mask:

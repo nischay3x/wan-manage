@@ -300,8 +300,8 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
   const bridges = getBridges(assignedIfs);
   const assignedByDevId = keyBy(assignedIfs, 'devId');
   for (const ifc of assignedIfs) {
-    // Assigned interfaces must be either WAN or LAN
-    if (!['WAN', 'LAN'].includes(ifc.type)) {
+    // Assigned interfaces must be either WAN, LAN or TRUNK
+    if (!['WAN', 'LAN', 'TRUNK'].includes(ifc.type)) {
       return {
         valid: false,
         err: `Invalid interface type for ${ifc.name}: ${ifc.type}`
