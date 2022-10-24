@@ -401,13 +401,39 @@ class QOSPoliciesService {
             from: 'devices',
             let: { id: '$_id' },
             pipeline: [
-              { $match: { $expr: { $eq: ['$policies.qos.policy', '$$id'] } } },
-              { $project: { 'policies.qos': 1 } }
+              { $unwind: '$interfaces' },
+              {
+                $match: {
+                  $expr: {
+                    $or: [
+                      {
+                        $eq: [
+                          '$policies.qos.policy',
+                          '$$id'
+                        ]
+                      },
+                      {
+                        $eq: [
+                          '$interfaces.qosPolicy',
+                          '$$id'
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                $group: {
+                  _id: '$_id',
+                  qos: { $first: '$policies.qos' }
+                }
+              },
+              { $project: { qos: 1 } }
             ],
-            as: 'qosPolicy'
+            as: 'policies'
           }
         },
-        { $addFields: { statuses: '$qosPolicy.policies.qos.status' } },
+        { $addFields: { statuses: '$policies.qos.status' } },
         {
           $project: {
             _id: { $toString: '$_id' },
