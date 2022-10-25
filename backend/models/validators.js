@@ -51,12 +51,11 @@ const validateIPv4WithMask = field => {
   return validateIPaddr(ip) && validateIPv4Mask(mask);
 };
 const validateIPv4Mask = mask => {
-  return (
-    !isEmpty(mask) &&
+  return (isEmpty(mask) || ( // empty mask allowed for DHCP
     mask.length < 3 &&
     !isNaN(Number(mask)) &&
     mask >= 0 && mask <= 32
-  );
+  ));
 };
 const validateIPv6Mask = mask => {
   return (
