@@ -466,6 +466,19 @@ class DeviceStatus {
     Object.assign(this.status[machineId].lteStatus[devId], { ...lteStatus, time });
   }
 
+  getDeviceLteStatus (machineId, devId) {
+    if (!this.status[machineId]) {
+      return {};
+    }
+    if (!this.status[machineId].lteStatus) {
+      return {};
+    }
+    if (!this.status[machineId].lteStatus[devId]) {
+      return {};
+    }
+    return this.status[machineId].lteStatus[devId];
+  }
+
   /**
     * Store LTE status in memory to improve the response speed of the WiFi monitoring requests
     * @param  {string} machineId  device machine id
