@@ -419,12 +419,18 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
   }
 
+  // Assuming unassigned interface is WAN if gateway is set
+  const uniqMetricsOfUnassigned = [...new Set(
+    interfaces.filter(i => !i.isAssigned && i.gateway).map(i => +i.metric)
+  )];
+
   // Checks if all assigned WAN interfaces metrics are different
   const { metricsArray, pathLabels } = wanIfcs.reduce((a, v) => {
     a.metricsArray.push(Number(v.metric));
     a.pathLabels = a.pathLabels.concat(v.pathlabels.map((p) => p._id));
     return a;
-  }, { metricsArray: [], pathLabels: [] });
+  }, { metricsArray: uniqMetricsOfUnassigned, pathLabels: [] });
+
   const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
   if (hasDuplicates) {
     return {
