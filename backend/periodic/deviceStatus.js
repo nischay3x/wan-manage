@@ -467,16 +467,7 @@ class DeviceStatus {
   }
 
   getDeviceLteStatus (machineId, devId) {
-    if (!this.status[machineId]) {
-      return {};
-    }
-    if (!this.status[machineId].lteStatus) {
-      return {};
-    }
-    if (!this.status[machineId].lteStatus[devId]) {
-      return {};
-    }
-    return this.status[machineId].lteStatus[devId];
+    return this.status?.[machineId]?.lteStatus?.[devId] ?? {};
   }
 
   /**
