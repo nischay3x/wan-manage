@@ -2925,14 +2925,7 @@ class DevicesService {
 
                 data = JSON.parse(`{${data}}`);
                 data = mapLteNames(data);
-                await devices.updateOne(
-                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-                  {
-                    $set: {
-                      'interfaces.$.deviceParams.initial_pin1_state': data
-                    }
-                  }
-                );
+                await updatePin(data, deviceObject, interfaceId, selectedIf);
                 return JSON.stringify({ err_msg: parsedError, data: data });
               } catch (err) { }
             },
@@ -2940,16 +2933,7 @@ class DevicesService {
               if (response.message && response.message.data) {
                 const data = mapLteNames(response.message.data);
                 response.message.data = data;
-                // update pin state
-                await devices.updateOne(
-                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-                  {
-                    $set: {
-                      'interfaces.$.deviceParams.initial_pin1_state': data
-                    }
-                  }
-                );
-
+                await updatePin(data, deviceObject, interfaceId, selectedIf);
                 return data;
               }
             }
@@ -3377,5 +3361,28 @@ const deviceApplicationFilters = [{
 {
   $replaceRoot: { newRoot: '$device' }
 }];
+
+async function updatePin (data, device, interfaceId, lteInterface) {
+  // update pin in database
+  await devices.updateOne(
+    { _id: device.id, org: device.org, 'interfaces._id': interfaceId },
+    {
+      $set: {
+        'interfaces.$.deviceParams.initial_pin1_state': data
+      }
+    }
+  );
+
+  // update pin in stats cache
+  const devId = lteInterface.devId;
+  const machineId = device.machineId;
+  const updated = deviceStatus.getDeviceLteStatus(machineId, devId);
+  updated.pinState = {
+    ...updated.pinState,
+    ...data
+  };
+
+  deviceStatus.setDeviceLteStatus(machineId, devId, updated);
+}
 
 module.exports = DevicesService;
