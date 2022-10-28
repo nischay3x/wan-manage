@@ -440,6 +440,47 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     };
   }
 
+  // VLAN validation
+  const vlanTags = [];
+  const vlanParents = [];
+  const nonVlanIds = assignedIfs.filter(ifc => !ifc.vlanTag).map(ifc => ifc.devId);
+  for (const ifc of assignedIfs) {
+    if (ifc.vlanTag) {
+      if (!ifc.parentDevId) {
+        return {
+          valid: false,
+          err: `VLAN ${ifc.name} must belong to some parent interface`
+        };
+      }
+      if (!nonVlanIds.includes(ifc.parentDevId)) {
+        return {
+          valid: false,
+          err: 'Wrong parent interface for VLAN ' + ifc.name
+        };
+      }
+      const idParts = ifc.devId.split('.');
+      let vlanTagInId = '';
+      if (idParts.length > 2 && idParts[0] === 'vlan' && idParts[1]) {
+        vlanTagInId = idParts[1];
+      }
+      if (ifc.vlanTag !== vlanTagInId) {
+        return {
+          valid: false,
+          err: `Wrong VLAN ${ifc.name} identifier`
+        };
+      }
+      vlanTags.push(+ifc.vlanTag);
+      vlanParents.push(ifc.parentDevId);
+    }
+  }
+  const hasVlanTagsDuplicates = vlanTags.length !== new Set(vlanTags).size;
+  if (hasVlanTagsDuplicates) {
+    return {
+      valid: false,
+      err: 'Duplicated VLAN tags are not allowed'
+    };
+  }
+
   if (isRunning && orgSubnets.length > 0) {
     // LAN subnet must not be overlap with other devices in this org
     for (const orgSubnet of orgSubnets) {
