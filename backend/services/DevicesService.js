@@ -1364,6 +1364,12 @@ class DevicesService {
           deviceRequest.interfaces = await Promise.all(requestedInterfaces.map(async origIntf => {
             if (!origIntf._id) return;
             const interfaceId = origIntf._id.toString();
+
+            // these parameters can be empty in case of DHCP or TRUNK interface
+            origIntf.IPv4 = origIntf.IPv4 || '';
+            origIntf.IPv4Mask = origIntf.IPv4Mask || '';
+            origIntf.gateway = origIntf.gateway || '';
+
             const updIntf = deviceRequest.interfaces.find(rif => interfaceId === rif._id);
             if (updIntf) {
               // if the user disabled the STUN for this interface
