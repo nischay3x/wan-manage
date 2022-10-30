@@ -88,10 +88,10 @@ class BillingService {
    *
    * no response value expected for this operation
    **/
-  static async couponsPOST ({ couponsRequest }, { user }) {
+  static async couponsPOST ({ couponRequest }, { user }) {
     try {
       const customerId = user.defaultAccount.billingCustomerId;
-      const code = couponsRequest.name;
+      const code = couponRequest.name;
 
       const result = await flexibilling.applyCoupon({ customer_id: customerId, code });
 
