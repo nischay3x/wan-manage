@@ -529,7 +529,7 @@ const remove = async (job) => {
 const sync = async (deviceId, org) => {
   const device = await devices.findOne(
     { _id: deviceId },
-    { applications: 1 }
+    { applications: 1, versions: 1 }
   ).populate({
     path: 'applications.app',
     populate: {

@@ -407,8 +407,17 @@ class RemoteVpn extends IApplication {
       params.dnsIps = dnsIps;
       params.dnsDomains = dnsDomains;
       params.dhKey = dhKey;
-      params.vpnPortalServer = configs.get('flexiVpnServer');
       params.vpnTmpTokenTime = configs.get('vpnTmpTokenTime');
+
+      const majorVersion = getMajorVersion(device.versions.agent);
+
+      const flexiVpnServer = configs.get('flexiVpnServer'); // can be string or list
+      const isFlexiVpnServerArray = Array.isArray(flexiVpnServer);
+      if (majorVersion >= 6) { // from 6 version, list should be sent
+        params.vpnPortalServer = isFlexiVpnServerArray ? flexiVpnServer : [flexiVpnServer];
+      } else { // Otherwise, string should be sent.
+        params.vpnPortalServer = isFlexiVpnServerArray ? flexiVpnServer[0] : flexiVpnServer;
+      }
 
       // get per device configuration
       const deviceApplication = device.applications.find(

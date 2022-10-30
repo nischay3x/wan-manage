@@ -186,7 +186,7 @@ const configEnv = {
     // TCP clamping header size, this value will be reduced from the MTU when calculating the mss clamping size
     tcpClampingHeaderSize: 40,
     // flexiVpn server portal url
-    flexiVpnServer: 'https://localvpn.flexiwan.com:4443',
+    flexiVpnServer: ['https://localvpn.flexiwan.com:4443'], // can be string or list
     // After successful vpn client authentication, the OpenVPN server will generate tmp token valid for the below number of seconds.
     // On the following renegotiations, the OpenVPN client will pass this token instead of the users password
     vpnTmpTokenTime: 43200,
@@ -324,7 +324,7 @@ const configEnv = {
     logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa01.flexiwan.com:443', 'http://appqa01.flexiwan.com:80'],
-    flexiVpnServer: 'https://vpnqa01.flexiwan.com:443',
+    flexiVpnServer: 'https://vpnqa01.flexiwan.com:443', // can be string or list
     vpnBaseUrl: ['https://vpnqa01.flexiwan.com']
   },
   // Override for appqa02 environment
@@ -349,7 +349,7 @@ const configEnv = {
     logLevel: 'debug',
     logUserName: true,
     corsWhiteList: ['https://appqa02.flexiwan.com:443', 'http://appqa02.flexiwan.com:80'],
-    flexiVpnServer: 'https://vpnqa02.flexiwan.com:443',
+    flexiVpnServer: 'https://vpnqa02.flexiwan.com:443', // can be string or list
     vpnBaseUrl: ['https://vpnqa02.flexiwan.com']
   }
 };
