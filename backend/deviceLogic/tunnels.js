@@ -385,7 +385,8 @@ const handlePeers = async (
           const devicePeerKey = getDevicePeerKey(device._id, peer._id);
           if (devicePeerKey in existingDevicePeersMap) {
             logger.debug('Found same peer in the device', { params: { peer: peer } });
-            reasons.add('Some of the selected peer profiles installed already in the device.');
+            reasons.add(`A peer tunnel with the selected profile (${peer.name}) \
+            already exists in the selected devices (${device.name}). `);
             continue;
           }
 
@@ -434,7 +435,8 @@ const handlePeers = async (
             const devicePeerKey = getDevicePeerKey(device._id, peer._id);
             if (devicePeerKey in existingDevicePeersMap) {
               logger.debug('Found same peer in the device', { params: { peer: peer } });
-              reasons.add('Some of the selected peer profiles installed already in the device.');
+              reasons.add(`A peer tunnel with the selected profile (${peer.name}) \
+              already exists in the selected device (${device.name}). `);
               continue;
             }
 
@@ -1743,8 +1745,8 @@ const prepareTunnelParams = (
   // need to check versions for some parameters compatibility
   const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
   const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
-  const majorAgentVersionB = getMajorVersion(deviceB?.versions.agent);
-  const minorAgentVersionB = getMinorVersion(deviceB?.versions.agent);
+  const majorAgentVersionB = peer ? null : getMajorVersion(deviceB?.versions.agent);
+  const minorAgentVersionB = peer ? null : getMinorVersion(deviceB?.versions.agent);
 
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
