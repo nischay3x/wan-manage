@@ -829,6 +829,9 @@ class DevicesService {
               );
             }
 
+            // update server stats cache, so the UI will have the most updated data
+            deviceStatus.setDeviceLteStatus(deviceObject.machineId, ifc.devId, response);
+            response = deviceStatus.getDeviceLteStatus(deviceObject.machineId, ifc.devId);
             return response;
           }
         },
