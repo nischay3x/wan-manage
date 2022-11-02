@@ -1378,6 +1378,11 @@ class DevicesService {
               if (origIntf.isAssigned) {
                 // if interface unassigned make sure it's not used by any tunnel
                 if (!updIntf.isAssigned) {
+                  if (Array.isArray(deviceRequest.staticroutes) &&
+                    (deviceRequest.staticroutes.some(r => r.ifname === updIntf.devId))) {
+                    // eslint-disable-next-line max-len
+                    throw new Error('Unassigned interface used by existing static routes, please delete related static routes before');
+                  }
                   const numTunnels = await tunnelsModel
                     .countDocuments({
                       isActive: true,
