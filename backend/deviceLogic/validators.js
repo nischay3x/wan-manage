@@ -127,7 +127,7 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
         };
       }
       // Inbound rules destination ports can't be overlapped
-      if (direction === 'inbound' && destination.ipProtoPort.ports) {
+      if (direction === 'inbound' && inbound !== 'edgeAccess' && destination.ipProtoPort.ports) {
         const { ports } = destination.ipProtoPort;
         let portLow, portHigh;
         if (ports.includes('-')) {
