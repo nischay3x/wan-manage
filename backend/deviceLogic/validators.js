@@ -348,7 +348,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       }
 
       // LAN interfaces are not allowed to have a default GW
-      if (ifc.gateway !== '') {
+      if (ifc.dhcp !== 'yes' && ifc.gateway !== '') {
         return {
           valid: false,
           err: 'LAN interfaces should not be assigned a default GW'
