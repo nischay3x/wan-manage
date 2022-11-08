@@ -796,7 +796,7 @@ const validateQOSPolicy = (devices) => {
   if (devices.some(device => getCpuInfo(device.cpuInfo).vppCores < 2)) {
     return {
       valid: false,
-      err: 'QoS cannot be installed on a device without 2 vRouter cores at least'
+      err: 'QoS feature requires 3 or more CPU cores and at least 2 vRouter cores'
     };
   }
 
