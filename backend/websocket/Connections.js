@@ -519,6 +519,11 @@ class Connections {
             updInterface.gateway = updatedConfig.gateway;
           };
 
+          if (!i.isAssigned) {
+            // changing the type of an unassigned interface based on the gateway
+            updInterface.type = updInterface.gateway ? 'WAN' : 'LAN';
+          }
+
           return updInterface;
         });
 
