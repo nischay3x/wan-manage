@@ -376,20 +376,18 @@ class RemoteVpn extends IApplication {
 
       // if is new keys, save them on db
       if (isNew) {
-        const query = { _id: application._id };
-        const update = {
-          $set: {
-            'configuration.keys.caKey': caKey,
-            'configuration.keys.caCrt': caCrt,
-            'configuration.keys.serverKey': serverKey,
-            'configuration.keys.serverCrt': serverCrt,
-            'configuration.keys.clientKey': clientKey,
-            'configuration.keys.clientCrt': clientCrt,
-            'configuration.keys.tlsKey': tlsKey,
-            'configuration.keys.dhKey': dhKey
-          }
-        };
-        await applications.updateOne(query, update);
+        const keysObj = { caKey, caCrt, serverKey, serverCrt, clientKey, clientCrt, tlsKey, dhKey };
+
+        await applications.updateOne(
+          { _id: application._id },
+          { $set: { 'configuration.keys': keysObj } }
+        );
+
+        // store the keys in the "application" variable as well.
+        // If user selected multiple devices to install the application,
+        // we need to ensure that we don't generate different keys
+        // for each device. Hence we saving in DB and in variable.
+        application.configuration.keys = keysObj;
       }
 
       const dnsIps = config.dnsIps && config.dnsIps !== ''
