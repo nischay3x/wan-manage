@@ -127,7 +127,7 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
         };
       }
       // Inbound rules destination ports can't be overlapped
-      if (direction === 'inbound' && destination.ipProtoPort.ports) {
+      if (direction === 'inbound' && inbound !== 'edgeAccess' && destination.ipProtoPort.ports) {
         const { ports } = destination.ipProtoPort;
         let portLow, portHigh;
         if (ports.includes('-')) {
@@ -348,7 +348,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       }
 
       // LAN interfaces are not allowed to have a default GW
-      if (ifc.gateway !== '') {
+      if (ifc.dhcp !== 'yes' && ifc.gateway !== '') {
         return {
           valid: false,
           err: 'LAN interfaces should not be assigned a default GW'
@@ -419,12 +419,18 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     }
   }
 
+  // Assuming unassigned interface is WAN if gateway is set
+  const uniqMetricsOfUnassigned = [...new Set(
+    interfaces.filter(i => !i.isAssigned && i.gateway).map(i => +i.metric)
+  )];
+
   // Checks if all assigned WAN interfaces metrics are different
   const { metricsArray, pathLabels } = wanIfcs.reduce((a, v) => {
     a.metricsArray.push(Number(v.metric));
     a.pathLabels = a.pathLabels.concat(v.pathlabels.map((p) => p._id));
     return a;
-  }, { metricsArray: [], pathLabels: [] });
+  }, { metricsArray: uniqMetricsOfUnassigned, pathLabels: [] });
+
   const hasDuplicates = metricsArray.length !== new Set(metricsArray).size;
   if (hasDuplicates) {
     return {
@@ -831,7 +837,7 @@ const validateQOSPolicy = (devices) => {
   if (devices.some(device => getCpuInfo(device.cpuInfo).vppCores < 2)) {
     return {
       valid: false,
-      err: 'QoS cannot be installed on a device without 2 vRouter cores at least'
+      err: 'QoS feature requires 3 or more CPU cores and at least 2 vRouter cores'
     };
   }
 

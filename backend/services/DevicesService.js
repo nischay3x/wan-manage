@@ -840,6 +840,9 @@ class DevicesService {
               );
             }
 
+            // update server stats cache, so the UI will have the most updated data
+            deviceStatus.setDeviceLteStatus(deviceObject.machineId, ifc.devId, response);
+            response = deviceStatus.getDeviceLteStatus(deviceObject.machineId, ifc.devId);
             return response;
           }
         },
@@ -1413,6 +1416,11 @@ class DevicesService {
               if (origIntf.isAssigned) {
                 // if interface unassigned make sure it's not used by any tunnel
                 if (!updIntf.isAssigned) {
+                  if (Array.isArray(deviceRequest.staticroutes) &&
+                    (deviceRequest.staticroutes.some(r => r.ifname === updIntf.devId))) {
+                    // eslint-disable-next-line max-len
+                    throw new Error('Unassigned interface used by existing static routes, please delete related static routes before');
+                  }
                   const numTunnels = await tunnelsModel
                     .countDocuments({
                       isActive: true,
@@ -1520,9 +1528,11 @@ class DevicesService {
                 if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
                   (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
                   (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
-                  throw createError(400,
-                    `Not allowed to modify parameters of unassigned interfaces (${origIntf.name})`
+                  logger.warn(
+                    'Unassigned interface is managed by the device host, parameters not applied',
+                    { params: { deviceId: id, request: updIntf } }
                   );
+                  return origIntf;
                 }
               };
               // Not allowed to modify parameters of PPPoE interfaces
@@ -2966,14 +2976,7 @@ class DevicesService {
 
                 data = JSON.parse(`{${data}}`);
                 data = mapLteNames(data);
-                await devices.updateOne(
-                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-                  {
-                    $set: {
-                      'interfaces.$.deviceParams.initial_pin1_state': data
-                    }
-                  }
-                );
+                await updatePin(data, deviceObject, interfaceId, selectedIf);
                 return JSON.stringify({ err_msg: parsedError, data: data });
               } catch (err) { }
             },
@@ -2981,16 +2984,7 @@ class DevicesService {
               if (response.message && response.message.data) {
                 const data = mapLteNames(response.message.data);
                 response.message.data = data;
-                // update pin state
-                await devices.updateOne(
-                  { _id: id, org: { $in: orgList }, 'interfaces._id': interfaceId },
-                  {
-                    $set: {
-                      'interfaces.$.deviceParams.initial_pin1_state': data
-                    }
-                  }
-                );
-
+                await updatePin(data, deviceObject, interfaceId, selectedIf);
                 return data;
               }
             }
@@ -3418,5 +3412,28 @@ const deviceApplicationFilters = [{
 {
   $replaceRoot: { newRoot: '$device' }
 }];
+
+async function updatePin (data, device, interfaceId, lteInterface) {
+  // update pin in database
+  await devices.updateOne(
+    { _id: device.id, org: device.org, 'interfaces._id': interfaceId },
+    {
+      $set: {
+        'interfaces.$.deviceParams.initial_pin1_state': data
+      }
+    }
+  );
+
+  // update pin in stats cache
+  const devId = lteInterface.devId;
+  const machineId = device.machineId;
+  const updated = deviceStatus.getDeviceLteStatus(machineId, devId);
+  updated.pinState = {
+    ...updated.pinState,
+    ...data
+  };
+
+  deviceStatus.setDeviceLteStatus(machineId, devId, updated);
+}
 
 module.exports = DevicesService;
