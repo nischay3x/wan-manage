@@ -58,6 +58,10 @@ const { TypedError, ErrorTypes } = require('../utils/errors');
 const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
+const {
+  activatePendingTunnelsOfDevice,
+  releasePublicAddrLimiterBlockage
+} = require('../deviceLogic/events');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const applications = require('../models/applications');
 const applicationStore = require('../models/applicationStore');
@@ -1274,6 +1278,8 @@ class DevicesService {
       let origDevice;
       let updDevice;
 
+      let isNeedToReleasePendingTunnels = false;
+
       // We set closeSession to false since apply uses documents with the session
       // The session is closed at the end of the API
       sessionCopy = await mongoConns.mainDBwithTransaction(async (session) => {
@@ -1361,8 +1367,7 @@ class DevicesService {
                 origIntf.useFixedPublicPort !== updIntf.useFixedPublicPort;
 
               if (isStunDisabledNow || isStaticPublicInfoChanged || isPortForwardingChanged) {
-                const deviceId = origDevice._id.toString();
-                await publicAddrInfoLimiter.release(`${deviceId}:${interfaceId}`);
+                isNeedToReleasePendingTunnels = true;
               }
 
               // Public port and NAT type is assigned by system only
@@ -1886,6 +1891,13 @@ class DevicesService {
         org: orgList[0],
         newDevice: updDevice
       });
+
+      if (isNeedToReleasePendingTunnels) {
+        const released = await releasePublicAddrLimiterBlockage(updDevice);
+        if (released) {
+          await activatePendingTunnelsOfDevice(updDevice);
+        }
+      }
 
       const status = modifyDevResult.ids.length > 0 ? 202 : 200;
       DevicesService.setLocationHeader(server, response, modifyDevResult.ids, orgList[0]);

@@ -42,9 +42,10 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
-const activatePendingTunnelsOfDevice = require('./events')
-  .activatePendingTunnelsOfDevice;
-const publicAddrInfoLimiter = require('./publicAddressLimiter');
+const {
+  activatePendingTunnelsOfDevice,
+  releasePublicAddrLimiterBlockage
+} = require('./events');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 // const { publicPortLimiter } = require('../limiters/publicPort');
 
@@ -461,7 +462,7 @@ const apply = async (device, user, data) => {
   await reconfigErrorsLimiter.release(_id.toString());
   const released = await releasePublicAddrLimiterBlockage(device[0]);
   if (released) {
-    await activatePendingTunnelsOfDevice(updDevice);
+    await activatePendingTunnelsOfDevice(updDevice, true);
   }
 
   // Get device current configuration hash
@@ -488,23 +489,6 @@ const apply = async (device, user, data) => {
     status: 'completed',
     message: ''
   };
-};
-
-const releasePublicAddrLimiterBlockage = async (device) => {
-  let blockagesReleased = false;
-
-  const wanIfcs = device.interfaces.filter(i => i.type === 'WAN');
-  const deviceId = device._id.toString();
-
-  for (const ifc of wanIfcs) {
-    const ifcId = ifc._id.toString();
-    const isReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcId}`);
-    if (isReleased) {
-      blockagesReleased = true;
-    }
-  }
-
-  return blockagesReleased;
 };
 
 // Register a method that updates sync state
