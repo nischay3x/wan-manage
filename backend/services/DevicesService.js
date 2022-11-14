@@ -1347,6 +1347,84 @@ class DevicesService {
             logger.error('Not allowed path labels', { params: { notAllowedPathLabels } });
             throw createError(400, 'Not allowed to assign path labels of a different organization');
           };
+
+          // validate removed, unassigned and modified interfaces
+          await Promise.all(origDevice.interfaces.map(async origIntf => {
+            const interfaceId = origIntf._id.toString();
+            const updIntf = deviceRequest.interfaces.find(rif => interfaceId === rif._id);
+            const ifcType = !updIntf ? 'Removed'
+              : updIntf.isAssigned ? updIntf.type : 'Unassigned';
+
+            // Check tunnels connectivity and static routes for removed or modified interfaces
+            if ((origIntf.isAssigned) &&
+              (!updIntf || !updIntf.isAssigned || updIntf.type !== 'WAN')) {
+              if (Array.isArray(deviceRequest.staticroutes) &&
+                (deviceRequest.staticroutes.some(r => r.ifname === origIntf.devId))) {
+                // eslint-disable-next-line max-len
+                throw new Error(`${ifcType} interface ${origIntf.name} used by existing static routes, please delete related static routes before`);
+              }
+              const numTunnels = await tunnelsModel
+                .countDocuments({
+                  isActive: true,
+                  $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }]
+                }).session(session);
+              if (numTunnels > 0) {
+                // eslint-disable-next-line max-len
+                throw new Error(`${ifcType} interface ${origIntf.name} used by existing tunnels, please delete related tunnels before`);
+              }
+            }
+
+            // check firewall rules
+            if (deviceRequest.firewall) {
+              let hasInbound = false;
+              let hasOutbound = false;
+              for (const rule of deviceRequest.firewall.rules) {
+                if (rule.direction === 'inbound') {
+                  if (rule.classification.destination.ipProtoPort.interface === origIntf.devId) {
+                    hasInbound = true;
+                  }
+                }
+                if (rule.direction === 'outbound') {
+                  if (rule.interfaces.includes(origIntf.devId)) {
+                    hasOutbound = true;
+                  }
+                }
+              }
+              if (updIntf && origIntf.type !== updIntf.type) {
+                if (hasInbound && updIntf.type !== 'WAN') {
+                  throw createError(400,
+                    `WAN interface ${origIntf.name} \
+                    has firewall rules. Please remove rules before modifying.`
+                  );
+                }
+                if (hasOutbound && updIntf.type !== 'LAN') {
+                  throw createError(400,
+                    `LAN Interface ${origIntf.name} \
+                    has firewall rules. Please remove rules before modifying.`
+                  );
+                }
+              }
+              if ((hasOutbound || hasInbound) && (!updIntf || !updIntf.isAssigned)) {
+                throw createError(400,
+                  `${ifcType} interface ${origIntf.name} configured with firewall rules. \
+                  Please delete related rules before`
+                );
+              }
+              if (hasOutbound && updIntf.type !== 'LAN') {
+                throw createError(400,
+                  `${updIntf.type} interface ${origIntf.name} configured with outbound rules. \
+                  Outbound rules are allowed on LAN only.`
+                );
+              }
+              if (hasInbound && updIntf.type !== 'WAN') {
+                throw createError(400,
+                  `${updIntf.type} interface ${origIntf.name} configured with inbound rules. \
+                  Inbound rules are allowed on WAN only.`
+                );
+              }
+            }
+          }));
+
           const newVlanTags = deviceRequest.interfaces.reduce(
             (res, { devId, vlanTag }) => vlanTag ? [...res, { devId, vlanTag }] : res, []
           );
@@ -1412,44 +1490,25 @@ class DevicesService {
               // This field is set by changed to true by events logic only
               updIntf.hasIpOnDevice = origIntf.hasIpOnDevice;
 
-              // Check tunnels connectivity
-              if (origIntf.isAssigned) {
-                // if interface unassigned make sure it's not used by any tunnel
-                if (!updIntf.isAssigned) {
-                  if (Array.isArray(deviceRequest.staticroutes) &&
-                    (deviceRequest.staticroutes.some(r => r.ifname === updIntf.devId))) {
-                    // eslint-disable-next-line max-len
-                    throw new Error('Unassigned interface used by existing static routes, please delete related static routes before');
-                  }
+              if (updIntf.isAssigned) {
+                // interface is assigned, check if removed path labels not used by any tunnel
+                const pathlabels = (Array.isArray(updIntf.pathlabels))
+                  ? updIntf.pathlabels.map(p => p._id.toString()) : [];
+                const remLabels = (Array.isArray(origIntf.pathlabels))
+                  ? origIntf.pathlabels.filter(
+                    p => !pathlabels.includes(p._id.toString())
+                  ) : [];
+                if (remLabels.length > 0) {
+                  const remLabelsArray = remLabels.map(p => p._id);
                   const numTunnels = await tunnelsModel
                     .countDocuments({
                       isActive: true,
-                      $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }]
+                      $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }],
+                      pathlabel: { $in: remLabelsArray }
                     }).session(session);
                   if (numTunnels > 0) {
-                    // eslint-disable-next-line max-len
-                    throw new Error('Unassigned interface used by existing tunnels, please delete related tunnels before');
-                  }
-                } else {
-                  // interface still assigned, check if removed path labels not used by any tunnel
-                  const pathlabels = (Array.isArray(updIntf.pathlabels))
-                    ? updIntf.pathlabels.map(p => p._id.toString()) : [];
-                  const remLabels = (Array.isArray(origIntf.pathlabels))
-                    ? origIntf.pathlabels.filter(
-                      p => !pathlabels.includes(p._id.toString())
-                    ) : [];
-                  if (remLabels.length > 0) {
-                    const remLabelsArray = remLabels.map(p => p._id);
-                    const numTunnels = await tunnelsModel
-                      .countDocuments({
-                        isActive: true,
-                        $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }],
-                        pathlabel: { $in: remLabelsArray }
-                      }).session(session);
-                    if (numTunnels > 0) {
-                    // eslint-disable-next-line max-len
-                      throw createError(400, 'Removed label used by existing tunnels, please delete related tunnels before');
-                    }
+                  // eslint-disable-next-line max-len
+                    throw createError(400, 'Removed label used by existing tunnels, please delete related tunnels before');
                   }
                 }
               }
@@ -1459,63 +1518,6 @@ class DevicesService {
                 const { valid, err } = validateQOSPolicy([origDevice]);
                 if (!valid) {
                   throw new Error(err);
-                }
-              }
-
-              // check firewall rules
-              if (deviceRequest.firewall) {
-                let hadInbound = false;
-                let hadOutbound = false;
-                let hasInbound = false;
-                let hasOutbound = false;
-                for (const rule of deviceRequest.firewall.rules) {
-                  if (rule.direction === 'inbound') {
-                    if (rule.classification.destination.ipProtoPort.interface === origIntf.devId) {
-                      hadInbound = true;
-                    }
-                    if (rule.classification.destination.ipProtoPort.interface === updIntf.devId) {
-                      hasInbound = true;
-                    }
-                  }
-                  if (rule.direction === 'outbound') {
-                    if (rule.interfaces.includes(origIntf.devId)) {
-                      hadOutbound = true;
-                    }
-                    if (rule.interfaces.includes(updIntf.devId)) {
-                      hasOutbound = true;
-                    }
-                  }
-                }
-                if (origIntf.type !== updIntf.type) {
-                  if (hadInbound && updIntf.type !== 'WAN') {
-                    throw createError(400,
-                      `WAN interface ${origIntf.name} \
-                      has firewall rules. Please remove rules before modifying.`
-                    );
-                  }
-                  if (hadOutbound && updIntf.type !== 'LAN') {
-                    throw createError(400,
-                      `LAN Interface ${origIntf.name} \
-                      has firewall rules. Please remove rules before modifying.`
-                    );
-                  }
-                }
-                if ((hasOutbound || hasInbound) && !updIntf.isAssigned) {
-                  throw createError(400,
-                    `Installing firewall on unassigned interface ${origIntf.name} is not allowed`
-                  );
-                }
-                if (hasOutbound && updIntf.type !== 'LAN') {
-                  throw createError(400,
-                    `${updIntf.type} Interface ${origIntf.name} configured with outbound rules. \
-                    Outbound rules are allowed on LAN only.`
-                  );
-                }
-                if (hasInbound && updIntf.type !== 'WAN') {
-                  throw createError(400,
-                    `${updIntf.type} Interface ${origIntf.name} configured with inbound rules. \
-                    Inbound rules are allowed on WAN only.`
-                  );
                 }
               }
 
