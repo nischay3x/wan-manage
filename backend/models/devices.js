@@ -784,6 +784,11 @@ const BGPNeighborSchema = new Schema({
   outboundFilter: {
     type: String,
     default: ''
+  },
+  sendCommunity: {
+    type: String,
+    enum: ['all', 'both', 'extended', 'large', 'standard', ''],
+    default: 'all'
   }
 }, {
   timestamps: true

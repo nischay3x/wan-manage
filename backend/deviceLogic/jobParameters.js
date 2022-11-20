@@ -141,6 +141,7 @@ const transformBGP = async (device, includeTunnelNeighbors = false) => {
       password: n.password || '',
       inboundFilter: n.inboundFilter || '',
       outboundFilter: n.outboundFilter || '',
+      sendCommunity: n.sendCommunity,
       holdInterval: bgp.holdInterval,
       keepaliveInterval: bgp.keepaliveInterval
     };
@@ -178,6 +179,7 @@ const transformBGP = async (device, includeTunnelNeighbors = false) => {
         password: '',
         inboundFilter: '',
         outboundFilter: '',
+        sendCommunity: null,
         holdInterval: bgpConfig.holdInterval,
         keepaliveInterval: bgpConfig.keepaliveInterval
       });

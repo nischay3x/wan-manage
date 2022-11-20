@@ -9210,6 +9210,7 @@ components:
             remoteASN: 65002
             inboundFilter: routingFilterName
             outboundFilter: routingFilterName
+            sendCommunity: both
         cpuInfo:
           powerSaving: true
           vppCores: 3
@@ -9900,6 +9901,16 @@ components:
         outboundFilter:
           type: string
           description: A routing filter name to apply on the expose routes to the BGP peer
+        sendCommunity:
+          enum:
+          - all
+          - both
+          - extended
+          - large
+          - standard
+          - ''
+          type: string
+          description: A BGP attribute to attach to the BGP peer
       type: object
     OspfConfigs:
       example:
