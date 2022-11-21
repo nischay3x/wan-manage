@@ -447,8 +447,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
   }
 
   // VLAN validation
-  const vlanTags = [];
-  const vlanParents = [];
   const nonVlanIds = assignedIfs.filter(ifc => !ifc.vlanTag).map(ifc => ifc.devId);
   for (const ifc of assignedIfs) {
     if (ifc.vlanTag) {
@@ -475,16 +473,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
           err: `Wrong VLAN ${ifc.name} identifier`
         };
       }
-      vlanTags.push(+ifc.vlanTag);
-      vlanParents.push(ifc.parentDevId);
     }
-  }
-  const hasVlanTagsDuplicates = vlanTags.length !== new Set(vlanTags).size;
-  if (hasVlanTagsDuplicates) {
-    return {
-      valid: false,
-      err: 'Duplicated VLAN tags are not allowed'
-    };
   }
 
   if (isRunning && orgSubnets.length > 0) {
