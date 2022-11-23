@@ -10483,7 +10483,7 @@ components:
           type: string
         ifname:
           description: Interface name
-          maxLength: 24
+          maxLength: 64
           type: string
         metric:
           description: Route metric
@@ -10529,7 +10529,7 @@ components:
       properties:
         interface:
           description: Interface bus Address
-          maxLength: 24
+          maxLength: 64
           type: string
         rangeStart:
           description: Start IP Range
