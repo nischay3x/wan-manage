@@ -10571,7 +10571,7 @@ components:
           type: string
         interface:
           description: Interface bus Address
-          maxLength: 24
+          maxLength: 64
           type: string
         rangeStart:
           description: Start IP Range
