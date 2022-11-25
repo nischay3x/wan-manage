@@ -145,7 +145,7 @@ const getFirewallParameters = (policy, device) => {
           permit: action === 'allow'
         }
       };
-      if ((priority >= 0) && (priority < globalShift)) {
+      if ((priority >= 0) && (priority < globalShift) && interfaces?.length) {
         // attach interfaces only for device specific rules
         jobRule.action.interfaces = interfaces;
       }
