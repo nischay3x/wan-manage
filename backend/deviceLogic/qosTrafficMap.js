@@ -254,14 +254,15 @@ const getDevicesTrafficMapJobInfo = async (org, deviceIdList, sync = false) => {
   // Extract QoS traffic map information
   const { trafficMap, updatedAt } = await getFullTrafficMap([org], true);
   const filter = {
-    $and: [
-      { 'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] } }
-    ]
+    $and: []
   };
   if (deviceIdList.length) {
     filter.$and.push({ _id: { $in: deviceIdList } });
   }
   if (!sync) {
+    filter.$and.push({
+      'policies.qos.status': { $in: ['installing', 'installed', 'installation failed'] }
+    });
     filter.$and.push({
       $or: [
         { 'qosTrafficMap.lastRequestTime': { $exists: false } },
