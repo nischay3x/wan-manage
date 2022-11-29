@@ -1149,6 +1149,10 @@ const apply = async (device, user, data) => {
     .populate('policies.qos.policy')
     .execPopulate();
 
+  data.sendAddTunnels ??= {};
+  data.sendRemoveTunnels ??= {};
+  data.ignoreTasks ??= [];
+
   // Create the default/static routes modification parameters
   const modifyRoutes = prepareModifyRoutes(device[0], data.newDevice);
   if (modifyRoutes.routes.length > 0) modifyParams.modify_routes = modifyRoutes;
@@ -1401,7 +1405,7 @@ const apply = async (device, user, data) => {
 
   // Queue job only if the device has changed
   // Return empty jobs array if the device did not change
-  if (!modified) {
+  if (!modified && isEmpty(data.sendAddTunnels) && isEmpty(data.sendRemoveTunnels)) {
     logger.debug('The device was not modified, nothing to apply', {
       params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
     });
@@ -1436,10 +1440,6 @@ const apply = async (device, user, data) => {
     ]);
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
     await setJobPendingInDB(device[0]._id, org, true);
-
-    data.sendAddTunnels ??= {};
-    data.sendRemoveTunnels ??= {};
-    data.ignoreTasks ??= [];
 
     // Queue device modification job
     const { jobs, sentTasks } = await queueModifyDeviceJob(
