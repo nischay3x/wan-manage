@@ -1850,6 +1850,9 @@ class DevicesService {
           throw createError(400, err);
         }
 
+        // reset the reconfig hash to update the info of unassigned interfaces
+        connections.devices.updateDeviceInfo(origDevice.machineId, 'reconfig', '');
+
         // If device changed to not approved disconnect it's socket
         if (deviceRequest.isApproved === false) connections.deviceDisconnect(origDevice.machineId);
 
