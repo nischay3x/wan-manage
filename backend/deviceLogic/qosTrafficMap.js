@@ -26,6 +26,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { toCamelCase } = require('../utils/helpers');
+const { getMajorVersion } = require('../versioning');
 
 /**
  * Queues an add-qos-traffic-map job to a device.
@@ -271,10 +272,19 @@ const getDevicesTrafficMapJobInfo = async (org, deviceIdList, sync = false) => {
       ]
     });
   }
-  const opDevices = await devices.find(filter, { _id: 1 });
+  const opDevices = await devices.find(filter, { _id: 1, versions: 1 });
+  const installIdsObject = {};
+  const installIdsArray = [];
+  for (const dev of opDevices) {
+    const majorAgentVersion = getMajorVersion(dev.versions.agent);
+    if (majorAgentVersion >= 6) {
+      installIdsArray.push(dev._id);
+      installIdsObject[dev._id] = true;
+    }
+  };
   if (opDevices.length) {
     await devices.updateMany(
-      { _id: { $in: opDevices.map((d) => d._id) } },
+      { _id: { $in: installIdsArray } },
       { $set: { 'qosTrafficMap.lastRequestTime': requestTime } }
     );
   };
@@ -283,7 +293,7 @@ const getDevicesTrafficMapJobInfo = async (org, deviceIdList, sync = false) => {
     message: 'add-qos-traffic-map',
     params: trafficMap,
     deviceJobResp: { requestTime: requestTime },
-    installIds: opDevices.reduce((obj, d) => { obj[d._id] = true; return obj; }, {})
+    installIds: installIdsObject
   };
 };
 
