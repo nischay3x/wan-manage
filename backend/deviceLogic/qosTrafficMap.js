@@ -241,6 +241,7 @@ const getFullTrafficMap = async (orgList, toAgent) => {
  * @param   {mongoID} org - organization to apply (make sure it is not the user defaultOrg)
  * @param   {List}    deviceIdList - deviceIDs List
  * @param   {Boolean} sync - true if sync action
+ * @param   {Object}  device - populated device object (to reduce DB calls)
  * @return {Object} with:
  *  params        - the QoS traffic map table
  *  installIds    - A list with a subset of the devices to add the QoS traffic map
@@ -248,7 +249,7 @@ const getFullTrafficMap = async (orgList, toAgent) => {
  *  deviceJobResp - Parameters to include in the job response data together with the device Id
  * @throw exception on error
  */
-const getDevicesTrafficMapJobInfo = async (org, deviceIdList, sync = false) => {
+const getDevicesTrafficMapJobInfo = async (org, deviceIdList, sync = false, device = null) => {
   // find all devices that require a new update (don't have a pending job)
   const requestTime = Date.now();
 
@@ -272,17 +273,18 @@ const getDevicesTrafficMapJobInfo = async (org, deviceIdList, sync = false) => {
       ]
     });
   }
-  const opDevices = await devices.find(filter, { _id: 1, versions: 1 });
+  const opDevices = device ? [device] : await devices.find(filter, { _id: 1, versions: 1 });
   const installIdsObject = {};
   const installIdsArray = [];
   for (const dev of opDevices) {
     const majorAgentVersion = getMajorVersion(dev.versions.agent);
     if (majorAgentVersion >= 6) {
-      installIdsArray.push(dev._id);
-      installIdsObject[dev._id] = true;
+      const deviceId = (device ? deviceIdList[0] : dev._id).toString();
+      installIdsArray.push(deviceId);
+      installIdsObject[deviceId] = true;
     }
   };
-  if (opDevices.length) {
+  if (installIdsArray.length > 0) {
     await devices.updateMany(
       { _id: { $in: installIdsArray } },
       { $set: { 'qosTrafficMap.lastRequestTime': requestTime } }
@@ -301,13 +303,13 @@ const getDevicesTrafficMapJobInfo = async (org, deviceIdList, sync = false) => {
  * Creates the QoS traffic map section in the full sync job.
  * @return Object
  */
-const sync = async (deviceId, org) => {
+const sync = async (deviceId, org, device) => {
   const {
     installIds,
     message,
     params,
     deviceJobResp
-  } = await getDevicesTrafficMapJobInfo(org, [deviceId], true);
+  } = await getDevicesTrafficMapJobInfo(org, [deviceId], true, device);
   const request = [];
   const completeCbData = [];
   let callComplete = false;
