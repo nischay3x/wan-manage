@@ -2240,7 +2240,7 @@ class DevicesService {
       { $match: match },
       { $project: { time: 1, stats: { $objectToArray: '$stats' } } },
       { $unwind: '$stats' },
-      ...(ifNum ? [{ $match: { 'stats.k': ifNum.replace('.', ':') } }] : []),
+      ...(ifNum ? [{ $match: { 'stats.k': ifNum.replaceAll('.', ':') } }] : []),
       {
         $group:
               {
