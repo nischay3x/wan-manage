@@ -57,7 +57,7 @@ const getDevicesQOSJobInfo = async (device) => {
     getQOSParameters(status.startsWith('install') ? qosPolicy : null, device, op);
   if (!policyParams) op = 'uninstall';
   // Extract QoS traffic map information
-  const trafficMap = await getDevicesTrafficMapJobInfo(device.org, [device._id]);
+  const trafficMap = await getDevicesTrafficMapJobInfo(device.org, [device._id], false, device);
   // Extract applications information
   const apps = await getDevicesAppIdentificationJobInfo(
     device.org,

@@ -229,7 +229,7 @@ const queueFullSyncJob = async (device, hash, org) => {
       requests,
       completeCbData,
       callComplete
-    } = await syncHandler(deviceId, org);
+    } = await syncHandler(deviceId, org, device);
 
     // Add the requests to the sync message params object
     requests.forEach(subTask => {
