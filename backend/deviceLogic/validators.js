@@ -556,6 +556,37 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
           err: 'Routing filters with the same name are not allowed'
         };
       }
+
+      const usedRuleRoutes = new Set();
+      const usedRulePriorities = new Set();
+      for (const rule of filter.rules) {
+        // check route duplications
+        const route = rule.route;
+        if (usedRuleRoutes.has(route)) {
+          return {
+            valid: false,
+            err: `Routing filter "${name}" has duplicates in routes rules (${route})`
+          };
+        }
+        usedRuleRoutes.add(route);
+
+        // check priority duplications
+        const priority = rule.priority;
+        if (usedRulePriorities.has(priority)) {
+          return {
+            valid: false,
+            err: `Routing filter "${name}" has duplicates priorities (${priority})`
+          };
+        }
+        usedRulePriorities.add(priority);
+      }
+
+      if (!usedRuleRoutes.has('0.0.0.0/0')) {
+        return {
+          valid: false,
+          err: `Routing filter "${name}" must include rule for 0.0.0.0/0 route`
+        };
+      }
     }
   }
 
