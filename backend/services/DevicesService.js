@@ -1949,7 +1949,7 @@ class DevicesService {
         null,
         device[0].machineId,
         { entity: 'agent', message: 'get-device-os-routes' },
-        configs.get('directMessageTimeout', 'number')
+        60000 // specific timeout for the get OS routes message (60 sec)
       );
 
       if (!deviceOsRoutes.ok) {
