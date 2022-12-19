@@ -519,7 +519,7 @@ class Connections {
             updInterface.gateway = updatedConfig.gateway;
           };
 
-          if (!i.isAssigned) {
+          if (!i.isAssigned && i.deviceType === 'dpdk') {
             // changing the type of an unassigned interface based on the gateway
             updInterface.type = updInterface.gateway ? 'WAN' : 'LAN';
           }
