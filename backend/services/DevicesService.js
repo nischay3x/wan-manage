@@ -1670,6 +1670,12 @@ class DevicesService {
             return d;
           });
 
+          // Verify there is no DHCP interfaces duplication
+          const uniqInterfaces = uniqBy(deviceRequest.dhcp, 'interface');
+          if (uniqInterfaces.length !== deviceRequest.dhcp.length) {
+            throw new Error('Multiple DHCP for the same interface not allowed');
+          }
+
           // validate DHCP info if it exists
           for (const dhcpRequest of deviceRequest.dhcp) {
             DevicesService.validateDhcpRequest(deviceToValidate, dhcpRequest);
@@ -1949,7 +1955,7 @@ class DevicesService {
         null,
         device[0].machineId,
         { entity: 'agent', message: 'get-device-os-routes' },
-        configs.get('directMessageTimeout', 'number')
+        60000 // specific timeout for the get OS routes message (60 sec)
       );
 
       if (!deviceOsRoutes.ok) {
@@ -2608,6 +2614,12 @@ class DevicesService {
       if (dhcpFiltered.length !== 1) return Service.rejectResponse('DHCP ID not found', 404);
 
       DevicesService.validateDhcpRequest(deviceObject, dhcpRequest);
+
+      // Verify there is no DHCP interfaces duplication
+      const hasDuplicates = deviceObject.dhcp.some(s =>
+        s.id !== dhcpId && s.interface === dhcpRequest.interface
+      );
+      if (hasDuplicates) throw new Error('Multiple DHCP for the same interface not allowed');
 
       const dhcpData = {
         _id: dhcpId,
