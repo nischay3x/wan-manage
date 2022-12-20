@@ -1509,7 +1509,7 @@ class DevicesService {
               if (updIntf.deviceType === 'pppoe') {
                 if ((updIntf.IPv4 && updIntf.IPv4 !== origIntf.IPv4) ||
                   (updIntf.IPv4Mask && updIntf.IPv4Mask !== origIntf.IPv4Mask) ||
-                  (updIntf.hasOwnProperty('dhcp') && updIntf.dhcp !== origIntf.dhcp) ||
+                  (updIntf.hasOwnProperty('dhcp') && updIntf.dhcp !== 'yes') ||
                   (updIntf.hasOwnProperty('metric') && updIntf.metric !== origIntf.metric) ||
                   (updIntf.hasOwnProperty('mtu') && updIntf.mtu !== origIntf.mtu) ||
                   (updIntf.gateway && updIntf.gateway !== origIntf.gateway)) {
