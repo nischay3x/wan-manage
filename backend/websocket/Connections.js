@@ -521,6 +521,8 @@ class Connections {
 
           if (!i.isAssigned && i.deviceType === 'dpdk') {
             // changing the type of an unassigned interface based on the gateway
+            // Non dpdk interfaces are pppoe (WAN) or lte (WAN) or wifi (LAN), 
+            // these shouldn't be modified from the value set on registration
             updInterface.type = updInterface.gateway ? 'WAN' : 'LAN';
           }
 
