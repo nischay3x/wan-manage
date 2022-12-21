@@ -169,6 +169,14 @@ class RemoteVpn extends IApplication {
       };
     }
 
+    if (Object.keys(app.configuration).length === 0 || !app.configuration.serverPort) {
+      return {
+        valid: false,
+        err: 'Remote Worker VPN is not configured. ' +
+        'You can go to the installed applications page and configure it first.'
+      };
+    }
+
     // prevent installation if there are missing required configurations
     // validate user inputs
     const result = vpnDeviceConfigSchema.validate(deviceConfiguration);
