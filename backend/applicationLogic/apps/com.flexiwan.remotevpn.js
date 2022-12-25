@@ -169,11 +169,13 @@ class RemoteVpn extends IApplication {
       };
     }
 
-    if (Object.keys(app.configuration).length === 0 || !app.configuration.serverPort) {
+    // this field indicates that application configured.
+    // There is no way to save only networkId without other configurations
+    if (!app.configuration?.networkId) {
       return {
         valid: false,
-        err: 'Remote Worker VPN is not configured. ' +
-        'You can go to the installed applications page and configure it first.'
+        err: 'Remote Worker VPN is not configured properly. ' +
+        'Check the installed application configuration page.'
       };
     }
 
