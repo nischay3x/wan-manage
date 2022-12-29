@@ -90,10 +90,12 @@ const transformRoutingFilters = (routingFilters) => {
     return {
       name: filter.name,
       description: filter.description,
-      defaultAction: filter.defaultAction,
       rules: filter.rules.map(r => {
         return {
-          network: r.network
+          route: r.route,
+          action: r.action,
+          nextHop: r.nextHop,
+          priority: r.priority
         };
       })
     };

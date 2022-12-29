@@ -574,26 +574,26 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
         if (usedRuleRoutes.has(route)) {
           return {
             valid: false,
-            err: `Routing filter "${name}" has duplicates in routes rules (${route})`
+            err: `Duplicate routes (${route}) in the "${name}" routing filter are not allowed`
           };
         }
         usedRuleRoutes.add(route);
 
         // check priority duplications
-        const priority = rule.priority;
-        if (usedRulePriorities.has(priority)) {
+        const p = rule.priority;
+        if (usedRulePriorities.has(p)) {
           return {
             valid: false,
-            err: `Routing filter "${name}" has duplicates priorities (${priority})`
+            err: `Duplicate priority values (${p}) in the "${name}" routing filter are not allowed`
           };
         }
-        usedRulePriorities.add(priority);
+        usedRulePriorities.add(p);
       }
 
       if (!usedRuleRoutes.has('0.0.0.0/0')) {
         return {
           valid: false,
-          err: `Routing filter "${name}" must include rule for 0.0.0.0/0 route`
+          err: `The routing filter "${name}" must include rule for 0.0.0.0/0 route`
         };
       }
     }
