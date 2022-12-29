@@ -330,13 +330,15 @@ const queueApplicationJob = async (
       }
     };
 
-    // during application installation, we can change the device,
-    // e.g. adding firewall rules.
-    // Here we call modifyDevice function to send the needed jobs
-    await modifyDeviceApply([dev], { username: 'system' }, {
-      org: org,
-      newDevice: newDevice
-    });
+    // during application uninstallation, we can change the device,
+    // e.g. removing firewall rules.
+    // Here we call modifyDevice function to send the needed jobs before the uninstallation
+    if (op === 'uninstall') {
+      await modifyDeviceApply([dev], { username: 'system' }, {
+        org: org,
+        newDevice: newDevice
+      });
+    }
 
     tasks.forEach(t => {
       jobs.push(
@@ -361,6 +363,16 @@ const queueApplicationJob = async (
         )
       );
     });
+
+    // during application installation, we can change the device,
+    // e.g. adding firewall rules.
+    // Here we call modifyDevice function to send the needed jobs after the installation
+    if (op === 'install' || op === 'config') {
+      await modifyDeviceApply([dev], { username: 'system' }, {
+        org: org,
+        newDevice: newDevice
+      });
+    }
   }
 
   return Promise.allSettled(jobs);

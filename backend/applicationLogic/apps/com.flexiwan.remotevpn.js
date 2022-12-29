@@ -169,6 +169,16 @@ class RemoteVpn extends IApplication {
       };
     }
 
+    // this field indicates that application configured.
+    // There is no way to save only networkId without other configurations
+    if (!app.configuration?.networkId) {
+      return {
+        valid: false,
+        err: 'Remote Worker VPN is not configured properly. ' +
+        'Check the installed application configuration page.'
+      };
+    }
+
     // prevent installation if there are missing required configurations
     // validate user inputs
     const result = vpnDeviceConfigSchema.validate(deviceConfiguration);
