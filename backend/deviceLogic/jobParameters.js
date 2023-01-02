@@ -155,25 +155,34 @@ const transformOSPF = (ospf, bgp) => {
 
 /**
  * Creates a modify-routing-bgp object
- * @param  {Object} bgp bgp configuration
- * @param  {Object} interfaces  assigned interfaces of device
- * @return {Object}            an object containing an array of routes
+ * @param  {Object} device device object
+ * @return {Object}        an object containing an bgp configuration
  */
-const transformBGP = async (device, includeTunnelNeighbors = false) => {
-  let { bgp, interfaces, org, _id } = device;
+const transformBGP = async (device) => {
+  let { bgp, interfaces, org, _id, versions } = device;
   interfaces = interfaces.filter(i => i.isAssigned);
 
+  const majorVersion = getMajorVersion(versions.agent);
+  const minorVersion = getMinorVersion(versions.agent);
+  const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
+  const sendCommunity = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+
   const neighbors = bgp.neighbors.map(n => {
-    return {
+    const neighbor = {
       ip: n.ip,
       remoteAsn: n.remoteASN,
       password: n.password || '',
       inboundFilter: n.inboundFilter || '',
       outboundFilter: n.outboundFilter || '',
-      sendCommunity: n.sendCommunity,
       holdInterval: bgp.holdInterval,
       keepaliveInterval: bgp.keepaliveInterval
     };
+
+    if (sendCommunity) {
+      neighbor.sendCommunity = n.sendCommunity;
+    }
+
+    return neighbor;
   });
 
   if (includeTunnelNeighbors) {
@@ -209,8 +218,8 @@ const transformBGP = async (device, includeTunnelNeighbors = false) => {
         inboundFilter: '',
         outboundFilter: '',
         holdInterval: bgpConfig.holdInterval,
-        keepaliveInterval: bgpConfig.keepaliveInterval,
-        sendCommunity: 'all' // 'all' enabled by default.
+        keepaliveInterval: bgpConfig.keepaliveInterval
+        // no need to send community here, since it is only for 5.3 version
       });
     }
   }

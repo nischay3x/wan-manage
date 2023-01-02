@@ -2115,7 +2115,7 @@ const addBgpNeighborsIfNeeded = async tunnel => {
 };
 
 const buildModifyBgpJob = async device => {
-  const bgpParams = await transformBGP(device, true);
+  const bgpParams = await transformBGP(device);
   return { entity: 'agent', message: 'modify-routing-bgp', params: bgpParams };
 };
 
