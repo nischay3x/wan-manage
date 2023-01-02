@@ -208,9 +208,9 @@ const transformBGP = async (device, includeTunnelNeighbors = false) => {
         password: '',
         inboundFilter: '',
         outboundFilter: '',
-        sendCommunity: null,
         holdInterval: bgpConfig.holdInterval,
-        keepaliveInterval: bgpConfig.keepaliveInterval
+        keepaliveInterval: bgpConfig.keepaliveInterval,
+        sendCommunity: 'all' // 'all' enabled by default.
       });
     }
   }
