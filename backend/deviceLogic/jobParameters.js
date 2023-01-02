@@ -85,7 +85,34 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
  * @param  {array} RoutingFilters routingFilters array
  * @return {array}   routingFilters array
  */
-const transformRoutingFilters = (routingFilters) => {
+const transformRoutingFilters = (routingFilters, deviceVersion) => {
+  const majorVersion = getMajorVersion(deviceVersion);
+  const minorVersion = getMinorVersion(deviceVersion);
+  const oldFormat = majorVersion < 6 || (majorVersion === 6 && minorVersion === 1);
+
+  if (oldFormat) {
+    return routingFilters.map(filter => {
+      // old devices should have old format of job.
+      // "action", "nextHop" and "priority" are not supported.
+      // In this format, there is "defaultAction" for all rules,
+      // except those that exists in "rules". Hence, we put all routes
+      // that have the opposite action as the default.
+      const defaultRoute = filter.rules.find(r => r.route === '0.0.0.0/0');
+      if (!defaultRoute) throw Error('Default route is missing');
+
+      return {
+        name: filter.name,
+        description: filter.description,
+        defaultAction: defaultRoute.action,
+        rules: filter.rules.filter(r => r.action !== defaultRoute.action).map(r => {
+          return {
+            network: r.route
+          };
+        })
+      };
+    });
+  }
+
   return routingFilters.map(filter => {
     return {
       name: filter.name,

@@ -1013,8 +1013,8 @@ const prepareModifyBGP = async (origDevice, newDevice) => {
  */
 const prepareModifyRoutingFilters = (origDevice, newDevice) => {
   const [origLists, newLists] = [
-    transformRoutingFilters(origDevice.routingFilters),
-    transformRoutingFilters(newDevice.routingFilters)
+    transformRoutingFilters(origDevice.routingFilters, origDevice.versions.agent),
+    transformRoutingFilters(newDevice.routingFilters, newDevice.versions.agent)
   ];
 
   const [addRoutingFilters, removeRoutingFilters] = [
@@ -1585,7 +1585,7 @@ const sync = async (deviceId, org) => {
   }
 
   // Prepare add-routing-filter message
-  const routingFiltersData = transformRoutingFilters(routingFilters);
+  const routingFiltersData = transformRoutingFilters(routingFilters, versions.agent);
   routingFiltersData.forEach(entry => {
     deviceConfRequests.push({
       entity: 'agent',
