@@ -31,8 +31,8 @@ const getFilterExpression = ({ key, op, val }) => {
   // where 'cond' depends on 'op' - if negative it will be '$and' and '$or' if opposite
   // Example: 'op' is '==' or 'contains' the condition in that case will be
   // { $or: [{"deviceA.name": "DeviceName"}, {"deviceB.name": "DeviceName"}] }
+  const cond = op.includes('!') ? '$and' : '$or';
   if (key.includes('?')) {
-    const cond = op.includes('!') ? '$and' : '$or';
     return {
       [cond]: ['A', 'B'].map(side => {
         const sideKey = key.replace(/\?/g, side);
@@ -43,6 +43,12 @@ const getFilterExpression = ({ key, op, val }) => {
         }
         return expr;
       })
+    };
+  }
+  // similar to '?', just the 'key' includes several keys divided by '|'
+  if (key.includes('|')) {
+    return {
+      [cond]: key.split('|').map(key => getFilterExpression({ key, op, val }))
     };
   }
   // Special case for dates filtering
@@ -72,35 +78,15 @@ const getFilterExpression = ({ key, op, val }) => {
   }
   // all other types
   const isString = typeof val === 'string';
-  let interfacesKey = '';
-  if (key.startsWith('policies.qos.policy')) {
-    // check interfaces specific policy
-    interfacesKey = 'interfacesQosPolicy.' + key.split('.').pop();
-  }
-  const prepareExpression = (queryExpression, compareType) => {
-    if (interfacesKey !== '') {
-      return {
-        [compareType]: [
-          { [key]: queryExpression },
-          { [interfacesKey]: queryExpression }
-        ]
-      };
-    }
-    return { [key]: queryExpression };
-  };
   switch (op) {
     case '==':
-      return prepareExpression(
-        isString ? new RegExp('^' + val + '$', 'i') : val, '$or'
-      );
+      return { [key]: isString ? new RegExp('^' + val + '$', 'i') : val };
     case '!=':
-      return prepareExpression(
-        isString ? { $not: new RegExp('^' + val, 'i') } : { $ne: val }, '$and'
-      );
+      return { [key]: isString ? { $not: new RegExp('^' + val, 'i') } : { $ne: val } };
     case 'contains':
-      return prepareExpression(new RegExp(val, 'i'), '$or');
+      return { [key]: new RegExp(val, 'i') };
     case '!contains':
-      return prepareExpression(new RegExp('^((?!' + val + ').)*$', 'i'), '$and');
+      return { [key]: new RegExp('^((?!' + val + ').)*$', 'i') };
     case '<':
       return { [key]: { $lt: val } };
     case '>':
