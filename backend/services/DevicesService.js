@@ -391,6 +391,14 @@ class DevicesService {
         },
         {
           $lookup: {
+            from: 'qospolicies',
+            localField: 'interfaces.qosPolicy',
+            foreignField: '_id',
+            as: 'interfacesQosPolicy'
+          }
+        },
+        {
+          $lookup: {
             from: 'pathlabels',
             localField: 'interfaces.pathlabels',
             foreignField: '_id',

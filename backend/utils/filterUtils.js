@@ -72,15 +72,35 @@ const getFilterExpression = ({ key, op, val }) => {
   }
   // all other types
   const isString = typeof val === 'string';
+  let interfacesKey = '';
+  if (key.startsWith('policies.qos.policy')) {
+    // check interfaces specific policy
+    interfacesKey = 'interfacesQosPolicy.' + key.split('.').pop();
+  }
+  const prepareExpression = (queryExpression, compareType) => {
+    if (interfacesKey !== '') {
+      return {
+        [compareType]: [
+          { [key]: queryExpression },
+          { [interfacesKey]: queryExpression }
+        ]
+      };
+    }
+    return { [key]: queryExpression };
+  };
   switch (op) {
     case '==':
-      return { [key]: isString ? new RegExp('^' + val + '$', 'i') : val };
+      return prepareExpression(
+        isString ? new RegExp('^' + val + '$', 'i') : val, '$or'
+      );
     case '!=':
-      return { [key]: isString ? { $not: new RegExp('^' + val, 'i') } : { $ne: val } };
+      return prepareExpression(
+        isString ? { $not: new RegExp('^' + val, 'i') } : { $ne: val }, '$and'
+      );
     case 'contains':
-      return { [key]: new RegExp(val, 'i') };
+      return prepareExpression(new RegExp(val, 'i'), '$or');
     case '!contains':
-      return { [key]: new RegExp('^((?!' + val + ').)*$', 'i') };
+      return prepareExpression(new RegExp('^((?!' + val + ').)*$', 'i'), '$and');
     case '<':
       return { [key]: { $lt: val } };
     case '>':
