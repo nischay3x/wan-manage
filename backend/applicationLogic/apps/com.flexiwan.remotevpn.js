@@ -130,7 +130,7 @@ class RemoteVpn extends IApplication {
       if (!dev.firewall.rules) continue;
       const outbound = dev.firewall.rules.some(r => {
         return r.direction === 'outbound' &&
-          r.interfaces.some(ri => `app_${app.appStoreApp.identifier}`);
+          r.interfaces.some(ri => ri === `app_${app.appStoreApp.identifier}`);
       });
 
       if (outbound) {
