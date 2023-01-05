@@ -498,6 +498,7 @@ class Connections {
             updInterface.dhcp = updatedConfig.dhcp;
             if (updatedConfig.deviceType === 'pppoe') {
               updInterface.type = 'WAN';
+              updInterface.routing = 'NONE';
             }
           }
 
@@ -519,7 +520,7 @@ class Connections {
             updInterface.gateway = updatedConfig.gateway;
           };
 
-          if (!i.isAssigned && i.deviceType === 'dpdk') {
+          if (!i.isAssigned && updInterface.deviceType === 'dpdk') {
             // changing the type of an unassigned interface based on the gateway
             // Non dpdk interfaces are pppoe (WAN) or lte (WAN) or wifi (LAN),
             // these shouldn't be modified from the value set on registration
