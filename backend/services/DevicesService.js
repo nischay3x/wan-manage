@@ -418,6 +418,27 @@ class DevicesService {
       }
 
       if (parsedFilters.length > 0) {
+        let populateInterfacesQosPolicy = false;
+        parsedFilters = parsedFilters.map(({ key, op, val }) => {
+          if (key.startsWith('policies.qos.policy')) {
+            // check interfaces specific policy also
+            populateInterfacesQosPolicy = true;
+            const combinedKey = key + '|interfacesQosPolicy.' + key.split('.').pop();
+            return { key: combinedKey, op, val };
+          } else {
+            return { key, op, val };
+          }
+        });
+        if (populateInterfacesQosPolicy) {
+          pipeline.push({
+            $lookup: {
+              from: 'qospolicies',
+              localField: 'interfaces.qosPolicy',
+              foreignField: '_id',
+              as: 'interfacesQosPolicy'
+            }
+          });
+        }
         const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
           pipeline.push({
