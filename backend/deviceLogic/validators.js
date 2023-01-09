@@ -139,8 +139,8 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
         if (+ports === tunnelPort) {
           return {
             valid: false,
-            err: `Port ${tunnelPort} is used for tunnels.
-            Make sure to not include it in the port range.`
+            err: `Firewall rule cannot be added, port ${tunnelPort}
+            is reserved for flexiWAN tunnel connectivity.`
           };
         }
         // implicit inbound edge-access rule for port 4789 on all WAN interfaces
@@ -148,7 +148,8 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
           return {
             valid: false,
             err: `Inbound rule destination ports ${ports} overlapped with port ${tunnelPort}.
-            Port is used for tunnels. Make sure to not include it in the port range.`
+            Firewall rule cannot be added, port ${tunnelPort}
+            is reserved for flexiWAN tunnel connectivity.`
           };
         }
         if (inbound === 'portForward') {
