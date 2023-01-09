@@ -1419,7 +1419,7 @@ class DevicesService {
                     }).session(session);
                   if (numTunnels > 0) {
                     // eslint-disable-next-line max-len
-                    throw new Error('Unassigned interface used by existing tunnels, please delete related tunnels before');
+                    throw new Error('Interface used by existing tunnels, cannot un-assign. Please delete tunnels first.');
                   }
                 } else {
                   // interface still assigned, check if removed path labels not used by any tunnel
