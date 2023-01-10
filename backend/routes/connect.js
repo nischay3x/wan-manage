@@ -222,7 +222,7 @@ connectRouter.route('/register')
                 device: req.body.device_version || ''
               };
 
-              const cpuInfo = getCpuInfo(req.body.cpuInfo);
+              const cpuInfo = getCpuInfo(JSON.parse(req.body.cpuInfo));
 
               // Check that account didn't cross its device limit
               const account = decoded.account;
