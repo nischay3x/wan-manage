@@ -182,6 +182,10 @@ class DevicesController {
   async devicesIdCoordsPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.devicesIdCoordsPUT);
   };
+
+  async devicesIdBgpStatusGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.devicesIdBgpStatusGET);
+  };
 }
 
 module.exports = DevicesController;

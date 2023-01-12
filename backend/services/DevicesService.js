@@ -1108,6 +1108,55 @@ class DevicesService {
     }
   }
 
+  static async devicesIdBgpStatusGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      }, 'machineId'); // add project to return relevant fields only
+
+      if (!device) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+
+      if (!connections.isConnected(device.machineId)) {
+        return Service.successResponse({
+          error: null,
+          deviceStatus: 'disconnected',
+          status: {}
+        });
+      }
+
+      const bgpStatusResponse = await connections.deviceSendMessage(
+        null,
+        device.machineId,
+        {
+          entity: 'agent',
+          message: 'get-bgp-status'
+        }
+      );
+
+      if (!bgpStatusResponse.ok) {
+        logger.error('Failed to get BGP status', {
+          params: {
+            deviceId: id,
+            response: bgpStatusResponse.message
+          }
+        });
+        return Service.rejectResponse('Failed to get BGP status', 500);
+      }
+
+      return Service.successResponse({
+        error: null,
+        deviceStatus: 'connected',
+        status: bgpStatusResponse.message
+      });
+    } catch (e) {
+      return DevicesService.handleRequestError(e, { deviceStatus: 'connected', status: {} });
+    }
+  }
+
   /**
    * Delete all devices matched the filters
    *
