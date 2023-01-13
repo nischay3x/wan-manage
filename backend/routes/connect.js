@@ -223,7 +223,7 @@ connectRouter.route('/register')
               };
 
               const requestCpuInfo = req.body.cpuInfo
-                .replaceAll('\'', '"').replaceAll('False', 'false').replaceAll('True', 'true');
+                ?.replaceAll('\'', '"').replaceAll('False', 'false').replaceAll('True', 'true');
               const cpuInfo = getCpuInfo(requestCpuInfo ? JSON.parse(requestCpuInfo) : null);
 
               // Check that account didn't cross its device limit
