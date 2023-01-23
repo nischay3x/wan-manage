@@ -291,7 +291,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     assignedIfs.filter(ifc => { return ifc.type === 'WAN'; }),
     assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
-  const majorVersion = getMajorVersion(device.versions.agent);
 
   if (isRunning && (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0))) {
     return {
@@ -390,12 +389,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
           err: 'All WAN interfaces should be assigned a default GW'
         };
       }
-    }
-    if (ifc.qosPolicy && majorVersion < 6) {
-      return {
-        valid: false,
-        err: 'QoS is supported from version 6'
-      };
     }
   }
 
