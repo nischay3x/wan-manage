@@ -4397,7 +4397,7 @@ paths:
         schema:
           type: string
         style: simple
-      - description: Organization to be filtered by
+      - description:  Numeric ID of the Organization to be filtered by
         explode: true
         in: query
         name: org
@@ -4452,6 +4452,131 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Modify notification
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf:
+    get:
+      operationId: notificationsConfGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description:  Group to be filtered by
+        explode: true
+        in: query
+        name: group
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/NotificationsConf'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the Notifications configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+    put:
+      operationId: notificationsConfPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationsConfPut'
+      responses:
+        "204":
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary:  Modify the rules of notifications
       tags:
       - Notifications
       x-swagger-router-controller: Notifications
@@ -9012,6 +9137,43 @@ components:
           type: string
         details:
           type: string
+      type: object
+    NotificationsConf:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+      type: object
+    NotificationsConfPut:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName,
+        rules: newrules
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+        rules:
+          type: array
       type: object
     NotificationsDeleteRequest:
       properties:

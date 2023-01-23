@@ -26,12 +26,20 @@ class NotificationsController {
     await Controller.handleRequest(request, response, this.service.notificationsGET);
   }
 
+  async notificationsConfGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfGET);
+  }
+
   async notificationsIdPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.notificationsIdPUT);
   }
 
   async notificationsPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.notificationsPUT);
+  }
+
+  async notificationsConfPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfPUT);
   }
 
   async notificationsDELETE (request, response) {
