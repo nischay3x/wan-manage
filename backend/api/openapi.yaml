@@ -8838,6 +8838,7 @@ components:
         description: description
         group: group
         encryptionMethod: ikev2
+        vxlanSourcePort: 4789
       required:
         - name
         - group
@@ -8855,6 +8856,8 @@ components:
           - psk
           - ikev2
           type: string
+        vxlanSourcePort:
+          type: string
       type: object
     Organization:
       example:
@@ -8864,6 +8867,7 @@ components:
         account: account
         group: group
         encryptionMethod: ikev2
+        vxlanSourcePort: 4789
       properties:
         _id:
           maxLength: 24
@@ -8882,6 +8886,8 @@ components:
           - none
           - psk
           - ikev2
+          type: string
+        vxlanSourcePort:
           type: string
       type: object
     OrganizationSummary:

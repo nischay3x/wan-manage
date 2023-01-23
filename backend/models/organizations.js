@@ -61,6 +61,14 @@ const OrgSchema = new Schema({
       'ikev2'
     ],
     default: 'psk'
+  },
+  vxlanSourcePort: {
+    type: String,
+    default: '4789',
+    validate: {
+      validator: validators.validatePort,
+      message: 'vxlanSourcePort should be a valid Port value'
+    }
   }
 });
 

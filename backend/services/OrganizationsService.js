@@ -53,7 +53,8 @@ class OrganizationsService {
       '_id',
       'account',
       'group',
-      'encryptionMethod'
+      'encryptionMethod',
+      'vxlanSourcePort'
     ]);
     retOrg._id = retOrg._id.toString();
     retOrg.account = retOrg.account.toString();
@@ -75,18 +76,7 @@ class OrganizationsService {
         return OrganizationsService.selectOrganizationParams(orgs[key]);
       });
 
-      const list = result.map(element => {
-        return {
-          _id: element._id.toString(),
-          name: element.name,
-          description: element.description,
-          account: element.account ? element.account.toString() : '',
-          group: element.group,
-          encryptionMethod: element.encryptionMethod
-        };
-      });
-
-      return Service.successResponse(list);
+      return Service.successResponse(result);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -125,14 +115,7 @@ class OrganizationsService {
         });
         res.setHeader('Refresh-JWT', token);
 
-        const result = {
-          _id: updUser.defaultOrg._id.toString(),
-          name: updUser.defaultOrg.name,
-          description: updUser.defaultOrg.description,
-          account: updUser.defaultOrg.account ? updUser.defaultOrg.account.toString() : '',
-          group: updUser.defaultOrg.group,
-          encryptionMethod: updUser.defaultOrg.encryptionMethod
-        };
+        const result = OrganizationsService.selectOrganizationParams(updUser.defaultOrg);
         return Service.successResponse(result, 201);
       }
     } catch (e) {
@@ -267,10 +250,10 @@ class OrganizationsService {
       // are set properly for updating this organization
       const orgList = await getAccessTokenOrgList(user, undefined, false);
       if (orgList.includes(id)) {
-        const { name, description, group, encryptionMethod } = organizationRequest;
+        const { name, description, group, encryptionMethod, vxlanSourcePort } = organizationRequest;
         const resultOrg = await Organizations.findOneAndUpdate(
           { _id: id },
-          { $set: { name, description, group, encryptionMethod } },
+          { $set: { name, description, group, encryptionMethod, vxlanSourcePort } },
           { upsert: false, multi: false, new: true, runValidators: true }
         );
         // Update token
