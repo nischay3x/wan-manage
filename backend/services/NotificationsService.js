@@ -270,39 +270,47 @@ class NotificationsService {
     }
   }
 
+  static async validateParams (org, account, group, user) {
+    // Validate parameters
+    if (!org && !account && !group) {
+      return Service.rejectResponse('Missing parameter: org, account or group', 400);
+    }
+    if (org && (account || group)) {
+      return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
+    }
+    if (group && !account) {
+      return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
+    }
+    if (account && org) {
+      return Service.rejectResponse('Invalid parameter: account should be used alone or with group(for modifying the group)', 400);
+    }
+
+    const orgList = await getUserOrganizations(user);
+    let orgIds = [];
+    if (org) {
+      if (!Object.values(orgList).find(o => o.id === org)) {
+        return Service.rejectResponse('You do not have permission to access this organization', 403);
+      }
+      orgIds = [org];
+    } else {
+      orgIds = Object.values(orgList)
+        .filter(org => org.account.toString() === account && (!group || org.group === group))
+        .map(org => org.id);
+    }
+    if (!orgIds.length) {
+      return Service.rejectResponse('No organizations found', 404);
+    }
+    return orgIds;
+  }
+
   /**
    * Get notifications settings of a given organization/account/group
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
-      // Validate notificationsConfPut
-      if (!org && !account && !group) {
-        return Service.rejectResponse('Missing parameter: org, account or group', 400);
-      }
-      if (org && (account || group)) {
-        return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
-      }
-      if (group && !account) {
-        return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
-      }
-      if (account && org) {
-        return Service.rejectResponse('Invalid parameter: account should be used alone or with group(for modifying the group)', 400);
-      }
-
-      const orgList = await getUserOrganizations(user);
-      let orgIds = [];
-      if (org) {
-        if (!Object.values(orgList).find(o => o.id === org)) {
-          return Service.rejectResponse('You do not have permission to access this organization', 403);
-        }
-        orgIds = [org];
-      } else {
-        orgIds = Object.values(orgList)
-          .filter(org => org.account.toString() === account && (!group || org.group === group))
-          .map(org => org.id);
-      }
-      if (!orgIds.length) {
-        return Service.rejectResponse('No organizations found', 404);
+      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      if (orgIds.error) {
+        return orgIds;
       }
       const response = await notificationsConf.aggregate([
         { $match: { org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } } },
@@ -362,34 +370,9 @@ class NotificationsService {
   static async notificationsConfPUT ({ notificationsConfPut }, { user }) {
     try {
       const { org, account, group, rules } = notificationsConfPut;
-      // Validate notificationsConfPut
-      if (!org && !account && !group) {
-        return Service.rejectResponse('Missing parameter: org, account or group', 400);
-      }
-      if (org && (account || group)) {
-        return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
-      }
-      if (group && !account) {
-        return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
-      }
-      if (account && org) {
-        return Service.rejectResponse('Invalid parameter: account should be used alone or with group(for modifying the group)', 400);
-      }
-
-      const orgList = await getUserOrganizations(user);
-      let orgIds = [];
-      if (org) {
-        if (!Object.values(orgList).find(o => o.id === org)) {
-          return Service.rejectResponse('You do not have permission to access this organization', 403);
-        }
-        orgIds = [org];
-      } else {
-        orgIds = Object.values(orgList)
-          .filter(org => org.account.toString() === account && (!group || org.group === group))
-          .map(org => org.id);
-      }
-      if (!orgIds.length) {
-        return Service.rejectResponse('No organizations found', 404);
+      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      if (orgIds.error) {
+        return orgIds;
       }
       const response = await notificationsConf.updateMany({ org: { $in: orgIds } }, {
         $set: {
