@@ -374,16 +374,35 @@ class NotificationsService {
       if (orgIds.error) {
         return orgIds;
       }
-      const response = await notificationsConf.updateMany({ org: { $in: orgIds } }, {
-        $set: {
-          rules
-        }
-      });
+      for (const org of orgIds) {
+        for (let i = 0; i < rules.length; i++) {
+          const updateData = { $set: {} };
+          if (rules[i].warningThreshold !== 'not the same') {
+            updateData.$set['rules.$[el].warningThreshold'] = rules[i].warningThreshold;
+          }
+          if (rules[i].criticalThreshold !== 'not the same') {
+            updateData.$set['rules.$[el].criticalThreshold'] = rules[i].criticalThreshold;
+          }
+          if (rules[i].thresholdUnit !== 'not the same') {
+            updateData.$set['rules.$[el].thresholdUnit'] = rules[i].thresholdUnit;
+          }
+          if (rules[i].severity !== 'not the same') {
+            updateData.$set['rules.$[el].severity'] = rules[i].severity;
+          }
+          if (rules[i].immediateEmail !== 'not the same') {
+            updateData.$set['rules.$[el].immediateEmail'] = rules[i].immediateEmail;
+          }
+          if (rules[i].resolvedAlert !== 'not the same') {
+            updateData.$set['rules.$[el].resolvedAlert'] = rules[i].resolvedAlert;
+          }
 
+          await notificationsConf.updateOne({ org: org, 'rules.event': rules[i].event }, updateData, { arrayFilters: [{ 'el.event': rules[i].event }] });
+        }
+      }
       return Service.successResponse({
         code: 200,
         message: 'Success',
-        data: response
+        data: 'updated successfully'
       });
     } catch (e) {
       return Service.rejectResponse({

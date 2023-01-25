@@ -35,8 +35,8 @@ const ruleSchema = new Schema({
   },
   warningThreshold: { type: Number, default: null },
   criticalThreshold: { type: Number, default: null },
-  thresholdUnit: { type: String, default: null },
-  severity: { type: String, default: null },
+  thresholdUnit: { type: String, default: null, enum: ['%', 'ms', 'C°'] },
+  severity: { type: String, default: null, enum: ['critical', 'warning'] },
   immediateEmail: { type: Boolean, default: false },
   resolvedAlert: { type: Boolean, default: true }
 });
