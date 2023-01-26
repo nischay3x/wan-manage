@@ -272,13 +272,14 @@ class OrganizationsService {
       org.encryptionMethod = encryptionMethod;
       org.vxlanSourcePort = vxlanSourcePort;
 
-      if (isVxlanPortChanged) { // consider doing it before saving the new org configuration.
+      if (isVxlanPortChanged) {
         const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(id), origVxlanPort);
         const tunnels = await Tunnels.aggregate(pipeline).allowDiskUse(true);
         // expected output is array with one object with two keys:
         //  [{ _id: null, toPending: [], toReconstruct: [] }]
-        const toPending = tunnels?.[0].toPending ?? [];
-        const toReconstruct = tunnels?.[0].toReconstruct ?? [];
+
+        const toPending = tunnels?.[0]?.toPending ?? [];
+        const toReconstruct = tunnels?.[0]?.toReconstruct ?? [];
 
         // handle pending tunnels
         if (toPending.length > 0) {
@@ -756,9 +757,11 @@ const getInterfaceConditionsToBePending = (key, origVxlanPort) => {
 };
 const handleToPendingTunnels = async (tunnels, username) => {
   const events = new DeviceEvents();
+  const pendingType = eventsReasons.pendingTypes.waitForStun;
+  const reason = eventsReasons(pendingType);
 
   for (const tunnel of tunnels) {
-    await events.setOneTunnelAsPending(tunnel, eventsReasons.waitForStun(), tunnel.deviceA);
+    await events.setOneTunnelAsPending(tunnel, reason, pendingType, tunnel.deviceA);
   }
 
   const modifyDevices = await events.prepareModifyDispatcherParameters();

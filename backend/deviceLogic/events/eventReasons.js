@@ -15,18 +15,25 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const reasons = {
-  interfaceHasNoIp: (ifcName, deviceName) => {
+const pendingTypes = {
+  interfaceHasNoIp: 'interfaceHasNoIp',
+  tunnelIsPending: 'tunnelIsPending',
+  waitForStun: 'waitForStun',
+  publicPortHighRate: 'publicPortHighRate'
+};
+
+const pendingReasons = {
+  [pendingTypes.interfaceHasNoIp]: (ifcName, deviceName) => {
     return `Interface ${ifcName} in device ${deviceName} has no IP address`;
   },
-  tunnelIsPending: (tunnelNumber) => {
+  [pendingTypes.tunnelIsPending]: (tunnelNumber) => {
     return `Tunnel ${tunnelNumber} is in pending state`;
   },
-  waitForStun: () => {
+  [pendingTypes.waitForStun]: () => {
     return 'Wait for STUN update to reconstruct. ' +
     'To activate it without waiting for STUN, click on the "sync" button';
   },
-  publicPortHighRate: (ifcName, deviceName) => {
+  [pendingTypes.publicPortHighRate]: (ifcName, deviceName) => {
     return `The public IP/Port of interface ${ifcName}` +
     ` in device ${deviceName} is changing at a high rate.\n` +
     ' Usually this is due to ISP symmetric NAT with port randomization.\n' +
@@ -36,4 +43,9 @@ const reasons = {
   }
 };
 
-module.exports = reasons;
+const get = (type, ...args) => {
+  return pendingReasons[type](...args);
+};
+
+const myModule = module.exports = get;
+myModule.pendingTypes = pendingTypes;

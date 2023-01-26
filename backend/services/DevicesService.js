@@ -1739,7 +1739,8 @@ class DevicesService {
               const { ip1, ip2 } = generateTunnelParams(t.num);
               if (ip1 === s.gateway || ip2 === s.gateway) {
                 s.isPending = true;
-                s.pendingReason = eventsReasons.tunnelIsPending(t.num);
+                s.pendingType = eventsReasons.pendingTypes.tunnelIsPending;
+                s.pendingReason = eventsReasons(s.pendingType, t.num);
                 return s;
               }
             }
@@ -1749,7 +1750,8 @@ class DevicesService {
               for (const ifc of interfacesWithoutIp) {
                 if (ifc.IPv4 === s.gateway) {
                   s.isPending = true;
-                  s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+                  s.pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
+                  s.pendingReason = eventsReasons(s.pendingType, ifc.name, origDevice.name);
                   return s;
                 }
               }

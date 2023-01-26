@@ -1223,15 +1223,18 @@ const addTunnel = async (
   // check if need to create the tunnel as pending
   let isPending = false;
   let pendingReason = '';
+  let pendingType = '';
 
   if (deviceAIntf.IPv4 === '') {
     isPending = true;
-    pendingReason = eventsReasons.interfaceHasNoIp(deviceAIntf.name, deviceA.name);
+    pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
+    pendingReason = eventsReasons(pendingType, deviceAIntf.name, deviceA.name);
   }
 
   if (!peer && deviceBIntf.IPv4 === '') {
     isPending = true;
-    pendingReason = eventsReasons.interfaceHasNoIp(deviceBIntf.name, deviceB.name);
+    pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
+    pendingReason = eventsReasons(pendingType, deviceBIntf.name, deviceB.name);
   }
 
   // on creation tunnel we remove the public address limiter if exists
@@ -1257,6 +1260,7 @@ const addTunnel = async (
       interfaceB: peer ? null : deviceBIntf._id,
       pathlabel: pathLabel,
       isPending: isPending,
+      pendingType: pendingType,
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,

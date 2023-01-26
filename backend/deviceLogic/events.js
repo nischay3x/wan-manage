@@ -81,8 +81,9 @@ class Events {
       { params: { deviceId: origDevice._id, interfaceId: origIfc._id } }
     );
 
-    const reason = eventsReasons.publicPortHighRate(origIfc.name, origDevice.name);
-    await this.setDeviceTunnelsAsPending(origDevice, origIfc, reason, false);
+    const pendingType = eventsReasons.pendingTypes.publicPortHighRate;
+    const reason = eventsReasons(pendingType, origIfc.name, origDevice.name);
+    await this.setDeviceTunnelsAsPending(origDevice, origIfc, reason, pendingType, false);
   }
 
   /**
@@ -132,14 +133,16 @@ class Events {
    * @param  {number} num  tunnel number
    * @param  {string} org  organization id
    * @param  {string} reason  incomplete reason
+   * @param  {string} pendingType  pending type
   */
-  async updatePendingTunnelReason (num, org, reason) {
+  async updatePendingTunnelReason (num, org, reason, pendingType) {
     await tunnelsModel.updateOne(
       // Query, use the org and tunnel number
       { org, num },
       {
         $set: {
-          pendingReason: reason
+          pendingReason: reason,
+          pendingType: pendingType
         }
       },
       // Options
@@ -210,7 +213,7 @@ class Events {
       const isOverlapping = cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet);
 
       if (isSameIfc || isOverlapping) {
-        await this.setIncompleteRouteStatus(s, false, '', device);
+        await this.setIncompleteRouteStatus(s, false, '', '', device);
       }
     }
   };
@@ -270,9 +273,10 @@ class Events {
           deviceWithoutIp = ifcA.IPv4 === '' ? deviceA : deviceB;
         }
 
-        const reason = eventsReasons.interfaceHasNoIp(ifcWithoutIp.name, deviceWithoutIp.name);
+        const pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
+        const reason = eventsReasons(pendingType, ifcWithoutIp.name, deviceWithoutIp.name);
         if (pendingReason !== reason) {
-          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
         }
         continue;
       }
@@ -282,12 +286,13 @@ class Events {
         const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
         const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
         if (isABlocked || isBBlocked) {
+          const pendingType = eventsReasons.pendingTypes.publicPortHighRate;
           const reason = isABlocked
-            ? eventsReasons.publicPortHighRate(ifcA.name, deviceA.name)
-            : eventsReasons.publicPortHighRate(ifcB.name, deviceB.name);
+            ? eventsReasons(pendingType, ifcA.name, deviceA.name)
+            : eventsReasons(pendingType, ifcB.name, deviceB.name);
 
           if (pendingReason !== reason) {
-            await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+            await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
           }
           continue;
         }
@@ -322,12 +327,13 @@ class Events {
       }]);
     }
 
-    const reason = eventsReasons.interfaceHasNoIp(origIfc.name, device.name);
+    const pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
+    const reason = eventsReasons(pendingType, origIfc.name, device.name);
 
     if (origIfc.type === 'WAN' && origIfc.dhcp === 'yes') {
       // set related tunnels as pending
       // static ip shouldn't set to pending - flexiManage knows how to configure it
-      await this.setDeviceTunnelsAsPending(device, origIfc, reason);
+      await this.setDeviceTunnelsAsPending(device, origIfc, reason, pendingType);
     }
 
     // for device version 4 we don't send the IP for bridged interface
@@ -344,7 +350,7 @@ class Events {
       // check if the static route configured with the same devId as the missing IP interface
       const isSameIfc = s.ifname === ifc.devId;
       if (isSameIfc) {
-        await this.setIncompleteRouteStatus(s, true, reason, device);
+        await this.setIncompleteRouteStatus(s, true, reason, pendingType, device);
         continue;
       }
 
@@ -354,18 +360,18 @@ class Events {
         const isOverlapping = cidr.overlap(`${origIfc.IPv4}/${origIfc.IPv4Mask}`, gatewaySubnet);
 
         if (isOverlapping) {
-          await this.setIncompleteRouteStatus(s, true, reason, device);
+          await this.setIncompleteRouteStatus(s, true, reason, pendingType, device);
         }
       }
     }
   };
 
-  async setOneTunnelAsPending (tunnel, reason, device) {
+  async setOneTunnelAsPending (tunnel, reason, pendingType, device) {
     // if tunnel already pending
     if (tunnel.isPending) {
       // if reason is different - update reason
       if (reason !== tunnel.pendingReason) {
-        await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+        await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
       }
 
       await this.tunnelSetToPending(tunnel, device, reason, false);
@@ -381,8 +387,9 @@ class Events {
    * @param  {object} device device object
    * @param  {object} origIfc original interface before the event
    * @param  {string} reason indicate why tunnel should be pending
+   * @param  {string} pendingType the pending type
   */
-  async setDeviceTunnelsAsPending (device, origIfc, reason, includingPeers = true) {
+  async setDeviceTunnelsAsPending (device, origIfc, reason, pendingType, includingPeers = true) {
     const query = {
       $or: [
         { deviceA: device._id, interfaceA: origIfc._id },
@@ -397,7 +404,7 @@ class Events {
     const tunnels = await tunnelsModel.find(query).lean();
 
     for (const tunnel of tunnels) {
-      await this.setOneTunnelAsPending(tunnel, reason, device);
+      await this.setOneTunnelAsPending(tunnel, reason, pendingType, device);
     };
   }
 
@@ -424,8 +431,9 @@ class Events {
 
     for (const dependedDevice of dependedDevices) {
       for (const staticRoute of dependedDevice.staticroutes) {
-        const reason = eventsReasons.tunnelIsPending(tunnel.num);
-        await this.setIncompleteRouteStatus(staticRoute, true, reason, dependedDevice);
+        const pendingType = eventsReasons.pendingTypes.tunnelIsPending;
+        const reason = eventsReasons(pendingType, tunnel.num);
+        await this.setIncompleteRouteStatus(staticRoute, true, reason, pendingType, dependedDevice);
       }
     }
   };
@@ -440,7 +448,7 @@ class Events {
 
     for (const dependedDevice of dependedDevices) {
       for (const staticRoute of dependedDevice.staticroutes) {
-        await this.setIncompleteRouteStatus(staticRoute, false, '', dependedDevice);
+        await this.setIncompleteRouteStatus(staticRoute, false, '', '', dependedDevice);
       }
     }
   };
@@ -450,9 +458,10 @@ class Events {
    * @param  {object} route  static route object
    * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
    * @param  {string} reason  incomplete reason
+   * @param  {string} pendingType  pending type
    * @param  {object} device  device of incomplete tunnel
   */
-  async setIncompleteRouteStatus (route, isIncomplete, reason, device) {
+  async setIncompleteRouteStatus (route, isIncomplete, reason, pendingType, device) {
     await this.addChangedDevice(device._id);
 
     await devices.findOneAndUpdate(
@@ -460,6 +469,7 @@ class Events {
       {
         $set: {
           'staticroutes.$[elem].isPending': isIncomplete,
+          'staticroutes.$[elem].pendingType': isIncomplete ? pendingType : '',
           'staticroutes.$[elem].pendingReason': isIncomplete ? reason : ''
         }
       },
