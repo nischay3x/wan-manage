@@ -22,6 +22,10 @@ const reasons = {
   tunnelIsPending: (tunnelNumber) => {
     return `Tunnel ${tunnelNumber} is in pending state`;
   },
+  waitForStun: () => {
+    return 'Wait for STUN update to reconstruct. ' +
+    'To activate it without waiting for STUN, click on the "sync" button';
+  },
   publicPortHighRate: (ifcName, deviceName) => {
     return `The public IP/Port of interface ${ifcName}` +
     ` in device ${deviceName} is changing at a high rate.\n` +

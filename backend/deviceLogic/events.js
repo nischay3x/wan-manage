@@ -82,7 +82,7 @@ class Events {
     );
 
     const reason = eventsReasons.publicPortHighRate(origIfc.name, origDevice.name);
-    await this.setPendingStateToTunnels(origDevice, origIfc, reason, false);
+    await this.setDeviceTunnelsAsPending(origDevice, origIfc, reason, false);
   }
 
   /**
@@ -327,7 +327,7 @@ class Events {
     if (origIfc.type === 'WAN' && origIfc.dhcp === 'yes') {
       // set related tunnels as pending
       // static ip shouldn't set to pending - flexiManage knows how to configure it
-      await this.setPendingStateToTunnels(device, origIfc, reason);
+      await this.setDeviceTunnelsAsPending(device, origIfc, reason);
     }
 
     // for device version 4 we don't send the IP for bridged interface
@@ -360,13 +360,29 @@ class Events {
     }
   };
 
+  async setOneTunnelAsPending (tunnel, reason, device) {
+    // if tunnel already pending
+    if (tunnel.isPending) {
+      // if reason is different - update reason
+      if (reason !== tunnel.pendingReason) {
+        await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
+      }
+
+      await this.tunnelSetToPending(tunnel, device, reason, false);
+      return;
+    }
+
+    // set active tunnel to pending
+    await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+  }
+
   /**
    * Set pending status to a tunnel
    * @param  {object} device device object
    * @param  {object} origIfc original interface before the event
    * @param  {string} reason indicate why tunnel should be pending
   */
-  async setPendingStateToTunnels (device, origIfc, reason, includingPeers = true) {
+  async setDeviceTunnelsAsPending (device, origIfc, reason, includingPeers = true) {
     const query = {
       $or: [
         { deviceA: device._id, interfaceA: origIfc._id },
@@ -381,19 +397,7 @@ class Events {
     const tunnels = await tunnelsModel.find(query).lean();
 
     for (const tunnel of tunnels) {
-      // if tunnel already pending
-      if (tunnel.isPending) {
-        // if reason is different - update reason
-        if (reason !== tunnel.pendingReason) {
-          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason);
-        }
-
-        await this.tunnelSetToPending(tunnel, device, reason, false);
-        continue;
-      }
-
-      // set active tunnel to pending
-      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+      await this.setOneTunnelAsPending(tunnel, reason, device);
     };
   }
 
