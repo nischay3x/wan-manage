@@ -1261,6 +1261,7 @@ const addTunnel = async (
       pathlabel: pathLabel,
       isPending: isPending,
       pendingType: pendingType,
+      pendingTime: isPending ? new Date() : '',
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,

@@ -103,7 +103,7 @@ class Events {
    * @param  {string} reason  incomplete reason
    * @param  {object} device  device of incomplete tunnel
   */
-  async setIncompleteTunnelStatus (num, org, isIncomplete, reason, device) {
+  async setIncompleteTunnelStatus (num, org, isIncomplete, reason, pendingType, device) {
     await this.addChangedDevice(device._id);
 
     const tunnel = await tunnelsModel.findOneAndUpdate(
@@ -112,7 +112,9 @@ class Events {
       {
         $set: {
           isPending: isIncomplete,
-          pendingReason: isIncomplete ? reason : ''
+          pendingReason: isIncomplete ? reason : '',
+          pendingType: isIncomplete ? pendingType : '',
+          pendingTime: isIncomplete ? new Date() : ''
         }
       },
       // Options
@@ -142,7 +144,8 @@ class Events {
       {
         $set: {
           pendingReason: reason,
-          pendingType: pendingType
+          pendingType: pendingType,
+          pendingTime: new Date()
         }
       },
       // Options
@@ -298,11 +301,13 @@ class Events {
         }
       }
 
+      // Note! all pending tunnel due to waiting for stun will be release here!
+
       // at this point, set tunnel to active
       logger.debug('Tunnel set to active',
         { params: { num: tunnel.num, org: tunnel.org, trace: new Error().stack } }
       );
-      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', device);
+      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', '', device);
     };
   }
 
@@ -379,7 +384,7 @@ class Events {
     }
 
     // set active tunnel to pending
-    await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, device);
+    await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, pendingType, device);
   }
 
   /**
@@ -470,7 +475,8 @@ class Events {
         $set: {
           'staticroutes.$[elem].isPending': isIncomplete,
           'staticroutes.$[elem].pendingType': isIncomplete ? pendingType : '',
-          'staticroutes.$[elem].pendingReason': isIncomplete ? reason : ''
+          'staticroutes.$[elem].pendingReason': isIncomplete ? reason : '',
+          'staticroutes.$[elem].pendingTime': isIncomplete ? new Date() : ''
         }
       },
       {

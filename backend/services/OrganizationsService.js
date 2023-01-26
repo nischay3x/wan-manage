@@ -602,7 +602,7 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
   // If *one of the interfaces* will cause the tunnels to be reconstructed,
   // there is no need to do a reconstruct right now but we can wait for STUN to fix it.
   return [
-    { $match: { org: id, isActive: true } },
+    { $match: { org: id, isActive: true, isPending: false } },
     {
       $project: {
         _id: 1,
@@ -701,7 +701,7 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
           $cond: {
             if: {
               // $or because one interface that met the conditions
-              // is enough to decide whether the reconstruct
+              // is enough to decide whether the reconstruct or pending
               $or: [
                 { $and: getInterfaceConditionsToBePending('interfaceA', origVxlanPort) },
                 { $and: getInterfaceConditionsToBePending('interfaceB', origVxlanPort) }

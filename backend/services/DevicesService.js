@@ -1733,6 +1733,7 @@ class DevicesService {
             if (origRoute) {
               s.isPending = origRoute.isPending;
               s.pendingReason = origRoute.pendingReason;
+              s.pendingTime = origRoute.pendingTime;
             }
 
             for (const t of incompleteTunnels) {
@@ -1741,6 +1742,7 @@ class DevicesService {
                 s.isPending = true;
                 s.pendingType = eventsReasons.pendingTypes.tunnelIsPending;
                 s.pendingReason = eventsReasons(s.pendingType, t.num);
+                s.pendingTime = new Date();
                 return s;
               }
             }
@@ -1752,6 +1754,7 @@ class DevicesService {
                   s.isPending = true;
                   s.pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
                   s.pendingReason = eventsReasons(s.pendingType, ifc.name, origDevice.name);
+                  s.pendingTime = new Date();
                   return s;
                 }
               }
