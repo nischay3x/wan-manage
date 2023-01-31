@@ -126,8 +126,11 @@ class PendingTunnels {
         await activatePendingTunnelsOfDevice(device);
       }
 
-      logger.info('release_pending_tunnels task. ' +
-        `found=${pendingTunnels.length}. trying to release=${releasedTunnelsCount}.`);
+      const pendingFound = pendingTunnels.length > 0;
+      if (pendingFound) {
+        logger.info('release_pending_tunnels task. ' +
+          `found=${pendingTunnels.length}. trying to release=${releasedTunnelsCount}.`);
+      }
     });
   }
 };

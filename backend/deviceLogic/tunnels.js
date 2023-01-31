@@ -960,13 +960,25 @@ const prepareTunnelAddJob = async (
 
   const { deviceA, deviceB, peer, pathlabel, advancedOptions } = tunnel;
 
-  const deviceAIntf = deviceA.interfaces.find(ifc => {
-    return ifc._id.toString() === tunnel.interfaceA.toString();
-  });
+  let deviceAIntf = null;
+  let deviceBIntf = null;
 
-  const deviceBIntf = peer ? null : deviceB.interfaces.find(ifc => {
-    return ifc._id.toString() === tunnel.interfaceB.toString();
-  });
+  // populate interfaces only if needed. Sometimes they are already populated.
+  if (mongoose.Types.ObjectId.isValid(tunnel.interfaceA)) {
+    deviceAIntf = deviceA.interfaces.find(ifc => {
+      return ifc._id.toString() === tunnel.interfaceA.toString();
+    });
+  } else {
+    deviceAIntf = tunnel.interfaceA;
+  }
+
+  if (!peer && mongoose.Types.ObjectId.isValid(tunnel.interfaceB)) {
+    deviceBIntf = deviceB.interfaces.find(ifc => {
+      return ifc._id.toString() === tunnel.interfaceB.toString();
+    });
+  } else if (!peer) {
+    deviceBIntf = tunnel.interfaceB;
+  }
 
   const tasksDeviceA = [];
   const tasksDeviceB = [];

@@ -41,9 +41,10 @@ const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getToken } = require('../tokens');
 const DeviceEvents = require('../deviceLogic/events');
-const modifyDeviceDispatcher = require('../deviceLogic/modifyDevice');
+const { processModifyJob } = require('../deviceLogic/modifyDevice');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
-const { sendRemoveTunnelsJobs, sendAddTunnelsJobs } = require('../deviceLogic/tunnels');
+const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/tunnels');
+const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
 
 class OrganizationsService {
   /**
@@ -263,38 +264,21 @@ class OrganizationsService {
         throw new Error('Organization ID is incorrect');
       }
 
-      const origVxlanPort = org.vxlanSourcePort;
-      const isVxlanPortChanged = vxlanSourcePort !== origVxlanPort;
+      const origVxlanSourcePort = org.vxlanSourcePort;
+      const isVxlanPortChanged = origVxlanSourcePort !== vxlanSourcePort;
 
       org.name = name;
       org.description = description;
       org.group = group;
       org.encryptionMethod = encryptionMethod;
       org.vxlanSourcePort = vxlanSourcePort;
+      const updatedOrg = await org.save({ validateBeforeSave: true });
 
       if (isVxlanPortChanged) {
-        const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(id), origVxlanPort);
-        const tunnels = await Tunnels.aggregate(pipeline).allowDiskUse(true);
-        // expected output is array with one object with two keys:
-        //  [{ _id: null, toPending: [], toReconstruct: [] }]
-
-        const toPending = tunnels?.[0]?.toPending ?? [];
-        const toReconstruct = tunnels?.[0]?.toReconstruct ?? [];
-
-        // handle pending tunnels
-        if (toPending.length > 0) {
-          await handleToPendingTunnels(toPending, user.username);
-        }
-
-        // handle reconstruct
-        if (toReconstruct.length > 0) {
-          const reconstructIds = toReconstruct.map(t => t._id);
-          await sendRemoveTunnelsJobs(reconstructIds, user.username, true);
-          await sendAddTunnelsJobs(reconstructIds, user.username, true);
-        }
+        // TODO: What should happen if job process has an issue. Do we need to revert the database?
+        // TODO: Validate devices (like firewall if has inbound rule)
+        await handleVxlanSourcePortChange(updatedOrg, origVxlanSourcePort, user);
       }
-
-      const updatedOrg = await org.save({ validateBeforeSave: true });
 
       // Update token
       const token = await getToken({ user }, { orgName: organizationRequest.name });
@@ -614,7 +598,9 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
         interfaceB: 1,
         isPending: 1,
         pendingReason: 1,
-        peer: 1
+        peer: 1,
+        pathlabel: 1,
+        advancedOptions: 1
       }
     },
     {
@@ -638,7 +624,10 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
               _id: 1,
               name: 1,
               machineId: 1,
-              interface: {
+              versions: 1,
+              hostname: 1,
+              'interfaces._id': 1,
+              tunnelInterface: {
                 $arrayElemAt: [{
                   $filter: {
                     input: '$interfaces',
@@ -658,19 +647,6 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
                 }, 0]
               }
             }
-          },
-          {
-            $project: {
-              _id: 1,
-              machineId: 1,
-              name: 1,
-              'interface._id': 1,
-              'interface.name': 1,
-              'interface.PublicPort': 1,
-              'interface.PublicIP': 1,
-              'interface.useStun': 1,
-              'interface.useFixedPublicPort': 1
-            }
           }
         ]
       }
@@ -682,21 +658,19 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
         interfaceA: {
           $let: {
             vars: { deviceA: { $arrayElemAt: ['$devices', 0] } },
-            in: '$$deviceA.interface'
+            in: '$$deviceA.tunnelInterface'
           }
         },
         interfaceB: {
           $let: {
             vars: { deviceB: { $arrayElemAt: ['$devices', 1] } },
-            in: '$$deviceB.interface'
+            in: '$$deviceB.tunnelInterface'
           }
         }
       }
     },
     {
       $addFields: {
-        'deviceA.interface': '$$REMOVE',
-        'deviceB.interface': '$$REMOVE',
         op: {
           $cond: {
             if: {
@@ -755,7 +729,9 @@ const getInterfaceConditionsToBePending = (key, origVxlanPort) => {
     { $ne: [`$${key}.PublicPort`, origVxlanPort] }
   ];
 };
-const handleToPendingTunnels = async (tunnels, username) => {
+const handleToPendingTunnels = async (tunnels) => {
+  if (tunnels.length === 0) return;
+
   const events = new DeviceEvents();
   const pendingType = eventsReasons.pendingTypes.waitForStun;
   const reason = eventsReasons(pendingType);
@@ -763,20 +739,72 @@ const handleToPendingTunnels = async (tunnels, username) => {
   for (const tunnel of tunnels) {
     await events.setOneTunnelAsPending(tunnel, reason, pendingType, tunnel.deviceA);
   }
+};
 
-  const modifyDevices = await events.prepareModifyDispatcherParameters();
-  const removeTunnelIds = Object.assign({},
-    ...Array.from(events.pendingTunnels, v => ({ [v]: '' })));
+const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, user) => {
+  const devicesJobs = {}; // object with a device and tasks to be sent to it
 
-  for (const modified in modifyDevices) {
-    await modifyDeviceDispatcher.apply(
-      [modifyDevices[modified].orig],
-      { username },
-      {
-        org: modifyDevices[modified].orig.org.toString(),
-        newDevice: modifyDevices[modified].updated,
-        sendRemoveTunnels: removeTunnelIds
-      }
-    );
+  const orgId = org._id;
+  const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(orgId), origVxlanSourcePort);
+  const tunnels = await Tunnels.aggregate(pipeline).allowDiskUse(true);
+  // expected output is array with one object with two keys:
+  //  [{ _id: null, toPending: [], toReconstruct: [] }]
+  const orgDevices = await Devices.devices.find({ org: orgId }).populate('org');
+
+  const toPending = tunnels?.[0]?.toPending ?? [];
+  const toReconstruct = tunnels?.[0]?.toReconstruct ?? [];
+
+  await handleToPendingTunnels(toPending);
+
+  const _addDeviceTasks = (device, task) => {
+    if (!task) return;
+
+    const deviceId = device._id.toString();
+
+    if (!(deviceId in devicesJobs)) {
+      devicesJobs[deviceId] = {
+        device: device,
+        tasks: []
+      };
+    }
+
+    if (Array.isArray(task)) {
+      devicesJobs[deviceId].tasks.push(...task);
+    } else {
+      devicesJobs[deviceId].tasks.push(task);
+    }
+  };
+
+  // first prepare remove-tunnel jobs for each device
+  for (const removeTunnel of [...toPending, ...toReconstruct]) {
+    const [removeTasksDeviceA, removeTasksDeviceB] =
+      await prepareTunnelRemoveJob(removeTunnel, true);
+
+    _addDeviceTasks(removeTunnel.deviceA, removeTasksDeviceA);
+    _addDeviceTasks(removeTunnel.deviceB, removeTasksDeviceB);
+  }
+
+  // now prepare modify-vxlan-config jobs for each device
+  const params = transformVxlanConfig({ ...org });
+  const job = { message: 'modify-vxlan-config', params };
+  for (const orgDevice of orgDevices) {
+    _addDeviceTasks(orgDevice, job);
+  }
+
+  // now prepare add-tunnel jobs for each device
+  for (const addTunnel of [...toReconstruct]) {
+    const [
+      removeTasksDeviceA, removeTasksDeviceB
+    ] = await prepareTunnelAddJob(addTunnel, true);
+
+    _addDeviceTasks(addTunnel.deviceA, removeTasksDeviceA);
+    _addDeviceTasks(addTunnel.deviceB, removeTasksDeviceB);
+  }
+
+  // now send obe job to each device that contains modify-vxlan and tunnels tasks
+  for (const deviceId in devicesJobs) {
+    const tasks = devicesJobs[deviceId].tasks;
+    const device = devicesJobs[deviceId].device;
+    await processModifyJob(tasks, device, orgId, user);
   }
 };

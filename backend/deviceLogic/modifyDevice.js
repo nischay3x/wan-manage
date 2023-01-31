@@ -58,6 +58,7 @@ const {
   transformInterfaces,
   transformRoutingFilters,
   transformOSPF,
+  transformVxlanConfig,
   transformBGP,
   transformDHCP
 } = require('./jobParameters');
@@ -388,7 +389,9 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
  */
 const queueJob = async (org, username, tasks, device, jobResponse) => {
   const job = await deviceQueues.addJob(
-    device.machineId, username, org,
+    device.machineId,
+    username,
+    org,
     // Data
     { title: `Modify device ${device.hostname}`, tasks: tasks },
     // Response data
@@ -734,53 +737,20 @@ const queueModifyDeviceJob = async (
     // at this point, list of jobs is ready.
     for (const deviceId in tasks) {
       const deviceTasks = tasks[deviceId].tasks;
-
-      // during the process, can be duplications in tasks so here we clean it
-      let finalTasks = uniqWith(deviceTasks, isEqual);
-
-      // remove the ignored tasks
-      // "ignoreTasks" is array of tasks that should be removed from the final list.
-      // The reason could be that those tasks already sent to the device
-      // and no need to send it once again.
-      // (see the long comment with examples in Connections.js file).
-      for (const ignoreTask of ignoreTasks) {
-        const index = finalTasks.findIndex(f => isEqual(ignoreTask, f));
-        if (index > -1) {
-          finalTasks.splice(index, 1);
-        }
-      }
-
-      sentTasks[deviceId] = finalTasks;
+      const device = tasks[deviceId].device;
       tasks[deviceId].jobResponse ??= {};
 
-      if (finalTasks.length === 0) {
-        continue;
-      }
+      const { modifyJob, finalTasks } = await processModifyJob(
+        deviceTasks,
+        device,
+        org,
+        user,
+        ignoreTasks,
+        tasks[deviceId].jobResponse
+      );
 
-      if (finalTasks.length > 1) {
-        // convert the tasks to one aggregated request
-        finalTasks = [{
-          entity: 'agent',
-          message: 'aggregated',
-          params: { requests: finalTasks }
-        }];
-      }
-
-      try {
-        const modifyJob = await queueJob(
-          org,
-          user.username,
-          finalTasks,
-          tasks[deviceId].device,
-          tasks[deviceId].jobResponse
-        );
-
-        jobs.push(modifyJob);
-      } catch (err) {
-        logger.error('Failed to queue device modification message', {
-          params: { err: err.message, finalTasks, deviceId }
-        });
-      }
+      if (modifyJob) jobs.push(modifyJob);
+      if (sentTasks) sentTasks[deviceId] = finalTasks;
     }
   } catch (err) {
     logger.error('Failed to handle device modification process', {
@@ -1507,14 +1477,29 @@ const sync = async (deviceId, org) => {
   )
     .lean()
     // no need to populate pathLabel name here, since we need only the id's
-    .populate('interfaces.pathlabels', '_id type');
+    .populate('interfaces.pathlabels', '_id type')
+    .populate('org');
 
   const {
     interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions
   } = device;
 
+  const majorVersion = getMajorVersion(versions.agent);
+  const minorVersion = getMinorVersion(versions.agent);
+
   // Prepare add-interface message
   const deviceConfRequests = [];
+
+  // do not send it to device version < 6.2
+  const isVxlanConfigSupported = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+  if (isVxlanConfigSupported) {
+    const vxlanConfigParams = transformVxlanConfig(device.org);
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-vxlan-config',
+      params: vxlanConfigParams
+    });
+  }
 
   // build bridges
   const bridges = getBridges(interfaces);
@@ -1576,8 +1561,6 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  const majorVersion = getMajorVersion(versions.agent);
-  const minorVersion = getMinorVersion(versions.agent);
   const isBgpSupported = majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3);
   const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
   if (isBgpSupported && bgp?.enable) {
@@ -1723,11 +1706,58 @@ const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
     });
 };
 
+const processModifyJob = async (tasks, device, orgId, user, ignoreTasks = [], jobResponse = {}) => {
+  // during the process, can be duplications in tasks so here we clean it
+  let finalTasks = uniqWith(tasks, isEqual);
+
+  // remove the ignored tasks
+  // "ignoreTasks" is array of tasks that should be removed from the final list.
+  // The reason could be that those tasks already sent to the device
+  // and no need to send it once again.
+  // (see the long comment with examples in Connections.js file).
+  for (const ignoreTask of ignoreTasks) {
+    const index = finalTasks.findIndex(f => isEqual(ignoreTask, f));
+    if (index > -1) {
+      finalTasks.splice(index, 1);
+    }
+  }
+
+  if (finalTasks.length === 0) {
+    return { modifyJob: null, finalTasks: null };
+  }
+
+  if (finalTasks.length > 1) {
+    // convert the tasks to one aggregated request
+    finalTasks = [{
+      entity: 'agent',
+      message: 'aggregated',
+      params: { requests: finalTasks }
+    }];
+  }
+
+  try {
+    const modifyJob = await queueJob(
+      orgId,
+      user.username,
+      finalTasks,
+      device,
+      jobResponse
+    );
+
+    return { modifyJob, finalTasks };
+  } catch (err) {
+    logger.error('Failed to queue device modification message', {
+      params: { err: err.message, finalTasks, deviceId: device._id }
+    });
+  }
+};
+
 module.exports = {
   apply: apply,
   complete: complete,
   completeSync: completeSync,
   sync: sync,
   error: error,
-  remove: remove
+  remove: remove,
+  processModifyJob: processModifyJob
 };

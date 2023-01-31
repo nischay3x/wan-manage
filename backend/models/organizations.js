@@ -19,6 +19,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const validators = require('./validators');
+const configs = require('../configs')();
 
 /**
  * Organizations Database Schema
@@ -64,7 +65,7 @@ const OrgSchema = new Schema({
   },
   vxlanSourcePort: {
     type: String,
-    default: '4789',
+    default: configs.get('tunnelPort'),
     validate: {
       validator: validators.validatePort,
       message: 'vxlanSourcePort should be a valid Port value'
