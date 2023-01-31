@@ -1504,12 +1504,10 @@ const completeTunnelDel = (jobId, res) => {
  * the jobs that should be queued for each of the devices connected
  * by the tunnel.
  * @param  {Object} tunnel      the tunnel object to be deleted
- * @param  {Object} peer        peer configurations
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelRemoveJob = async (
   tunnel,
-  peer = null,
   includeDeviceConfigDependencies = false
 ) => {
   const tasksDeviceA = [];
@@ -1530,7 +1528,7 @@ const prepareTunnelRemoveJob = async (
   // Saving configuration for device A
   tasksDeviceA.push({ entity: 'agent', message: 'remove-tunnel', params: removeParams });
 
-  if (!peer) {
+  if (!tunnel.peer) {
     // Saving configuration for device B
     tasksDeviceB.push({ entity: 'agent', message: 'remove-tunnel', params: removeParams });
   }
@@ -1901,7 +1899,6 @@ const sendRemoveTunnelsJobs = async (
 
     let [tasksDeviceA, tasksDeviceB] = await prepareTunnelRemoveJob(
       tunnel,
-      peer,
       includeDeviceConfigDependencies
     );
 

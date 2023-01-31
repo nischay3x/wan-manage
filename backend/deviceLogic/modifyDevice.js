@@ -566,7 +566,7 @@ const queueModifyDeviceJob = async (
       // First check if need to send tunnel jobs regardless of interface change.
       const [
         removeTasksDeviceA, removeTasksDeviceB
-      ] = await prepareTunnelRemoveJob(tunnel, peer, true);
+      ] = await prepareTunnelRemoveJob(tunnel, true);
 
       if (sendRemoveTunnels.has(_id.toString())) {
         _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
