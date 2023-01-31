@@ -206,7 +206,7 @@ const getFullTrafficMap = async (orgList, toAgent) => {
     trafficMap[serviceClass].low = convert('best-effort');
     trafficMap[serviceClass].medium = convert('standard-select');
 
-    const highRealTime = ['realtime', 'telephony', 'low-latency', 'multimedia-conferencing'];
+    const highRealTime = ['real-time', 'telephony', 'low-latency', 'multimedia-conferencing'];
     const highControlSignaling = ['network-control', 'signaling', 'oam'];
 
     if (highRealTime.includes(serviceClass)) {
