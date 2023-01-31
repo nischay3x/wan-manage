@@ -672,8 +672,6 @@ const activatePendingTunnelsOfDevice = async (device) => {
   // and release them, and then it triggers the events chain once tunnel becomes active.
   const events = new Events();
   await events.removePendingStateFromTunnels(device);
-  const addTunnelIds = Object.assign({},
-    ...Array.from(events.activeTunnels, v => ({ [v]: '' })));
 
   const modifyDevices = await events.prepareModifyDispatcherParameters();
   for (const modified in modifyDevices) {
@@ -683,7 +681,7 @@ const activatePendingTunnelsOfDevice = async (device) => {
       {
         org: modifyDevices[modified].orig.org.toString(),
         newDevice: modifyDevices[modified].updated,
-        sendAddTunnels: addTunnelIds
+        sendAddTunnels: events.activeTunnels
       }
     );
   }

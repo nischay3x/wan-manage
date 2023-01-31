@@ -420,8 +420,8 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
  * @param  {Object}  messageParams  object with all changes that will be sent to the device
  * @param  {Object}  user           the user that created the request
  * @param  {string}  org            organization to which the user belongs
- * @param  {object}  sendAddTunnels object of tunnel ids as keys to send add-tunnel job for
- * @param  {object}  sendRemoveTunnels object of tunnel ids as keys to send remove-tunnel job for
+ * @param  {set}     sendAddTunnels Set of tunnel ids to send add-tunnel job for
+ * @param  {set}     sendRemoveTunnels Set of tunnel ids to send remove-tunnel job for
  * @param  {array}   ignoreTasks array of tasks that should be ignored.
  *                               Usually it means that in the current process,
                                  these jobs already sent and no need to resend them.
@@ -545,7 +545,7 @@ const queueModifyDeviceJob = async (
             ]
           },
           // Tunnels regardless of interfaces' changes - Reason 3 above
-          { _id: { $in: [...Object.keys(sendAddTunnels), ...Object.keys(sendRemoveTunnels)] } }
+          { _id: { $in: [...sendAddTunnels, ...sendRemoveTunnels] } }
         ]
       })
       .populate('deviceA')
@@ -568,7 +568,7 @@ const queueModifyDeviceJob = async (
         removeTasksDeviceA, removeTasksDeviceB
       ] = await prepareTunnelRemoveJob(tunnel, peer, true);
 
-      if (_id.toString() in sendRemoveTunnels) {
+      if (sendRemoveTunnels.has(_id.toString())) {
         _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
         continue;
       }
@@ -585,7 +585,7 @@ const queueModifyDeviceJob = async (
         true
       );
 
-      if (_id.toString() in sendAddTunnels) {
+      if (sendAddTunnels.has(_id.toString())) {
         _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
         continue;
       }
@@ -1128,7 +1128,7 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
  * @return {None}
  */
 const apply = async (device, user, data) => {
-  const org = data.org;
+  const orgId = data.org;
   const modifyParams = {};
 
   device[0] = await device[0]
@@ -1149,8 +1149,8 @@ const apply = async (device, user, data) => {
     .populate('policies.qos.policy')
     .execPopulate();
 
-  data.sendAddTunnels ??= {};
-  data.sendRemoveTunnels ??= {};
+  data.sendAddTunnels ??= new Set();
+  data.sendRemoveTunnels ??= new Set();
   data.ignoreTasks ??= [];
 
   // Create the default/static routes modification parameters
@@ -1405,7 +1405,7 @@ const apply = async (device, user, data) => {
 
   // Queue job only if the device has changed
   // Return empty jobs array if the device did not change
-  if (!modified && isEmpty(data.sendAddTunnels) && isEmpty(data.sendRemoveTunnels)) {
+  if (!modified && data.sendAddTunnels.size === 0 && data.sendRemoveTunnels.size === 0) {
     logger.debug('The device was not modified, nothing to apply', {
       params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
     });
@@ -1439,7 +1439,7 @@ const apply = async (device, user, data) => {
       ...unassign
     ]);
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
-    await setJobPendingInDB(device[0]._id, org, true);
+    await setJobPendingInDB(device[0]._id, orgId, true);
 
     // Queue device modification job
     const { jobs, sentTasks } = await queueModifyDeviceJob(
@@ -1447,7 +1447,7 @@ const apply = async (device, user, data) => {
       data.newDevice,
       modifyParams,
       user,
-      org,
+      orgId,
       data.sendAddTunnels,
       data.sendRemoveTunnels,
       data.ignoreTasks

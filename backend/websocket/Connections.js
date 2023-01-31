@@ -563,11 +563,6 @@ class Connections {
             }
           });
 
-          let addTunnelIds = Object.assign({},
-            ...Array.from(events.activeTunnels, v => ({ [v]: '' })));
-          let removeTunnelIds = Object.assign({},
-            ...Array.from(events.pendingTunnels, v => ({ [v]: '' })));
-
           // modify jobs
           const modifyDevices = await events.prepareModifyDispatcherParameters();
           const completedTasks = {};
@@ -579,8 +574,8 @@ class Connections {
               {
                 org: modifyDevices[modified].orig.org.toString(),
                 newDevice: modifyDevices[modified].updated,
-                sendAddTunnels: addTunnelIds,
-                sendRemoveTunnels: removeTunnelIds,
+                sendAddTunnels: events.activeTunnels,
+                sendRemoveTunnels: events.pendingTunnels,
                 ignoreTasks: completedTasks[modifyDevices[modified].orig._id] ?? []
               }
             );
@@ -610,9 +605,10 @@ class Connections {
               completedTasks[deviceId].push(...tasks[deviceId]);
             }
 
-            // send tunnel jobs only on the first iteration to prevent job duplications
-            addTunnelIds = {};
-            removeTunnelIds = {};
+            // send tunnel jobs only on the first iteration to prevent job duplications.
+            // Hance on end of first iteration, clear the tunnels sets.
+            events.activeTunnels.clear();
+            events.pendingTunnels.clear();
           }
 
           // remove the variable from the memory.
