@@ -553,15 +553,7 @@ const queueModifyDeviceJob = async (
       .populate('peer');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, peer, pathlabel, _id, advancedOptions } = tunnel;
-
-      const ifcA = deviceA.interfaces.find(ifc => {
-        return ifc._id.toString() === tunnel.interfaceA.toString();
-      });
-
-      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
-        return ifc._id.toString() === tunnel.interfaceB.toString();
-      });
+      let { deviceA, deviceB, peer, _id, advancedOptions } = tunnel;
 
       // First check if need to send tunnel jobs regardless of interface change.
       const [
@@ -573,17 +565,7 @@ const queueModifyDeviceJob = async (
         continue;
       }
 
-      const [addTasksDeviceA, addTasksDeviceB] = await prepareTunnelAddJob(
-        tunnel,
-        ifcA,
-        ifcB,
-        pathlabel,
-        deviceA,
-        deviceB,
-        advancedOptions,
-        peer,
-        true
-      );
+      const [addTasksDeviceA, addTasksDeviceB] = await prepareTunnelAddJob(tunnel, true);
 
       if (sendAddTunnels.has(_id.toString())) {
         _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);

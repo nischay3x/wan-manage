@@ -947,30 +947,26 @@ const queueTunnel = async (
  * Prepares tunnel add jobs by creating an array that contains
  * the jobs that should be queued for each of the devices connected
  * by the tunnel.
- * @param  {Object} tunnel    tunnel object
- * @param  {Object} deviceAIntf device A tunnel interface
- * @param  {Object?} deviceBIntf device B tunnel interface
- * @param  {pathLabel} path label used for this tunnel
- * @param  {Object} deviceA details of device A
- * @param  {Object?} deviceB details of device B
- * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
- * @param  {Object?}  peer peer configurations
+ * @param  {object} tunnel    tunnel object
+ * @param  {boolean} includeDeviceConfigDependencies tunnel dependencies (routes via the tunnel)
+ * @param  {boolean} isSync  if "sync" module called to this function
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
-  tunnel,
-  deviceAIntf,
-  deviceBIntf,
-  pathLabel,
-  deviceA,
-  deviceB,
-  advancedOptions,
-  peer = null,
-  includeDeviceConfigDependencies = false,
-  isSync = false
+  tunnel, includeDeviceConfigDependencies = false, isSync = false
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
+
+  const { deviceA, deviceB, peer, pathlabel, advancedOptions } = tunnel;
+
+  const deviceAIntf = deviceA.interfaces.find(ifc => {
+    return ifc._id.toString() === tunnel.interfaceA.toString();
+  });
+
+  const deviceBIntf = peer ? null : deviceB.interfaces.find(ifc => {
+    return ifc._id.toString() === tunnel.interfaceB.toString();
+  });
 
   const tasksDeviceA = [];
   const tasksDeviceB = [];
@@ -985,7 +981,7 @@ const prepareTunnelAddJob = async (
     deviceBIntf,
     deviceA,
     deviceB,
-    pathLabel,
+    pathlabel,
     advancedOptions,
     peer
   );
@@ -1174,7 +1170,7 @@ const prepareTunnelAddJob = async (
     }
   }
 
-  return [tasksDeviceA, tasksDeviceB];
+  return [tasksDeviceA, tasksDeviceB, deviceAIntf, deviceBIntf];
 };
 
 /**
@@ -1649,21 +1645,10 @@ const sync = async (deviceId, org) => {
       num,
       deviceA,
       deviceB,
-      interfaceA,
-      interfaceB,
       tunnelKeys,
       encryptionMethod,
-      pathlabel,
-      advancedOptions,
       peer
     } = tunnel;
-
-    const ifcA = deviceA.interfaces.find(
-      (ifc) => ifc._id.toString() === interfaceA.toString()
-    );
-    const ifcB = peer ? null : deviceB.interfaces.find(
-      (ifc) => ifc._id.toString() === interfaceB.toString()
-    );
     if (!tunnelKeys && encryptionMethod === 'psk' && peer === null) {
       // No keys for some reason, probably version 2 upgraded.
       // Tunnel keys will be generated in prepareTunnelAddJob.
@@ -1675,18 +1660,8 @@ const sync = async (deviceId, org) => {
         devicesToSync.push(remoteDeviceId);
       }
     }
-    const [tasksA, tasksB] = await prepareTunnelAddJob(
-      tunnel,
-      ifcA,
-      ifcB,
-      pathlabel,
-      deviceA,
-      deviceB,
-      advancedOptions,
-      peer,
-      false,
-      true
-    );
+    const [tasksA, tasksB] = await prepareTunnelAddJob(tunnel, false, true);
+
     // Add the tunnel only for the device that is being synced
     const deviceTasks =
       deviceId.toString() === deviceA._id.toString() ? tasksA : tasksB;
@@ -1997,30 +1972,11 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
         deviceB,
         num,
         pathlabel,
-        peer,
-        advancedOptions,
-        interfaceA,
-        interfaceB
+        peer
       } = tunnel;
 
-      const ifcA = deviceA.interfaces.find(ifc => {
-        return ifc._id.toString() === interfaceA.toString();
-      });
-
-      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
-        return ifc._id.toString() === interfaceB.toString();
-      });
-
-      let [tasksDeviceA, tasksDeviceB] = await prepareTunnelAddJob(
-        tunnel,
-        ifcA,
-        ifcB,
-        pathlabel,
-        deviceA,
-        deviceB,
-        advancedOptions,
-        peer,
-        includeDeviceConfigDependencies
+      let [tasksDeviceA, tasksDeviceB, ifcA, ifcB] = await prepareTunnelAddJob(
+        tunnel, includeDeviceConfigDependencies
       );
 
       if (tasksDeviceA.length > 1) {
