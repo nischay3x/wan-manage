@@ -77,7 +77,11 @@ class Connections {
     this.getAllDevices().forEach(deviceID => {
       const { socket } = this.devices.getDeviceInfo(deviceID);
       // Don't try to ping a closing, or already closed socket
-      if (!socket || [socket.CLOSING, socket.CLOSED].includes(socket.readyState)) return;
+      if (!socket) return;
+      if ([socket.CLOSING, socket.CLOSED].includes(socket.readyState)) {
+        this.closeConnection(deviceID);
+        return;
+      }
       if (socket.isAlive <= 0) {
         logger.warn('Terminating device due to ping failure', {
           params: { deviceId: deviceID }
