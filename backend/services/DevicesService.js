@@ -1312,6 +1312,7 @@ class DevicesService {
           .session(session)
           .populate('policies.firewall.policy', '_id name rules')
           .populate('interfaces.pathlabels', '_id name description color type')
+          .populate('org')
           .populate({
             path: 'applications.app',
             populate: {
@@ -1322,6 +1323,8 @@ class DevicesService {
         if (!origDevice) {
           throw createError(404, 'Device not found');
         }
+
+        const orgId = origDevice.org._id;
 
         // Don't allow empty device name
         // if the 'name' parameter skipped in the request we use the original value
@@ -1340,9 +1343,9 @@ class DevicesService {
 
         let orgSubnets = [];
         if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-          orgSubnets = await getAllOrganizationSubnets(origDevice.org);
+          orgSubnets = await getAllOrganizationSubnets(orgId);
         }
-        const orgBgp = await getAllOrganizationBGPDevices(origDevice.org);
+        const orgBgp = await getAllOrganizationBGPDevices(orgId);
 
         const origTunnels = await tunnelsModel.find({
           isActive: true,
@@ -1352,7 +1355,7 @@ class DevicesService {
         // Make sure interfaces are not deleted, only modified
         if (Array.isArray(deviceRequest.interfaces)) {
           // not allowed to assign path labels of a different organization
-          let orgPathLabels = await pathLabelsModel.find({ org: origDevice.org }, '_id')
+          let orgPathLabels = await pathLabelsModel.find({ org: orgId }, '_id')
             .session(session).lean();
           orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
           const notAllowedPathLabels = deviceRequest.interfaces.map(intf =>
@@ -1872,7 +1875,13 @@ class DevicesService {
         deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
-        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets, orgBgp);
+        const { valid, err } = validateDevice(
+          deviceToValidate,
+          origDevice.org,
+          isRunning,
+          orgSubnets,
+          orgBgp
+        );
 
         if (!valid) {
           logger.warn('Device update failed',

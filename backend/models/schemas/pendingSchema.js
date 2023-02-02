@@ -25,7 +25,7 @@ const pendingSchema = {
   // pending type. We can query all pending with a given type
   pendingType: {
     type: String,
-    enum: Object.values(eventReasons.pendingTypes)
+    enum: [...Object.values(eventReasons.pendingTypes), '']
   },
   // reason for pending item configuration
   pendingReason: {

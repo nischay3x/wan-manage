@@ -45,6 +45,8 @@ const { processModifyJob } = require('../deviceLogic/modifyDevice');
 const eventsReasons = require('../deviceLogic/events/eventReasons');
 const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/tunnels');
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
+const { validateDevice } = require('../deviceLogic/validators');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 class OrganizationsService {
   /**
@@ -263,21 +265,42 @@ class OrganizationsService {
       if (!org) {
         throw new Error('Organization ID is incorrect');
       }
+      const origVxlanPort = org.vxlanSourcePort;
 
-      const origVxlanSourcePort = org.vxlanSourcePort;
-      const isVxlanPortChanged = origVxlanSourcePort !== vxlanSourcePort;
+      const orgDevices = await Devices.devices.find({ org: id })
+        .populate('org')
+        .populate('policies.firewall.policy', '_id name rules');
 
+      // update org, don't save
       org.name = name;
       org.description = description;
       org.group = group;
       org.encryptionMethod = encryptionMethod;
       org.vxlanSourcePort = vxlanSourcePort;
+
+      // before saving, let's validate the new config
+      for (const orgDevice of orgDevices) {
+        const { valid, err } = validateDevice(orgDevice.toObject(), org);
+        if (!valid) {
+          throw new Error(err);
+        }
+      }
+
+      // now, save
       const updatedOrg = await org.save({ validateBeforeSave: true });
 
-      if (isVxlanPortChanged) {
-        // TODO: What should happen if job process has an issue. Do we need to revert the database?
-        // TODO: Validate devices (like firewall if has inbound rule)
-        await handleVxlanSourcePortChange(updatedOrg, origVxlanSourcePort, user);
+      // after save, send jobs to devices
+      if (origVxlanPort !== vxlanSourcePort) {
+        // only 6.2 and later support source vxlan change.
+        const devices = orgDevices.filter(d => {
+          const majorVersion = getMajorVersion(d.versions.agent);
+          const minorVersion = getMinorVersion(d.versions.agent);
+          return majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+        });
+
+        if (devices.length > 0) {
+          await handleVxlanSourcePortChange(updatedOrg, vxlanSourcePort, devices, user);
+        }
       }
 
       // Update token
@@ -712,6 +735,7 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
     }
   ];
 };
+
 const getInterfaceConditionsToBePending = (key, origVxlanPort) => {
   return [
     // uses STUN
@@ -729,6 +753,7 @@ const getInterfaceConditionsToBePending = (key, origVxlanPort) => {
     { $ne: [`$${key}.PublicPort`, origVxlanPort] }
   ];
 };
+
 const handleToPendingTunnels = async (tunnels) => {
   if (tunnels.length === 0) return;
 
@@ -741,70 +766,94 @@ const handleToPendingTunnels = async (tunnels) => {
   }
 };
 
-const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, user) => {
-  const devicesJobs = {}; // object with a device and tasks to be sent to it
+const addDeviceTasks = (obj, device, task) => {
+  if (!task) return;
 
+  const deviceId = device._id.toString();
+
+  if (!(deviceId in obj)) {
+    obj[deviceId] = {
+      device: device,
+      tasks: []
+    };
+  }
+
+  if (Array.isArray(task)) {
+    obj[deviceId].tasks.push(...task);
+  } else {
+    obj[deviceId].tasks.push(task);
+  }
+};
+
+// TODO: What should happen if job process has an issue. Do we need to revert the database?
+// TODO: in case of failure in jobs, send sync to all devices.
+const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, orgDevices, user) => {
   const orgId = org._id;
+
+  // mapping object [deviceId] = { device: {}, tasks: [] }
+  const devicesJobs = {};
+
+  // get relevant tunnels that need to take action for.
+  // The expected output is array with one object with two keys:
+  //  [{ _id: null, toPending: [], toReconstruct: [] }]
   const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(orgId), origVxlanSourcePort);
   const tunnels = await Tunnels.aggregate(pipeline).allowDiskUse(true);
-  // expected output is array with one object with two keys:
-  //  [{ _id: null, toPending: [], toReconstruct: [] }]
-  const orgDevices = await Devices.devices.find({ org: orgId }).populate('org');
 
+  // parse database result
   const toPending = tunnels?.[0]?.toPending ?? [];
   const toReconstruct = tunnels?.[0]?.toReconstruct ?? [];
 
-  await handleToPendingTunnels(toPending);
+  try {
+    // put needed tunnels to pending state - don't send jobs yet
+    await handleToPendingTunnels(toPending);
 
-  const _addDeviceTasks = (device, task) => {
-    if (!task) return;
-
-    const deviceId = device._id.toString();
-
-    if (!(deviceId in devicesJobs)) {
-      devicesJobs[deviceId] = {
-        device: device,
-        tasks: []
-      };
+    // first prepare remove-tunnel tasks for each device
+    for (const removeTunnel of [...toPending, ...toReconstruct]) {
+      const [removeTasksDevA, removeTasksDevB] = await prepareTunnelRemoveJob(removeTunnel, true);
+      addDeviceTasks(devicesJobs, removeTunnel.deviceA, removeTasksDevA);
+      addDeviceTasks(devicesJobs, removeTunnel.deviceB, removeTasksDevB);
     }
 
-    if (Array.isArray(task)) {
-      devicesJobs[deviceId].tasks.push(...task);
-    } else {
-      devicesJobs[deviceId].tasks.push(task);
+    // now prepare modify-vxlan-config task for each device
+    const params = transformVxlanConfig(org);
+    for (const orgDevice of orgDevices) {
+      addDeviceTasks(devicesJobs, orgDevice, { message: 'modify-vxlan-config', params });
     }
-  };
 
-  // first prepare remove-tunnel jobs for each device
-  for (const removeTunnel of [...toPending, ...toReconstruct]) {
-    const [removeTasksDeviceA, removeTasksDeviceB] =
-      await prepareTunnelRemoveJob(removeTunnel, true);
+    // now prepare add-tunnel tasks for each device
+    for (const addTunnel of toReconstruct) {
+      const [addTasksDevA, addTasksDevB] = await prepareTunnelAddJob(addTunnel, true);
+      addDeviceTasks(devicesJobs, addTunnel.deviceA, addTasksDevA);
+      addDeviceTasks(devicesJobs, addTunnel.deviceB, addTasksDevB);
+    }
 
-    _addDeviceTasks(removeTunnel.deviceA, removeTasksDeviceA);
-    _addDeviceTasks(removeTunnel.deviceB, removeTasksDeviceB);
-  }
+    // finally, send one job to each device that contains all tasks inside
+    for (const deviceId in devicesJobs) {
+      const tasks = devicesJobs[deviceId].tasks;
+      const device = devicesJobs[deviceId].device;
+      await processModifyJob(tasks, device, orgId, user);
+    }
+  } catch (err) {
+    logger.error('Error in handling vxlan change', {
+      params: {
+        reason: err.message,
+        origVxlanSourcePort,
+        newVxlanPort: org.vxlanSourcePort,
+        orgId: org._id
+      }
+    });
 
-  // now prepare modify-vxlan-config jobs for each device
-  const params = transformVxlanConfig({ ...org });
-  const job = { message: 'modify-vxlan-config', params };
-  for (const orgDevice of orgDevices) {
-    _addDeviceTasks(orgDevice, job);
-  }
-
-  // now prepare add-tunnel jobs for each device
-  for (const addTunnel of [...toReconstruct]) {
-    const [
-      removeTasksDeviceA, removeTasksDeviceB
-    ] = await prepareTunnelAddJob(addTunnel, true);
-
-    _addDeviceTasks(addTunnel.deviceA, removeTasksDeviceA);
-    _addDeviceTasks(addTunnel.deviceB, removeTasksDeviceB);
-  }
-
-  // now send obe job to each device that contains modify-vxlan and tunnels tasks
-  for (const deviceId in devicesJobs) {
-    const tasks = devicesJobs[deviceId].tasks;
-    const device = devicesJobs[deviceId].device;
-    await processModifyJob(tasks, device, orgId, user);
+    // need to sync all devices in order to ensure they have the new vxlan port config
+    await Devices.devices.updateMany(
+      { _id: { $in: orgDevices.map(d => d._id) } },
+      {
+        $set: {
+          'sync.state': 'syncing',
+          'sync.autoSync': 'on',
+          'sync.trials': 0
+        }
+      },
+      { upsert: false }
+    );
   }
 };

@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const configs = require('../configs')();
 const randomNum = require('../utils/random-key');
 const mongoose = require('mongoose');
 const { getMatchFilters } = require('../utils/filterUtils');
@@ -245,9 +246,14 @@ const getTunnelsPipeline = (orgList, filters) => {
   return pipeline;
 };
 
+const getOrgDefaultTunnelPort = org => {
+  return org.vxlanSourcePort || configs.get('tunnelPort');
+};
+
 // Default exports
 module.exports = {
   generateTunnelParams,
   generateRandomKeys,
-  getTunnelsPipeline
+  getTunnelsPipeline,
+  getOrgDefaultTunnelPort
 };
