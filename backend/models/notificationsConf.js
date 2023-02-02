@@ -56,7 +56,19 @@ const notificationsConfSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'accounts'
   },
-  rules: [ruleSchema]
+  rules: [ruleSchema],
+  signedToCritical:
+  [
+    { type: mongoose.Schema.Types.ObjectId, ref: 'users' }
+  ],
+  signedToWarning:
+  [
+    { type: mongoose.Schema.Types.ObjectId, ref: 'users' }
+  ],
+  signedToDaily:
+  [
+    { type: mongoose.Schema.Types.ObjectId, ref: 'users' }
+  ]
 });
 
 notificationsConfSchema.index({ org: 1 }, { unique: true, sparse: true });

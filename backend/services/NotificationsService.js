@@ -22,10 +22,14 @@ const notificationsDb = require('../models/notifications');
 const { devices } = require('../models/devices');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getUserOrganizations } = require('../utils/membershipUtils');
+const { checkMemberLevel } = require('./MembersService');
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getMatchFilters } = require('../utils/filterUtils');
 const notificationsConf = require('../models/notificationsConf');
+const { membership } = require('../models/membership');
+const Organizations = require('../models/organizations');
+const users = require('../models/users');
 const { ObjectId } = require('mongodb');
 
 class NotificationsService {
@@ -270,6 +274,7 @@ class NotificationsService {
     }
   }
 
+  // Validate request params and return the list of organizations according to the param
   static async validateParams (org, account, group, user) {
     // Validate parameters
     if (!org && !account && !group) {
@@ -308,53 +313,59 @@ class NotificationsService {
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
+      let response;
       const orgIds = await NotificationsService.validateParams(org, account, group, user);
       if (orgIds.error) {
         return orgIds;
       }
-      const response = await notificationsConf.aggregate([
-        { $match: { org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } } },
-        { $unwind: '$rules' },
-        {
-          $group: {
-            _id: '$rules._id',
-            warningThreshold: { $addToSet: '$rules.warningThreshold' },
-            criticalThreshold: { $addToSet: '$rules.criticalThreshold' },
-            thresholdUnit: { $addToSet: '$rules.thresholdUnit' },
-            severity: { $addToSet: '$rules.severity' },
-            immediateEmail: { $addToSet: '$rules.immediateEmail' },
-            resolvedAlert: { $addToSet: '$rules.resolvedAlert' },
-            event: { $addToSet: '$rules.event' }
-          }
-        },
-        { $sort: { event: 1 } },
-        {
-          $project: {
-            warningThreshold: {
-              $cond: [{ $gt: [{ $size: '$warningThreshold' }, 1] }, 'not the same', { $arrayElemAt: ['$warningThreshold', 0] }]
-            },
-            criticalThreshold: {
-              $cond: [{ $gt: [{ $size: '$criticalThreshold' }, 1] }, 'not the same', { $arrayElemAt: ['$criticalThreshold', 0] }]
-            },
-            thresholdUnit: {
-              $cond: [{ $gt: [{ $size: '$thresholdUnit' }, 1] }, 'not the same', { $arrayElemAt: ['$thresholdUnit', 0] }]
-            },
-            severity: {
-              $cond: [{ $gt: [{ $size: '$severity' }, 1] }, 'not the same', { $arrayElemAt: ['$severity', 0] }]
-            },
-            immediateEmail: {
-              $cond: [{ $gt: [{ $size: '$immediateEmail' }, 1] }, 'not the same', { $arrayElemAt: ['$immediateEmail', 0] }]
-            },
-            resolvedAlert: {
-              $cond: [{ $gt: [{ $size: '$resolvedAlert' }, 1] }, 'not the same', { $arrayElemAt: ['$resolvedAlert', 0] }]
-            },
-            event: {
-              $cond: [{ $gt: [{ $size: '$event' }, 1] }, 'not the same', { $arrayElemAt: ['$event', 0] }]
+      if (org) {
+        response = await notificationsConf.find({ org: org }, { rules: 1, _id: 0 });
+        return Service.successResponse(response[0].rules);
+      } else {
+        response = await notificationsConf.aggregate([
+          { $match: { org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } } },
+          { $unwind: '$rules' },
+          {
+            $group: {
+              _id: '$rules._id',
+              warningThreshold: { $addToSet: '$rules.warningThreshold' },
+              criticalThreshold: { $addToSet: '$rules.criticalThreshold' },
+              thresholdUnit: { $addToSet: '$rules.thresholdUnit' },
+              severity: { $addToSet: '$rules.severity' },
+              immediateEmail: { $addToSet: '$rules.immediateEmail' },
+              resolvedAlert: { $addToSet: '$rules.resolvedAlert' },
+              event: { $addToSet: '$rules.event' }
+            }
+          },
+          { $sort: { event: 1 } },
+          {
+            $project: {
+              warningThreshold: {
+                $cond: [{ $gt: [{ $size: '$warningThreshold' }, 1] }, 'not the same', { $arrayElemAt: ['$warningThreshold', 0] }]
+              },
+              criticalThreshold: {
+                $cond: [{ $gt: [{ $size: '$criticalThreshold' }, 1] }, 'not the same', { $arrayElemAt: ['$criticalThreshold', 0] }]
+              },
+              thresholdUnit: {
+                $cond: [{ $gt: [{ $size: '$thresholdUnit' }, 1] }, 'not the same', { $arrayElemAt: ['$thresholdUnit', 0] }]
+              },
+              severity: {
+                $cond: [{ $gt: [{ $size: '$severity' }, 1] }, 'not the same', { $arrayElemAt: ['$severity', 0] }]
+              },
+              immediateEmail: {
+                $cond: [{ $gt: [{ $size: '$immediateEmail' }, 1] }, 'not the same', { $arrayElemAt: ['$immediateEmail', 0] }]
+              },
+              resolvedAlert: {
+                $cond: [{ $gt: [{ $size: '$resolvedAlert' }, 1] }, 'not the same', { $arrayElemAt: ['$resolvedAlert', 0] }]
+              },
+              event: {
+                $cond: [{ $gt: [{ $size: '$event' }, 1] }, 'not the same', { $arrayElemAt: ['$event', 0] }]
+              }
             }
           }
-        }
-      ]);
-      return Service.successResponse(response);
+        ]);
+        return Service.successResponse(response);
+      }
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -395,8 +406,188 @@ class NotificationsService {
           if (rules[i].resolvedAlert !== 'not the same') {
             updateData.$set['rules.$[el].resolvedAlert'] = rules[i].resolvedAlert;
           }
-
           await notificationsConf.updateOne({ org: org, 'rules.event': rules[i].event }, updateData, { arrayFilters: [{ 'el.event': rules[i].event }] });
+        }
+      }
+      return Service.successResponse({
+        code: 200,
+        message: 'Success',
+        data: 'updated successfully'
+      });
+    } catch (e) {
+      return Service.rejectResponse({
+        code: e.status || 500,
+        message: e.message || 'Internal Server Error'
+      });
+    }
+  }
+
+  static async emailNotificationsGET ({ org, account, group }, { user }) {
+    try {
+      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      if (orgIds.error) {
+        return orgIds;
+      }
+      // a function to retrieve users details
+      const createCurrentUser = async (userId, orgId) => {
+        const currentUser = {};
+        const userData = await users.find({ _id: userId });
+        const notificationsData = await notificationsConf.find({ org: orgId });
+        currentUser._id = userId;
+        currentUser.email = userData[0].email;
+        currentUser.name = userData[0].name;
+        currentUser.lastName = userData[0].lastName;
+        currentUser.signedToCritical = notificationsData[0].signedToCritical.includes(userId);
+        currentUser.signedToWarning = notificationsData[0].signedToWarning.includes(userId);
+        currentUser.signedToDaily = notificationsData[0].signedToDaily.includes(userId);
+        return currentUser;
+      };
+
+      let response = [];
+      let membersIds;
+      if (org) {
+        const uniqueUsers = new Set();
+        const orgData = await Organizations.find({ _id: org });
+        const orgAccount = orgData[0].account;
+        const orgGroup = orgData[0].group;
+        membersIds = await membership.find({
+          $or: [
+            { to: 'organization', organization: org },
+            { to: 'account', account: orgAccount },
+            { to: 'group', account: orgAccount, group: orgGroup }
+          ]
+        });
+        for (const member of membersIds) {
+          if (!uniqueUsers.has(member.user.toString())) {
+            uniqueUsers.add(member.user.toString());
+            const isPermitted = await checkMemberLevel(member.to, member.role, member.to === 'organization' ? member.organization : member.to === 'account' ? member.account : member.group
+              , user._id, user.defaultAccount._id, member);
+            if (isPermitted) {
+              response.push(await createCurrentUser(member.user, org));
+            }
+          }
+        }
+      } else {
+        const uniqueUsers = new Set();
+        for (let i = 0; i < orgIds.length; i++) {
+          const orgData = await Organizations.find({ _id: orgIds[i] });
+          const orgAccount = orgData[0].account;
+          const orgGroup = orgData[0].group;
+          const orgMembers = await membership.find({
+            $or: [
+              { to: 'organization', organization: orgIds[i] },
+              { to: 'account', account: orgAccount },
+              { to: 'group', account: orgAccount, group: orgGroup }
+            ]
+          });
+          for (const member of orgMembers) {
+            if (!uniqueUsers.has(member.user.toString())) {
+              uniqueUsers.add(member.user.toString());
+              const isPermitted = await checkMemberLevel(member.to, member.role, member.to === 'organization' ? member.organization : member.to === 'account' ? member.account : member.group
+                , user._id, user.defaultAccount._id, member);
+              if (isPermitted) {
+                const currentUser = await createCurrentUser(member.user, orgIds[i]);
+                response.push({ ...currentUser, count: 1 });
+              }
+            } else {
+              const index = response.findIndex(x => x._id.toString() === member.user.toString());
+              const currentUser = await createCurrentUser(member.user, orgIds[i]);
+              if (index !== -1) {
+                const existingUser = response[index];
+                existingUser.signedToCritical = existingUser.signedToCritical !== currentUser.signedToCritical ? null : existingUser.signedToCritical;
+                existingUser.signedToWarning = existingUser.signedToWarning !== currentUser.signedToWarning ? null : existingUser.signedToWarning;
+                existingUser.signedToDaily = existingUser.signedToDaily !== currentUser.signedToDaily ? null : existingUser.signedToDaily;
+                existingUser.count++;
+              }
+            }
+          }
+        }
+        response = response
+          .filter(user => user.count >= orgIds.length)
+          .map(user => {
+            const { count, ...rest } = user;
+            return rest;
+          });
+      }
+      return Service.successResponse(response);
+    } catch (e) {
+      return Service.rejectResponse({
+        code: e.status || 500,
+        message: e.message || 'Internal Server Error'
+      });
+    }
+  }
+
+  static async emailNotificationsPUT ({ emailNotificationsConfPut }, { user }) {
+    try {
+      const { org, account, group, emailsSigning } = emailNotificationsConfPut;
+      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      if (orgIds.error) {
+        return orgIds;
+      }
+      if (org) {
+        for (let i = 0; i < emailsSigning.length; i++) {
+          const emailSigning = emailsSigning[i];
+          // validate that the user has permissions to the organization
+          const userData = await users.findOne({ _id: emailSigning._id }).populate('defaultAccount');
+          const userOrgList = await getUserOrganizations(userData);
+          if (!Object.values(userOrgList).find(o => o.id === org)) {
+            return Service.rejectResponse('One of the users does not have permission to access the organization');
+          }
+          const signedToCritical = emailSigning.signedToCritical ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
+          const signedToWarning = emailSigning.signedToWarning ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
+          const signedToDaily = emailSigning.signedToDaily ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
+          if (emailSigning.signedToCritical === false) {
+            await notificationsConf.updateOne({ org: org }, { $pull: { signedToCritical: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
+          } else if (signedToCritical !== undefined) {
+            await notificationsConf.updateOne({ org: org }, { $addToSet: { signedToCritical: signedToCritical } }, { upsert: true });
+          }
+          if (emailSigning.signedToWarning === false) {
+            await notificationsConf.updateOne({ org: org }, { $pull: { signedToWarning: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
+          } else if (signedToWarning !== undefined) {
+            await notificationsConf.updateOne({ org: org }, { $addToSet: { signedToWarning: signedToWarning } }, { upsert: true });
+          }
+          if (emailSigning.signedToDaily === false) {
+            await notificationsConf.updateOne({ org: org }, { $pull: { signedToDaily: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
+          } else if (signedToDaily !== undefined) {
+            await notificationsConf.updateOne({ org: org }, { $addToSet: { signedToDaily: signedToDaily } }, { upsert: true });
+          }
+        }
+      } else {
+        // verify that all the users have a permission to access all the organizations under the account/group
+        for (let i = 0; i < orgIds.length; i++) {
+          // TODO add membership validation
+          for (let j = 0; j < emailsSigning.length; j++) {
+            const emailSigning = emailsSigning[j];
+            const userData = await users.findOne({ _id: emailSigning._id }).populate('defaultAccount');
+            const userOrgList = await getUserOrganizations(userData);
+            if (!Object.values(userOrgList).find(o => o.id === orgIds[i])) {
+              return Service.rejectResponse('All the users must have an access permission to each one the the organizations');
+            }
+          }
+        }
+        for (let i = 0; i < orgIds.length; i++) {
+          for (let j = 0; j < emailsSigning.length; j++) {
+            const emailSigning = emailsSigning[j];
+            const signedToCritical = emailSigning.signedToCritical ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
+            const signedToWarning = emailSigning.signedToWarning ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
+            const signedToDaily = emailSigning.signedToDaily ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
+            if (emailSigning.signedToCritical === false) {
+              await notificationsConf.updateOne({ org: orgIds[i] }, { $pull: { signedToCritical: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
+            } else if (signedToCritical !== undefined) {
+              await notificationsConf.updateOne({ org: orgIds[i] }, { $addToSet: { signedToCritical: signedToCritical } }, { upsert: true });
+            }
+            if (emailSigning.signedToWarning === false) {
+              await notificationsConf.updateOne({ org: orgIds[i] }, { $pull: { signedToWarning: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
+            } else if (signedToWarning !== undefined) {
+              await notificationsConf.updateOne({ org: orgIds[i] }, { $addToSet: { signedToWarning: signedToWarning } }, { upsert: true });
+            }
+            if (emailSigning.signedToDaily === false) {
+              await notificationsConf.updateOne({ org: orgIds[i] }, { $pull: { signedToDaily: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
+            } else if (signedToDaily !== undefined) {
+              await notificationsConf.updateOne({ org: orgIds[i] }, { $addToSet: { signedToDaily: signedToDaily } }, { upsert: true });
+            }
+          }
         }
       }
       return Service.successResponse({

@@ -30,6 +30,14 @@ class NotificationsController {
     await Controller.handleRequest(request, response, this.service.notificationsConfGET);
   }
 
+  async emailNotificationsGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.emailNotificationsGET);
+  }
+
+  async emailNotificationsPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.emailNotificationsPUT);
+  }
+
   async notificationsIdPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.notificationsIdPUT);
   }
