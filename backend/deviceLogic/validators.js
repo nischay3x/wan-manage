@@ -96,6 +96,7 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
 const validateFirewallRules = (rules, interfaces = undefined) => {
   const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
   const usedInboundPorts = [];
+  const tunnelPort = 4789;
   let inboundPortsCount = 0;
   const enabledRules = rules.filter(r => r.enabled);
   // Common rules validation
@@ -127,7 +128,7 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
         };
       }
       // Inbound rules destination ports can't be overlapped
-      if (direction === 'inbound' && inbound !== 'edgeAccess' && destination.ipProtoPort.ports) {
+      if (direction === 'inbound' && destination.ipProtoPort.ports) {
         const { ports } = destination.ipProtoPort;
         let portLow, portHigh;
         if (ports.includes('-')) {
@@ -135,19 +136,31 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
         } else {
           portLow = portHigh = +ports;
         }
-        // implicit inbound edge-access rule for port 4789 on all WAN interfaces
-        if (portLow <= 4789 && portHigh >= 4789) {
+        if (+ports === tunnelPort) {
           return {
             valid: false,
-            err: `Inbound rule destination ports ${ports} overlapped with port 4789`
+            err: `Firewall rule cannot be added, port ${tunnelPort}
+            is reserved for flexiWAN tunnel connectivity.`
           };
         }
-        for (const [usedPortLow, usedPortHigh] of usedInboundPorts) {
-          if ((usedPortLow <= portLow && portLow <= usedPortHigh) ||
-            (usedPortLow <= portHigh && portHigh <= usedPortHigh) ||
-            (portLow <= usedPortLow && usedPortLow <= portHigh) ||
-            (portLow <= usedPortHigh && usedPortHigh <= portHigh)) {
-            return { valid: false, err: `Inbound rule destination ports ${ports} overlapped` };
+        // implicit inbound edge-access rule for port 4789 on all WAN interfaces
+        if (portLow <= tunnelPort && portHigh >= tunnelPort) {
+          return {
+            valid: false,
+            err: `Inbound rule destination ports ${ports} overlapped with port ${tunnelPort}.
+            Firewall rule cannot be added, port ${tunnelPort}
+            is reserved for flexiWAN tunnel connectivity.`
+          };
+        }
+        if (inbound === 'portForward') {
+          // port forward rules overlapping not allowed
+          for (const [usedPortLow, usedPortHigh] of usedInboundPorts) {
+            if ((usedPortLow <= portLow && portLow <= usedPortHigh) ||
+              (usedPortLow <= portHigh && portHigh <= usedPortHigh) ||
+              (portLow <= usedPortLow && usedPortLow <= portHigh) ||
+              (portLow <= usedPortHigh && usedPortHigh <= portHigh)) {
+              return { valid: false, err: `Inbound rule destination ports ${ports} overlapped` };
+            }
           }
         }
         usedInboundPorts.push([portLow, portHigh]);
@@ -241,9 +254,6 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
       if (destPortsOverlapped) {
         return { valid: false, err: 'Destination forwarded ports overlapped on ' + wanIfc };
       }
-      if (destPortsArray.includes(4789)) {
-        return { valid: false, err: 'Not allowed to use port 4789 as forwarded on ' + wanIfc };
-      }
     }
     // Internal port can be used only once for one internal IP
     for (const internalIP of Object.keys(internalPorts)) {
@@ -281,7 +291,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     assignedIfs.filter(ifc => { return ifc.type === 'WAN'; }),
     assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
-  const majorVersion = getMajorVersion(device.versions.agent);
 
   if (isRunning && (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0))) {
     return {
@@ -380,12 +389,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
           err: 'All WAN interfaces should be assigned a default GW'
         };
       }
-    }
-    if (ifc.qosPolicy && majorVersion < 6) {
-      return {
-        valid: false,
-        err: 'QoS is supported from version 6'
-      };
     }
   }
 

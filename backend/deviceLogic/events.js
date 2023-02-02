@@ -652,8 +652,8 @@ const activatePendingTunnelsOfDevice = async (device) => {
   // and release them, and then it triggers the events chain once tunnel becomes active.
   const events = new Events();
   await events.removePendingStateFromTunnels(device);
-
-  const addTunnelIds = Array.from(events.activeTunnels);
+  const addTunnelIds = Object.assign({},
+    ...Array.from(events.activeTunnels, v => ({ [v]: '' })));
 
   const modifyDevices = await events.prepareModifyDispatcherParameters();
   for (const modified in modifyDevices) {
@@ -669,8 +669,26 @@ const activatePendingTunnelsOfDevice = async (device) => {
   }
 };
 
+const releasePublicAddrLimiterBlockage = async (device) => {
+  let blockagesReleased = false;
+
+  const wanIfcs = device.interfaces.filter(i => i.type === 'WAN');
+  const deviceId = device._id.toString();
+
+  for (const ifc of wanIfcs) {
+    const ifcId = ifc._id.toString();
+    const isReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcId}`);
+    if (isReleased) {
+      blockagesReleased = true;
+    }
+  }
+
+  return blockagesReleased;
+};
+
 module.exports = Events; // default export
 exports = module.exports;
 
 exports.activatePendingTunnelsOfDevice = activatePendingTunnelsOfDevice; // named export
+exports.releasePublicAddrLimiterBlockage = releasePublicAddrLimiterBlockage; // named export
 exports.publicAddrInfoLimiter = publicAddrInfoLimiter; // named export
