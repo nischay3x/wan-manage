@@ -161,6 +161,19 @@ const getTunnelsPipeline = (orgList, filters) => {
     }
   },
   {
+    $lookup: {
+      from: 'organizations',
+      localField: 'org',
+      foreignField: '_id',
+      as: 'org'
+    }
+  },
+  {
+    $unwind: {
+      path: '$org'
+    }
+  },
+  {
     $project: {
       num: 1,
       isActive: 1,
@@ -182,11 +195,13 @@ const getTunnelsPipeline = (orgList, filters) => {
       'deviceA._id': 1,
       'deviceA.isConnected': 1,
       'deviceA.status': 1,
+      'deviceA.versions': 1,
       'deviceB.name': 1,
       'deviceB.machineId': 1,
       'deviceB._id': 1,
       'deviceB.isConnected': 1,
       'deviceB.status': 1,
+      'deviceB.versions': 1,
       deviceAconf: 1,
       deviceBconf: 1,
       encryptionMethod: 1,
@@ -195,6 +210,8 @@ const getTunnelsPipeline = (orgList, filters) => {
       'pathlabel.color': 1,
       isPending: 1,
       pendingReason: 1,
+      'org._id': 1,
+      'org.vxlanSourcePort': 1,
       tunnelStatus: {
         $switch: {
           branches: [

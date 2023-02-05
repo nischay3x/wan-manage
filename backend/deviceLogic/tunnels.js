@@ -833,7 +833,7 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
  * @param  {Object} tasksDeviceA  device A tunnel job
  * @param  {Object} tasksDeviceB  device B tunnel job
  * @param  {string} user          user id of the requesting user
- * @param  {string} org           user's organization id
+ * @param  {string} orgId           user's organization id
  * @param  {string} devAMachineID device A host id
  * @param  {string?} devBMachineID device B host id
  * @param  {string} devAOid       device A database mongodb object id
@@ -849,7 +849,7 @@ const queueTunnel = async (
   tasksDeviceA,
   tasksDeviceB,
   user,
-  org,
+  orgId,
   devAMachineID,
   devBMachineID,
   devAOid,
@@ -863,7 +863,7 @@ const queueTunnel = async (
     const jobA = await deviceQueues.addJob(
       devAMachineID,
       user,
-      org,
+      orgId,
       // Data
       {
         title: title,
@@ -874,7 +874,7 @@ const queueTunnel = async (
         method: isAdd ? 'tunnels' : 'deltunnels',
         data: {
           username: user,
-          org: org,
+          org: orgId,
           tunnelId: tunnelId,
           deviceA: devAOid,
           deviceB: devBOid,
@@ -897,7 +897,7 @@ const queueTunnel = async (
     const jobB = peer ? null : await deviceQueues.addJob(
       devBMachineID,
       user,
-      org,
+      orgId,
       // Data
       {
         title: title,
@@ -908,7 +908,7 @@ const queueTunnel = async (
         method: isAdd ? 'tunnels' : 'deltunnels',
         data: {
           username: user,
-          org: org,
+          org: orgId,
           tunnelId: tunnelId,
           deviceA: devAOid,
           deviceB: devBOid,
@@ -948,12 +948,13 @@ const queueTunnel = async (
  * the jobs that should be queued for each of the devices connected
  * by the tunnel.
  * @param  {object} tunnel    tunnel object
+ * @param  {object} org       organization object
  * @param  {boolean} includeDeviceConfigDependencies tunnel dependencies (routes via the tunnel)
  * @param  {boolean} isSync  if "sync" module called to this function
  * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
-  tunnel, includeDeviceConfigDependencies = false, isSync = false
+  tunnel, org, includeDeviceConfigDependencies = false, isSync = false
 ) => {
   // Extract tunnel keys from the database
   if (!tunnel) throw new Error('Tunnel not found');
@@ -993,6 +994,7 @@ const prepareTunnelAddJob = async (
     deviceBIntf,
     deviceA,
     deviceB,
+    org,
     pathlabel,
     advancedOptions,
     peer
@@ -1644,6 +1646,7 @@ const sync = async (deviceId, org) => {
     .populate('deviceA', 'machineId interfaces versions IKEv2 bgp org')
     .populate('deviceB', 'machineId interfaces versions IKEv2 bgp org')
     .populate('peer')
+    .populate('org')
     .lean();
 
   // Create add-tunnel messages
@@ -1659,7 +1662,8 @@ const sync = async (deviceId, org) => {
       deviceB,
       tunnelKeys,
       encryptionMethod,
-      peer
+      peer,
+      org: tunnelOrg
     } = tunnel;
     if (!tunnelKeys && encryptionMethod === 'psk' && peer === null) {
       // No keys for some reason, probably version 2 upgraded.
@@ -1672,7 +1676,7 @@ const sync = async (deviceId, org) => {
         devicesToSync.push(remoteDeviceId);
       }
     }
-    const [tasksA, tasksB] = await prepareTunnelAddJob(tunnel, false, true);
+    const [tasksA, tasksB] = await prepareTunnelAddJob(tunnel, tunnelOrg, false, true);
 
     // Add the tunnel only for the device that is being synced
     const deviceTasks =
@@ -1716,17 +1720,57 @@ const sync = async (deviceId, org) => {
   };
 };
 
+const populateTunnelDestinations = (paramsA, paramsB, ifcA, ifcB, devAVer, devBVer, org) => {
+  let usePrivateIps = false;
+
+  if (!ifcA.PublicIP || !ifcB.PublicIP) {
+    usePrivateIps = true;
+  }
+
+  // if both interfaces have the same public IP,
+  // it means that they can use their private IPs as destinations
+  if (ifcA.PublicIP === ifcB.PublicIP) {
+    usePrivateIps = true;
+  }
+
+  // populate destination ips
+  paramsA.dst = usePrivateIps ? ifcB.IPv4 : ifcB.PublicIP;
+  paramsB.dst = usePrivateIps ? ifcA.IPv4 : ifcA.PublicIP;
+
+  const isDevSupportsVxlanPort = (deviceVersion) => {
+    const majorVer = getMajorVersion(deviceVersion);
+    const minorVer = getMinorVersion(deviceVersion);
+    return majorVer > 6 || (majorVer === 6 && minorVer >= 2);
+  };
+
+  const orgSourcePort = org.vxlanSourcePort;
+  const configSourcePort = configs.get('tunnelPort');
+
+  // if device version is lower than 6.2 - use 4789. Otherwise take the org.vxlanSourcePort;
+  const deviceADefaultPort = isDevSupportsVxlanPort(devAVer) ? orgSourcePort : configSourcePort;
+  const deviceBDefaultPort = isDevSupportsVxlanPort(devBVer) ? orgSourcePort : configSourcePort;
+
+  const deviceAUseDefaultPort = !ifcA.PublicPort || ifcA.useFixedPublicPort;
+  const deviceBUseDefaultPort = !ifcB.PublicPort || ifcB.useFixedPublicPort;
+
+  paramsA.dstPort = deviceBUseDefaultPort ? deviceBDefaultPort : ifcB.PublicPort;
+  paramsB.dstPort = deviceAUseDefaultPort ? deviceADefaultPort : ifcA.PublicPort;
+};
+
 /**
  * Prepares common parameters for add/remove tunnel jobs
- * @param  {Object} tunnel      the tunnel object
- * @param  {Object} deviceAIntf device A tunnel interface
- * @param  {Object?} deviceBIntf device B tunnel interface
- * @param  {pathLabel?} path label used for this tunnel
- * @param  {Object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
- * @param  {Object?}  peer peer configurations. If exists, fill peer configurations
+ * @param  {object} tunnel      the tunnel object
+ * @param  {object} deviceAIntf device A tunnel interface
+ * @param  {object?} deviceBIntf device B tunnel interface
+ * @param  {object?} deviceA device A object
+ * @param  {object?} deviceB device B object
+ * @param  {object?} org organization object
+ * @param  {pathLabel?} pathLabel label used for this tunnel
+ * @param  {object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
+ * @param  {object?}  peer peer configurations. If exists, fill peer configurations
 */
 const prepareTunnelParams = (
-  tunnel, deviceAIntf, deviceBIntf, deviceA, deviceB,
+  tunnel, deviceAIntf, deviceBIntf, deviceA, deviceB, org,
   pathLabel = null, advancedOptions = {}, peer = null
 ) => {
   const paramsDeviceA = {};
@@ -1784,11 +1828,15 @@ const prepareTunnelParams = (
     }
   } else {
     // destination
-    const isLocal = (!deviceAIntf.PublicIP || !deviceBIntf.PublicIP ||
-      deviceAIntf.PublicIP === deviceBIntf.PublicIP);
-    paramsDeviceA.dst = isLocal ? deviceBIntf.IPv4 : deviceBIntf.PublicIP;
-    paramsDeviceA.dstPort = (isLocal || !deviceBIntf.PublicPort || deviceBIntf.useFixedPublicPort)
-      ? configs.get('tunnelPort') : deviceBIntf.PublicPort;
+    populateTunnelDestinations(
+      paramsDeviceA,
+      paramsDeviceB,
+      deviceAIntf,
+      deviceBIntf,
+      deviceA.versions.agent,
+      deviceB.versions.agent,
+      org
+    );
 
     paramsDeviceA['loopback-iface'] = {
       addr: tunnelParams.ip1 + '/31',
@@ -1805,9 +1853,6 @@ const prepareTunnelParams = (
     paramsDeviceB.src = deviceBIntf.IPv4;
     paramsDeviceB.dev_id = deviceBIntf.devId;
 
-    paramsDeviceB.dst = isLocal ? deviceAIntf.IPv4 : deviceAIntf.PublicIP;
-    paramsDeviceB.dstPort = (isLocal || !deviceAIntf.PublicPort || deviceAIntf.useFixedPublicPort)
-      ? configs.get('tunnelPort') : deviceAIntf.PublicPort;
     paramsDeviceB['tunnel-id'] = tunnel.num;
     paramsDeviceB['loopback-iface'] = {
       addr: tunnelParams.ip2 + '/31',
@@ -1964,7 +2009,7 @@ const sendRemoveTunnelsJobs = async (
  */
 const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDependencies = false) => {
   let jobs = [];
-  let org = null;
+  let orgId = null;
   try {
     const tunnels = await tunnelsModel
       .find({
@@ -1974,21 +2019,23 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
       })
       .populate('deviceA')
       .populate('deviceB')
+      .populate('org')
       .populate('peer');
 
     for (const tunnel of tunnels) {
-      org = tunnel.org;
+      orgId = tunnel.org._id;
 
       const {
         deviceA,
         deviceB,
         num,
         pathlabel,
-        peer
+        peer,
+        org
       } = tunnel;
 
       let [tasksDeviceA, tasksDeviceB, ifcA, ifcB] = await prepareTunnelAddJob(
-        tunnel, includeDeviceConfigDependencies
+        tunnel, org, includeDeviceConfigDependencies
       );
 
       if (tasksDeviceA.length > 1) {
@@ -2033,7 +2080,7 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
         tasksDeviceA,
         tasksDeviceB,
         username,
-        org,
+        orgId,
         deviceA.machineId,
         peer ? null : deviceB.machineId,
         deviceA._id,

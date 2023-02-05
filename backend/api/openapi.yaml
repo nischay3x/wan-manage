@@ -9422,7 +9422,7 @@ components:
         account:
           type: string
         org:
-          type: string
+          $ref: '#/components/schemas/Organization'
         ipList:
           type: string
         staticroutes:

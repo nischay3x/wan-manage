@@ -297,9 +297,11 @@ class DevicesService {
       }) : [];
 
     // Update with additional objects
+    retDevice.org = retDevice.org.toObject();
+    retDevice.org._id = retDevice.org._id.toString();
+    retDevice.org.account = retDevice.org.account?.toString();
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
-    retDevice.org = retDevice.org.toString();
     retDevice.upgradeSchedule = pick(item.upgradeSchedule, ['jobQueued', '_id', 'time']);
     retDevice.upgradeSchedule._id = retDevice.upgradeSchedule._id.toString();
     retDevice.upgradeSchedule.time = (retDevice.upgradeSchedule.time)
@@ -398,6 +400,19 @@ class DevicesService {
           }
         },
         {
+          $lookup: {
+            from: 'organizations',
+            localField: 'org',
+            foreignField: '_id',
+            as: 'org'
+          }
+        },
+        {
+          $unwind: {
+            path: '$org'
+          }
+        },
+        {
           $addFields: {
             _id: { $toString: '$_id' },
             'deviceStatus.state': {
@@ -462,7 +477,7 @@ class DevicesService {
       if (requestParams.response === 'summary') {
         pipeline.push({
           $project: {
-            org: { $toString: '$org' },
+            'org._id': { $toString: '$org._id' },
             isApproved: 1,
             isConnected: 1,
             name: 1,
@@ -720,6 +735,7 @@ class DevicesService {
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description')
         .populate('policies.qos.policy', '_id name description')
+        .populate('org', 'vxlanSourcePort')
         .populate({
           path: 'applications.app',
           populate: {
@@ -1921,6 +1937,7 @@ class DevicesService {
           .populate('policies.firewall.policy', '_id name description rules')
           .populate('policies.multilink.policy', '_id name description')
           .populate('policies.qos.policy', '_id name description')
+          .populate('org')
           .populate({
             path: 'applications.app',
             populate: {

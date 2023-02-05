@@ -822,7 +822,7 @@ const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, orgDevices,
 
     // now prepare add-tunnel tasks for each device
     for (const addTunnel of toReconstruct) {
-      const [addTasksDevA, addTasksDevB] = await prepareTunnelAddJob(addTunnel, true);
+      const [addTasksDevA, addTasksDevB] = await prepareTunnelAddJob(addTunnel, org, true);
       addDeviceTasks(devicesJobs, addTunnel.deviceA, addTasksDevA);
       addDeviceTasks(devicesJobs, addTunnel.deviceB, addTasksDevB);
     }

@@ -145,7 +145,7 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
             is reserved for flexiWAN tunnel connectivity.`
           };
         }
-        // implicit inbound edge-access rule for port 4789 on all WAN interfaces
+        // implicit inbound edge-access rule for tunnel port on all WAN interfaces
         if (portLow <= tunnelPort && portHigh >= tunnelPort) {
           return {
             valid: false,
