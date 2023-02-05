@@ -210,7 +210,7 @@ const incAutoSyncTrials = (deviceId) => {
   );
 };
 
-const queueFullSyncJob = async (device, hash, org) => {
+const queueFullSyncJob = async (device, hash, org, username = 'system') => {
   // Queue full sync job
   // Add current hash to message so the device can
   // use it to check if it is already synced
@@ -255,7 +255,7 @@ const queueFullSyncJob = async (device, hash, org) => {
 
   const job = await deviceQueues.addJob(
     machineId,
-    'system',
+    username,
     org,
     // Data
     { title: 'Sync device ' + hostname, tasks: tasks },
@@ -476,7 +476,8 @@ const apply = async (device, user, data) => {
   const job = await queueFullSyncJob(
     { deviceId: _id, machineId, hostname, versions },
     hash,
-    org
+    org,
+    user.username
   );
 
   if (!job) {
