@@ -460,8 +460,10 @@ const apply = async (device, user, data) => {
 
   // release existing limiters if the device is blocked
   await reconfigErrorsLimiter.release(_id.toString());
-  await releasePublicAddrLimiterBlockage(device[0]);
-  await activatePendingTunnelsOfDevice(updDevice, true);
+  const released = await releasePublicAddrLimiterBlockage(device[0]);
+  if (released) {
+    await activatePendingTunnelsOfDevice(updDevice, true);
+  }
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(

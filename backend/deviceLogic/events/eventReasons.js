@@ -18,7 +18,6 @@
 const pendingTypes = {
   interfaceHasNoIp: 'interfaceHasNoIp',
   tunnelIsPending: 'tunnelIsPending',
-  waitForStun: 'waitForStun',
   publicPortHighRate: 'publicPortHighRate'
 };
 
@@ -28,10 +27,6 @@ const pendingReasons = {
   },
   [pendingTypes.tunnelIsPending]: (tunnelNumber) => {
     return `Tunnel ${tunnelNumber} is in pending state`;
-  },
-  [pendingTypes.waitForStun]: () => {
-    return 'Wait for STUN update to reconstruct. ' +
-    'To activate it without waiting for STUN, click on the "sync" button';
   },
   [pendingTypes.publicPortHighRate]: (ifcName, deviceName) => {
     return `The public IP/Port of interface ${ifcName}` +

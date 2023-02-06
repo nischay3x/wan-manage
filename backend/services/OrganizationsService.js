@@ -40,10 +40,7 @@ const mongoConns = require('../mongoConns.js')();
 const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getToken } = require('../tokens');
-const DeviceEvents = require('../deviceLogic/events');
 const { processModifyJob } = require('../deviceLogic/modifyDevice');
-const eventsReasons = require('../deviceLogic/events/eventReasons');
-const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/tunnels');
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
 const { validateDevice } = require('../deviceLogic/validators');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
@@ -597,241 +594,17 @@ class OrganizationsService {
   }
 }
 
-module.exports = OrganizationsService;
-
-const getTunnelsPipeline = (id, origVxlanPort) => {
-  // if VXLAN source port is changed, we need to reconstruct all tunnels
-  // to use the new source port.
-  // but, since that change in source port may trigger public port change,
-  // the STUN may detect another public port and triggers another reconstruction of the same tunnel.
-  //
-  // So, the idean is to try to guess which tunnel will be reconstructed via STUN.
-  // If *one of the interfaces* will cause the tunnels to be reconstructed,
-  // there is no need to do a reconstruct right now but we can wait for STUN to fix it.
-  return [
-    { $match: { org: id, isActive: true, isPending: false } },
-    {
-      $project: {
-        _id: 1,
-        num: 1,
-        org: 1,
-        deviceA: 1,
-        deviceB: 1,
-        interfaceA: 1,
-        interfaceB: 1,
-        isPending: 1,
-        pendingReason: 1,
-        peer: 1,
-        pathlabel: 1,
-        advancedOptions: 1
-      }
-    },
-    {
-      $lookup: {
-        from: 'devices',
-        let: { idA: '$deviceA', idB: '$deviceB', ifcA: '$interfaceA', ifcB: '$interfaceB' },
-        as: 'devices',
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ['$org', id] },
-                  { $or: [{ $eq: ['$_id', '$$idA'] }, { $eq: ['$_id', '$$idB'] }] }
-                ]
-              }
-            }
-          },
-          {
-            $project: {
-              _id: 1,
-              name: 1,
-              machineId: 1,
-              versions: 1,
-              hostname: 1,
-              'interfaces._id': 1,
-              tunnelInterface: {
-                $arrayElemAt: [{
-                  $filter: {
-                    input: '$interfaces',
-                    as: 'ifc',
-                    cond: {
-                      $and: [
-                        { $eq: ['$$ifc.type', 'WAN'] },
-                        {
-                          $or: [
-                            { $eq: ['$$ifc._id', '$$ifcA'] },
-                            { $eq: ['$$ifc._id', '$$ifcB'] }
-                          ]
-                        }
-                      ]
-                    }
-                  }
-                }, 0]
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      $addFields: {
-        deviceA: { $arrayElemAt: ['$devices', 0] },
-        deviceB: { $arrayElemAt: ['$devices', 1] },
-        interfaceA: {
-          $let: {
-            vars: { deviceA: { $arrayElemAt: ['$devices', 0] } },
-            in: '$$deviceA.tunnelInterface'
-          }
-        },
-        interfaceB: {
-          $let: {
-            vars: { deviceB: { $arrayElemAt: ['$devices', 1] } },
-            in: '$$deviceB.tunnelInterface'
-          }
-        }
-      }
-    },
-    {
-      $addFields: {
-        op: {
-          $cond: {
-            if: {
-              // $or because one interface that met the conditions
-              // is enough to decide whether the reconstruct or pending
-              $or: [
-                { $and: getInterfaceConditionsToBePending('interfaceA', origVxlanPort) },
-                { $and: getInterfaceConditionsToBePending('interfaceB', origVxlanPort) }
-              ]
-            },
-            then: 'pending',
-            else: 'reconstruct'
-          }
-        }
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        toPending: {
-          $push: {
-            $cond: {
-              if: { $eq: ['$op', 'pending'] },
-              then: '$$ROOT',
-              else: '$$REMOVE'
-            }
-          }
-        },
-        toReconstruct: {
-          $push: {
-            $cond: {
-              if: { $eq: ['$op', 'reconstruct'] },
-              then: '$$ROOT',
-              else: '$$REMOVE'
-            }
-          }
-        }
-      }
-    }
-  ];
-};
-
-const getInterfaceConditionsToBePending = (key, origVxlanPort) => {
-  return [
-    // uses STUN
-    { $eq: [`$${key}.useStun`, true] },
-    // doesn't use static public port
-    { $eq: [`$${key}.useFixedPublicPort`, false] },
-    // has public port and public IP
-    { $ne: [`$${key}.PublicIP`, ''] },
-    { $ne: [`$${key}.PublicPort`, ''] },
-    // public pore equals to original public port.
-    // if equals, we can assume that new source port will be used
-    // as public port. hence we reconstruct the tunnel now.
-    // if the guess turns out to be wrong, the other public port from STUN
-    // will trigger another reconstruction.
-    { $ne: [`$${key}.PublicPort`, origVxlanPort] }
-  ];
-};
-
-const handleToPendingTunnels = async (tunnels) => {
-  if (tunnels.length === 0) return;
-
-  const events = new DeviceEvents();
-  const pendingType = eventsReasons.pendingTypes.waitForStun;
-  const reason = eventsReasons(pendingType);
-
-  for (const tunnel of tunnels) {
-    await events.setOneTunnelAsPending(tunnel, reason, pendingType, tunnel.deviceA);
-  }
-};
-
-const addDeviceTasks = (obj, device, task) => {
-  if (!task) return;
-
-  const deviceId = device._id.toString();
-
-  if (!(deviceId in obj)) {
-    obj[deviceId] = {
-      device: device,
-      tasks: []
-    };
-  }
-
-  if (Array.isArray(task)) {
-    obj[deviceId].tasks.push(...task);
-  } else {
-    obj[deviceId].tasks.push(task);
-  }
-};
-
-// TODO: What should happen if job process has an issue. Do we need to revert the database?
-// TODO: in case of failure in jobs, send sync to all devices.
 const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, orgDevices, user) => {
   const orgId = org._id;
 
-  // mapping object [deviceId] = { device: {}, tasks: [] }
-  const devicesJobs = {};
-
-  // get relevant tunnels that need to take action for.
-  // The expected output is array with one object with two keys:
-  //  [{ _id: null, toPending: [], toReconstruct: [] }]
-  const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(orgId), origVxlanSourcePort);
-  const tunnels = await Tunnels.aggregate(pipeline).allowDiskUse(true);
-
-  // parse database result
-  const toPending = tunnels?.[0]?.toPending ?? [];
-  const toReconstruct = tunnels?.[0]?.toReconstruct ?? [];
-
   try {
-    // put needed tunnels to pending state - don't send jobs yet
-    await handleToPendingTunnels(toPending);
+    const job = {
+      message: 'modify-vxlan-config',
+      params: transformVxlanConfig(org)
+    };
 
-    // first prepare remove-tunnel tasks for each device
-    for (const removeTunnel of [...toPending, ...toReconstruct]) {
-      const [removeTasksDevA, removeTasksDevB] = await prepareTunnelRemoveJob(removeTunnel, true);
-      addDeviceTasks(devicesJobs, removeTunnel.deviceA, removeTasksDevA);
-      addDeviceTasks(devicesJobs, removeTunnel.deviceB, removeTasksDevB);
-    }
-
-    // now prepare modify-vxlan-config task for each device
-    const params = transformVxlanConfig(org);
     for (const orgDevice of orgDevices) {
-      addDeviceTasks(devicesJobs, orgDevice, { message: 'modify-vxlan-config', params });
-    }
-
-    // now prepare add-tunnel tasks for each device
-    for (const addTunnel of toReconstruct) {
-      const [addTasksDevA, addTasksDevB] = await prepareTunnelAddJob(addTunnel, org, true);
-      addDeviceTasks(devicesJobs, addTunnel.deviceA, addTasksDevA);
-      addDeviceTasks(devicesJobs, addTunnel.deviceB, addTasksDevB);
-    }
-
-    // finally, send one job to each device that contains all tasks inside
-    for (const deviceId in devicesJobs) {
-      const tasks = devicesJobs[deviceId].tasks;
-      const device = devicesJobs[deviceId].device;
-      await processModifyJob(tasks, device, orgId, user);
+      await processModifyJob([job], orgDevice, orgId, user);
     }
   } catch (err) {
     logger.error('Error in handling vxlan change', {
@@ -857,3 +630,5 @@ const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, orgDevices,
     );
   }
 };
+
+module.exports = OrganizationsService;

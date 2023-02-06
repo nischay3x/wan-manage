@@ -113,8 +113,7 @@ class Events {
         $set: {
           isPending: isIncomplete,
           pendingReason: isIncomplete ? reason : '',
-          pendingType: isIncomplete ? pendingType : '',
-          pendingTime: isIncomplete ? new Date() : ''
+          pendingType: isIncomplete ? pendingType : ''
         }
       },
       // Options
@@ -144,8 +143,7 @@ class Events {
       {
         $set: {
           pendingReason: reason,
-          pendingType: pendingType,
-          pendingTime: new Date()
+          pendingType: pendingType
         }
       },
       // Options
@@ -300,8 +298,6 @@ class Events {
           continue;
         }
       }
-
-      // Note! all pending tunnel due to waiting for stun will be release here!
 
       // at this point, set tunnel to active
       logger.debug('Tunnel set to active',
@@ -475,8 +471,7 @@ class Events {
         $set: {
           'staticroutes.$[elem].isPending': isIncomplete,
           'staticroutes.$[elem].pendingType': isIncomplete ? pendingType : '',
-          'staticroutes.$[elem].pendingReason': isIncomplete ? reason : '',
-          'staticroutes.$[elem].pendingTime': isIncomplete ? new Date() : ''
+          'staticroutes.$[elem].pendingReason': isIncomplete ? reason : ''
         }
       },
       {
