@@ -1720,7 +1720,13 @@ const sync = async (deviceId, org) => {
   };
 };
 
-const populateTunnelDestinations = (paramsA, paramsB, ifcA, ifcB, devAVer, devBVer, org) => {
+const isDevSupportsVxlanPort = (majorVer, minorVer) => {
+  return majorVer > 6 || (majorVer === 6 && minorVer >= 2);
+};
+
+const populateTunnelDestinations = (
+  paramsA, paramsB, ifcA, ifcB, isDevASupportsVxlanPort, isDevBSupportsVxlanPort, orgSourcePort
+) => {
   let usePrivateIps = false;
 
   if (!ifcA.PublicIP || !ifcB.PublicIP) {
@@ -1737,24 +1743,16 @@ const populateTunnelDestinations = (paramsA, paramsB, ifcA, ifcB, devAVer, devBV
   paramsA.dst = usePrivateIps ? ifcB.IPv4 : ifcB.PublicIP;
   paramsB.dst = usePrivateIps ? ifcA.IPv4 : ifcA.PublicIP;
 
-  const isDevSupportsVxlanPort = (deviceVersion) => {
-    const majorVer = getMajorVersion(deviceVersion);
-    const minorVer = getMinorVersion(deviceVersion);
-    return majorVer > 6 || (majorVer === 6 && minorVer >= 2);
-  };
-
-  const orgSourcePort = org.vxlanSourcePort;
-  const configSourcePort = configs.get('tunnelPort');
-
   // if device version is lower than 6.2 - use 4789. Otherwise take the org.vxlanSourcePort;
-  const deviceADefaultPort = isDevSupportsVxlanPort(devAVer) ? orgSourcePort : configSourcePort;
-  const deviceBDefaultPort = isDevSupportsVxlanPort(devBVer) ? orgSourcePort : configSourcePort;
+  const configSourcePort = configs.get('tunnelPort');
+  const deviceADefaultDstPort = isDevASupportsVxlanPort ? orgSourcePort : configSourcePort;
+  const deviceBDefaultDstPort = isDevBSupportsVxlanPort ? orgSourcePort : configSourcePort;
 
   const deviceAUseDefaultPort = !ifcA.PublicPort || ifcA.useFixedPublicPort;
   const deviceBUseDefaultPort = !ifcB.PublicPort || ifcB.useFixedPublicPort;
 
-  paramsA.dstPort = deviceBUseDefaultPort ? deviceBDefaultPort : ifcB.PublicPort;
-  paramsB.dstPort = deviceAUseDefaultPort ? deviceADefaultPort : ifcA.PublicPort;
+  paramsA.dstPort = deviceBUseDefaultPort ? deviceBDefaultDstPort : ifcB.PublicPort;
+  paramsB.dstPort = deviceAUseDefaultPort ? deviceADefaultDstPort : ifcA.PublicPort;
 };
 
 /**
@@ -1777,10 +1775,10 @@ const prepareTunnelParams = (
   const paramsDeviceB = {};
 
   // need to check versions for some parameters compatibility
-  const majorAgentVersionA = getMajorVersion(deviceA.versions.agent);
-  const minorAgentVersionA = getMinorVersion(deviceA.versions.agent);
-  const majorAgentVersionB = peer ? null : getMajorVersion(deviceB?.versions.agent);
-  const minorAgentVersionB = peer ? null : getMinorVersion(deviceB?.versions.agent);
+  const majorVersionA = getMajorVersion(deviceA.versions.agent);
+  const minorVersionA = getMinorVersion(deviceA.versions.agent);
+  const majorVersionB = peer ? null : getMajorVersion(deviceB?.versions.agent);
+  const minorVersionB = peer ? null : getMinorVersion(deviceB?.versions.agent);
 
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
   const tunnelParams = generateTunnelParams(tunnel.num);
@@ -1802,8 +1800,15 @@ const prepareTunnelParams = (
   // Create common settings for both tunnel types
   paramsDeviceA['encryption-mode'] = tunnel.encryptionMethod;
   paramsDeviceA.dev_id = deviceAIntf.devId;
-  paramsDeviceA.src = deviceAIntf.IPv4;
   paramsDeviceA['tunnel-id'] = tunnel.num;
+
+  const isDevASupportsVxlanPort = isDevSupportsVxlanPort(majorVersionA, minorVersionA);
+  const orgSourcePort = org.vxlanSourcePort;
+
+  paramsDeviceA.src = deviceAIntf.IPv4;
+  if (isDevASupportsVxlanPort) {
+    paramsDeviceA.srcPort = orgSourcePort;
+  }
 
   if (peer) {
     // destination
@@ -1827,15 +1832,22 @@ const prepareTunnelParams = (
       paramsDeviceA.peer['ospf-cost'] = ospfCost;
     }
   } else {
+    const isDevBSupportsVxlanPort = isDevSupportsVxlanPort(majorVersionB, minorVersionB);
+
+    paramsDeviceB.src = deviceBIntf.IPv4;
+    if (isDevBSupportsVxlanPort) {
+      paramsDeviceB.srcPort = orgSourcePort;
+    }
+
     // destination
     populateTunnelDestinations(
       paramsDeviceA,
       paramsDeviceB,
       deviceAIntf,
       deviceBIntf,
-      deviceA.versions.agent,
-      deviceB.versions.agent,
-      org
+      isDevASupportsVxlanPort,
+      isDevBSupportsVxlanPort,
+      orgSourcePort
     );
 
     paramsDeviceA['loopback-iface'] = {
@@ -1850,7 +1862,6 @@ const prepareTunnelParams = (
 
     // handle params device B
     paramsDeviceB['encryption-mode'] = tunnel.encryptionMethod;
-    paramsDeviceB.src = deviceBIntf.IPv4;
     paramsDeviceB.dev_id = deviceBIntf.devId;
 
     paramsDeviceB['tunnel-id'] = tunnel.num;
@@ -1863,13 +1874,13 @@ const prepareTunnelParams = (
         labels: pathLabel ? [pathLabel] : []
       }
     };
-    if (majorAgentVersionA >= 6) {
+    if (majorVersionA >= 6) {
       paramsDeviceA.remoteBandwidthMbps = {
         tx: +deviceBIntf.bandwidthMbps.tx,
         rx: +deviceBIntf.bandwidthMbps.rx
       };
     };
-    if (majorAgentVersionB >= 6) {
+    if (majorVersionB >= 6) {
       paramsDeviceB.remoteBandwidthMbps = {
         tx: +deviceAIntf.bandwidthMbps.tx,
         rx: +deviceAIntf.bandwidthMbps.rx
@@ -1886,9 +1897,9 @@ const prepareTunnelParams = (
 
     if (routing === 'bgp') {
       const isNeedToSendRemoteAsnA =
-        majorAgentVersionA >= 6 || (majorAgentVersionA === 5 && minorAgentVersionA >= 4);
+        majorVersionA >= 6 || (majorVersionA === 5 && minorVersionA >= 4);
       const isNeedToSendRemoteAsnB =
-        majorAgentVersionB >= 6 || (majorAgentVersionB === 5 && minorAgentVersionB >= 4);
+        majorVersionB >= 6 || (majorVersionB === 5 && minorVersionB >= 4);
 
       if (isNeedToSendRemoteAsnA) {
         const bgpAsnDeviceB = deviceB.bgp.localASN;

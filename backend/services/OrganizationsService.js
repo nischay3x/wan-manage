@@ -745,11 +745,9 @@ const getInterfaceConditionsToBePending = (key, origVxlanPort) => {
     // has public port and public IP
     { $ne: [`$${key}.PublicIP`, ''] },
     { $ne: [`$${key}.PublicPort`, ''] },
-    // public pore equals to original public port.
-    // if equals, we can assume that new source port will be used
-    // as public port. hence we reconstruct the tunnel now.
-    // if the guess turns out to be wrong, the other public port from STUN
-    // will trigger another reconstruction.
+    // if original source port equals to the public port,
+    // we can assume that new source port will be used
+    // as the new public port so we can reconstruct now.
     { $ne: [`$${key}.PublicPort`, origVxlanPort] }
   ];
 };
@@ -785,8 +783,6 @@ const addDeviceTasks = (obj, device, task) => {
   }
 };
 
-// TODO: What should happen if job process has an issue. Do we need to revert the database?
-// TODO: in case of failure in jobs, send sync to all devices.
 const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, orgDevices, user) => {
   const orgId = org._id;
 
