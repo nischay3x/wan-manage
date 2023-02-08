@@ -96,14 +96,14 @@ class Events {
   }
 
   /**
-   * Set incomplete state for tunnel if needed and send notification
+   * Set pending state for tunnel if needed and send notification
    * @param  {number} num  tunnel number
    * @param  {string} org  organization id
-   * @param  {boolean} isIncomplete  indicate if need set as incomplete or not
+   * @param  {boolean} isPending  indicate if need set as pending or not
    * @param  {string} reason  incomplete reason
    * @param  {object} device  device of incomplete tunnel
   */
-  async setIncompleteTunnelStatus (num, org, isIncomplete, reason, pendingType, device) {
+  async setRemovePendingTunnelStatus (num, org, isPending, reason, pendingType, device) {
     await this.addChangedDevice(device._id);
 
     const tunnel = await tunnelsModel.findOneAndUpdate(
@@ -111,17 +111,17 @@ class Events {
       { org, num },
       {
         $set: {
-          isPending: isIncomplete,
-          pendingReason: isIncomplete ? reason : '',
-          pendingType: isIncomplete ? pendingType : '',
-          pendingTime: isIncomplete ? new Date() : ''
+          isPending: isPending,
+          pendingReason: isPending ? reason : '',
+          pendingType: isPending ? pendingType : '',
+          pendingTime: isPending ? new Date() : ''
         }
       },
       // Options
       { upsert: false, new: true }
     ).lean();
 
-    if (isIncomplete) {
+    if (isPending) {
       this.pendingTunnels.add(tunnel._id.toString());
       await this.tunnelSetToPending(tunnel, device, reason);
     } else {
@@ -131,7 +131,7 @@ class Events {
   };
 
   /**
-   * Set incomplete state for tunnel if needed and send notification
+   * Update pending tunnel reason
    * @param  {number} num  tunnel number
    * @param  {string} org  organization id
    * @param  {string} reason  incomplete reason
@@ -246,68 +246,8 @@ class Events {
       .lean();
 
     for (const tunnel of tunnels) {
-      const {
-        isPending, pendingReason, deviceA, deviceB, peer, interfaceA, interfaceB
-      } = tunnel;
-
-      // no need to update active tunnels, go and check routes
-      if (!isPending) {
-        await this.tunnelSetToActive(tunnel);
-        continue;
-      }
-
-      // get tunnel interfaces
-      const ifcA = deviceA.interfaces.find(i => i._id.toString() === interfaceA.toString());
-      let ifcB = null;
-      if (!peer) {
-        ifcB = deviceB.interfaces.find(i => i._id.toString() === interfaceB.toString());
-      }
-
-      // check if should keep it pending due to other reasons
-      //
-      // check for no ip
-      if (ifcA.IPv4 === '' || (ifcB && ifcB.IPv4 === '')) {
-        let ifcWithoutIp, deviceWithoutIp;
-        if (peer) {
-          ifcWithoutIp = ifcA;
-          deviceWithoutIp = deviceA;
-        } else {
-          ifcWithoutIp = ifcA.IPv4 === '' ? ifcA : ifcB;
-          deviceWithoutIp = ifcA.IPv4 === '' ? deviceA : deviceB;
-        }
-
-        const pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
-        const reason = eventsReasons(pendingType, ifcWithoutIp.name, deviceWithoutIp.name);
-        if (pendingReason !== reason) {
-          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
-        }
-        continue;
-      }
-
-      // check for rate limit blockage, peer is not blocked by public address limiter
-      if (!peer) {
-        const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
-        const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
-        if (isABlocked || isBBlocked) {
-          const pendingType = eventsReasons.pendingTypes.publicPortHighRate;
-          const reason = isABlocked
-            ? eventsReasons(pendingType, ifcA.name, deviceA.name)
-            : eventsReasons(pendingType, ifcB.name, deviceB.name);
-
-          if (pendingReason !== reason) {
-            await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
-          }
-          continue;
-        }
-      }
-
-      // Note! all pending tunnel due to waiting for stun will be release here!
-
       // at this point, set tunnel to active
-      logger.debug('Tunnel set to active',
-        { params: { num: tunnel.num, org: tunnel.org, trace: new Error().stack } }
-      );
-      await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, false, '', '', device);
+      await this.setOneTunnelAsActive(tunnel, device);
     };
   }
 
@@ -371,6 +311,13 @@ class Events {
     }
   };
 
+  /**
+   * Set pending status to a tunnel
+   * @param  {object} tunnel tunnel object
+   * @param  {string} reason indicate why tunnel should be pending
+   * @param  {string} pendingType the pending type
+   * @param  {object} device device object
+  */
   async setOneTunnelAsPending (tunnel, reason, pendingType, device) {
     // if tunnel already pending
     if (tunnel.isPending) {
@@ -384,11 +331,88 @@ class Events {
     }
 
     // set active tunnel to pending
-    await this.setIncompleteTunnelStatus(tunnel.num, tunnel.org, true, reason, pendingType, device);
+    await this.setRemovePendingTunnelStatus(
+      tunnel.num, tunnel.org, true, reason, pendingType, device);
   }
 
   /**
-   * Set pending status to a tunnel
+   * Set active status to a pending tunnel
+   * @param  {object} tunnel tunnel object
+   * @param  {object} device device object
+  */
+  async setOneTunnelAsActive (tunnel, device) {
+    const {
+      isPending, pendingReason, pendingType, deviceA, deviceB, peer, interfaceA, interfaceB
+    } = tunnel;
+
+    // no need to update active tunnels, go and check routes
+    if (!isPending) {
+      await this.tunnelSetToActive(tunnel);
+      return;
+    }
+
+    // get tunnel interfaces
+    const ifcA = deviceA.interfaces.find(i => i._id.toString() === interfaceA.toString());
+    let ifcB = null;
+    if (!peer) {
+      ifcB = deviceB.interfaces.find(i => i._id.toString() === interfaceB.toString());
+    }
+
+    // check if should keep it pending due to other reasons
+    //
+    // check for no ip
+    if (ifcA.IPv4 === '' || (ifcB && ifcB.IPv4 === '')) {
+      let ifcWithoutIp, deviceWithoutIp;
+      if (peer) {
+        ifcWithoutIp = ifcA;
+        deviceWithoutIp = deviceA;
+      } else {
+        ifcWithoutIp = ifcA.IPv4 === '' ? ifcA : ifcB;
+        deviceWithoutIp = ifcA.IPv4 === '' ? deviceA : deviceB;
+      }
+
+      const pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
+      const reason = eventsReasons(pendingType, ifcWithoutIp.name, deviceWithoutIp.name);
+      if (pendingReason !== reason) {
+        await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
+      }
+      return;
+    }
+
+    // check for rate limit blockage, peer is not blocked by public address limiter
+    if (!peer) {
+      const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
+      const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
+      if (isABlocked || isBBlocked) {
+        const pendingType = eventsReasons.pendingTypes.publicPortHighRate;
+        const reason = isABlocked
+          ? eventsReasons(pendingType, ifcA.name, deviceA.name)
+          : eventsReasons(pendingType, ifcB.name, deviceB.name);
+
+        if (pendingReason !== reason) {
+          await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
+        }
+        return;
+      }
+    }
+
+    // don't release tunnels that wait for STUN and no public port in both interfaces
+    if (pendingType === eventsReasons.pendingTypes.waitForStun) {
+      if (ifcA.PublicPort === '' || ifcB?.PublicPort === '') {
+        return;
+      }
+    }
+
+    logger.debug('Set Tunnel to active',
+      { params: { num: tunnel.num, org: tunnel.org, trace: new Error().stack } }
+    );
+
+    // set pending tunnel to active state
+    await this.setRemovePendingTunnelStatus(tunnel.num, tunnel.org, false, '', '', device);
+  }
+
+  /**
+   * Set all device tunnels to pending state
    * @param  {object} device device object
    * @param  {object} origIfc original interface before the event
    * @param  {string} reason indicate why tunnel should be pending
@@ -494,7 +518,7 @@ class Events {
    * @param  {object} origDevice  original device from DB
    * @param  {array} newInterfaces  incoming interfaces from the device
   */
-  async checkIfToTriggerEvent (origDevice, newInterfaces) {
+  async analyze (origDevice, newInterfaces) {
     try {
       const orig = keyBy(origDevice.interfaces, 'devId');
       const updated = keyBy(newInterfaces, 'devId');
@@ -508,35 +532,160 @@ class Events {
           continue;
         }
 
-        if (this.isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
-          await this.interfaceConnectivityChanged(origDevice, origIfc, updatedIfc.internetAccess);
-        }
+        await this.handleConnectivityChange(origDevice, origIfc, updatedIfc);
 
-        const isPublicPortChanged = this.isPublicPortChanged(origIfc, updatedIfc);
-        const isPublicIpChanged = this.isPublicIpChanged(origIfc, updatedIfc);
-        if (isPublicPortChanged || isPublicIpChanged) {
-          const deviceId = origDevice._id.toString();
-          const ifcId = origIfc._id.toString();
-          const key = `${deviceId}:${ifcId}`;
-          const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(key);
-          if (releasedNow) {
-            await this.publicInfoRateLimitIsReleased(origDevice, origIfc);
-          } else if (!allowed && blockedNow) {
-            await this.publicInfoIsRateLimited(origDevice, origIfc);
-          }
-        }
+        await this.handlePublicAddrChange(origDevice, origIfc, updatedIfc);
 
-        if (this.isIpMissing(updatedIfc)) {
-          await this.interfaceIpMissing(origDevice, origIfc, updatedIfc);
-        }
+        await this.handleMissingIP(origDevice, updatedIfc, origIfc);
 
-        if (this.isIpExists(updatedIfc)) {
-          await this.interfaceIpExists(origDevice, origIfc, updatedIfc);
-        }
+        await this.handleExistsIP(origDevice, updatedIfc, origIfc);
       }
     } catch (err) {
       logger.error('events check failed', { params: { err: err.message } });
       throw err;
+    }
+  }
+
+  /**
+   * Check and handle interface with IP
+   * @param  {object} origDevice original device object
+   * @param  {string} updatedIfc updated interface object
+   * @param  {string} origIfc original interface object
+  */
+  async handleExistsIP (origDevice, updatedIfc, origIfc) {
+    if (this.isIpExists(updatedIfc)) {
+      await this.interfaceIpExists(origDevice, origIfc, updatedIfc);
+    }
+  }
+
+  /**
+   * Check and handle interface without IP
+   * @param  {object} origDevice original device object
+   * @param  {string} updatedIfc updated interface object
+   * @param  {string} origIfc original interface object
+  */
+  async handleMissingIP (origDevice, updatedIfc, origIfc) {
+    if (this.isIpMissing(updatedIfc)) {
+      await this.interfaceIpMissing(origDevice, origIfc, updatedIfc);
+    }
+  }
+
+  /**
+   * Check and handle change in public IP or public port
+   * @param  {object} origDevice original device object
+   * @param  {string} updatedIfc updated interface object
+   * @param  {string} origIfc original interface object
+  */
+  async handlePublicAddrChange (origDevice, origIfc, updatedIfc) {
+    // if orig public port is empty and not we have new public port,
+    // check if need to active pending tunnels due to "wait for stun"
+    if (origIfc.PublicPort === '' && updatedIfc.PublicPort !== '') {
+      const tunnels = await tunnelsModel.find({
+        org: origDevice.org,
+        isActive: true,
+        isPending: true,
+        pendingType: eventsReasons.pendingTypes.waitForStun,
+        $or: [
+          { interfaceA: updatedIfc._id },
+          { interfaceB: updatedIfc._id }
+        ]
+      })
+        .populate('deviceA', '_id name interfaces')
+        .populate('deviceB', '_id name interfaces');
+
+      for (const tunnel of tunnels) {
+        const { deviceA, deviceB, interfaceA, interfaceB, peer, num } = tunnel;
+
+        const ifcAId = interfaceA.toString();
+        const ifcBId = peer ? null : interfaceB.toString();
+        // we now that we have new public port in this tunnel side.
+        // let's check the other side. If both have public port, we can activate.
+        const ifcA = deviceA.interfaces.find(i => i._id.toString() === ifcAId);
+        const ifcB = peer ? null : deviceB.interfaces.find(i => i._id.toString() === ifcBId);
+
+        const secondTunnelSide = updatedIfc._id.toString() === ifcAId ? ifcB : ifcA;
+
+        if (secondTunnelSide.PublicPort !== '') {
+          await this.setOneTunnelAsActive(tunnel, origDevice);
+        } else {
+          logger.info(
+            `Tunnel ${num} is pending and waits for STUN. ` +
+            `Interface got public port (${updatedIfc.PublicPort}) but ` +
+            'the other side of the tunnel still does not have. waiting for the other side',
+            { params: { tunnelNum: num, org: origDevice.org } }
+          );
+        }
+      }
+    }
+
+    await this.handlePublicInfoLimiter(origDevice, origIfc, updatedIfc);
+  }
+
+  /**
+   * Handle limiter logic of public ip/port change
+   * @param  {object} origDevice original device object
+   * @param  {string} updatedIfc updated interface object
+   * @param  {string} origIfc original interface object
+  */
+  async handlePublicInfoLimiter (origDevice, origIfc, updatedIfc) {
+    const isPublicPortChangeShouldBeCounted = (origIfc, updatedIfc) => {
+      // if STUN is disabled for this interface, no need to count it
+      if (origIfc.useStun === false) {
+        return false;
+      }
+
+      // if not ip, there is no public port, so we can't count it as change
+      if (updatedIfc.IPv4 === '' || updatedIfc.PublicPort === '') {
+        return false;
+      }
+
+      if (origIfc.PublicPort === updatedIfc.PublicPort.toString()) {
+        return false;
+      }
+
+      return true;
+    };
+
+    const isPublicIpChangeShouldBeCounted = (origIfc, updatedIfc) => {
+      // if STUN is disabled for this interface, no need to count it
+      if (origIfc.useStun === false) {
+        return false;
+      }
+
+      // if not ip, there is no public port, so we can't count it as change
+      if (updatedIfc.IPv4 === '' || updatedIfc.PublicIP === '') {
+        return false;
+      }
+
+      if (origIfc.PublicIP === updatedIfc.PublicIP) {
+        return false;
+      }
+
+      return true;
+    };
+
+    const isPublicPortChanged = isPublicPortChangeShouldBeCounted(origIfc, updatedIfc);
+    const isPublicIpChanged = isPublicIpChangeShouldBeCounted(origIfc, updatedIfc);
+
+    if (!isPublicPortChanged && !isPublicIpChanged) {
+      return;
+    }
+
+    const key = `${origDevice._id.toString()}:${origIfc._id.toString()}`;
+    const { allowed, blockedNow, releasedNow } = await publicAddrInfoLimiter.use(key);
+    if (releasedNow) {
+      await this.publicInfoRateLimitIsReleased(origDevice, origIfc);
+      return;
+    }
+
+    if (!allowed && blockedNow) {
+      await this.publicInfoIsRateLimited(origDevice, origIfc);
+    }
+  }
+
+  async handleConnectivityChange (origDevice, origIfc, updatedIfc) {
+    if (this.isInterfaceConnectivityChanged(origIfc, updatedIfc)) {
+      await this.interfaceConnectivityChanged(origDevice, origIfc, updatedIfc.internetAccess);
     }
   }
 
@@ -583,54 +732,6 @@ class Events {
     }
 
     return modifyDevices;
-  };
-
-  /**
-   * Check if public port is changed
-   * @param  {object} origIfc  interface from flexiManage DB
-   * @param  {object} updatedIfc  incoming interface info from device
-   * @return {boolean} if need to trigger event of ip restored
-  */
-  isPublicPortChanged (origIfc, updatedIfc) {
-    // if STUN is disabled for this interface, no need to monitor it
-    if (origIfc.useStun === false) {
-      return false;
-    }
-
-    // if not ip, there is no public port, so we can't count it as change
-    if (updatedIfc.IPv4 === '' || updatedIfc.PublicPort === '') {
-      return false;
-    }
-
-    if (origIfc.PublicPort === updatedIfc.PublicPort.toString()) {
-      return false;
-    }
-
-    return true;
-  };
-
-  /**
-   * Check if public ip is changed
-   * @param  {object} origIfc  interface from flexiManage DB
-   * @param  {object} updatedIfc  incoming interface info from device
-   * @return {boolean} if need to trigger event of ip restored
-  */
-  isPublicIpChanged (origIfc, updatedIfc) {
-    // if STUN is disabled for this interface, no need to monitor it
-    if (origIfc.useStun === false) {
-      return false;
-    }
-
-    // if not ip, there is no public port, so we can't count it as change
-    if (updatedIfc.IPv4 === '' || updatedIfc.PublicIP === '') {
-      return false;
-    }
-
-    if (origIfc.PublicIP === updatedIfc.PublicIP) {
-      return false;
-    }
-
-    return true;
   };
 
   /**

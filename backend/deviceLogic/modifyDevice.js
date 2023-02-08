@@ -751,7 +751,7 @@ const queueModifyDeviceJob = async (
       );
 
       if (modifyJob) jobs.push(modifyJob);
-      if (sentTasks) sentTasks[deviceId] = finalTasks;
+      if (sentTasks) sentTasks[deviceId] = finalTasks ?? [];
     }
   } catch (err) {
     logger.error('Failed to handle device modification process', {

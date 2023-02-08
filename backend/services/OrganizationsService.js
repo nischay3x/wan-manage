@@ -762,6 +762,24 @@ const handleToPendingTunnels = async (tunnels) => {
   for (const tunnel of tunnels) {
     await events.setOneTunnelAsPending(tunnel, reason, pendingType, tunnel.deviceA);
   }
+
+  // remove public port from both interfaces
+  const deviceIds = new Set();
+  const interfacesIds = new Set();
+  tunnels.forEach(t => {
+    deviceIds.add(t.deviceA._id.toString());
+    interfacesIds.add(t.interfaceA._id.toString());
+    if (!t.peer) {
+      deviceIds.add(t.deviceB._id.toString());
+      interfacesIds.add(t.interfaceB._id.toString());
+    }
+  });
+
+  await Devices.devices.updateMany(
+    { _id: { $in: [...deviceIds] } },
+    { $set: { 'interfaces.$[elem].PublicPort': '' } },
+    { upsert: false, arrayFilters: [{ 'elem._id': { $in: [...interfacesIds] } }] }
+  );
 };
 
 const addDeviceTasks = (obj, device, task) => {

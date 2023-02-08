@@ -549,7 +549,7 @@ class Connections {
           // add current device to changed devices in order to run modify process for it
           await events.addChangedDevice(origDevice._id, origDevice);
 
-          await events.checkIfToTriggerEvent(plainJsDevice, interfaces);
+          await events.analyze(plainJsDevice, interfaces);
 
           // Update the reconfig hash before applying to prevent infinite loop
           this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
