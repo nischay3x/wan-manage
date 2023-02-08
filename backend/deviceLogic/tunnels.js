@@ -951,8 +951,7 @@ const queueTunnel = async (
  * @param  {object} org       organization object
  * @param  {boolean} includeDeviceConfigDependencies tunnel dependencies (routes via the tunnel)
  * @param  {boolean} isSync  if "sync" module called to this function
- * @return {[ tasksDeviceA: array, tasksDeviceB: array, ifcA: object, ifcB: object ]}
- *  array of tasks for deviceA, tasks for deviceB, interface A object and interface B object
+ * @return {[{entity: string, message: string, params: Object}]} an array of tunnel-add jobs
  */
 const prepareTunnelAddJob = async (
   tunnel, org, includeDeviceConfigDependencies = false, isSync = false
@@ -1272,6 +1271,7 @@ const addTunnel = async (
       pathlabel: pathLabel,
       isPending: isPending,
       pendingType: pendingType,
+      pendingTime: isPending ? new Date() : '',
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,

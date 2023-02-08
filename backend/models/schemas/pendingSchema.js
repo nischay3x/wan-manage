@@ -31,6 +31,10 @@ const pendingSchema = {
   pendingReason: {
     type: String,
     default: ''
+  },
+  // pending time. the time when item become pending
+  pendingTime: {
+    type: Date
   }
 };
 

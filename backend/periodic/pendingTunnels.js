@@ -64,37 +64,60 @@ class PendingTunnels {
       const pendingTunnels = await tunnels.find({
         isPending: true,
         isActive: true,
-        pendingType: types.publicPortHighRate
+        pendingType: { $in: [types.publicPortHighRate, types.waitForStun] }
       }).populate('deviceA').populate('deviceB').lean();
 
       let releasedTunnelsCount = 0;
 
       const devicesToRelease = new Map();
       for (const tunnel of pendingTunnels) {
-        const { deviceA, deviceB, ifcA, ifcB, num, org } = tunnel;
+        const { deviceA, deviceB, ifcA, ifcB, num, org, pendingType, pendingTime } = tunnel;
 
-        // check if blockage is already removed.
-        // If the block does not exist, it means that the public port is stable
-        // and has not changed much recently. Therefore it can be released.
-        const keyA = `${deviceA}:${ifcA}`;
-        const isIfcABlocked = await publicAddrInfoLimiter.isBlocked(keyA);
-        if (isIfcABlocked) continue;
+        if (pendingType === types.publicPortHighRate) {
+          // check if blockage is already removed.
+          // If the block does not exist, it means that the public port is stable
+          // and has not changed much recently. Therefore it can be released.
+          const keyA = `${deviceA}:${ifcA}`;
+          const isIfcABlocked = await publicAddrInfoLimiter.isBlocked(keyA);
+          if (isIfcABlocked) continue;
 
-        if (deviceB) {
-          const keyB = `${deviceB}:${ifcB}`;
-          const isIfcBBlocked = await publicAddrInfoLimiter.isBlocked(keyB);
-          if (isIfcBBlocked) continue;
+          if (deviceB) {
+            const keyB = `${deviceB}:${ifcB}`;
+            const isIfcBBlocked = await publicAddrInfoLimiter.isBlocked(keyB);
+            if (isIfcBBlocked) continue;
+          }
+
+          logger.info('releasing tunnel. Public port limiter already removed', {
+            params: { num, org }
+          });
+
+          releasedTunnelsCount++;
+
+          devicesToRelease.set(deviceA._id.toString(), deviceA);
+          if (deviceB) {
+            devicesToRelease.set(deviceB._id.toString(), deviceB);
+          }
+          continue;
         }
 
-        logger.info('releasing tunnel. Public port limiter already removed', {
-          params: { num, org }
-        });
+        if (pendingType === types.waitForStun) {
+          // check if tunnel is pending more than 3 minutes.
+          // If 3 minutes passed and tunnel is not become active
+          // we can release it now.
+          const threeMinLater = pendingTime.getTime() + (60000 * 3);
+          if (Date.now() < threeMinLater) continue;
 
-        releasedTunnelsCount++;
+          logger.info('releasing tunnel. 3 minutes after waiting for stun', {
+            params: { num, org }
+          });
 
-        devicesToRelease.set(deviceA._id.toString(), deviceA);
-        if (deviceB) {
-          devicesToRelease.set(deviceB._id.toString(), deviceB);
+          releasedTunnelsCount++;
+
+          devicesToRelease.set(deviceA._id.toString(), deviceA);
+          if (deviceB) {
+            devicesToRelease.set(deviceB._id.toString(), deviceB);
+          }
+          continue;
         }
       }
 
