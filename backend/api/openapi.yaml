@@ -8783,12 +8783,15 @@ components:
       type: object
     Account:
       example:
+        _id: _id
+        name: name
         country: country
         companyType: companyType
         companyDesc: companyDesc
         enableNotifications: true
-        name: name
-        _id: _id
+        isSubscriptionValid: true
+        trial_end: 1676591999
+        forceMfa: false
       properties:
         _id:
           maxLength: 24
@@ -8796,34 +8799,42 @@ components:
           type: string
         name:
           type: string
+        country:
+          maxLength: 2
+          type: string
         companyType:
           type: string
         companyDesc:
           type: string
-        country:
-          maxLength: 2
-          type: string
         enableNotifications:
           default: true
+          type: boolean
+        isSubscriptionValid:
+          default: true
+          type: boolean
+        trial_end:
+          type: integer
+        forceMfa:
+          default: false
           type: boolean
       type: object
     AccountRequest:
       example:
+        name: name
         country: country
         companyType: companyType
         companyDesc: companyDesc
         enableNotifications: true
         forceMfa: false
-        name: name
       properties:
         name:
+          type: string
+        country:
+          maxLength: 2
           type: string
         companyType:
           type: string
         companyDesc:
-          type: string
-        country:
-          maxLength: 2
           type: string
         enableNotifications:
           default: true
