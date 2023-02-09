@@ -130,8 +130,7 @@ router.route('/register')
           logoFile: '',
           billingCustomerId: customerId,
           isSubscriptionValid: true,
-          trial_end: subscription.length && subscription[0].subscription.trial_end
-            ? subscription[0].subscription.trial_end : null
+          trial_end: subscription?.[0]?.subscription?.trial_end ?? null
         }], { session: session });
       })
       .then((account) => {

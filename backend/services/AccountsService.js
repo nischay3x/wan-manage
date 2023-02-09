@@ -19,6 +19,7 @@ const Service = require('./Service');
 
 const Accounts = require('../models/accounts');
 const Users = require('../models/users');
+const pick = require('lodash/pick');
 const { getToken } = require('../tokens');
 const {
   getUserAccounts,
@@ -32,17 +33,20 @@ class AccountsService {
    * @param {mongo Account Object} item
    */
   static selectAccountParams (item) {
-    const {
-      logoFile,
-      organizations,
-      companySize,
-      serviceType,
-      numSites,
-      __v,
-      ...rest
-    } = item.toObject();
-    rest._id = rest._id.toString();
-    return rest;
+    const ret = pick(item, [
+      '_id',
+      'companyType',
+      'companyDesc',
+      'enableNotifications',
+      'billingCustomerId',
+      'isSubscriptionValid',
+      'trial_end',
+      'forceMfa',
+      'name',
+      'country'
+    ]);
+    ret._id = ret._id.toString();
+    return ret;
   }
 
   /**
