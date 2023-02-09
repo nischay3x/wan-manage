@@ -38,7 +38,6 @@ class AccountsService {
       'companyType',
       'companyDesc',
       'enableNotifications',
-      'billingCustomerId',
       'isSubscriptionValid',
       'trial_end',
       'forceMfa',
