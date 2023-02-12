@@ -4707,6 +4707,66 @@ paths:
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
+  /notifications-conf/default:
+    get:
+      operationId: notificationsDefaultConfGET
+      parameters:
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/NotificationsDefaultConf'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the account/system default notifications configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
   /members:
     get:
       operationId: membersGET
@@ -9280,6 +9340,15 @@ components:
         group:
           type: string
       type: object
+    NotificationsDefaultConf:
+      example:
+        account: accountId
+      properties:
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+      type: object
     EmailNotificationsConf:
       example:
         org: organizationId,
@@ -9322,7 +9391,8 @@ components:
         org: organizationId,
         account: accountId,
         group: groupName,
-        rules: newrules
+        rules: newRules,
+        setAsDefault: false,
       properties:
         organizationId:
           maxLength: 24

@@ -275,37 +275,43 @@ class NotificationsService {
   }
 
   // Validate request params and return the list of organizations according to the param
-  static async validateParams (org, account, group, user) {
-    // Validate parameters
-    if (!org && !account && !group) {
-      return Service.rejectResponse('Missing parameter: org, account or group', 400);
-    }
-    if (org && (account || group)) {
-      return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
-    }
-    if (group && !account) {
-      return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
-    }
-    if (account && org) {
-      return Service.rejectResponse('Invalid parameter: account should be used alone or with group(for modifying the group)', 400);
-    }
-
-    const orgList = await getUserOrganizations(user);
-    let orgIds = [];
-    if (org) {
-      if (!Object.values(orgList).find(o => o.id === org)) {
-        return Service.rejectResponse('You do not have permission to access this organization', 403);
+  static async validateParams (org, account, group, user, setAsDefault = null) {
+    if (setAsDefault) {
+      if (!account) {
+        return Service.rejectResponse('Please specify the account id', 400);
       }
-      orgIds = [org];
     } else {
-      orgIds = Object.values(orgList)
-        .filter(org => org.account.toString() === account && (!group || org.group === group))
-        .map(org => org.id);
+    // Validate parameters
+      if (!org && !account && !group) {
+        return Service.rejectResponse('Missing parameter: org, account or group', 400);
+      }
+      if (org && (account || group)) {
+        return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
+      }
+      if (group && !account) {
+        return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
+      }
+      if (account && org) {
+        return Service.rejectResponse('Invalid parameter: account should be used alone or with group(for modifying the group)', 400);
+      }
+
+      const orgList = await getUserOrganizations(user);
+      let orgIds = [];
+      if (org) {
+        if (!Object.values(orgList).find(o => o.id === org)) {
+          return Service.rejectResponse('You do not have permission to access this organization', 403);
+        }
+        orgIds = [org];
+      } else {
+        orgIds = Object.values(orgList)
+          .filter(org => org.account.toString() === account && (!group || org.group === group))
+          .map(org => org.id);
+      }
+      if (!orgIds.length) {
+        return Service.rejectResponse('No organizations found', 404);
+      }
+      return orgIds;
     }
-    if (!orgIds.length) {
-      return Service.rejectResponse('No organizations found', 404);
-    }
-    return orgIds;
   }
 
   /**
@@ -380,33 +386,38 @@ class NotificationsService {
 
   static async notificationsConfPUT ({ notificationsConfPut }, { user }) {
     try {
-      const { org, account, group, rules } = notificationsConfPut;
-      const orgIds = await NotificationsService.validateParams(org, account, group, user);
-      if (orgIds.error) {
+      const { org, account, group, rules, setAsDefault = false } = notificationsConfPut;
+      const orgIds = await NotificationsService.validateParams(org, account, group, user, setAsDefault);
+      if (orgIds && orgIds.error) {
         return orgIds;
       }
-      for (const org of orgIds) {
-        for (let i = 0; i < rules.length; i++) {
-          const updateData = { $set: {} };
-          if (rules[i].warningThreshold !== 'not the same') {
-            updateData.$set['rules.$[el].warningThreshold'] = rules[i].warningThreshold;
+      // TODO check if the user is the account owner
+      if (setAsDefault) {
+        await notificationsConf.update({ account: account }, { $set: { account: account, rules: rules } }, { upsert: true });
+      } else {
+        for (const org of orgIds) {
+          for (let i = 0; i < rules.length; i++) {
+            const updateData = { $set: {} };
+            if (rules[i].warningThreshold !== 'not the same') {
+              updateData.$set['rules.$[el].warningThreshold'] = rules[i].warningThreshold;
+            }
+            if (rules[i].criticalThreshold !== 'not the same') {
+              updateData.$set['rules.$[el].criticalThreshold'] = rules[i].criticalThreshold;
+            }
+            if (rules[i].thresholdUnit !== 'not the same') {
+              updateData.$set['rules.$[el].thresholdUnit'] = rules[i].thresholdUnit;
+            }
+            if (rules[i].severity !== 'not the same') {
+              updateData.$set['rules.$[el].severity'] = rules[i].severity;
+            }
+            if (rules[i].immediateEmail !== 'not the same') {
+              updateData.$set['rules.$[el].immediateEmail'] = rules[i].immediateEmail;
+            }
+            if (rules[i].resolvedAlert !== 'not the same') {
+              updateData.$set['rules.$[el].resolvedAlert'] = rules[i].resolvedAlert;
+            }
+            await notificationsConf.updateOne({ org: org, 'rules.event': rules[i].event }, updateData, { arrayFilters: [{ 'el.event': rules[i].event }] });
           }
-          if (rules[i].criticalThreshold !== 'not the same') {
-            updateData.$set['rules.$[el].criticalThreshold'] = rules[i].criticalThreshold;
-          }
-          if (rules[i].thresholdUnit !== 'not the same') {
-            updateData.$set['rules.$[el].thresholdUnit'] = rules[i].thresholdUnit;
-          }
-          if (rules[i].severity !== 'not the same') {
-            updateData.$set['rules.$[el].severity'] = rules[i].severity;
-          }
-          if (rules[i].immediateEmail !== 'not the same') {
-            updateData.$set['rules.$[el].immediateEmail'] = rules[i].immediateEmail;
-          }
-          if (rules[i].resolvedAlert !== 'not the same') {
-            updateData.$set['rules.$[el].resolvedAlert'] = rules[i].resolvedAlert;
-          }
-          await notificationsConf.updateOne({ org: org, 'rules.event': rules[i].event }, updateData, { arrayFilters: [{ 'el.event': rules[i].event }] });
         }
       }
       return Service.successResponse({
@@ -562,7 +573,7 @@ class NotificationsService {
             const userData = await users.findOne({ _id: emailSigning._id }).populate('defaultAccount');
             const userOrgList = await getUserOrganizations(userData);
             if (!Object.values(userOrgList).find(o => o.id === orgIds[i])) {
-              return Service.rejectResponse('All the users must have an access permission to each one the the organizations');
+              return Service.rejectResponse('All the users must have an access permission to each one of the organizations');
             }
           }
         }
@@ -600,6 +611,33 @@ class NotificationsService {
         code: e.status || 500,
         message: e.message || 'Internal Server Error'
       });
+    }
+  }
+
+  /**
+   * Get account/system default notifications settings
+   **/
+  static async notificationsDefaultConfGET ({ account = null }, { user }) {
+    try {
+      let response;
+      // TODO validate membership of the account (account owner)
+      if (account) {
+        response = await notificationsConf.find({ account: account }, { rules: 1, _id: 0 });
+        if (response.length > 0) {
+          const sortedRules = response[0].rules.sort((a, b) => (a.event > b.event) ? 1 : -1);
+          return Service.successResponse(sortedRules);
+        }
+      // If the account doesn't have a default or the user asked the system default - retrieve the system default
+      } if (!account || response.length === 0) {
+        response = await notificationsConf.find({ name: 'Default notifications settings' }, { rules: 1, _id: 0 });
+        const sortedRules = response[0].rules.sort((a, b) => (a.event > b.event) ? 1 : -1);
+        return Service.successResponse(sortedRules);
+      }
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 }
