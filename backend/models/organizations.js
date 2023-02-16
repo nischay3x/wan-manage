@@ -63,12 +63,12 @@ const OrgSchema = new Schema({
     ],
     default: 'psk'
   },
-  vxlanSourcePort: {
+  vxlanPort: {
     type: String,
     default: configs.get('tunnelPort'),
     validate: {
       validator: validators.validatePort,
-      message: 'vxlanSourcePort should be a valid Port value'
+      message: 'vxlanPort should be a valid Port value'
     }
   }
 });

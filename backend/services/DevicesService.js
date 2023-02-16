@@ -735,7 +735,7 @@ class DevicesService {
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description')
         .populate('policies.qos.policy', '_id name description')
-        .populate('org', 'vxlanSourcePort')
+        .populate('org', 'vxlanPort')
         .populate({
           path: 'applications.app',
           populate: {

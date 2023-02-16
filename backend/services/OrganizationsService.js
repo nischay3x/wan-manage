@@ -61,7 +61,7 @@ class OrganizationsService {
       'account',
       'group',
       'encryptionMethod',
-      'vxlanSourcePort'
+      'vxlanPort'
     ]);
     retOrg._id = retOrg._id.toString();
     retOrg.account = retOrg.account.toString();
@@ -260,12 +260,12 @@ class OrganizationsService {
         throw new Error('Please select an organization to update it');
       }
 
-      const { name, description, group, encryptionMethod, vxlanSourcePort } = organizationRequest;
+      const { name, description, group, encryptionMethod, vxlanPort } = organizationRequest;
       const org = await Organizations.findOne({ _id: id });
       if (!org) {
         throw new Error('Organization ID is incorrect');
       }
-      const origVxlanPort = org.vxlanSourcePort;
+      const origVxlanPort = org.vxlanPort;
 
       const orgDevices = await Devices.devices.find({ org: id })
         .populate('org')
@@ -276,7 +276,7 @@ class OrganizationsService {
       org.description = description;
       org.group = group;
       org.encryptionMethod = encryptionMethod;
-      org.vxlanSourcePort = vxlanSourcePort;
+      org.vxlanPort = vxlanPort;
 
       // before saving, let's validate the new config
       for (const orgDevice of orgDevices) {
@@ -290,7 +290,7 @@ class OrganizationsService {
       const updatedOrg = await org.save({ validateBeforeSave: true });
 
       // after save, send jobs to devices
-      if (origVxlanPort !== vxlanSourcePort) {
+      if (origVxlanPort !== vxlanPort) {
         // only 6.2 and later support source vxlan change.
         const devices = orgDevices.filter(d => {
           const majorVersion = getMajorVersion(d.versions.agent);
@@ -299,7 +299,7 @@ class OrganizationsService {
         });
 
         if (devices.length > 0) {
-          await handleVxlanSourcePortChange(updatedOrg, vxlanSourcePort, devices, user);
+          await handleVxlanPortChange(updatedOrg, vxlanPort, devices, user);
         }
       }
 
@@ -801,7 +801,7 @@ const addDeviceTasks = (obj, device, task) => {
   }
 };
 
-const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, orgDevices, user) => {
+const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
   const orgId = org._id;
 
   // mapping object [deviceId] = { device: {}, tasks: [] }
@@ -810,7 +810,7 @@ const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, orgDevices,
   // get relevant tunnels that need to take action for.
   // The expected output is array with one object with two keys:
   //  [{ _id: null, toPending: [], toReconstruct: [] }]
-  const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(orgId), origVxlanSourcePort);
+  const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(orgId), origVxlanPort);
   const tunnels = await Tunnels.aggregate(pipeline).allowDiskUse(true);
 
   // parse database result
@@ -851,8 +851,8 @@ const handleVxlanSourcePortChange = async (org, origVxlanSourcePort, orgDevices,
     logger.error('Error in handling vxlan change', {
       params: {
         reason: err.message,
-        origVxlanSourcePort,
-        newVxlanPort: org.vxlanSourcePort,
+        origVxlanPort,
+        newVxlanPort: org.vxlanPort,
         orgId: org._id
       }
     });

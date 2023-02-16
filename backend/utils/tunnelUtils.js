@@ -211,7 +211,7 @@ const getTunnelsPipeline = (orgList, filters) => {
       isPending: 1,
       pendingReason: 1,
       'org._id': 1,
-      'org.vxlanSourcePort': 1,
+      'org.vxlanPort': 1,
       tunnelStatus: {
         $switch: {
           branches: [
@@ -264,7 +264,7 @@ const getTunnelsPipeline = (orgList, filters) => {
 };
 
 const getOrgDefaultTunnelPort = org => {
-  return org.vxlanSourcePort || configs.get('tunnelPort');
+  return org.vxlanPort || configs.get('tunnelPort');
 };
 
 // Default exports

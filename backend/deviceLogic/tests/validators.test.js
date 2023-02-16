@@ -23,7 +23,7 @@ const maxMetric = 2 * 10 ** 9;
 describe('validateDevice', () => {
   let device;
   const org = {
-    vxlanSourcePort: '4789'
+    vxlanPort: '4789'
   };
   const successObject = {
     valid: true,

@@ -1743,7 +1743,7 @@ const populateTunnelDestinations = (
   paramsA.dst = usePrivateIps ? ifcB.IPv4 : ifcB.PublicIP;
   paramsB.dst = usePrivateIps ? ifcA.IPv4 : ifcA.PublicIP;
 
-  // if device version is lower than 6.2 - use 4789. Otherwise take the org.vxlanSourcePort;
+  // if device version is lower than 6.2 - use 4789. Otherwise take the org.vxlanPort;
   const configSourcePort = configs.get('tunnelPort');
   const deviceADefaultDstPort = isDevASupportsVxlanPort ? orgSourcePort : configSourcePort;
   const deviceBDefaultDstPort = isDevBSupportsVxlanPort ? orgSourcePort : configSourcePort;
@@ -1803,7 +1803,7 @@ const prepareTunnelParams = (
   paramsDeviceA['tunnel-id'] = tunnel.num;
 
   const isDevASupportsVxlanPort = isDevSupportsVxlanPort(majorVersionA, minorVersionA);
-  const orgSourcePort = org.vxlanSourcePort;
+  const orgSourcePort = org.vxlanPort;
 
   paramsDeviceA.src = deviceAIntf.IPv4;
   if (isDevASupportsVxlanPort) {

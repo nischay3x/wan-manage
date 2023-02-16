@@ -132,7 +132,7 @@ const transformOSPF = (ospf, bgp) => {
  */
 const transformVxlanConfig = org => {
   const vxlanConfigParams = {
-    sourcePort: org.vxlanSourcePort || configs.get('tunnelPort')
+    port: org.vxlanPort || configs.get('tunnelPort')
   };
 
   return vxlanConfigParams;
