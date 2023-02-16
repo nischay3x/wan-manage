@@ -24,7 +24,7 @@ const keyBy = require('lodash/keyBy');
 const { getTunnelConfigDependencies } = require('./tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { apply } = require('./modifyDevice');
-const eventsReasons = require('./events/eventReasons');
+const { pendingTypes, getReason } = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
 const { getMajorVersion } = require('../versioning');
 
@@ -81,8 +81,8 @@ class Events {
       { params: { deviceId: origDevice._id, interfaceId: origIfc._id } }
     );
 
-    const pendingType = eventsReasons.pendingTypes.publicPortHighRate;
-    const reason = eventsReasons(pendingType, origIfc.name, origDevice.name);
+    const pendingType = pendingTypes.publicPortHighRate;
+    const reason = getReason(pendingType, origIfc.name, origDevice.name);
     await this.setDeviceTunnelsAsPending(origDevice, origIfc, reason, pendingType, false);
   }
 
@@ -226,8 +226,10 @@ class Events {
    * @param  {object} device device object
    * @param  {?object} origIfc Original interface object.
    *  If not specified, The system will remove all device's tunnels
+   * @param {boolean} forceWaitForStunRelease if true, wait for stun will be
+   *  released even without public ports
   */
-  async removePendingStateFromTunnels (device, origIfc = null) {
+  async removePendingStateFromTunnels (device, origIfc = null, forceWaitForStunRelease = false) {
     const orQuery = [];
     if (origIfc) {
       orQuery.push({ deviceA: device._id, interfaceA: origIfc._id });
@@ -247,7 +249,7 @@ class Events {
 
     for (const tunnel of tunnels) {
       // at this point, set tunnel to active
-      await this.setOneTunnelAsActive(tunnel, device);
+      await this.setOneTunnelAsActive(tunnel, device, forceWaitForStunRelease);
     };
   }
 
@@ -258,10 +260,9 @@ class Events {
    * @param  {object} ifc updated ifc from the device
   */
   async interfaceIpMissing (device, origIfc, ifc) {
-    logger.info('Interface IP missing', { params: { device, origIfc, ifc } });
-
     // only at the first time - send notification
     if (origIfc.hasIpOnDevice) {
+      logger.info('Interface IP missing', { params: { origIfc, ifc } });
       await notificationsMgr.sendNotifications([{
         org: device.org,
         title: 'Interface IP missing',
@@ -272,8 +273,8 @@ class Events {
       }]);
     }
 
-    const pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
-    const reason = eventsReasons(pendingType, origIfc.name, device.name);
+    const pendingType = pendingTypes.interfaceHasNoIp;
+    const reason = getReason(pendingType, origIfc.name, device.name);
 
     if (origIfc.type === 'WAN' && origIfc.dhcp === 'yes') {
       // set related tunnels as pending
@@ -339,8 +340,10 @@ class Events {
    * Set active status to a pending tunnel
    * @param  {object} tunnel tunnel object
    * @param  {object} device device object
+   * @param {boolean} forceWaitForStunRelease if true, wait for stun will be
+   *  released even without public ports
   */
-  async setOneTunnelAsActive (tunnel, device) {
+  async setOneTunnelAsActive (tunnel, device, forceWaitForStunRelease = false) {
     const {
       isPending, pendingReason, pendingType, deviceA, deviceB, peer, interfaceA, interfaceB
     } = tunnel;
@@ -371,8 +374,8 @@ class Events {
         deviceWithoutIp = ifcA.IPv4 === '' ? deviceA : deviceB;
       }
 
-      const pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
-      const reason = eventsReasons(pendingType, ifcWithoutIp.name, deviceWithoutIp.name);
+      const pendingType = pendingTypes.interfaceHasNoIp;
+      const reason = getReason(pendingType, ifcWithoutIp.name, deviceWithoutIp.name);
       if (pendingReason !== reason) {
         await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
       }
@@ -384,10 +387,10 @@ class Events {
       const isABlocked = await publicAddrInfoLimiter.isBlocked(`${deviceA._id}:${ifcA._id}`);
       const isBBlocked = await publicAddrInfoLimiter.isBlocked(`${deviceB._id}:${ifcB._id}`);
       if (isABlocked || isBBlocked) {
-        const pendingType = eventsReasons.pendingTypes.publicPortHighRate;
+        const pendingType = pendingTypes.publicPortHighRate;
         const reason = isABlocked
-          ? eventsReasons(pendingType, ifcA.name, deviceA.name)
-          : eventsReasons(pendingType, ifcB.name, deviceB.name);
+          ? getReason(pendingType, ifcA.name, deviceA.name)
+          : getReason(pendingType, ifcB.name, deviceB.name);
 
         if (pendingReason !== reason) {
           await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
@@ -397,7 +400,8 @@ class Events {
     }
 
     // don't release tunnels that wait for STUN and no public port in both interfaces
-    if (pendingType === eventsReasons.pendingTypes.waitForStun) {
+    // if forceWaitForStunRelease is true, we release it with the default public port
+    if (pendingType === pendingTypes.waitForStun && !forceWaitForStunRelease) {
       if (ifcA.PublicPort === '' || ifcB?.PublicPort === '') {
         return;
       }
@@ -460,8 +464,8 @@ class Events {
 
     for (const dependedDevice of dependedDevices) {
       for (const staticRoute of dependedDevice.staticroutes) {
-        const pendingType = eventsReasons.pendingTypes.tunnelIsPending;
-        const reason = eventsReasons(pendingType, tunnel.num);
+        const pendingType = pendingTypes.tunnelIsPending;
+        const reason = getReason(pendingType, tunnel.num);
         await this.setIncompleteRouteStatus(staticRoute, true, reason, pendingType, dependedDevice);
       }
     }
@@ -584,7 +588,7 @@ class Events {
         org: origDevice.org,
         isActive: true,
         isPending: true,
-        pendingType: eventsReasons.pendingTypes.waitForStun,
+        pendingType: pendingTypes.waitForStun,
         $or: [
           { interfaceA: updatedIfc._id },
           { interfaceB: updatedIfc._id }
@@ -765,14 +769,15 @@ class Events {
 
 /**
  * Remove all pending tunnels for a device
- * @param  {object} device  device object
+ * @param {object} device  device object
+ * @param {boolean} forceWaitForStunRelease wait for stun will be released even without public ports
 */
-const activatePendingTunnelsOfDevice = async (device) => {
+const activatePendingTunnelsOfDevice = async (device, forceWaitForStunRelease = false) => {
   // we have the needed logic for this operation in the event class.
   // so we use its method to get tunnels via this device
   // and release them, and then it triggers the events chain once tunnel becomes active.
   const events = new Events();
-  await events.removePendingStateFromTunnels(device);
+  await events.removePendingStateFromTunnels(device, null, forceWaitForStunRelease);
 
   const modifyDevices = await events.prepareModifyDispatcherParameters();
   for (const modified in modifyDevices) {

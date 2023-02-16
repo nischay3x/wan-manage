@@ -20,14 +20,14 @@ const tunnels = require('../models/tunnels');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
 const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
-const pendingReasons = require('../deviceLogic/events/eventReasons');
+const { pendingTypes } = require('../deviceLogic/events/eventReasons');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const { activatePendingTunnelsOfDevice } = require('../deviceLogic/events');
 
 /***
  * This class periodically checks if need to release pending tunnels
  ***/
-class PendingTunnels {
+class ReleasePendingTunnels {
   /**
   * Creates an instance of the class
   */
@@ -40,7 +40,7 @@ class PendingTunnels {
       name: 'release_pending_tunnels',
       func: this.runTask,
       handle: null,
-      period: 60000 // 1 minutes
+      period: 60000 * 2 // 2 minutes
     };
   }
 
@@ -60,11 +60,10 @@ class PendingTunnels {
   */
   runTask () {
     ha.runIfActive(async () => {
-      const types = pendingReasons.pendingTypes;
       const pendingTunnels = await tunnels.find({
         isPending: true,
         isActive: true,
-        pendingType: { $in: [types.publicPortHighRate, types.waitForStun] }
+        pendingType: { $in: [pendingTypes.publicPortHighRate, pendingTypes.waitForStun] }
       }).populate('deviceA').populate('deviceB').lean();
 
       let releasedTunnelsCount = 0;
@@ -73,7 +72,7 @@ class PendingTunnels {
       for (const tunnel of pendingTunnels) {
         const { deviceA, deviceB, ifcA, ifcB, num, org, pendingType, pendingTime } = tunnel;
 
-        if (pendingType === types.publicPortHighRate) {
+        if (pendingType === pendingTypes.publicPortHighRate) {
           // check if blockage is already removed.
           // If the block does not exist, it means that the public port is stable
           // and has not changed much recently. Therefore it can be released.
@@ -100,7 +99,7 @@ class PendingTunnels {
           continue;
         }
 
-        if (pendingType === types.waitForStun) {
+        if (pendingType === pendingTypes.waitForStun) {
           // check if tunnel is pending more than 3 minutes.
           // If 3 minutes passed and tunnel is not become active
           // we can release it now.
@@ -135,11 +134,11 @@ class PendingTunnels {
   }
 };
 
-let pendingTunnels = null;
+let releasePendingTunnels = null;
 module.exports = function () {
-  if (pendingTunnels) return pendingTunnels;
+  if (releasePendingTunnels) return releasePendingTunnels;
   else {
-    pendingTunnels = new PendingTunnels();
-    return pendingTunnels;
+    releasePendingTunnels = new ReleasePendingTunnels();
+    return releasePendingTunnels;
   }
 };

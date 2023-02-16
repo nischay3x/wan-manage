@@ -57,7 +57,7 @@ const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
-const eventsReasons = require('../deviceLogic/events/eventReasons');
+const { pendingTypes, getReason } = require('../deviceLogic/events/eventReasons');
 const {
   activatePendingTunnelsOfDevice,
   releasePublicAddrLimiterBlockage
@@ -1759,8 +1759,8 @@ class DevicesService {
               const { ip1, ip2 } = generateTunnelParams(t.num);
               if (ip1 === s.gateway || ip2 === s.gateway) {
                 s.isPending = true;
-                s.pendingType = eventsReasons.pendingTypes.tunnelIsPending;
-                s.pendingReason = eventsReasons(s.pendingType, t.num);
+                s.pendingType = pendingTypes.tunnelIsPending;
+                s.pendingReason = getReason(s.pendingType, t.num);
                 s.pendingTime = new Date();
                 return s;
               }
@@ -1771,8 +1771,8 @@ class DevicesService {
               for (const ifc of interfacesWithoutIp) {
                 if (ifc.IPv4 === s.gateway) {
                   s.isPending = true;
-                  s.pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
-                  s.pendingReason = eventsReasons(s.pendingType, ifc.name, origDevice.name);
+                  s.pendingType = pendingTypes.interfaceHasNoIp;
+                  s.pendingReason = getReason(s.pendingType, ifc.name, origDevice.name);
                   s.pendingTime = new Date();
                   return s;
                 }

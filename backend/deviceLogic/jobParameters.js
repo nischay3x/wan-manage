@@ -126,9 +126,9 @@ const transformOSPF = (ospf, bgp) => {
 };
 
 /**
- * Creates a add-vxlan-port object
+ * Creates a add-vxlan-config object
  * @param  {Object} org organization object
- * @return {Object}      an object containing the OSPF parameters
+ * @return {Object}      an object containing the VXLAN config parameters
  */
 const transformVxlanConfig = org => {
   const vxlanConfigParams = {

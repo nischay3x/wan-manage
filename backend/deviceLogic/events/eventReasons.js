@@ -16,9 +16,16 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const pendingTypes = {
+  // if interfaces loses is IP, we set tunnels/static routes
+  // via this interface as pending due to missing ip
   interfaceHasNoIp: 'interfaceHasNoIp',
+  // if tunnel marked as pending, we set static routes
+  // via this tunnel as pending due to tunnel pending
   tunnelIsPending: 'tunnelIsPending',
+  // if we marked tunnels as pending because we are waiting for STUN in both sides
   waitForStun: 'waitForStun',
+  // if public port changed a lot and tunnel is down,
+  // we reduce system effort and put tunnels as pending until the port will be stabilized
   publicPortHighRate: 'publicPortHighRate'
 };
 
@@ -43,9 +50,11 @@ const pendingReasons = {
   }
 };
 
-const get = (type, ...args) => {
+const getReason = (type, ...args) => {
   return pendingReasons[type](...args);
 };
 
-const myModule = module.exports = get;
-myModule.pendingTypes = pendingTypes;
+module.exports = {
+  pendingTypes,
+  getReason
+};

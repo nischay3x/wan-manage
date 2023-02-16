@@ -28,7 +28,7 @@ const {
   getTunnelsPipeline
 } = require('../utils/tunnelUtils');
 const { validateIKEv2 } = require('./IKEv2');
-const eventsReasons = require('./events/eventReasons');
+const { pendingTypes, getReason } = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -1237,14 +1237,14 @@ const addTunnel = async (
 
   if (deviceAIntf.IPv4 === '') {
     isPending = true;
-    pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
-    pendingReason = eventsReasons(pendingType, deviceAIntf.name, deviceA.name);
+    pendingType = pendingTypes.interfaceHasNoIp;
+    pendingReason = getReason(pendingType, deviceAIntf.name, deviceA.name);
   }
 
   if (!peer && deviceBIntf.IPv4 === '') {
     isPending = true;
-    pendingType = eventsReasons.pendingTypes.interfaceHasNoIp;
-    pendingReason = eventsReasons(pendingType, deviceBIntf.name, deviceB.name);
+    pendingType = pendingTypes.interfaceHasNoIp;
+    pendingReason = getReason(pendingType, deviceBIntf.name, deviceB.name);
   }
 
   // on creation tunnel we remove the public address limiter if exists

@@ -14,7 +14,7 @@
 
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-const eventReasons = require('../../deviceLogic/events/eventReasons');
+const { pendingTypes } = require('../../deviceLogic/events/eventReasons');
 
 const pendingSchema = {
   // indicate if this item was sent to flexiEdge or configured only in manage
@@ -25,7 +25,7 @@ const pendingSchema = {
   // pending type. We can query all pending with a given type
   pendingType: {
     type: String,
-    enum: [...Object.values(eventReasons.pendingTypes), '']
+    enum: [...Object.values(pendingTypes), '']
   },
   // reason for pending item configuration
   pendingReason: {

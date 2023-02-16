@@ -42,10 +42,10 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { getToken } = require('../tokens');
 const DeviceEvents = require('../deviceLogic/events');
 const { processModifyJob } = require('../deviceLogic/modifyDevice');
-const eventsReasons = require('../deviceLogic/events/eventReasons');
+const { pendingTypes, getReason } = require('../deviceLogic/events/eventReasons');
 const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/tunnels');
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
-const { validateDevice } = require('../deviceLogic/validators');
+const { validateFirewallRules } = require('../deviceLogic/validators');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 class OrganizationsService {
@@ -266,10 +266,7 @@ class OrganizationsService {
         throw new Error('Organization ID is incorrect');
       }
       const origVxlanPort = org.vxlanPort;
-
-      const orgDevices = await Devices.devices.find({ org: id })
-        .populate('org')
-        .populate('policies.firewall.policy', '_id name rules');
+      let orgDevices = [];
 
       // update org, don't save
       org.name = name;
@@ -278,20 +275,22 @@ class OrganizationsService {
       org.encryptionMethod = encryptionMethod;
       org.vxlanPort = vxlanPort;
 
-      // before saving, let's validate the new config
-      for (const orgDevice of orgDevices) {
-        const { valid, err } = validateDevice(orgDevice.toObject(), org);
-        if (!valid) {
-          throw new Error(err);
-        }
+      const isVxlanPortChanged = origVxlanPort !== vxlanPort;
+      if (isVxlanPortChanged) {
+        // if vxlan port is changed, need to check the firewall ports before saving in db
+        orgDevices = await Devices.devices.find({ org: id })
+          .populate('org')
+          .populate('policies.firewall.policy', '_id name rules');
+
+        validateVxlanPortChange(orgDevices, org);
       }
 
       // now, save
       const updatedOrg = await org.save({ validateBeforeSave: true });
 
       // after save, send jobs to devices
-      if (origVxlanPort !== vxlanPort) {
-        // only 6.2 and later support source vxlan change.
+      if (isVxlanPortChanged) {
+        // only 6.2 and later support vxlan port change.
         const devices = orgDevices.filter(d => {
           const majorVersion = getMajorVersion(d.versions.agent);
           const minorVersion = getMinorVersion(d.versions.agent);
@@ -600,16 +599,17 @@ class OrganizationsService {
 module.exports = OrganizationsService;
 
 const getTunnelsPipeline = (id, origVxlanPort) => {
-  // if VXLAN source port is changed, we need to reconstruct all tunnels
+  // if VXLAN port is changed, we need to reconstruct all tunnels
   // to use the new source port.
   // but, since that change in source port may trigger public port change,
   // the STUN may detect another public port and triggers another reconstruction of the same tunnel.
   //
-  // So, the idean is to try to guess which tunnel will be reconstructed via STUN.
+  // So, the idea is to try to guess which tunnel will be reconstructed via STUN.
   // If *one of the interfaces* will cause the tunnels to be reconstructed,
   // there is no need to do a reconstruct right now but we can wait for STUN to fix it.
   return [
-    { $match: { org: id, isActive: true, isPending: false } },
+    // we don't use vxlan for peers, so filter those tunnels out.
+    { $match: { org: id, isActive: true, isPending: false, peer: null } },
     {
       $project: {
         _id: 1,
@@ -756,8 +756,8 @@ const handleToPendingTunnels = async (tunnels) => {
   if (tunnels.length === 0) return;
 
   const events = new DeviceEvents();
-  const pendingType = eventsReasons.pendingTypes.waitForStun;
-  const reason = eventsReasons(pendingType);
+  const pendingType = pendingTypes.waitForStun;
+  const reason = getReason(pendingType);
 
   for (const tunnel of tunnels) {
     await events.setOneTunnelAsPending(tunnel, reason, pendingType, tunnel.deviceA);
@@ -857,11 +857,14 @@ const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
       }
     });
 
-    // need to sync all devices in order to ensure they have the new vxlan port config
+    // In case of error, it is hard to know which device gets the job and who does not
+    // so better to to sync all devices in order to ensure
+    // they have the new vxlan port and tunnels config
     await Devices.devices.updateMany(
       { _id: { $in: orgDevices.map(d => d._id) } },
       {
         $set: {
+          'sync.hash': '',
           'sync.state': 'syncing',
           'sync.autoSync': 'on',
           'sync.trials': 0
@@ -869,5 +872,24 @@ const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
       },
       { upsert: false }
     );
+  }
+};
+const validateVxlanPortChange = (devices, org) => {
+  for (const device of devices) {
+    const { interfaces, firewall, policies } = device.toObject();
+    const deviceRules = firewall?.rules ?? [];
+    const globalRules = policies?.firewall?.status?.startsWith('install')
+      ? policies?.firewall?.policy?.rules ?? []
+      : [];
+    const rules = [...globalRules, ...deviceRules];
+
+    if (rules.length === 0) {
+      continue;
+    }
+
+    const { valid, err } = validateFirewallRules(rules, org, interfaces);
+    if (!valid) {
+      throw new Error(`VXLAN port is invalid: ${err}`);
+    }
   }
 };
