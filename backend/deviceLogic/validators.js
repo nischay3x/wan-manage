@@ -317,7 +317,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
       };
     }
 
-    if (!isIPv4Address(ifc.IPv4, ifc.IPv4Mask) && ifc.dhcp !== 'yes') {
+    if (!isIPv4Address(ifc.IPv4, ifc.IPv4Mask) && ifc.dhcp !== 'yes' && ifc.type !== 'TRUNK') {
       return {
         valid: false,
         err: ifc.IPv4 && ifc.IPv4Mask
@@ -683,7 +683,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
-    if (ifc.dhcp === 'yes' && ifc.addr === '') {
+    if ((ifc.dhcp === 'yes' || ifc.type === 'TRUNK') && ifc.addr === '') {
       // allow empty IP on WAN with dhcp client
       continue;
     }
