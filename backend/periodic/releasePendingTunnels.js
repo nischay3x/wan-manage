@@ -66,8 +66,6 @@ class ReleasePendingTunnels {
         pendingType: { $in: [pendingTypes.publicPortHighRate, pendingTypes.waitForStun] }
       }).populate('deviceA').populate('deviceB').lean();
 
-      let releasedTunnelsCount = 0;
-
       const devicesToRelease = new Map();
       for (const tunnel of pendingTunnels) {
         const { deviceA, deviceB, ifcA, ifcB, num, org, pendingType, pendingTime } = tunnel;
@@ -90,8 +88,6 @@ class ReleasePendingTunnels {
             params: { num, org }
           });
 
-          releasedTunnelsCount++;
-
           devicesToRelease.set(deviceA._id.toString(), deviceA);
           if (deviceB) {
             devicesToRelease.set(deviceB._id.toString(), deviceB);
@@ -110,8 +106,6 @@ class ReleasePendingTunnels {
             params: { num, org }
           });
 
-          releasedTunnelsCount++;
-
           devicesToRelease.set(deviceA._id.toString(), deviceA);
           if (deviceB) {
             devicesToRelease.set(deviceB._id.toString(), deviceB);
@@ -123,12 +117,6 @@ class ReleasePendingTunnels {
       for (const deviceId in Object.fromEntries(devicesToRelease)) {
         const device = devicesToRelease.get(deviceId);
         await activatePendingTunnelsOfDevice(device);
-      }
-
-      const pendingFound = pendingTunnels.length > 0;
-      if (pendingFound) {
-        logger.info('release_pending_tunnels task. ' +
-          ` Pending tunnels=${pendingTunnels.length}. Released=${releasedTunnelsCount}.`);
       }
     });
   }

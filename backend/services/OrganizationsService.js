@@ -42,6 +42,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const { getToken } = require('../tokens');
 const DeviceEvents = require('../deviceLogic/events');
 const { processModifyJob } = require('../deviceLogic/modifyDevice');
+const { forceDevicesSync } = require('../deviceLogic/sync');
 const { pendingTypes, getReason } = require('../deviceLogic/events/eventReasons');
 const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/tunnels');
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
@@ -756,31 +757,37 @@ const getInterfaceConditionsToBePending = (key, origVxlanPort) => {
 const handleToPendingTunnels = async (tunnels) => {
   if (tunnels.length === 0) return;
 
+  const failedDevices = new Set();
+  const deviceIds = new Set();
+  const interfacesIds = new Set();
+
   const events = new DeviceEvents();
   const pendingType = pendingTypes.waitForStun;
   const reason = getReason(pendingType);
 
   for (const tunnel of tunnels) {
-    await events.setOneTunnelAsPending(tunnel, reason, pendingType, tunnel.deviceA);
+    try {
+      await events.setOneTunnelAsPending(tunnel, reason, pendingType, tunnel.deviceA);
+
+      deviceIds.add(tunnel.deviceA._id.toString());
+      deviceIds.add(tunnel.deviceB._id.toString());
+      interfacesIds.add(tunnel.interfaceA._id.toString());
+      interfacesIds.add(tunnel.interfaceB._id.toString());
+    } catch (err) {
+      logger.error('Failed to set tunnel as pending', { params: { reason: err.message, tunnel } });
+      failedDevices.add(tunnel.deviceA._id.toString());
+      failedDevices.add(tunnel.deviceB._id.toString());
+    }
   }
 
   // remove public port from both interfaces
-  const deviceIds = new Set();
-  const interfacesIds = new Set();
-  tunnels.forEach(t => {
-    deviceIds.add(t.deviceA._id.toString());
-    interfacesIds.add(t.interfaceA._id.toString());
-    if (!t.peer) {
-      deviceIds.add(t.deviceB._id.toString());
-      interfacesIds.add(t.interfaceB._id.toString());
-    }
-  });
-
   await Devices.devices.updateMany(
     { _id: { $in: [...deviceIds] } },
     { $set: { 'interfaces.$[elem].PublicPort': '' } },
     { upsert: false, arrayFilters: [{ 'elem._id': { $in: [...interfacesIds] } }] }
   );
+
+  return failedDevices;
 };
 
 const addDeviceTasks = (obj, device, task) => {
@@ -804,23 +811,21 @@ const addDeviceTasks = (obj, device, task) => {
 
 const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
   const orgId = org._id;
-
-  // mapping object [deviceId] = { device: {}, tasks: [] }
-  const devicesJobs = {};
-
-  // get relevant tunnels that need to take action for.
-  // The expected output is array with one object with two keys:
-  //  [{ _id: null, toPending: [], toReconstruct: [] }]
-  const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(orgId), origVxlanPort);
-  const tunnels = await Tunnels.aggregate(pipeline).allowDiskUse(true);
-
-  // parse database result
-  const toPending = tunnels?.[0]?.toPending ?? [];
-  const toReconstruct = tunnels?.[0]?.toReconstruct ?? [];
+  const devicesJobs = {}; // mapping object [deviceId] = { device: {}, tasks: [] }
+  const desynchronizedDevices = new Set();
 
   try {
-    // put needed tunnels to pending state - don't send jobs yet
-    await handleToPendingTunnels(toPending);
+    const pipeline = getTunnelsPipeline(mongoose.Types.ObjectId(orgId), origVxlanPort);
+    const tunnels = await Tunnels.aggregate(pipeline).allowDiskUse(true);
+    // The expected output is array with one object with two keys:
+    //  [{ _id: null, toPending: [], toReconstruct: [] }]
+    //
+    const toPending = tunnels?.[0]?.toPending ?? [];
+    const toReconstruct = tunnels?.[0]?.toReconstruct ?? [];
+
+    // handle tunnels that should be pending. Do not send jobs
+    const failedDevicesIds = await handleToPendingTunnels(toPending);
+    failedDevicesIds.forEach(f => desynchronizedDevices.add(f));
 
     // first prepare remove-tunnel tasks for each device
     for (const removeTunnel of [...toPending, ...toReconstruct]) {
@@ -829,7 +834,7 @@ const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
       addDeviceTasks(devicesJobs, removeTunnel.deviceB, removeTasksDevB);
     }
 
-    // now prepare modify-vxlan-config task for each device
+    // now prepare the modify-vxlan-config task for each device
     const params = transformVxlanConfig(org);
     for (const orgDevice of orgDevices) {
       addDeviceTasks(devicesJobs, orgDevice, { message: 'modify-vxlan-config', params });
@@ -842,11 +847,20 @@ const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
       addDeviceTasks(devicesJobs, addTunnel.deviceB, addTasksDevB);
     }
 
-    // finally, send one job to each device that contains all tasks inside
+    // finally, send one job to each device that contains all the tasks
     for (const deviceId in devicesJobs) {
-      const tasks = devicesJobs[deviceId].tasks;
-      const device = devicesJobs[deviceId].device;
-      await processModifyJob(tasks, device, orgId, user);
+      try {
+        const tasks = devicesJobs[deviceId].tasks;
+        const device = devicesJobs[deviceId].device;
+        await processModifyJob(tasks, device, orgId, user);
+      } catch (err) {
+        logger.error('Error in sending modify vxlan jobs to device', {
+          params: { reason: err.message, deviceId }
+        });
+
+        // send sync later but don't throw exception
+        desynchronizedDevices.add(deviceId);
+      }
     }
   } catch (err) {
     logger.error('Error in handling vxlan change', {
@@ -858,23 +872,16 @@ const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
       }
     });
 
-    // In case of error, it is hard to know which device gets the job and who does not
-    // so better to to sync all devices in order to ensure
-    // they have the new vxlan port and tunnels config
-    await Devices.devices.updateMany(
-      { _id: { $in: orgDevices.map(d => d._id) } },
-      {
-        $set: {
-          'sync.hash': '',
-          'sync.state': 'syncing',
-          'sync.autoSync': 'on',
-          'sync.trials': 0
-        }
-      },
-      { upsert: false }
-    );
+    // here, no job was sent (it was handled by nested try and catch). hence we sync all devices
+    await forceDevicesSync(orgDevices.map(d => d._id));
+    desynchronizedDevices.clear();
+  }
+
+  if (desynchronizedDevices.size > 0) {
+    await forceDevicesSync(desynchronizedDevices);
   }
 };
+
 const validateVxlanPortChange = (devices, org) => {
   for (const device of devices) {
     const { interfaces, firewall, policies } = device.toObject();

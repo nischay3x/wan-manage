@@ -489,6 +489,28 @@ const apply = async (device, user, data) => {
   };
 };
 
+/**
+ * Function that put given devices in syncing state
+ * so the system will send sync immediately
+ *
+ * @param {array} devicesIds List of devices to put in syncing state
+ * @returns
+ */
+const forceDevicesSync = async devicesIds => {
+  await devices.updateMany(
+    { _id: { $in: devicesIds } },
+    {
+      $set: {
+        'sync.hash': '',
+        'sync.state': 'syncing',
+        'sync.autoSync': 'on',
+        'sync.trials': 0
+      }
+    },
+    { upsert: false }
+  );
+};
+
 // Register a method that updates sync state
 // from periodic status message flow
 deviceStatus.registerSyncUpdateFunc(updateSyncStatus);
@@ -502,5 +524,6 @@ module.exports = {
   updateSyncStatusBasedOnJobResult,
   apply,
   complete,
-  error
+  error,
+  forceDevicesSync
 };
