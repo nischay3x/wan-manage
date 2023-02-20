@@ -623,7 +623,8 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
         pendingReason: 1,
         peer: 1,
         pathlabel: 1,
-        advancedOptions: 1
+        advancedOptions: 1,
+        encryptionMethod: 1
       }
     },
     {
