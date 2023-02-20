@@ -460,10 +460,8 @@ const apply = async (device, user, data) => {
 
   // release existing limiters if the device is blocked
   await reconfigErrorsLimiter.release(_id.toString());
-  const released = await releasePublicAddrLimiterBlockage(device[0]);
-  if (released) {
-    await activatePendingTunnelsOfDevice(updDevice, true);
-  }
+  await releasePublicAddrLimiterBlockage(device[0]);
+  await activatePendingTunnelsOfDevice(updDevice, true);
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(
@@ -492,6 +490,28 @@ const apply = async (device, user, data) => {
   };
 };
 
+/**
+ * Function that put given devices in syncing state
+ * so the system will send sync immediately
+ *
+ * @param {array} devicesIds List of devices to put in syncing state
+ * @returns
+ */
+const forceDevicesSync = async devicesIds => {
+  await devices.updateMany(
+    { _id: { $in: devicesIds } },
+    {
+      $set: {
+        'sync.hash': '',
+        'sync.state': 'syncing',
+        'sync.autoSync': 'on',
+        'sync.trials': 0
+      }
+    },
+    { upsert: false }
+  );
+};
+
 // Register a method that updates sync state
 // from periodic status message flow
 deviceStatus.registerSyncUpdateFunc(updateSyncStatus);
@@ -505,5 +525,6 @@ module.exports = {
   updateSyncStatusBasedOnJobResult,
   apply,
   complete,
-  error
+  error,
+  forceDevicesSync
 };
