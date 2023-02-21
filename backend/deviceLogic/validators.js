@@ -18,7 +18,7 @@
 const net = require('net');
 const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
-const { generateTunnelParams } = require('../utils/tunnelUtils');
+const { generateTunnelParams, getOrgDefaultTunnelPort } = require('../utils/tunnelUtils');
 const { getBridges, getCpuInfo } = require('../utils/deviceUtils');
 const { getMajorVersion } = require('../versioning');
 const keyBy = require('lodash/keyBy');
@@ -89,14 +89,16 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
 
 /**
  * Checks whether firewall rules are valid
- * @param {Array} rules - array of firewall rules to validate
- * @param {Array}  interfaces - interfaces of the device to check for device-specific rules
+ * @param {array} rules - array of firewall rules to validate
+ * @param {object} org  - organization object
+ * @param {array}  interfaces - interfaces of the device to check for device-specific rules
  * @return {{valid: boolean, err: string}}  test result + error, if rules are invalid
  */
-const validateFirewallRules = (rules, interfaces = undefined) => {
+const validateFirewallRules = (rules, org, interfaces = undefined) => {
   const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
+
+  const tunnelPort = +getOrgDefaultTunnelPort(org);
   const usedInboundPorts = [];
-  const tunnelPort = 4789;
   let inboundPortsCount = 0;
   const enabledRules = rules.filter(r => r.enabled);
   // Common rules validation
@@ -139,16 +141,17 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
         if (+ports === tunnelPort) {
           return {
             valid: false,
-            err: `Port ${tunnelPort} is used for tunnels.
-            Make sure to not include it in the port range.`
+            err: `Firewall rule cannot be added, port ${tunnelPort}
+            is reserved for flexiWAN tunnel connectivity.`
           };
         }
-        // implicit inbound edge-access rule for port 4789 on all WAN interfaces
+        // implicit inbound edge-access rule for tunnel port on all WAN interfaces
         if (portLow <= tunnelPort && portHigh >= tunnelPort) {
           return {
             valid: false,
             err: `Inbound rule destination ports ${ports} overlapped with port ${tunnelPort}.
-            Port is used for tunnels. Make sure to not include it in the port range.`
+            Firewall rule cannot be added, port ${tunnelPort}
+            is reserved for flexiWAN tunnel connectivity.`
           };
         }
         if (inbound === 'portForward') {
@@ -269,13 +272,14 @@ const validateFirewallRules = (rules, interfaces = undefined) => {
 /**
  * Checks whether the device configuration is valid,
  * therefore the device can be started.
- * @param {Object}  device                 the device to check
- * @param {Boolean} isRunning              is the device running
+ * @param {object}  device     the device to check
+ * @param {object}  org        organization object
+ * @param {boolean} isRunning  is the device running
  * @param {[_id: objectId, name: string, type: string, subnet: string]} orgSubnets to check overlaps
  * @param {[_id: objectId, bgp: object]} orgBgpDevices
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevices = []) => {
+const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpDevices = []) => {
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -290,7 +294,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
     assignedIfs.filter(ifc => { return ifc.type === 'WAN'; }),
     assignedIfs.filter(ifc => { return ifc.type === 'LAN'; })
   ];
-  const majorVersion = getMajorVersion(device.versions.agent);
 
   if (isRunning && (assignedIfs.length < 2 || (wanIfcs.length === 0 || lanIfcs.length === 0))) {
     return {
@@ -389,12 +392,6 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
           err: 'All WAN interfaces should be assigned a default GW'
         };
       }
-    }
-    if (ifc.qosPolicy && majorVersion < 6) {
-      return {
-        valid: false,
-        err: 'QoS is supported from version 6'
-      };
     }
   }
 
@@ -546,9 +543,13 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
   // Firewall rules validation
   if (device.firewall) {
     const { interfaces, firewall, policies } = device;
-    const globalRules = policies && policies.firewall && policies.firewall.policy &&
-      policies.firewall.status.startsWith('install') ? policies.firewall.policy.rules : [];
-    const { valid, err } = validateFirewallRules([...globalRules, ...firewall.rules], interfaces);
+    const globalRules = policies?.firewall?.policy &&
+      policies?.firewall?.status?.startsWith('install') ? policies.firewall.policy.rules : [];
+    const { valid, err } = validateFirewallRules(
+      [...globalRules, ...firewall.rules],
+      org,
+      interfaces
+    );
     if (!valid) {
       return { valid, err };
     }

@@ -57,7 +57,7 @@ const cidr = require('cidr-tools');
 const { TypedError, ErrorTypes } = require('../utils/errors');
 const { getMatchFilters } = require('../utils/filterUtils');
 const TunnelsService = require('./TunnelsService');
-const eventsReasons = require('../deviceLogic/events/eventReasons');
+const { pendingTypes, getReason } = require('../deviceLogic/events/eventReasons');
 const {
   activatePendingTunnelsOfDevice,
   releasePublicAddrLimiterBlockage
@@ -297,9 +297,13 @@ class DevicesService {
       }) : [];
 
     // Update with additional objects
+    if (retDevice.org instanceof mongoose.Document) {
+      retDevice.org = retDevice.org.toObject();
+    }
+    retDevice.org._id = retDevice.org._id.toString();
+    retDevice.org.account = retDevice.org.account?.toString();
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
-    retDevice.org = retDevice.org.toString();
     retDevice.upgradeSchedule = pick(item.upgradeSchedule, ['jobQueued', '_id', 'time']);
     retDevice.upgradeSchedule._id = retDevice.upgradeSchedule._id.toString();
     retDevice.upgradeSchedule.time = (retDevice.upgradeSchedule.time)
@@ -398,6 +402,19 @@ class DevicesService {
           }
         },
         {
+          $lookup: {
+            from: 'organizations',
+            localField: 'org',
+            foreignField: '_id',
+            as: 'org'
+          }
+        },
+        {
+          $unwind: {
+            path: '$org'
+          }
+        },
+        {
           $addFields: {
             _id: { $toString: '$_id' },
             'deviceStatus.state': {
@@ -418,6 +435,27 @@ class DevicesService {
       }
 
       if (parsedFilters.length > 0) {
+        let populateInterfacesQosPolicy = false;
+        parsedFilters = parsedFilters.map(({ key, op, val }) => {
+          if (key.startsWith('policies.qos.policy')) {
+            // check interfaces specific policy also
+            populateInterfacesQosPolicy = true;
+            const combinedKey = key + '|interfacesQosPolicy.' + key.split('.').pop();
+            return { key: combinedKey, op, val };
+          } else {
+            return { key, op, val };
+          }
+        });
+        if (populateInterfacesQosPolicy) {
+          pipeline.push({
+            $lookup: {
+              from: 'qospolicies',
+              localField: 'interfaces.qosPolicy',
+              foreignField: '_id',
+              as: 'interfacesQosPolicy'
+            }
+          });
+        }
         const matchFilters = getMatchFilters(parsedFilters);
         if (matchFilters.length > 0) {
           pipeline.push({
@@ -441,7 +479,7 @@ class DevicesService {
       if (requestParams.response === 'summary') {
         pipeline.push({
           $project: {
-            org: { $toString: '$org' },
+            'org._id': { $toString: '$org._id' },
             isApproved: 1,
             isConnected: 1,
             name: 1,
@@ -699,6 +737,7 @@ class DevicesService {
         .populate('policies.firewall.policy', '_id name description rules')
         .populate('policies.multilink.policy', '_id name description')
         .populate('policies.qos.policy', '_id name description')
+        .populate('org', 'vxlanPort')
         .populate({
           path: 'applications.app',
           populate: {
@@ -1291,6 +1330,7 @@ class DevicesService {
           .session(session)
           .populate('policies.firewall.policy', '_id name rules')
           .populate('interfaces.pathlabels', '_id name description color type')
+          .populate('org')
           .populate({
             path: 'applications.app',
             populate: {
@@ -1301,6 +1341,8 @@ class DevicesService {
         if (!origDevice) {
           throw createError(404, 'Device not found');
         }
+
+        const orgId = origDevice.org._id;
 
         // Don't allow empty device name
         // if the 'name' parameter skipped in the request we use the original value
@@ -1319,9 +1361,9 @@ class DevicesService {
 
         let orgSubnets = [];
         if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-          orgSubnets = await getAllOrganizationSubnets(origDevice.org);
+          orgSubnets = await getAllOrganizationSubnets(orgId);
         }
-        const orgBgp = await getAllOrganizationBGPDevices(origDevice.org);
+        const orgBgp = await getAllOrganizationBGPDevices(orgId);
 
         const origTunnels = await tunnelsModel.find({
           isActive: true,
@@ -1331,7 +1373,7 @@ class DevicesService {
         // Make sure interfaces are not deleted, only modified
         if (Array.isArray(deviceRequest.interfaces)) {
           // not allowed to assign path labels of a different organization
-          let orgPathLabels = await pathLabelsModel.find({ org: origDevice.org }, '_id')
+          let orgPathLabels = await pathLabelsModel.find({ org: orgId }, '_id')
             .session(session).lean();
           orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
           const notAllowedPathLabels = deviceRequest.interfaces.map(intf =>
@@ -1398,7 +1440,7 @@ class DevicesService {
                     }).session(session);
                   if (numTunnels > 0) {
                     // eslint-disable-next-line max-len
-                    throw new Error('Unassigned interface used by existing tunnels, please delete related tunnels before');
+                    throw new Error('Interface used by existing tunnels, cannot un-assign. Please delete tunnels first.');
                   }
                 } else {
                   // interface still assigned, check if removed path labels not used by any tunnel
@@ -1712,13 +1754,16 @@ class DevicesService {
             if (origRoute) {
               s.isPending = origRoute.isPending;
               s.pendingReason = origRoute.pendingReason;
+              s.pendingTime = origRoute.pendingTime;
             }
 
             for (const t of incompleteTunnels) {
               const { ip1, ip2 } = generateTunnelParams(t.num);
               if (ip1 === s.gateway || ip2 === s.gateway) {
                 s.isPending = true;
-                s.pendingReason = eventsReasons.tunnelIsPending(t.num);
+                s.pendingType = pendingTypes.tunnelIsPending;
+                s.pendingReason = getReason(s.pendingType, t.num);
+                s.pendingTime = new Date();
                 return s;
               }
             }
@@ -1728,7 +1773,9 @@ class DevicesService {
               for (const ifc of interfacesWithoutIp) {
                 if (ifc.IPv4 === s.gateway) {
                   s.isPending = true;
-                  s.pendingReason = eventsReasons.interfaceHasNoIp(ifc.name, origDevice.name);
+                  s.pendingType = pendingTypes.interfaceHasNoIp;
+                  s.pendingReason = getReason(s.pendingType, ifc.name, origDevice.name);
+                  s.pendingTime = new Date();
                   return s;
                 }
               }
@@ -1846,7 +1893,13 @@ class DevicesService {
         deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
-        const { valid, err } = validateDevice(deviceToValidate, isRunning, orgSubnets, orgBgp);
+        const { valid, err } = validateDevice(
+          deviceToValidate,
+          origDevice.org,
+          isRunning,
+          orgSubnets,
+          orgBgp
+        );
 
         if (!valid) {
           logger.warn('Device update failed',
@@ -1886,6 +1939,7 @@ class DevicesService {
           .populate('policies.firewall.policy', '_id name description rules')
           .populate('policies.multilink.policy', '_id name description')
           .populate('policies.qos.policy', '_id name description')
+          .populate('org')
           .populate({
             path: 'applications.app',
             populate: {
