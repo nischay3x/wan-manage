@@ -297,7 +297,9 @@ class DevicesService {
       }) : [];
 
     // Update with additional objects
-    retDevice.org = retDevice.org.toObject();
+    if (retDevice.org instanceof mongoose.Document) {
+      retDevice.org = retDevice.org.toObject();
+    }
     retDevice.org._id = retDevice.org._id.toString();
     retDevice.org.account = retDevice.org.account?.toString();
     retDevice._id = retDevice._id.toString();
