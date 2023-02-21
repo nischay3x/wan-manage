@@ -42,6 +42,7 @@ const { getUserOrganizations } = require('../utils/membershipUtils');
 const { generateSecret, verifyCode } = require('../otp');
 const SHA256 = require('crypto-js/sha256');
 const rateLimit = require('express-rate-limit');
+const RateLimitStore = require('../rateLimitStore');
 
 router.use(bodyParser.json());
 
@@ -551,8 +552,9 @@ router.route('/mfa/getMfaConfigUri')
 
 // 2fa token is changed every 30 seconds.
 // Hence allow 5 times in 30 seconds to verify,
+const inMemoryStore = new RateLimitStore(1000 * 30); // 30 seconds
 const verifyMfaRateLimit = rateLimit({
-  windowMs: 1000 * 30, // 30 seconds
+  store: inMemoryStore,
   max: 5, // Allow 5 times in token period. The 6th request will be blocked
   message: { error: 'Too many attempts. Please wait and try again later' },
   onLimitReached: (req, res, options) => {
