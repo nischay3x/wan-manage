@@ -117,8 +117,11 @@ router.route('/register')
           }
         });
       })
-      .then(customerId => {
+      .then(async customerId => {
         registerCustomerId = customerId;
+        const subscription = await flexibilling.getAllSubscriptionsForQuery({
+          'customer_id[is]': customerId
+        });
         return Account.create([{
           name: req.body.accountName,
           country: req.body.country,
@@ -126,7 +129,9 @@ router.route('/register')
           serviceType: req.body.serviceType,
           numSites: req.body.numberSites,
           logoFile: '',
-          billingCustomerId: customerId
+          billingCustomerId: customerId,
+          isSubscriptionValid: true,
+          trial_end: subscription?.[0]?.subscription?.trial_end ?? null
         }], { session: session });
       })
       .then((account) => {

@@ -210,7 +210,7 @@ const incAutoSyncTrials = (deviceId) => {
   );
 };
 
-const queueFullSyncJob = async (device, hash, org) => {
+const queueFullSyncJob = async (device, hash, org, username = 'system') => {
   // Queue full sync job
   // Add current hash to message so the device can
   // use it to check if it is already synced
@@ -255,7 +255,7 @@ const queueFullSyncJob = async (device, hash, org) => {
 
   const job = await deviceQueues.addJob(
     machineId,
-    'system',
+    username,
     org,
     // Data
     { title: 'Sync device ' + hostname, tasks: tasks },
@@ -460,10 +460,8 @@ const apply = async (device, user, data) => {
 
   // release existing limiters if the device is blocked
   await reconfigErrorsLimiter.release(_id.toString());
-  const released = await releasePublicAddrLimiterBlockage(device[0]);
-  if (released) {
-    await activatePendingTunnelsOfDevice(updDevice, true);
-  }
+  await releasePublicAddrLimiterBlockage(device[0]);
+  await activatePendingTunnelsOfDevice(updDevice, true);
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(
@@ -476,7 +474,8 @@ const apply = async (device, user, data) => {
   const job = await queueFullSyncJob(
     { deviceId: _id, machineId, hostname, versions },
     hash,
-    org
+    org,
+    user.username
   );
 
   if (!job) {
@@ -489,6 +488,28 @@ const apply = async (device, user, data) => {
     status: 'completed',
     message: ''
   };
+};
+
+/**
+ * Function that put given devices in syncing state
+ * so the system will send sync immediately
+ *
+ * @param {array} devicesIds List of devices to put in syncing state
+ * @returns
+ */
+const forceDevicesSync = async devicesIds => {
+  await devices.updateMany(
+    { _id: { $in: devicesIds } },
+    {
+      $set: {
+        'sync.hash': '',
+        'sync.state': 'syncing',
+        'sync.autoSync': 'on',
+        'sync.trials': 0
+      }
+    },
+    { upsert: false }
+  );
 };
 
 // Register a method that updates sync state
@@ -504,5 +525,6 @@ module.exports = {
   updateSyncStatusBasedOnJobResult,
   apply,
   complete,
-  error
+  error,
+  forceDevicesSync
 };
