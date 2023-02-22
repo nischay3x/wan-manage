@@ -1362,6 +1362,22 @@ class DevicesService {
 
         // Make sure interfaces are not deleted, only modified
         if (Array.isArray(deviceRequest.interfaces)) {
+          const interfacesByDevId = {};
+          for (const ifc of deviceRequest.interfaces) {
+            interfacesByDevId[ifc.devId] = ifc;
+          }
+          // update isAssigned and MTU for VLAN interfaces
+          deviceRequest.interfaces.forEach(ifc => {
+            if (ifc.parentDevId) {
+              const parentIfc = interfacesByDevId[ifc.parentDevId];
+              if (!parentIfc) {
+                logger.error('Unknown parent interface', { params: { ifc } });
+                throw createError(400, `Unknown parent interface ${ifc.parentDevId}`);
+              }
+              ifc.isAssigned = parentIfc.isAssigned;
+              ifc.mtu = parentIfc.mtu;
+            }
+          });
           // not allowed to assign path labels of a different organization
           let orgPathLabels = await pathLabelsModel.find({ org: origDevice.org }, '_id')
             .session(session).lean();

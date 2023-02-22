@@ -450,7 +450,7 @@ const validateDevice = (device, isRunning = false, orgSubnets = [], orgBgpDevice
   }
 
   // VLAN validation
-  const nonVlanIds = assignedIfs.filter(ifc => !ifc.vlanTag).map(ifc => ifc.devId);
+  const nonVlanIds = interfaces.filter(ifc => !ifc.vlanTag).map(ifc => ifc.devId);
   for (const ifc of assignedIfs) {
     if (ifc.vlanTag) {
       if (!ifc.parentDevId) {
