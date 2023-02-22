@@ -73,7 +73,8 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
     );
     // Skip interfaces with invalid IPv4 addresses.
     // Currently we allow empty IPv6 address
-    if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'wifi') continue;
+    if (dhcp !== 'yes' && type !== 'TRUNK' &&
+      !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'wifi') continue;
 
     const ifcInfo = {
       dev_id: devId,

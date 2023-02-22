@@ -1639,7 +1639,7 @@ class DevicesService {
                 );
               }
 
-              if (updIntf.isAssigned && (updIntf.type === 'WAN' || updIntf.type === 'TRUNK')) {
+              if (updIntf.isAssigned && updIntf.type === 'WAN') {
                 const dhcp = updIntf.dhcp;
                 const servers = updIntf.dnsServers;
                 const domains = updIntf.dnsDomains;
