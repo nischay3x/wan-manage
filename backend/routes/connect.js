@@ -161,6 +161,7 @@ connectRouter.route('/register')
                 const idParts = intf.devId.split('.');
                 if (idParts.length > 2 && idParts[0] === 'vlan' && idParts[1]) {
                   intf.vlanTag = idParts[1];
+                  intf.parentDevId = idParts.slice(2).join('.');
                 }
                 intf.isAssigned = false;
                 intf.useStun = true;
