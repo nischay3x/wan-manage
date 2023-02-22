@@ -25,12 +25,9 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'm
 async function up () {
   try {
     const communityRes = await devices.updateMany(
-      {
-        'bgp.neighbors': { $exists: true, $not: { $size: 0 } },
-        'bgp.neighbors.sendCommunity': { $ne: 'all' }
-      },
-      { $set: { 'bgp.neighbors.$[].sendCommunity': 'all' } },
-      { upsert: false }
+      { 'bgp.neighbors': { $exists: true, $not: { $size: 0 } } },
+      { $set: { 'bgp.neighbors.$[elem].sendCommunity': 'all' } },
+      { upsert: false, arrayFilters: [{ 'elem.sendCommunity': { $exists: false } }] }
     );
 
     const operations = [];
@@ -41,31 +38,57 @@ async function up () {
 
     for (const device of devicesList) {
       const routingFilters = device.routingFilters.map(r => {
-        const defaultRule = {
-          _id: mongoose.Types.ObjectId(),
-          route: '0.0.0.0/0',
-          action: r.defaultAction,
-          nextHop: '',
-          priority: 0
-        };
-
-        return {
+        const ret = {
           _id: mongoose.Types.ObjectId(r._id),
           name: r.name,
           description: r.description,
-          rules: [
-            defaultRule,
-            ...r.rules.map((rule, idx) => {
-              return {
-                _id: mongoose.Types.ObjectId(rule._id),
-                route: rule.network,
-                action: r.defaultAction === 'allow' ? 'deny' : 'allow',
-                nextHop: '',
-                priority: idx + 1
-              };
-            })
-          ]
+          rules: []
         };
+
+        let hasDefault = false;
+        let idx = -1;
+        for (const rule of r.rules) {
+          idx++;
+
+          // ensure to not touch rules that already have the new format.
+          if ('route' in rule) {
+            // check if updated format has default rule.
+            if (rule.route === '0.0.0.0/0') {
+              hasDefault = true;
+            }
+
+            // if rule has new format, push it as is.
+            ret.rules.push(rule);
+            continue;
+          }
+
+          // at this point, rule has old format and we migrate it now to the new one
+          //
+          if (rule.network === '0.0.0.0/0') {
+            // if old format rule is default one, don't push it, we will push the default one later
+            continue;
+          }
+
+          ret.rules.push({
+            _id: mongoose.Types.ObjectId(rule._id),
+            route: rule.network,
+            action: r.defaultAction === 'allow' ? 'deny' : 'allow',
+            nextHop: '',
+            priority: idx + 1
+          });
+        }
+
+        if (!hasDefault) {
+          ret.rules.push({
+            _id: mongoose.Types.ObjectId(),
+            route: '0.0.0.0/0',
+            action: r.defaultAction,
+            nextHop: '',
+            priority: 0
+          });
+        }
+
+        return ret;
       });
 
       operations.push({
@@ -77,9 +100,7 @@ async function up () {
       });
     }
 
-    // write bulk
     const res = await devices.collection.bulkWrite(operations);
-
     logger.info('Device bgp.neighbors.sendCommunity and routingFilter migration succeeded', {
       params: { collections: ['devices'], operation: 'up', communityRes, res }
     });
@@ -114,16 +135,37 @@ async function down () {
         const ret = {
           _id: mongoose.Types.ObjectId(r._id),
           name: r.name,
-          description: r.description
+          description: r.description,
+          defaultAction: 'allow', // put allow as default, it will be override later if needed
+          rules: []
         };
 
-        const defaultRule = r.rules.find(rule => rule.route === '0.0.0.0/0');
-        ret.defaultAction = defaultRule?.action ?? 'allow'; // not clear what to put in this case
+        for (const rule of r.rules) {
+          // ensure to not touch rules that already have the old format.
+          if ('network' in rule) {
+            // if rule has old format, push it as is.
+            ret.rules.push(rule);
+            continue;
+          }
 
-        const filtered = r.rules.filter(rule => rule.action !== ret.defaultAction);
-        ret.rules = filtered.map(rule =>
-          ({ _id: mongoose.Types.ObjectId(rule._id), network: rule.route })
-        );
+          // at this point, rule has new format and we migrate it now to the old one
+          if (rule.route === '0.0.0.0/0') {
+            ret.defaultAction = rule.action;
+            continue; // don't push defaultRule to the rules list.
+          }
+
+          // in old format, rules have automatically the opposite action then defaultAction
+          // hance, if they have same action, don't push it. There is no need for this rule.
+          if (rule.action === ret.defaultAction) {
+            continue;
+          }
+
+          ret.rules.push({
+            _id: mongoose.Types.ObjectId(rule._id),
+            network: rule.route
+          });
+        }
+
         return ret;
       });
 
