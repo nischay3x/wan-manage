@@ -77,7 +77,11 @@ class Connections {
     this.getAllDevices().forEach(deviceID => {
       const { socket } = this.devices.getDeviceInfo(deviceID);
       // Don't try to ping a closing, or already closed socket
-      if (!socket || [socket.CLOSING, socket.CLOSED].includes(socket.readyState)) return;
+      if (!socket) return;
+      if ([socket.CLOSING, socket.CLOSED].includes(socket.readyState)) {
+        this.closeConnection(deviceID);
+        return;
+      }
       if (socket.isAlive <= 0) {
         logger.warn('Terminating device due to ping failure', {
           params: { deviceId: deviceID }
@@ -549,7 +553,7 @@ class Connections {
           // add current device to changed devices in order to run modify process for it
           await events.addChangedDevice(origDevice._id, origDevice);
 
-          await events.checkIfToTriggerEvent(plainJsDevice, interfaces);
+          await events.analyze(plainJsDevice, interfaces);
 
           // Update the reconfig hash before applying to prevent infinite loop
           this.devices.updateDeviceInfo(machineId, 'reconfig', deviceInfo.message.reconfig);
@@ -563,11 +567,6 @@ class Connections {
             }
           });
 
-          let addTunnelIds = Object.assign({},
-            ...Array.from(events.activeTunnels, v => ({ [v]: '' })));
-          let removeTunnelIds = Object.assign({},
-            ...Array.from(events.pendingTunnels, v => ({ [v]: '' })));
-
           // modify jobs
           const modifyDevices = await events.prepareModifyDispatcherParameters();
           const completedTasks = {};
@@ -579,8 +578,8 @@ class Connections {
               {
                 org: modifyDevices[modified].orig.org.toString(),
                 newDevice: modifyDevices[modified].updated,
-                sendAddTunnels: addTunnelIds,
-                sendRemoveTunnels: removeTunnelIds,
+                sendAddTunnels: events.activeTunnels,
+                sendRemoveTunnels: events.pendingTunnels,
                 ignoreTasks: completedTasks[modifyDevices[modified].orig._id] ?? []
               }
             );
@@ -610,9 +609,10 @@ class Connections {
               completedTasks[deviceId].push(...tasks[deviceId]);
             }
 
-            // send tunnel jobs only on the first iteration to prevent job duplications
-            addTunnelIds = {};
-            removeTunnelIds = {};
+            // send tunnel jobs only on the first iteration to prevent job duplications.
+            // Hance on end of first iteration, clear the tunnels sets.
+            events.activeTunnels.clear();
+            events.pendingTunnels.clear();
           }
 
           // remove the variable from the memory.

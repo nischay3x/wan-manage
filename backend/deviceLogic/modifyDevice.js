@@ -58,6 +58,7 @@ const {
   transformInterfaces,
   transformRoutingFilters,
   transformOSPF,
+  transformVxlanConfig,
   transformBGP,
   transformDHCP
 } = require('./jobParameters');
@@ -388,7 +389,9 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
  */
 const queueJob = async (org, username, tasks, device, jobResponse) => {
   const job = await deviceQueues.addJob(
-    device.machineId, username, org,
+    device.machineId,
+    username,
+    org,
     // Data
     { title: `Modify device ${device.hostname}`, tasks: tasks },
     // Response data
@@ -420,8 +423,8 @@ const queueJob = async (org, username, tasks, device, jobResponse) => {
  * @param  {Object}  messageParams  object with all changes that will be sent to the device
  * @param  {Object}  user           the user that created the request
  * @param  {string}  org            organization to which the user belongs
- * @param  {object}  sendAddTunnels object of tunnel ids as keys to send add-tunnel job for
- * @param  {object}  sendRemoveTunnels object of tunnel ids as keys to send remove-tunnel job for
+ * @param  {set}     sendAddTunnels Set of tunnel ids to send add-tunnel job for
+ * @param  {set}     sendRemoveTunnels Set of tunnel ids to send remove-tunnel job for
  * @param  {array}   ignoreTasks array of tasks that should be ignored.
  *                               Usually it means that in the current process,
                                  these jobs already sent and no need to resend them.
@@ -545,47 +548,30 @@ const queueModifyDeviceJob = async (
             ]
           },
           // Tunnels regardless of interfaces' changes - Reason 3 above
-          { _id: { $in: [...Object.keys(sendAddTunnels), ...Object.keys(sendRemoveTunnels)] } }
+          { _id: { $in: [...sendAddTunnels, ...sendRemoveTunnels] } }
         ]
       })
       .populate('deviceA')
       .populate('deviceB')
+      .populate('org')
       .populate('peer');
 
     for (const tunnel of tunnels) {
-      let { deviceA, deviceB, peer, pathlabel, _id, advancedOptions } = tunnel;
-
-      const ifcA = deviceA.interfaces.find(ifc => {
-        return ifc._id.toString() === tunnel.interfaceA.toString();
-      });
-
-      const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
-        return ifc._id.toString() === tunnel.interfaceB.toString();
-      });
+      let { deviceA, deviceB, peer, _id, advancedOptions, org: tunnelOrg } = tunnel;
 
       // First check if need to send tunnel jobs regardless of interface change.
       const [
         removeTasksDeviceA, removeTasksDeviceB
-      ] = await prepareTunnelRemoveJob(tunnel, peer, true);
+      ] = await prepareTunnelRemoveJob(tunnel, true);
 
-      if (_id.toString() in sendRemoveTunnels) {
+      if (sendRemoveTunnels.has(_id.toString())) {
         _addTunnelTasks(tasks, tunnel, removeTasksDeviceA, removeTasksDeviceB);
         continue;
       }
 
-      const [addTasksDeviceA, addTasksDeviceB] = await prepareTunnelAddJob(
-        tunnel,
-        ifcA,
-        ifcB,
-        pathlabel,
-        deviceA,
-        deviceB,
-        advancedOptions,
-        peer,
-        true
-      );
+      const [addTasksDeviceA, addTasksDeviceB] = await prepareTunnelAddJob(tunnel, tunnelOrg, true);
 
-      if (_id.toString() in sendAddTunnels) {
+      if (sendAddTunnels.has(_id.toString())) {
         _addTunnelTasks(tasks, tunnel, addTasksDeviceA, addTasksDeviceB);
         continue;
       }
@@ -752,53 +738,20 @@ const queueModifyDeviceJob = async (
     // at this point, list of jobs is ready.
     for (const deviceId in tasks) {
       const deviceTasks = tasks[deviceId].tasks;
-
-      // during the process, can be duplications in tasks so here we clean it
-      let finalTasks = uniqWith(deviceTasks, isEqual);
-
-      // remove the ignored tasks
-      // "ignoreTasks" is array of tasks that should be removed from the final list.
-      // The reason could be that those tasks already sent to the device
-      // and no need to send it once again.
-      // (see the long comment with examples in Connections.js file).
-      for (const ignoreTask of ignoreTasks) {
-        const index = finalTasks.findIndex(f => isEqual(ignoreTask, f));
-        if (index > -1) {
-          finalTasks.splice(index, 1);
-        }
-      }
-
-      sentTasks[deviceId] = finalTasks;
+      const device = tasks[deviceId].device;
       tasks[deviceId].jobResponse ??= {};
 
-      if (finalTasks.length === 0) {
-        continue;
-      }
+      const { modifyJob, finalTasks } = await processModifyJob(
+        deviceTasks,
+        device,
+        org,
+        user,
+        ignoreTasks,
+        tasks[deviceId].jobResponse
+      );
 
-      if (finalTasks.length > 1) {
-        // convert the tasks to one aggregated request
-        finalTasks = [{
-          entity: 'agent',
-          message: 'aggregated',
-          params: { requests: finalTasks }
-        }];
-      }
-
-      try {
-        const modifyJob = await queueJob(
-          org,
-          user.username,
-          finalTasks,
-          tasks[deviceId].device,
-          tasks[deviceId].jobResponse
-        );
-
-        jobs.push(modifyJob);
-      } catch (err) {
-        logger.error('Failed to queue device modification message', {
-          params: { err: err.message, finalTasks, deviceId }
-        });
-      }
+      if (modifyJob) jobs.push(modifyJob);
+      if (sentTasks) sentTasks[deviceId] = finalTasks ?? [];
     }
   } catch (err) {
     logger.error('Failed to handle device modification process', {
@@ -1128,7 +1081,7 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
  * @return {None}
  */
 const apply = async (device, user, data) => {
-  const org = data.org;
+  const orgId = data.org;
   const modifyParams = {};
 
   device[0] = await device[0]
@@ -1149,8 +1102,8 @@ const apply = async (device, user, data) => {
     .populate('policies.qos.policy')
     .execPopulate();
 
-  data.sendAddTunnels ??= {};
-  data.sendRemoveTunnels ??= {};
+  data.sendAddTunnels ??= new Set();
+  data.sendRemoveTunnels ??= new Set();
   data.ignoreTasks ??= [];
 
   // Create the default/static routes modification parameters
@@ -1419,7 +1372,7 @@ const apply = async (device, user, data) => {
 
   // Queue job only if the device has changed
   // Return empty jobs array if the device did not change
-  if (!modified && isEmpty(data.sendAddTunnels) && isEmpty(data.sendRemoveTunnels)) {
+  if (!modified && data.sendAddTunnels.size === 0 && data.sendRemoveTunnels.size === 0) {
     logger.debug('The device was not modified, nothing to apply', {
       params: { newInterfaces: JSON.stringify(newInterfaces), device: device[0]._id }
     });
@@ -1453,7 +1406,7 @@ const apply = async (device, user, data) => {
       ...unassign
     ]);
     if (!dhcpValidation.valid) throw (new Error(dhcpValidation.err));
-    await setJobPendingInDB(device[0]._id, org, true);
+    await setJobPendingInDB(device[0]._id, orgId, true);
 
     // Queue device modification job
     const { jobs, sentTasks } = await queueModifyDeviceJob(
@@ -1461,7 +1414,7 @@ const apply = async (device, user, data) => {
       data.newDevice,
       modifyParams,
       user,
-      org,
+      orgId,
       data.sendAddTunnels,
       data.sendRemoveTunnels,
       data.ignoreTasks
@@ -1539,14 +1492,29 @@ const sync = async (deviceId, org) => {
   )
     .lean()
     // no need to populate pathLabel name here, since we need only the id's
-    .populate('interfaces.pathlabels', '_id type');
+    .populate('interfaces.pathlabels', '_id type')
+    .populate('org');
 
   const {
     interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions
   } = device;
 
+  const majorVersion = getMajorVersion(versions.agent);
+  const minorVersion = getMinorVersion(versions.agent);
+
   // Prepare add-interface message
   const deviceConfRequests = [];
+
+  // do not send it to device version < 6.2
+  const isVxlanConfigSupported = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+  if (isVxlanConfigSupported) {
+    const vxlanConfigParams = transformVxlanConfig(device.org);
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-vxlan-config',
+      params: vxlanConfigParams
+    });
+  }
 
   // build bridges
   const bridges = getBridges(interfaces);
@@ -1608,8 +1576,6 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  const majorVersion = getMajorVersion(versions.agent);
-  const minorVersion = getMinorVersion(versions.agent);
   const isBgpSupported = majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3);
   const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
   if (isBgpSupported && bgp?.enable) {
@@ -1755,11 +1721,58 @@ const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
     });
 };
 
+const processModifyJob = async (tasks, device, orgId, user, ignoreTasks = [], jobResponse = {}) => {
+  // during the process, can be duplications in tasks so here we clean it
+  let finalTasks = uniqWith(tasks, isEqual);
+
+  // remove the ignored tasks
+  // "ignoreTasks" is array of tasks that should be removed from the final list.
+  // The reason could be that those tasks already sent to the device
+  // and no need to send it once again.
+  // (see the long comment with examples in Connections.js file).
+  for (const ignoreTask of ignoreTasks) {
+    const index = finalTasks.findIndex(f => isEqual(ignoreTask, f));
+    if (index > -1) {
+      finalTasks.splice(index, 1);
+    }
+  }
+
+  if (finalTasks.length === 0) {
+    return { modifyJob: null, finalTasks: null };
+  }
+
+  if (finalTasks.length > 1) {
+    // convert the tasks to one aggregated request
+    finalTasks = [{
+      entity: 'agent',
+      message: 'aggregated',
+      params: { requests: finalTasks }
+    }];
+  }
+
+  try {
+    const modifyJob = await queueJob(
+      orgId,
+      user.username,
+      finalTasks,
+      device,
+      jobResponse
+    );
+
+    return { modifyJob, finalTasks };
+  } catch (err) {
+    logger.error('Failed to queue device modification message', {
+      params: { err: err.message, finalTasks, deviceId: device._id }
+    });
+  }
+};
+
 module.exports = {
   apply: apply,
   complete: complete,
   completeSync: completeSync,
   sync: sync,
   error: error,
-  remove: remove
+  remove: remove,
+  processModifyJob: processModifyJob
 };

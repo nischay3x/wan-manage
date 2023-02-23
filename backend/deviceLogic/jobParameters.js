@@ -20,6 +20,7 @@ const pick = require('lodash/pick');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const tunnelsModel = require('../models/tunnels');
+const configs = require('../configs')();
 
 /**
  * Transforms mongoose array of interfaces into array of objects
@@ -129,6 +130,19 @@ const transformOSPF = (ospf, bgp) => {
 };
 
 /**
+ * Creates a add-vxlan-config object
+ * @param  {Object} org organization object
+ * @return {Object}      an object containing the VXLAN config parameters
+ */
+const transformVxlanConfig = org => {
+  const vxlanConfigParams = {
+    port: org.vxlanPort || configs.get('tunnelPort')
+  };
+
+  return vxlanConfigParams;
+};
+
+/**
  * Creates a modify-routing-bgp object
  * @param  {Object} bgp bgp configuration
  * @param  {Object} interfaces  assigned interfaces of device
@@ -229,5 +243,6 @@ module.exports = {
   transformRoutingFilters,
   transformOSPF,
   transformBGP,
-  transformDHCP
+  transformDHCP,
+  transformVxlanConfig
 };
