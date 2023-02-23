@@ -104,7 +104,7 @@ const validateVlanAddress = devId => {
     /^vlan\.([1-9]|[1-9][0-9]{1,2}|[1-3][0-9]{1,3}|40([0-8][0-9]|9[0-4]))\.pci:([A-F0-9]{2,4}:)?([A-F0-9]{2}|[A-F0-9]{4}):[A-F0-9]{2}\.[A-F0-9]{2}$/i.test(devId)
   );
 };
-const validateIfcName = (name) => { return /^[a-zA-Z0-9_/.]{1,15}$/i.test(name || ''); };
+const validateIfcName = (name) => { return /^[a-zA-Z0-9_/.]{1,64}$/i.test(name || ''); };
 const validateIsNumber = (str) => { return !isNaN(Number(str)); };
 const validateDriverName = (name) => { return /^[a-z0-9_-]{1,30}$/i.test(name || ''); };
 const validateMacAddress = mac => {

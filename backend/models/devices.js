@@ -42,7 +42,7 @@ const interfacesSchema = new Schema({
   name: {
     type: String,
     minlength: [1, 'Name length must be at least 1'],
-    maxlength: [50, 'Name length must be at most 50'],
+    maxlength: [64, 'Name length must be at most 64'],
     validate: {
       validator: validators.validateIfcName,
       message: 'name should be a valid interface name'
