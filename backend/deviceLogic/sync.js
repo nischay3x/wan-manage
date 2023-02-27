@@ -17,6 +17,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // const deviceStatus = require('../periodic/deviceStatus')();
 const configs = require('../configs')();
+const mongoConns = require('../mongoConns')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -123,47 +124,45 @@ const toMessageContents = (message) => {
  * @returns
  */
 const setSyncStateOnJobQueue = async (machineId, message) => {
-  // Calculate the new configuration hash
-  const { sync } = await devices.findOne(
-    { machineId: machineId },
-    { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
-  )
-    .lean();
+  await mongoConns.mainDBwithTransaction(async (session) => {
+    const device = await devices.findOne(
+      { machineId: machineId },
+      { 'sync.hash': 1, 'sync.state': 1, versions: 1 },
+      { session }
+    );
 
-  const { hash } = sync || {};
-  if (hash === null || hash === undefined) {
-    throw new Error('Failed to get device hash value');
-  }
-
-  // Reset hash value for full-sync messages
-  const messageContents = toMessageContents(message);
-  const newHash =
-    messageContents !== 'sync-device' ? calcChangeHash(hash, message) : '';
-
-  const { state } = sync;
-  const newState = state !== 'not-synced' ? 'syncing' : 'not-synced';
-  logger.info('New sync state calculated, updating database', {
-    params: { state, newState, hash, newHash }
-  });
-
-  // Update hash and reset autoSync state only when the added
-  // job is not sync-device. The hash for sync-device job will be
-  // reset after the job is completed. If sync-device job has
-  // failed, the hash will not be changed.
-  const updateFields = messageContents !== 'sync-device'
-    ? {
-      'sync.state': newState,
-      'sync.hash': newHash,
-      'sync.autoSync': 'on',
-      'sync.trials': 0
+    const { sync } = device;
+    const { hash } = sync || {};
+    if (hash === null || hash === undefined) {
+      throw new Error('Failed to get device hash value');
     }
-    : { 'sync.state': newState };
 
-  return devices.updateOne(
-    { machineId: machineId },
-    updateFields,
-    { upsert: false }
-  );
+    // Reset hash value for full-sync messages
+    const messageContents = toMessageContents(message);
+    const newHash =
+      messageContents !== 'sync-device' ? calcChangeHash(hash, message) : '';
+
+    const { state } = sync;
+    const newState = state !== 'not-synced' ? 'syncing' : 'not-synced';
+    logger.info('New sync state calculated, updating database', {
+      params: { state, newState, hash, newHash }
+    });
+
+    // Update hash and reset autoSync state only when the added
+    // job is not sync-device. The hash for sync-device job will be
+    // reset after the job is completed. If sync-device job has
+    // failed, the hash will not be changed.
+    if (messageContents !== 'sync-device') {
+      device.sync.state = newState;
+      device.sync.hash = newHash;
+      device.sync.autoSync = 'on';
+      device.sync.trials = 0;
+    } else {
+      device.sync.state = newState;
+    }
+
+    await device.save({ session });
+  });
 };
 
 const updateSyncState = (org, deviceId, state) => {
