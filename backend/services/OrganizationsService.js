@@ -755,7 +755,7 @@ const getInterfaceConditionsToBePending = (key, origVxlanPort) => {
 };
 
 const handleToPendingTunnels = async (tunnels) => {
-  if (tunnels.length === 0) return;
+  if (tunnels.length === 0) return [];
 
   const failedDevices = new Set();
   const deviceIds = new Set();
