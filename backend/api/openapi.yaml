@@ -9302,6 +9302,13 @@ components:
         cpuInfo:
           $ref: '#/components/schemas/DeviceCpuInfo'
       type: object
+    OrganizationInfo:
+      example:
+        vxlanPort: 4789
+      properties:
+        vxlanPort:
+          type: string
+      type: object
     Device:
       example:
         interfaces:
@@ -9439,7 +9446,9 @@ components:
         account:
           type: string
         org:
-          $ref: '#/components/schemas/Organization'
+          type: string
+        orgInfo:
+          $ref: '#/components/schemas/OrganizationInfo'
         ipList:
           type: string
         staticroutes:

@@ -453,10 +453,7 @@ const queueModifyDeviceJob = async (
     (unassign || []).forEach(ifc => { interfacesIdsSet.add(ifc._id); });
   }
   if (has(messageParams, 'modify_interfaces')) {
-    const interfaces = [
-      ...messageParams.modify_interfaces.interfaces,
-      ...messageParams.modify_interfaces.lte_enable_disable
-    ];
+    const { interfaces } = messageParams.modify_interfaces;
     interfaces.forEach(ifc => {
       interfacesIdsSet.add(ifc._id);
       modifiedIfcsMap[ifc._id] = ifc;
