@@ -453,7 +453,7 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
   }
 
   // VLAN validation
-  const nonVlanIds = interfaces.filter(ifc => !ifc.vlanTag).map(ifc => ifc.devId);
+  const interfacesByDevId = keyBy(interfaces, 'devId');
   for (const ifc of interfaces) {
     if (ifc.vlanTag) {
       if (!ifc.parentDevId) {
@@ -462,7 +462,7 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
           err: `VLAN ${ifc.name} must belong to some parent interface`
         };
       }
-      if (!nonVlanIds.includes(ifc.parentDevId)) {
+      if (!interfacesByDevId[ifc.parentDevId]) {
         return {
           valid: false,
           err: 'Wrong parent interface for VLAN ' + ifc.name
