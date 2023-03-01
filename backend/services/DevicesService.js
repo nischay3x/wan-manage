@@ -1391,15 +1391,16 @@ class DevicesService {
           $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
         }).session(session).lean();
 
-        // not allowed to assign path labels of a different organization
-        let orgPathLabels = await pathLabelsModel.find({ org: orgId }, '_id')
-          .session(session).lean();
-        orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
-        const notAllowedPathLabels = [];
-
         // Make sure interfaces are not deleted, only modified
         if (Array.isArray(deviceRequest.interfaces)) {
           const interfacesByDevId = keyBy(deviceRequest.interfaces, 'devId');
+
+          // not allowed to assign path labels of a different organization
+          let orgPathLabels = await pathLabelsModel.find({ org: orgId }, '_id')
+            .session(session).lean();
+          orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
+          const notAllowedPathLabels = [];
+
           // request interfaces first loop: simple validation of input data
           deviceRequest.interfaces.forEach(ifc => {
             if (ifc.parentDevId) {
