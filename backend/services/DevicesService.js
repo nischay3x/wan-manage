@@ -1414,7 +1414,7 @@ class DevicesService {
             }
             if (Array.isArray(ifc.pathlabels)) {
               ifc.pathlabels.forEach(pl => {
-                if (!orgPathLabels.includes(pl)) {
+                if (!orgPathLabels.includes(pl._id.toString())) {
                   notAllowedPathLabels.push(pl);
                 }
               });
@@ -1448,7 +1448,8 @@ class DevicesService {
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing static routes, please delete related static routes before`);
               }
               const hasTunnels = origTunnels.some(({ interfaceA, interfaceB }) => {
-                return interfaceA === origIntf._id || interfaceB === origIntf._id;
+                return interfaceA.toString() === origIntf._id.toString() ||
+                  interfaceB.toString() === origIntf._id.toString();
               });
               if (hasTunnels) {
                 // eslint-disable-next-line max-len
@@ -1562,8 +1563,9 @@ class DevicesService {
                   ) : [];
                 if (remLabels.length > 0) {
                   const hasTunnels = origTunnels.some(({ interfaceA, interfaceB, pathlabel }) => {
-                    return (interfaceA === origIntf._id || interfaceB === origIntf._id) &&
-                      remLabels.some(p => p._id === pathlabel);
+                    return (interfaceA.toString() === origIntf._id.toString() ||
+                      interfaceB.toString() === origIntf._id.toString()) &&
+                      remLabels.some(p => p._id.toString() === pathlabel.toString());
                   });
                   if (hasTunnels) {
                   // eslint-disable-next-line max-len
