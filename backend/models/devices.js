@@ -59,22 +59,22 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
-  // Parent device bus address, used for VLAN interfaces
+  // Parent device bus address, used for VLAN sub-interfaces
   parentDevId: {
     type: String,
-    maxlength: [50, 'devId length must be at most 50'],
+    maxlength: [50, 'Parent devId length must be at most 50'],
     validate: {
       validator: validators.validateParentDevId,
       message: 'Parent devId should be a valid devId address'
     },
     default: ''
   },
-  // Parent device bus address, used for VLAN interfaces
+  // VLAN Tag, used for VLAN sub-interfaces
   vlanTag: {
     type: String,
     default: '',
     validate: {
-      validator: validators.validateVlan,
+      validator: validators.validateVlanTag,
       message: 'VLAN Tag should be a number between 1 and 4094'
     }
   },

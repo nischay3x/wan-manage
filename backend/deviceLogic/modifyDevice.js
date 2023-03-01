@@ -1200,7 +1200,7 @@ const apply = async (device, user, data) => {
 
   // Push missing VLAN interfaces as unassigned to initiate a remove-interface task
   origInterfaces.forEach(origIfc => {
-    if (origIfc.devId.startsWith('vlan') &&
+    if (origIfc.parentDevId &&
       !newInterfaces.some(newIfc => origIfc.devId === newIfc.devId)) {
       newInterfaces.push({ ...origIfc, isAssigned: false });
       newIsAssigned.push({

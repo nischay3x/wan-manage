@@ -190,7 +190,7 @@ const validateApplicationIdentifier = str => { return /[A-Za-z_.-]/i.test(str ||
 const validateBGPASN = val => val && validateIsInteger(val) && +val >= 1;
 const validateBGPInterval = val => val && validateIsInteger(val) && +val >= 0 && +val < 65535;
 const validateCpuCoresNumber = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
-const validateVlan = val => val === '' || (val && validateIsInteger(val) && +val >= 0 && +val <= 4096);
+const validateVlanTag = val => val === '' || (val && validateIsInteger(val) && +val >= 0 && +val <= 4096);
 
 module.exports = {
   validateDHCP,
@@ -201,7 +201,7 @@ module.exports = {
   validatePciAddress,
   validateDevId,
   validateParentDevId,
-  validateVlan,
+  validateVlanTag,
   validateIfcName,
   validateIPv4Mask,
   validateIPv6Mask,

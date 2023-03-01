@@ -33,6 +33,7 @@ const net = require('net');
 const pick = require('lodash/pick');
 const isEqual = require('lodash/isEqual');
 const uniqBy = require('lodash/uniqBy');
+const keyBy = require('lodash/keyBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const flexibilling = require('../flexibilling');
 const dispatcher = require('../deviceLogic/dispatcher');
@@ -1381,13 +1382,16 @@ class DevicesService {
           $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
         }).session(session).lean();
 
+        // not allowed to assign path labels of a different organization
+        let orgPathLabels = await pathLabelsModel.find({ org: orgId }, '_id')
+          .session(session).lean();
+        orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
+        const notAllowedPathLabels = [];
+
         // Make sure interfaces are not deleted, only modified
         if (Array.isArray(deviceRequest.interfaces)) {
-          const interfacesByDevId = {};
-          for (const ifc of deviceRequest.interfaces) {
-            interfacesByDevId[ifc.devId] = ifc;
-          }
-          // update isAssigned and MTU for VLAN interfaces
+          const interfacesByDevId = keyBy(deviceRequest.interfaces, 'devId');
+          // request interfaces first loop: simple validation of input data
           deviceRequest.interfaces.forEach(ifc => {
             if (ifc.parentDevId) {
               const parentIfc = interfacesByDevId[ifc.parentDevId];
@@ -1395,27 +1399,34 @@ class DevicesService {
                 logger.error('Unknown parent interface', { params: { ifc } });
                 throw createError(400, `Unknown parent interface ${ifc.parentDevId}`);
               }
+              // update isAssigned and MTU of the parent for VLAN sub-interfaces
               ifc.isAssigned = parentIfc.isAssigned;
               ifc.mtu = parentIfc.mtu;
             }
+            if (Array.isArray(ifc.pathlabels)) {
+              ifc.pathlabels.forEach(pl => {
+                if (!orgPathLabels.includes(pl)) {
+                  notAllowedPathLabels.push(pl);
+                }
+              });
+            }
           });
-          // not allowed to assign path labels of a different organization
-          let orgPathLabels = await pathLabelsModel.find({ org: orgId }, '_id')
-            .session(session).lean();
-          orgPathLabels = orgPathLabels.map(pl => pl._id.toString());
-          const notAllowedPathLabels = deviceRequest.interfaces.map(intf =>
-            !Array.isArray(intf.pathlabels) ? []
-              : intf.pathlabels.map(pl => pl._id).filter(id => !orgPathLabels.includes(id))
-          ).flat();
+
           if (notAllowedPathLabels.length) {
             logger.error('Not allowed path labels', { params: { notAllowedPathLabels } });
             throw createError(400, 'Not allowed to assign path labels of a different organization');
           };
 
-          // validate removed, unassigned and modified interfaces
-          await Promise.all(origDevice.interfaces.map(async origIntf => {
-            const interfaceId = origIntf._id.toString();
-            const updIntf = deviceRequest.interfaces.find(rif => interfaceId === rif._id);
+          // original interfaces loop: removed, unassigned and modified interfaces validation
+          const origInterfacesByDevId = {};
+          for (const origIntf of origDevice.interfaces) {
+            origInterfacesByDevId[origIntf.devId] = origIntf;
+            const updIntf = interfacesByDevId[origIntf.devId];
+            if (!updIntf && !origIntf.parentDevId) {
+              // we allow to remove only sub-interfaces
+              logger.error('Not allowed to remove interfaces', { params: { origIntf } });
+              throw createError(400, 'Not allowed to remove interfaces');
+            };
             const ifcType = !updIntf ? 'Removed'
               : updIntf.isAssigned ? updIntf.type : 'Unassigned';
 
@@ -1427,12 +1438,10 @@ class DevicesService {
                 // eslint-disable-next-line max-len
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing static routes, please delete related static routes before`);
               }
-              const numTunnels = await tunnelsModel
-                .countDocuments({
-                  isActive: true,
-                  $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }]
-                }).session(session);
-              if (numTunnels > 0) {
+              const hasTunnels = origTunnels.some(({ interfaceA, interfaceB }) => {
+                return interfaceA === origIntf._id || interfaceB === origIntf._id;
+              });
+              if (hasTunnels) {
                 // eslint-disable-next-line max-len
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing tunnels, please delete related tunnels before`);
               }
@@ -1487,36 +1496,17 @@ class DevicesService {
                 );
               }
             }
-          }));
+          };
 
-          const newVlanTags = deviceRequest.interfaces.reduce(
-            (res, { devId, vlanTag }) => vlanTag ? [...res, { devId, vlanTag }] : res, []
-          );
-          const origVlanTags = origDevice.interfaces.reduce(
-            (res, { devId, vlanTag }) => vlanTag ? [...res, { devId, vlanTag }] : res, []
-          );
-          const requestedInterfaces = [
-            // existing interfaces
-            ...origDevice.interfaces.filter(ifc => !ifc.vlanTag ||
-              newVlanTags.some(tag => tag.devId === ifc.devId && tag.vlanTag === ifc.vlanTag)
-            ),
-            // added interfaces
-            ...deviceRequest.interfaces.filter(ifc => ifc.vlanTag &&
-              !origVlanTags.some(tag => tag.devId === ifc.devId && tag.vlanTag === ifc.vlanTag)
-            )
-          ];
-
-          deviceRequest.interfaces = await Promise.all(requestedInterfaces.map(async origIntf => {
-            if (!origIntf._id) return;
-            const interfaceId = origIntf._id.toString();
-
+          // prepare request interfaces loop
+          deviceRequest.interfaces = deviceRequest.interfaces.map(updIntf => {
+            const origIntf = origInterfacesByDevId[updIntf.devId];
             // these parameters can be empty in case of DHCP or TRUNK interface
-            origIntf.IPv4 = origIntf.IPv4 || '';
-            origIntf.IPv4Mask = origIntf.IPv4Mask || '';
-            origIntf.gateway = origIntf.gateway || '';
+            updIntf.IPv4 = updIntf.IPv4 || '';
+            updIntf.IPv4Mask = updIntf.IPv4Mask || '';
+            updIntf.gateway = updIntf.gateway || '';
 
-            const updIntf = deviceRequest.interfaces.find(rif => interfaceId === rif._id);
-            if (updIntf) {
+            if (origIntf) {
               // if the user disabled the STUN for this interface
               // we release the high rate blockage if exists
               const isStunDisabledNow = origIntf.useStun === true && updIntf.useStun === false;
@@ -1562,25 +1552,14 @@ class DevicesService {
                     p => !pathlabels.includes(p._id.toString())
                   ) : [];
                 if (remLabels.length > 0) {
-                  const remLabelsArray = remLabels.map(p => p._id);
-                  const numTunnels = await tunnelsModel
-                    .countDocuments({
-                      isActive: true,
-                      $or: [{ interfaceA: origIntf._id }, { interfaceB: origIntf._id }],
-                      pathlabel: { $in: remLabelsArray }
-                    }).session(session);
-                  if (numTunnels > 0) {
+                  const hasTunnels = origTunnels.some(({ interfaceA, interfaceB, pathlabel }) => {
+                    return (interfaceA === origIntf._id || interfaceB === origIntf._id) &&
+                      remLabels.some(p => p._id === pathlabel);
+                  });
+                  if (hasTunnels) {
                   // eslint-disable-next-line max-len
                     throw createError(400, 'Removed label used by existing tunnels, please delete related tunnels before');
                   }
-                }
-              }
-
-              // check interface specific validation
-              if (updIntf?.qosPolicy) {
-                const { valid, err } = validateQOSPolicy([origDevice]);
-                if (!valid) {
-                  throw new Error(err);
                 }
               }
 
@@ -1644,56 +1623,6 @@ class DevicesService {
                 );
               }
 
-              // don't allow set OSPF keyID without key and vise versa
-              const keyId = updIntf.ospf.keyId;
-              const key = updIntf.ospf.key;
-              if ((keyId && !key) || (!keyId && key)) {
-                throw createError(400,
-                  `(${origIntf.name}) Not allowed to save OSPF key ID without key and vice versa`
-                );
-              }
-
-              if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
-                throw new Error(
-                  `Can't set BGP on ${origIntf.name}. ` +
-                  'BGP is disabled, please configure BGP from routing settings first'
-                );
-              }
-
-              if (updIntf.isAssigned && updIntf.type === 'WAN') {
-                const dhcp = updIntf.dhcp;
-                const servers = updIntf.dnsServers;
-                const domains = updIntf.dnsDomains;
-
-                // Prevent static IP without dns servers
-                if (dhcp === 'no' && servers.length === 0) {
-                  throw createError(400, `DNS ip address is required for ${origIntf.name}`);
-                }
-
-                // Prevent override dhcp DNS info without dns servers
-                if (dhcp === 'yes' && !updIntf.useDhcpDnsServers && servers.length === 0) {
-                  throw createError(400, `DNS ip address is required for ${origIntf.name}`);
-                }
-
-                const isValidIpList = servers.every(ip => net.isIPv4(ip));
-                if (!isValidIpList) {
-                  throw createError(400, `DNS ip addresses are not valid for (${origIntf.name})`);
-                }
-
-                const isValidDomainList = domains.every(domain => {
-                  return validator.isFQDN(domain, { require_tld: false });
-                });
-                if (!isValidDomainList) {
-                  throw createError(400, `DNS domain list is not valid for (${origIntf.name})`);
-                }
-              }
-
-              // remove _id for created vlan interfaces
-              if (updIntf.vlanTag && !origVlanTags.some(
-                tag => tag.devId === updIntf.devId && tag.vlanTag === updIntf.vlanTag)) {
-                delete updIntf._id;
-              }
-
               if (updIntf.isAssigned !== origIntf.isAssigned ||
                 updIntf.type !== origIntf.type ||
                 updIntf.dhcp !== origIntf.dhcp ||
@@ -1703,10 +1632,69 @@ class DevicesService {
               ) {
                 updIntf.modified = true;
               }
-              return updIntf;
+            } else {
+              // only allow to add sub-interfaces
+              if (!updIntf.parentDevId) {
+                logger.error('Not allowed to add interfaces', { params: { updIntf } });
+                throw createError(400, 'Not allowed to add interfaces');
+              }
+              // remove _id for added or modified VLAN interfaces
+              delete updIntf._id;
             }
-            return origIntf;
-          }));
+
+            // check interface specific validation
+            if (updIntf?.qosPolicy) {
+              const { valid, err } = validateQOSPolicy([origDevice]);
+              if (!valid) {
+                throw new Error(err);
+              }
+            }
+
+            // don't allow set OSPF keyID without key and vise versa
+            const keyId = updIntf.ospf.keyId;
+            const key = updIntf.ospf.key;
+            if ((keyId && !key) || (!keyId && key)) {
+              throw createError(400,
+                `(${updIntf.name}) Not allowed to save OSPF key ID without key and vice versa`
+              );
+            }
+
+            if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
+              throw new Error(
+                `Can't set BGP on ${origIntf.name}. ` +
+                'BGP is disabled, please configure BGP from routing settings first'
+              );
+            }
+
+            if (updIntf.isAssigned && updIntf.type === 'WAN') {
+              const dhcp = updIntf.dhcp;
+              const servers = updIntf.dnsServers;
+              const domains = updIntf.dnsDomains;
+
+              // Prevent static IP without dns servers
+              if (dhcp === 'no' && servers.length === 0) {
+                throw createError(400, `DNS ip address is required for ${origIntf.name}`);
+              }
+
+              // Prevent override dhcp DNS info without dns servers
+              if (dhcp === 'yes' && !updIntf.useDhcpDnsServers && servers.length === 0) {
+                throw createError(400, `DNS ip address is required for ${updIntf.name}`);
+              }
+
+              const isValidIpList = servers.every(ip => net.isIPv4(ip));
+              if (!isValidIpList) {
+                throw createError(400, `DNS ip addresses are not valid for (${updIntf.name})`);
+              }
+
+              const isValidDomainList = domains.every(domain => {
+                return validator.isFQDN(domain, { require_tld: false });
+              });
+              if (!isValidDomainList) {
+                throw createError(400, `DNS domain list is not valid for (${updIntf.name})`);
+              }
+            }
+            return updIntf;
+          });
         };
 
         // add device id to device request
