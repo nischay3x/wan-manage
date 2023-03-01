@@ -502,7 +502,8 @@ const forceDevicesSync = async devicesIds => {
     { _id: { $in: devicesIds } },
     {
       $set: {
-        'sync.hash': '',
+        // set hardcoded hash to trigger a change on next get-device-stats
+        'sync.hash': 'FORCE_SYNC',
         'sync.state': 'syncing',
         'sync.autoSync': 'on',
         'sync.trials': 0

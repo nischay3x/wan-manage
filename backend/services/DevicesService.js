@@ -299,12 +299,18 @@ class DevicesService {
         return retRule;
       }) : [];
 
-    // Update with additional objects
+    // "org" can be "populated" or by aggregation "lookup".
+    // The lookup doesn't return "mongoose.Document" so there is no toObject() method in prototype.
     if (retDevice.org instanceof mongoose.Document) {
       retDevice.org = retDevice.org.toObject();
     }
-    retDevice.org._id = retDevice.org._id.toString();
-    retDevice.org.account = retDevice.org.account?.toString();
+    // ret.org should be organization ID due to backward compatibility.
+    // we adding the organization info to a new field
+    retDevice.orgInfo = {
+      vxlanPort: retDevice.org.vxlanPort
+    };
+    retDevice.org = retDevice.org._id.toString();
+
     retDevice._id = retDevice._id.toString();
     retDevice.account = retDevice.account.toString();
     retDevice.upgradeSchedule = pick(item.upgradeSchedule, ['jobQueued', '_id', 'time']);
@@ -482,7 +488,10 @@ class DevicesService {
       if (requestParams.response === 'summary') {
         pipeline.push({
           $project: {
-            'org._id': { $toString: '$org._id' },
+            org: { $toString: '$org._id' },
+            orgInfo: {
+              vxlanPort: '$org.vxlanPort'
+            },
             isApproved: 1,
             isConnected: 1,
             name: 1,
