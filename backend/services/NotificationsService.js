@@ -31,6 +31,7 @@ const { membership } = require('../models/membership');
 const Organizations = require('../models/organizations');
 const users = require('../models/users');
 const { ObjectId } = require('mongodb');
+const { apply } = require('../deviceLogic/deviceNotifications');
 
 class NotificationsService {
   /**
@@ -386,38 +387,48 @@ class NotificationsService {
 
   static async notificationsConfPUT ({ notificationsConfPut }, { user }) {
     try {
-      const { org, account, group, rules, setAsDefault = false } = notificationsConfPut;
-      const orgIds = await NotificationsService.validateParams(org, account, group, user, setAsDefault);
+      const { org: orgId, account, group, rules: newRules, setAsDefault = false } = notificationsConfPut;
+      const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
       if (orgIds && orgIds.error) {
         return orgIds;
       }
       // TODO check if the user is the account owner
       if (setAsDefault) {
-        await notificationsConf.update({ account: account }, { $set: { account: account, rules: rules } }, { upsert: true });
+        await notificationsConf.update({ account: account }, { $set: { account: account, rules: newRules } }, { upsert: true });
       } else {
         for (const org of orgIds) {
-          for (let i = 0; i < rules.length; i++) {
+          const devicesList = [];
+          for (let i = 0; i < newRules.length; i++) {
             const updateData = { $set: {} };
-            if (rules[i].warningThreshold !== 'not the same') {
-              updateData.$set['rules.$[el].warningThreshold'] = rules[i].warningThreshold;
+            if (newRules[i].warningThreshold !== 'not the same') {
+              updateData.$set['rules.$[el].warningThreshold'] = newRules[i].warningThreshold;
             }
-            if (rules[i].criticalThreshold !== 'not the same') {
-              updateData.$set['rules.$[el].criticalThreshold'] = rules[i].criticalThreshold;
+            if (newRules[i].criticalThreshold !== 'not the same') {
+              updateData.$set['rules.$[el].criticalThreshold'] = newRules[i].criticalThreshold;
             }
-            if (rules[i].thresholdUnit !== 'not the same') {
-              updateData.$set['rules.$[el].thresholdUnit'] = rules[i].thresholdUnit;
+            if (newRules[i].thresholdUnit !== 'not the same') {
+              updateData.$set['rules.$[el].thresholdUnit'] = newRules[i].thresholdUnit;
             }
-            if (rules[i].severity !== 'not the same') {
-              updateData.$set['rules.$[el].severity'] = rules[i].severity;
+            if (newRules[i].severity !== 'not the same') {
+              updateData.$set['rules.$[el].severity'] = newRules[i].severity;
             }
-            if (rules[i].immediateEmail !== 'not the same') {
-              updateData.$set['rules.$[el].immediateEmail'] = rules[i].immediateEmail;
+            if (newRules[i].immediateEmail !== 'not the same') {
+              updateData.$set['rules.$[el].immediateEmail'] = newRules[i].immediateEmail;
             }
-            if (rules[i].resolvedAlert !== 'not the same') {
-              updateData.$set['rules.$[el].resolvedAlert'] = rules[i].resolvedAlert;
+            if (newRules[i].resolvedAlert !== 'not the same') {
+              updateData.$set['rules.$[el].resolvedAlert'] = newRules[i].resolvedAlert;
             }
-            await notificationsConf.updateOne({ org: org, 'rules.event': rules[i].event }, updateData, { arrayFilters: [{ 'el.event': rules[i].event }] });
+            await notificationsConf.updateOne({ org: org, 'rules.event': newRules[i].event }, updateData, { arrayFilters: [{ 'el.event': newRules[i].event }] });
           }
+          const orgDevices = await devices.find({ org: org });
+          devicesList.push(orgDevices);
+          const getOrgNotificationsConf = await notificationsConf.findOne({ org: org });
+          const orgNotificationsConf = getOrgNotificationsConf.rules;
+          const data = {
+            rules: orgNotificationsConf,
+            org: org
+          };
+          await apply(devicesList[0], user, data);
         }
       }
       return Service.successResponse({
@@ -430,6 +441,61 @@ class NotificationsService {
         code: e.status || 500,
         message: e.message || 'Internal Server Error'
       });
+    }
+  }
+
+  /**
+   * Set notifications settings for a given organization
+  **/
+  static async notificationsConfPOST ({ notificationsConfPost }, { user }) {
+    try {
+      const { org: orgId, rules: orgNotificationsSettings } = notificationsConfPost;
+      if (!orgId || !orgNotificationsSettings) {
+        return Service.rejectResponse('Missing parameter: org or rules');
+      }
+      const orgList = await getUserOrganizations(user);
+      if (!Object.values(orgList).find(o => o.id === orgId)) {
+        return Service.rejectResponse('You do not have permissions to access this organization', 403);
+      }
+      // TODO add the account owner to the daily list
+      await notificationsConf.create({ org: orgId, rules: orgNotificationsSettings, signedToCritical: [], signedToWarning: [], signedToDaily: [] });
+      return Service.successResponse({
+        code: 200,
+        message: 'Success',
+        data: notificationsConfPost
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Get account/system default notifications settings
+   **/
+  static async notificationsDefaultConfGET ({ account = null }, { user }) {
+    try {
+      let response;
+      // TODO validate membership of the account (account owner)
+      if (account) {
+        response = await notificationsConf.find({ account: account }, { rules: 1, _id: 0 });
+        if (response.length > 0) {
+          const sortedRules = response[0].rules.sort((a, b) => (a.event > b.event) ? 1 : -1);
+          return Service.successResponse(sortedRules);
+        }
+      // If the account doesn't have a default or the user asked the system default - retrieve the system default
+      } if (!account || response.length === 0) {
+        response = await notificationsConf.find({ name: 'Default notifications settings' }, { rules: 1, _id: 0 });
+        const sortedRules = response[0].rules.sort((a, b) => (a.event > b.event) ? 1 : -1);
+        return Service.successResponse(sortedRules);
+      }
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
@@ -611,33 +677,6 @@ class NotificationsService {
         code: e.status || 500,
         message: e.message || 'Internal Server Error'
       });
-    }
-  }
-
-  /**
-   * Get account/system default notifications settings
-   **/
-  static async notificationsDefaultConfGET ({ account = null }, { user }) {
-    try {
-      let response;
-      // TODO validate membership of the account (account owner)
-      if (account) {
-        response = await notificationsConf.find({ account: account }, { rules: 1, _id: 0 });
-        if (response.length > 0) {
-          const sortedRules = response[0].rules.sort((a, b) => (a.event > b.event) ? 1 : -1);
-          return Service.successResponse(sortedRules);
-        }
-      // If the account doesn't have a default or the user asked the system default - retrieve the system default
-      } if (!account || response.length === 0) {
-        response = await notificationsConf.find({ name: 'Default notifications settings' }, { rules: 1, _id: 0 });
-        const sortedRules = response[0].rules.sort((a, b) => (a.event > b.event) ? 1 : -1);
-        return Service.successResponse(sortedRules);
-      }
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
     }
   }
 }
