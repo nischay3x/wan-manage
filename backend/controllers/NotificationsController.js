@@ -54,6 +54,10 @@ class NotificationsController {
     await Controller.handleRequest(request, response, this.service.notificationsConfPUT);
   }
 
+  async notificationsConfPOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfPOST);
+  }
+
   async notificationsDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.notificationsDELETE);
   }
