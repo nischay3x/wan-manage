@@ -1203,6 +1203,20 @@ const apply = async (device, user, data) => {
       });
     })
   ];
+
+  // Push missing VLAN interfaces as unassigned to initiate a remove-interface task
+  origInterfaces.forEach(origIfc => {
+    if (origIfc.parentDevId &&
+      !newInterfaces.some(newIfc => origIfc.devId === newIfc.devId)) {
+      newInterfaces.push({ ...origIfc, isAssigned: false });
+      newIsAssigned.push({
+        _id: origIfc._id,
+        devId: origIfc.devId,
+        isAssigned: false
+      });
+    }
+  });
+
   // Handle changes in the 'assigned' field. assignedDiff will contain
   // all the interfaces that have changed their 'isAssigned' field
   const assignedDiff = differenceWith(

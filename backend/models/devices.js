@@ -42,7 +42,7 @@ const interfacesSchema = new Schema({
   name: {
     type: String,
     minlength: [1, 'Name length must be at least 1'],
-    maxlength: [50, 'Name length must be at most 50'],
+    maxlength: [64, 'Name length must be at most 64'],
     validate: {
       validator: validators.validateIfcName,
       message: 'name should be a valid interface name'
@@ -58,6 +58,25 @@ const interfacesSchema = new Schema({
       message: 'devId should be a valid devId address'
     },
     default: ''
+  },
+  // Parent device bus address, used for VLAN sub-interfaces
+  parentDevId: {
+    type: String,
+    maxlength: [50, 'Parent devId length must be at most 50'],
+    validate: {
+      validator: validators.validateParentDevId,
+      message: 'Parent devId should be a valid devId address'
+    },
+    default: ''
+  },
+  // VLAN Tag, used for VLAN sub-interfaces
+  vlanTag: {
+    type: String,
+    default: '',
+    validate: {
+      validator: validators.validateVlanTag,
+      message: 'VLAN Tag should be a number between 1 and 4094'
+    }
   },
   // driver name
   driver: {

@@ -312,15 +312,15 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
   const bridges = getBridges(assignedIfs);
   const assignedByDevId = keyBy(assignedIfs, 'devId');
   for (const ifc of assignedIfs) {
-    // Assigned interfaces must be either WAN or LAN
-    if (!['WAN', 'LAN'].includes(ifc.type)) {
+    // Assigned interfaces must be either WAN, LAN or TRUNK
+    if (!['WAN', 'LAN', 'TRUNK'].includes(ifc.type)) {
       return {
         valid: false,
         err: `Invalid interface type for ${ifc.name}: ${ifc.type}`
       };
     }
 
-    if (!isIPv4Address(ifc.IPv4, ifc.IPv4Mask) && ifc.dhcp !== 'yes') {
+    if (!isIPv4Address(ifc.IPv4, ifc.IPv4Mask) && ifc.dhcp !== 'yes' && ifc.type !== 'TRUNK') {
       return {
         valid: false,
         err: ifc.IPv4 && ifc.IPv4Mask
@@ -450,6 +450,36 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
       valid: false,
       err: 'Setting the same path label on multiple WAN interfaces is not allowed'
     };
+  }
+
+  // VLAN validation
+  const interfacesByDevId = keyBy(interfaces, 'devId');
+  for (const ifc of interfaces) {
+    if (ifc.vlanTag) {
+      if (!ifc.parentDevId) {
+        return {
+          valid: false,
+          err: `VLAN ${ifc.name} must belong to some parent interface`
+        };
+      }
+      if (!interfacesByDevId[ifc.parentDevId]) {
+        return {
+          valid: false,
+          err: 'Wrong parent interface for VLAN ' + ifc.name
+        };
+      }
+      const idParts = ifc.devId.split('.');
+      let vlanTagInId = '';
+      if (idParts.length > 2 && idParts[0] === 'vlan' && idParts[1]) {
+        vlanTagInId = idParts[1];
+      }
+      if (ifc.vlanTag !== vlanTagInId) {
+        return {
+          valid: false,
+          err: `Wrong VLAN ${ifc.name} identifier`
+        };
+      }
+    }
   }
 
   if (isRunning && orgSubnets.length > 0) {
@@ -660,7 +690,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   // Support both arrays and single interface
   const msg = Array.isArray(modifyDeviceMsg) ? modifyDeviceMsg : [modifyDeviceMsg];
   for (const ifc of msg) {
-    if (ifc.dhcp === 'yes' && ifc.addr === '') {
+    if ((ifc.dhcp === 'yes' || ifc.type === 'TRUNK') && ifc.addr === '') {
       // allow empty IP on WAN with dhcp client
       continue;
     }

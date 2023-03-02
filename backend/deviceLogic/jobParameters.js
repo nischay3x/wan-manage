@@ -48,7 +48,6 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       monitorInternet: ifc.monitorInternet,
       gateway: ifc.gateway,
       metric: ifc.metric,
-      mtu: ifc.mtu,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
       pathlabels: ifc.pathlabels,
@@ -76,6 +75,11 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
         helloInterval: globalOSPF.helloInterval,
         deadInterval: globalOSPF.deadInterval
       };
+    }
+
+    // do not send MTU for VLANs
+    if (!ifc.vlanTag) {
+      ifcObg.mtu = ifc.mtu;
     }
     return ifcObg;
   });

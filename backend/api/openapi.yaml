@@ -9542,6 +9542,10 @@ components:
           type: string
         devId:
           type: string
+        parentDevId:
+          type: string
+        vlanTag:
+          type: string
         driver:
           type: string
         dhcp:
@@ -9596,6 +9600,7 @@ components:
           enum:
           - WAN
           - LAN
+          - TRUNK
           - NONE
           type: string
         IPv4Mask:
@@ -10504,7 +10509,7 @@ components:
           type: string
         ifname:
           description: Interface name
-          maxLength: 24
+          maxLength: 64
           type: string
         metric:
           description: Route metric
@@ -10550,7 +10555,7 @@ components:
       properties:
         interface:
           description: Interface bus Address
-          maxLength: 24
+          maxLength: 64
           type: string
         rangeStart:
           description: Start IP Range
@@ -10592,7 +10597,7 @@ components:
           type: string
         interface:
           description: Interface bus Address
-          maxLength: 24
+          maxLength: 64
           type: string
         rangeStart:
           description: Start IP Range
