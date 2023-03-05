@@ -115,6 +115,7 @@ class DeviceStatus {
       application_stats: Joi.object().optional(),
       lte_stats: Joi.object().optional(),
       wifi_stats: Joi.object().optional(),
+      alerts: Joi.object().optional(),
       reconfig: Joi.string().allow('').optional(),
       ikev2: Joi.object({
         certificateExpiration: Joi.string().allow('').optional(),

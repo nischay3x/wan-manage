@@ -46,9 +46,9 @@ const activatePendingTunnelsOfDevice = require('./events')
   .activatePendingTunnelsOfDevice;
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
-// const { publicPortLimiter } = require('../limiters/publicPort');
+const deviceNotificationsSync = require('./deviceNotifications').sync;
 
-// Create a object of all sync handlers
+// Create an object of all sync handlers
 const syncHandlers = {
   deviceConf: {
     syncHandler: deviceConfSyncHandler,
@@ -81,6 +81,9 @@ const syncHandlers = {
   applications: {
     syncHandler: applicationsSyncHandler,
     completeHandler: applicationsCompleteHandler
+  },
+  deviceNotifications: {
+    syncHandler: deviceNotificationsSync
   }
 };
 

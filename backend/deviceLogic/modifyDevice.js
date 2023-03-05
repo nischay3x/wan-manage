@@ -1509,7 +1509,8 @@ const completeSync = async (jobId, jobsData) => {
  * Firewall rules skipped here, sync from firewallPolicy will handle them
  * @return Array
  */
-const sync = async (deviceId, org) => {
+
+const sync = async (deviceId, orgId) => {
   const device = await devices.findOne(
     { _id: deviceId },
     {
