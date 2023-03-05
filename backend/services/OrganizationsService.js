@@ -22,6 +22,7 @@ const Accounts = require('../models/accounts');
 const Devices = require('../models/devices');
 const Users = require('../models/users');
 const Organizations = require('../models/organizations');
+const NotificationsConf = require('../models/notificationsConf');
 const Tunnels = require('../models/tunnels');
 const TunnelIds = require('../models/tunnelids');
 const Tokens = require('../models/tokens');
@@ -214,6 +215,7 @@ class OrganizationsService {
         await AccessTokens.deleteMany({ organization: id }, { session: session });
         await MultiLinkPolicies.deleteMany({ org: id }, { session: session });
         await PathLabels.deleteMany({ org: id }, { session: session });
+        await NotificationsConf.deleteOne({ org: id }, { session: session });
 
         // Find all devices for organization
         orgDevices = await Devices.devices.find({ org: id },
@@ -554,6 +556,20 @@ class OrganizationsService {
       });
       if (!qosPolicy) throw new Error('Error default QoS policy adding');
 
+      // Add default notifications settings
+      const notificationsSettings = await NotificationsConf.findOne({
+        account: updUser.defaultAccount
+      });
+      const setNotificationsConf = await NotificationsConf.create({
+        org: org._id,
+        rules: notificationsSettings.rules,
+        signedToCritical: [],
+        signedToWarning: [],
+        signedToDaily: []
+      });
+      if (!setNotificationsConf) {
+        throw new Error('Error adding default notifications settings');
+      }
       session.commitTransaction();
 
       const token = await getToken({ user }, { org: org._id, orgName: org.name });

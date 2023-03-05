@@ -445,34 +445,6 @@ class NotificationsService {
   }
 
   /**
-   * Set notifications settings for a given organization
-  **/
-  static async notificationsConfPOST ({ notificationsConfPost }, { user }) {
-    try {
-      const { org: orgId, rules: orgNotificationsSettings } = notificationsConfPost;
-      if (!orgId || !orgNotificationsSettings) {
-        return Service.rejectResponse('Missing parameter: org or rules');
-      }
-      const orgList = await getUserOrganizations(user);
-      if (!Object.values(orgList).find(o => o.id === orgId)) {
-        return Service.rejectResponse('You do not have permissions to access this organization', 403);
-      }
-      // TODO add the account owner to the daily list
-      await notificationsConf.create({ org: orgId, rules: orgNotificationsSettings, signedToCritical: [], signedToWarning: [], signedToDaily: [] });
-      return Service.successResponse({
-        code: 200,
-        message: 'Success',
-        data: notificationsConfPost
-      });
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
-  }
-
-  /**
    * Get account/system default notifications settings
    **/
   static async notificationsDefaultConfGET ({ account = null }, { user }) {

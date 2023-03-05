@@ -4582,57 +4582,6 @@ paths:
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
-    post:
-      operationId: notificationsConfPOST
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NotificationsConfPost'
-      responses:
-        "204":
-          description: Successful operation
-        "400":
-          description: Bad Request
-        "401":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unauthorized
-        "403":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Forbidden
-        "404":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: The specified resource was not found
-        "500":
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Internal server error
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-          description: Unexpected error
-      security:
-      - apiKey: []
-      - bearerAuth: []
-      summary:  Create the notifications settings of a new organization
-      tags:
-      - Notifications
-      x-swagger-router-controller: Notifications
-      x-openapi-router-controller: NotificationsController
-      x-openapi-router-service: NotificationsService
   /notifications-conf/emails:
     get:
       operationId: emailNotificationsGET
@@ -9468,39 +9417,6 @@ components:
                 type: string
               severity:
                 type: string
-              immediateEmail:
-                type: boolean
-              resolvedAlert:
-                type: boolean
-              event:
-                type: string
-      type: object
-    NotificationsConfPost:
-      example:
-        org: organizationId,
-        rules: rules
-      properties:
-        organizationId:
-          maxLength: 24
-          minLength: 24
-          type: string
-        rules:
-          type: array
-          items:
-            type: object
-            properties:
-              warningThreshold:
-                type: number
-                nullable: true
-              criticalThreshold:
-                type: number
-                nullable: true
-              thresholdUnit:
-                type: string
-                nullable: true
-              severity:
-                type: string
-                nullable: true
               immediateEmail:
                 type: boolean
               resolvedAlert:
