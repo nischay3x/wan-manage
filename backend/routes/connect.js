@@ -157,6 +157,12 @@ connectRouter.route('/register')
               let highestMetric = 0;
               const setAutoMetricIndexes = new Set();
               ifs.forEach((intf, idx) => {
+                // VLAN identification by devId, example "vlan.10.pci:0000:00:08.00"
+                const idParts = intf.devId.split('.');
+                if (idParts.length > 2 && idParts[0] === 'vlan' && idParts[1]) {
+                  intf.vlanTag = idParts[1];
+                  intf.parentDevId = idParts.slice(2).join('.');
+                }
                 intf.isAssigned = false;
                 intf.useStun = true;
                 intf.useFixedPublicPort = false;
@@ -222,7 +228,9 @@ connectRouter.route('/register')
                 device: req.body.device_version || ''
               };
 
-              const cpuInfo = getCpuInfo(JSON.parse(req.body.cpuInfo));
+              const requestCpuInfo = req.body.cpuInfo
+                ?.replaceAll('\'', '"').replaceAll('False', 'false').replaceAll('True', 'true');
+              const cpuInfo = getCpuInfo(requestCpuInfo ? JSON.parse(requestCpuInfo) : null);
 
               // Check that account didn't cross its device limit
               const account = decoded.account;

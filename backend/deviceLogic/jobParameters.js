@@ -20,6 +20,7 @@ const pick = require('lodash/pick');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const tunnelsModel = require('../models/tunnels');
+const configs = require('../configs')();
 
 /**
  * Transforms mongoose array of interfaces into array of objects
@@ -47,7 +48,6 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       monitorInternet: ifc.monitorInternet,
       gateway: ifc.gateway,
       metric: ifc.metric,
-      mtu: ifc.mtu,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
       pathlabels: ifc.pathlabels,
@@ -75,6 +75,11 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
         helloInterval: globalOSPF.helloInterval,
         deadInterval: globalOSPF.deadInterval
       };
+    }
+
+    // do not send MTU for VLANs
+    if (!ifc.vlanTag) {
+      ifcObg.mtu = ifc.mtu;
     }
     return ifcObg;
   });
@@ -122,6 +127,19 @@ const transformOSPF = (ospf, bgp) => {
   }
 
   return ospfParams;
+};
+
+/**
+ * Creates a add-vxlan-config object
+ * @param  {Object} org organization object
+ * @return {Object}      an object containing the VXLAN config parameters
+ */
+const transformVxlanConfig = org => {
+  const vxlanConfigParams = {
+    port: org.vxlanPort || configs.get('tunnelPort')
+  };
+
+  return vxlanConfigParams;
 };
 
 /**
@@ -225,5 +243,6 @@ module.exports = {
   transformRoutingFilters,
   transformOSPF,
   transformBGP,
-  transformDHCP
+  transformDHCP,
+  transformVxlanConfig
 };

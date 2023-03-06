@@ -45,6 +45,7 @@ const deviceQueues = require('./periodic/deviceQueue')();
 const deviceSwVersion = require('./periodic/deviceSwVersion')();
 const deviceSwUpgrade = require('./periodic/deviceperiodicUpgrade')();
 const notifyUsers = require('./periodic/notifyUsers')();
+const releasePendingTunnels = require('./periodic/releasePendingTunnels')();
 const appRules = require('./periodic/appRules')();
 const applications = require('./periodic/applications')();
 const statusesInDb = require('./periodic/statusesInDb')();
@@ -142,6 +143,7 @@ class ExpressServer {
     appRules.start();
     applications.start();
     statusesInDb.start();
+    releasePendingTunnels.start();
 
     // Secure traffic only
     this.app.all('*', (req, res, next) => {

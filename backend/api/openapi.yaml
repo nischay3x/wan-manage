@@ -8783,12 +8783,15 @@ components:
       type: object
     Account:
       example:
+        _id: _id
+        name: name
         country: country
         companyType: companyType
         companyDesc: companyDesc
         enableNotifications: true
-        name: name
-        _id: _id
+        isSubscriptionValid: true
+        trial_end: 1676591999
+        forceMfa: false
       properties:
         _id:
           maxLength: 24
@@ -8796,34 +8799,42 @@ components:
           type: string
         name:
           type: string
+        country:
+          maxLength: 2
+          type: string
         companyType:
           type: string
         companyDesc:
           type: string
-        country:
-          maxLength: 2
-          type: string
         enableNotifications:
           default: true
+          type: boolean
+        isSubscriptionValid:
+          default: true
+          type: boolean
+        trial_end:
+          type: integer
+        forceMfa:
+          default: false
           type: boolean
       type: object
     AccountRequest:
       example:
+        name: name
         country: country
         companyType: companyType
         companyDesc: companyDesc
         enableNotifications: true
         forceMfa: false
-        name: name
       properties:
         name:
+          type: string
+        country:
+          maxLength: 2
           type: string
         companyType:
           type: string
         companyDesc:
-          type: string
-        country:
-          maxLength: 2
           type: string
         enableNotifications:
           default: true
@@ -8838,6 +8849,7 @@ components:
         description: description
         group: group
         encryptionMethod: ikev2
+        vxlanPort: 4789
       required:
         - name
         - group
@@ -8855,6 +8867,8 @@ components:
           - psk
           - ikev2
           type: string
+        vxlanPort:
+          type: string
       type: object
     Organization:
       example:
@@ -8864,6 +8878,7 @@ components:
         account: account
         group: group
         encryptionMethod: ikev2
+        vxlanPort: 4789
       properties:
         _id:
           maxLength: 24
@@ -8882,6 +8897,8 @@ components:
           - none
           - psk
           - ikev2
+          type: string
+        vxlanPort:
           type: string
       type: object
     OrganizationSummary:
@@ -9279,6 +9296,13 @@ components:
         cpuInfo:
           $ref: '#/components/schemas/DeviceCpuInfo'
       type: object
+    OrganizationInfo:
+      example:
+        vxlanPort: 4789
+      properties:
+        vxlanPort:
+          type: string
+      type: object
     Device:
       example:
         interfaces:
@@ -9417,6 +9441,8 @@ components:
           type: string
         org:
           type: string
+        orgInfo:
+          $ref: '#/components/schemas/OrganizationInfo'
         ipList:
           type: string
         staticroutes:
@@ -9516,6 +9542,10 @@ components:
           type: string
         devId:
           type: string
+        parentDevId:
+          type: string
+        vlanTag:
+          type: string
         driver:
           type: string
         dhcp:
@@ -9570,6 +9600,7 @@ components:
           enum:
           - WAN
           - LAN
+          - TRUNK
           - NONE
           type: string
         IPv4Mask:
@@ -10478,7 +10509,7 @@ components:
           type: string
         ifname:
           description: Interface name
-          maxLength: 24
+          maxLength: 64
           type: string
         metric:
           description: Route metric
@@ -10524,7 +10555,7 @@ components:
       properties:
         interface:
           description: Interface bus Address
-          maxLength: 24
+          maxLength: 64
           type: string
         rangeStart:
           description: Start IP Range
@@ -10566,7 +10597,7 @@ components:
           type: string
         interface:
           description: Interface bus Address
-          maxLength: 24
+          maxLength: 64
           type: string
         rangeStart:
           description: Start IP Range

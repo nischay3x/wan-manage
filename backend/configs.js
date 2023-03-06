@@ -73,7 +73,7 @@ const configEnv = {
     // Biling config site - this is used as the billing site name in ChargeBee
     billingConfigSite: 'flexiwan-test',
     // ChargeBee default plan for a new customer
-    billingDefaultPlan: 'enterprise',
+    billingDefaultPlan: 'enterprise-standard',
     // Wheter to enable billing
     useFlexiBilling: false,
     // API key for ChargeBee Billing config site. Not used when useFlexiBilling is false
@@ -214,7 +214,7 @@ const configEnv = {
     // UI URL for feedback
     feedbackUrl: '',
     // If to show device limit alert banner
-    showDeviceLimitAlert: true,
+    showDeviceLimitAlert: false,
     // Whether to remove branding, e.g. powered by...
     removeBranding: false,
     // URL for account qualification
