@@ -20,7 +20,7 @@ const cidr = require('cidr-tools');
 const IPCidr = require('ip-cidr');
 const { generateTunnelParams, getOrgDefaultTunnelPort } = require('../utils/tunnelUtils');
 const { getBridges, getCpuInfo } = require('../utils/deviceUtils');
-const { getMajorVersion } = require('../versioning');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 const keyBy = require('lodash/keyBy');
 const { isEqual } = require('lodash');
 const maxMetric = 2 * 10 ** 9;
@@ -280,6 +280,9 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpDevices = []) => {
+  const major = getMajorVersion(device.versions.agent);
+  const minor = getMinorVersion(device.versions.agent);
+
   // Get all assigned interface. There should be at least
   // two such interfaces - one LAN and the other WAN
   const interfaces = device.interfaces;
@@ -557,6 +560,8 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
 
   // routing filters validation
   if (device.routingFilters) {
+    const isOverlappingAllowed = major > 6 || (major === 6 && minor >= 2);
+
     for (const filter of device.routingFilters) {
       const name = filter.name;
       const duplicateName = device.routingFilters.filter(l => l.name === name).length > 1;
@@ -577,6 +582,20 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
             valid: false,
             err: `Duplicate routes (${route}) in the "${name}" routing filter are not allowed`
           };
+        }
+
+        // if version less than 6.2, prevent overlapping routes
+        if (!isOverlappingAllowed) {
+          for (const usedRuleRoute of usedRuleRoutes) {
+            if (usedRuleRoute === '0.0.0.0/0') continue;
+            if (cidr.overlap(usedRuleRoute, route)) {
+              return {
+                valid: false,
+                err: 'Device version 6.1.X and below doesn\'t support ' +
+                `route overlapping (${usedRuleRoute}, ${route})`
+              };
+            }
+          }
         }
         usedRuleRoutes.add(route);
 
