@@ -1673,7 +1673,7 @@ class DevicesService {
 
             if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
               throw new Error(
-                `Can't set BGP on ${origIntf.name}. ` +
+                `Can't set BGP on ${updIntf.name}. ` +
                 'BGP is disabled, please configure BGP from routing settings first'
               );
             }
@@ -1685,7 +1685,7 @@ class DevicesService {
 
               // Prevent static IP without dns servers
               if (dhcp === 'no' && servers.length === 0) {
-                throw createError(400, `DNS ip address is required for ${origIntf.name}`);
+                throw createError(400, `DNS ip address is required for ${updIntf.name}`);
               }
 
               // Prevent override dhcp DNS info without dns servers
