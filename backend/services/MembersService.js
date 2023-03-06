@@ -34,6 +34,7 @@ const Accounts = require('../models/accounts');
 const Organizations = require('../models/organizations');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
+const NotificationsConf = require('../models/notificationsConf');
 
 class MembersService {
   /**
@@ -515,6 +516,27 @@ class MembersService {
         account: user.defaultAccount._id
       });
 
+      const userId = membershipData.user;
+      const userOrgList = await getUserOrganizations(membershipData.user);
+      const userOrgsIds = Object.values(userOrgList).map(org => org.id);
+      // Stop receiving email notifications from previous organizations
+      await NotificationsConf.updateMany(
+        {
+          $or: [
+            { signedToCritical: userId },
+            { signedToWarning: userId },
+            { signedToDaily: userId }
+          ],
+          org: { $nin: userOrgsIds }
+        },
+        {
+          $pull: {
+            signedToCritical: userId,
+            signedToWarning: userId,
+            signedToDaily: userId
+          }
+        }
+      );
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(

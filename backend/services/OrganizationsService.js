@@ -560,12 +560,18 @@ class OrganizationsService {
       const notificationsSettings = await NotificationsConf.findOne({
         account: updUser.defaultAccount
       });
+      const ownerMembership = await membership.findOne({
+        account: updUser.defaultAccount,
+        to: 'account',
+        role: 'owner'
+      });
+      const accountOwner = ownerMembership.user;
       const setNotificationsConf = await NotificationsConf.create({
         org: org._id,
         rules: notificationsSettings.rules,
         signedToCritical: [],
         signedToWarning: [],
-        signedToDaily: []
+        signedToDaily: [accountOwner]
       });
       if (!setNotificationsConf) {
         throw new Error('Error adding default notifications settings');
