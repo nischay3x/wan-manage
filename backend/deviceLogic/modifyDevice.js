@@ -923,13 +923,9 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
  * @return {Object}            an object containing add and remove ospf parameters
  */
 const prepareModifyBGP = async (origDevice, newDevice) => {
-  const majorVersion = getMajorVersion(newDevice.versions.agent);
-  const minorVersion = getMinorVersion(newDevice.versions.agent);
-  const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
-
   const [origBGP, newBGP] = [
-    await transformBGP(origDevice, includeTunnelNeighbors),
-    await transformBGP(newDevice, includeTunnelNeighbors)
+    await transformBGP(origDevice),
+    await transformBGP(newDevice)
   ];
 
   const origEnable = origDevice.bgp.enable;
@@ -966,8 +962,8 @@ const prepareModifyBGP = async (origDevice, newDevice) => {
  */
 const prepareModifyRoutingFilters = (origDevice, newDevice) => {
   const [origLists, newLists] = [
-    transformRoutingFilters(origDevice.routingFilters),
-    transformRoutingFilters(newDevice.routingFilters)
+    transformRoutingFilters(origDevice.routingFilters, origDevice.versions.agent),
+    transformRoutingFilters(newDevice.routingFilters, newDevice.versions.agent)
   ];
 
   const [addRoutingFilters, removeRoutingFilters] = [
@@ -1573,7 +1569,7 @@ const sync = async (deviceId, org) => {
   }
 
   // Prepare add-routing-filter message
-  const routingFiltersData = transformRoutingFilters(routingFilters);
+  const routingFiltersData = transformRoutingFilters(routingFilters, versions.agent);
   routingFiltersData.forEach(entry => {
     deviceConfRequests.push({
       entity: 'agent',
@@ -1583,9 +1579,8 @@ const sync = async (deviceId, org) => {
   });
 
   const isBgpSupported = majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3);
-  const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
   if (isBgpSupported && bgp?.enable) {
-    const bgpData = await transformBGP(device, includeTunnelNeighbors);
+    const bgpData = await transformBGP(device);
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({
         entity: 'agent',
