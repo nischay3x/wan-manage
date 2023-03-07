@@ -453,7 +453,10 @@ const queueModifyDeviceJob = async (
     (unassign || []).forEach(ifc => { interfacesIdsSet.add(ifc._id); });
   }
   if (has(messageParams, 'modify_interfaces')) {
-    const { interfaces } = messageParams.modify_interfaces;
+    const interfaces = [
+      ...messageParams.modify_interfaces.interfaces,
+      ...messageParams.modify_interfaces.lte_enable_disable
+    ];
     interfaces.forEach(ifc => {
       interfacesIdsSet.add(ifc._id);
       modifiedIfcsMap[ifc._id] = ifc;
@@ -1166,9 +1169,12 @@ const apply = async (device, user, data) => {
   // an array of the interfaces that have changed
   // First, extract only the relevant interface fields
   const origDeviceVersion = device[0].versions.agent;
+  const origTransformedIfcs = transformInterfaces(
+    device[0].interfaces, device[0].ospf, origDeviceVersion
+  );
   const [origInterfaces, origIsAssigned] = [
     // add global ospf settings to each interface
-    transformInterfaces(device[0].interfaces, device[0].ospf, origDeviceVersion),
+    origTransformedIfcs,
     device[0].interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -1179,9 +1185,12 @@ const apply = async (device, user, data) => {
   ];
 
   const newDeviceVersion = data.newDevice.versions.agent;
+  const newTransformedIfcs = transformInterfaces(
+    data.newDevice.interfaces, data.newDevice.ospf, newDeviceVersion
+  );
   const [newInterfaces, newIsAssigned] = [
     // add global ospf settings to each interface
-    transformInterfaces(data.newDevice.interfaces, data.newDevice.ospf, newDeviceVersion),
+    newTransformedIfcs,
     data.newDevice.interfaces.map(ifc => {
       return ({
         _id: ifc._id,
@@ -1190,6 +1199,20 @@ const apply = async (device, user, data) => {
       });
     })
   ];
+
+  // Push missing VLAN interfaces as unassigned to initiate a remove-interface task
+  origInterfaces.forEach(origIfc => {
+    if (origIfc.parentDevId &&
+      !newInterfaces.some(newIfc => origIfc.devId === newIfc.devId)) {
+      newInterfaces.push({ ...origIfc, isAssigned: false });
+      newIsAssigned.push({
+        _id: origIfc._id,
+        devId: origIfc.devId,
+        isAssigned: false
+      });
+    }
+  });
+
   // Handle changes in the 'assigned' field. assignedDiff will contain
   // all the interfaces that have changed their 'isAssigned' field
   const assignedDiff = differenceWith(
@@ -1271,8 +1294,8 @@ const apply = async (device, user, data) => {
 
   // add-lte job should be submitted even if unassigned interface
   // we send this job if configuration or interface metric was changed
-  const oldLteInterfaces = device[0].interfaces.filter(item => item.deviceType === 'lte');
-  const newLteInterfaces = data.newDevice.interfaces.filter(item => item.deviceType === 'lte');
+  const oldLteInterfaces = origTransformedIfcs.filter(item => item.deviceType === 'lte');
+  const newLteInterfaces = newTransformedIfcs.filter(item => item.deviceType === 'lte');
   const lteInterfacesDiff = differenceWith(
     newLteInterfaces,
     oldLteInterfaces,
