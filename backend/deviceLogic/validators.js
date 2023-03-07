@@ -617,12 +617,12 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
         // if version less than 6.2, prevent overlapping routes
         if (!isOverlappingAllowed) {
           for (const usedRuleRoute of usedRuleRoutes) {
-            if (usedRuleRoute === '0.0.0.0/0') continue;
+            if (usedRuleRoute === '0.0.0.0/0' || route === '0.0.0.0/0') continue;
             if (cidr.overlap(usedRuleRoute, route)) {
               return {
                 valid: false,
                 err: 'Device version 6.1.X and below doesn\'t support ' +
-                `route overlapping (${usedRuleRoute}, ${route})`
+                `route overlapping (${usedRuleRoute}, ${route}) in routing filter (${name})`
               };
             }
           }
