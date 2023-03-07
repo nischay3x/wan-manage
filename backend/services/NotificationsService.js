@@ -392,9 +392,19 @@ class NotificationsService {
       if (orgIds && orgIds.error) {
         return orgIds;
       }
-      // TODO check if the user is the account owner
       if (setAsDefault) {
-        await notificationsConf.update({ account: account }, { $set: { account: account, rules: newRules } }, { upsert: true });
+        const accountOwners = await membership.find({
+          account: user.defaultAccount._id,
+          to: 'account',
+          role: 'owner'
+        });
+        const accountOwnersIds = Object.values(accountOwners).map(membership => membership.user.toString());
+        if (accountOwnersIds.includes(user._id.toString())) {
+          await notificationsConf.update({ account: account }, { $set: { account: account, rules: newRules } }, { upsert: true });
+        } else {
+          return Service.rejectResponse(
+            'Only account owners can set the account default settings', 403);
+        }
       } else {
         for (const org of orgIds) {
           const devicesList = [];
