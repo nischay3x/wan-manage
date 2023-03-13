@@ -5125,6 +5125,54 @@ paths:
       x-swagger-router-controller: Accounts
       x-openapi-router-controller: AccountsController
       x-openapi-router-service: AccountsService
+  /accounts/{id}/subscription-status:
+    get:
+      operationId: accountsIdSubscriptionStatusGET
+      parameters:
+      - description: Numeric ID of the Account to retrieve information
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Retrieve account information, account response with subscription status
+      tags:
+      - Accounts
+      x-swagger-router-controller: Accounts
+      x-openapi-router-controller: AccountsController
+      x-openapi-router-service: AccountsService
   /organizations:
     get:
       operationId: organizationsGET
