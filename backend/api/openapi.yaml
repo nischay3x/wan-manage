@@ -9256,12 +9256,17 @@ components:
         - 46.5
         - 3.6
         routingFilters:
-        - defaultAction: deny
-          name: routingFilterName
+        - name: routingFilterName
           description: description for the filter
           rules:
-          - network: 192.168.55.0/24
-          - network: 192.168.66.0/24
+          - route: 192.168.55.0/24
+            action: allow
+            nextHop: ''
+            priority: 1
+          - route: 192.168.66.0/24
+            action: deny
+            nextHop: 65.65.65.65
+            priority: 2
         bgp:
           enable: true
           holdInterval: 90
@@ -9275,6 +9280,7 @@ components:
             remoteASN: 65002
             inboundFilter: routingFilterName
             outboundFilter: routingFilterName
+            sendCommunity: both
         cpuInfo:
           powerSaving: true
           vppCores: 3
@@ -9902,11 +9908,6 @@ components:
           type: string
         description:
           type: string
-        defaultAction:
-          type: string
-          enum:
-          - deny
-          - allow
         rules:
           items:
             $ref: '#/components/schemas/RoutingFilterRule'
@@ -9916,9 +9917,18 @@ components:
       example:
         $ref: '#/components/examples/RoutingFilterRuleExample'
       properties:
-        network:
+        route:
           type: string
           maxLength: 24
+        action:
+          enum:
+          - allow
+          - deny
+          type: string
+        nextHop:
+          type: string
+        priority:
+          type: integer
       type: object
     BgpConfigs:
       example:
@@ -9979,6 +9989,16 @@ components:
         outboundFilter:
           type: string
           description: A routing filter name to apply on the expose routes to the BGP peer
+        sendCommunity:
+          enum:
+          - all
+          - both
+          - extended
+          - large
+          - standard
+          - ''
+          type: string
+          description: A BGP attribute to attach to the BGP peer
       type: object
     OspfConfigs:
       example:
@@ -11882,6 +11902,9 @@ components:
         - $ref: '#/components/examples/RoutingFilterRuleExample'
     RoutingFilterRuleExample:
       value:
-        network: 100.200.30.1/24
+        route: 100.200.30.1/24
+        action: deny
+        nextHop: 8.8.8.8
+        priority: 2
 
 

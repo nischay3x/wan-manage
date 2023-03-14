@@ -1450,7 +1450,7 @@ class DevicesService {
               }
               const hasTunnels = origTunnels.some(({ interfaceA, interfaceB }) => {
                 return interfaceA.toString() === origIntf._id.toString() ||
-                  interfaceB.toString() === origIntf._id.toString();
+                  (interfaceB && interfaceB.toString() === origIntf._id.toString());
               });
               if (hasTunnels) {
                 // eslint-disable-next-line max-len
@@ -1565,7 +1565,7 @@ class DevicesService {
                 if (remLabels.length > 0) {
                   const hasTunnels = origTunnels.some(({ interfaceA, interfaceB, pathlabel }) => {
                     return (interfaceA.toString() === origIntf._id.toString() ||
-                      interfaceB.toString() === origIntf._id.toString()) &&
+                      (interfaceB && interfaceB.toString() === origIntf._id.toString())) &&
                       remLabels.some(p => p._id.toString() === pathlabel.toString());
                   });
                   if (hasTunnels) {

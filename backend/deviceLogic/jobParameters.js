@@ -90,15 +90,44 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
  * @param  {array} RoutingFilters routingFilters array
  * @return {array}   routingFilters array
  */
-const transformRoutingFilters = (routingFilters) => {
+const transformRoutingFilters = (routingFilters, deviceVersion) => {
+  const majorVersion = getMajorVersion(deviceVersion);
+  const minorVersion = getMinorVersion(deviceVersion);
+  const oldFormat = majorVersion < 6 || (majorVersion === 6 && minorVersion === 1);
+
+  if (oldFormat) {
+    return routingFilters.map(filter => {
+      // old devices should have old format of job.
+      // "action", "nextHop" and "priority" are not supported.
+      // In this format, there is "defaultAction" for all rules,
+      // except those that exists in "rules". Hence, we put all routes
+      // that have the opposite action as the default.
+      const defaultRoute = filter.rules.find(r => r.route === '0.0.0.0/0');
+      if (!defaultRoute) throw Error('Default route is missing');
+
+      return {
+        name: filter.name,
+        description: filter.description,
+        defaultAction: defaultRoute.action,
+        rules: filter.rules.filter(r => r.action !== defaultRoute.action).map(r => {
+          return {
+            network: r.route
+          };
+        })
+      };
+    });
+  }
+
   return routingFilters.map(filter => {
     return {
       name: filter.name,
       description: filter.description,
-      defaultAction: filter.defaultAction,
       rules: filter.rules.map(r => {
         return {
-          network: r.network
+          route: r.route,
+          action: r.action,
+          nextHop: r.nextHop,
+          priority: r.priority
         };
       })
     };
@@ -144,16 +173,20 @@ const transformVxlanConfig = org => {
 
 /**
  * Creates a modify-routing-bgp object
- * @param  {Object} bgp bgp configuration
- * @param  {Object} interfaces  assigned interfaces of device
- * @return {Object}            an object containing an array of routes
+ * @param  {Object} device device object
+ * @return {Object}        an object containing an bgp configuration
  */
-const transformBGP = async (device, includeTunnelNeighbors = false) => {
-  let { bgp, interfaces, org, _id } = device;
+const transformBGP = async (device) => {
+  let { bgp, interfaces, org, _id, versions } = device;
   interfaces = interfaces.filter(i => i.isAssigned);
 
+  const majorVersion = getMajorVersion(versions.agent);
+  const minorVersion = getMinorVersion(versions.agent);
+  const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
+  const sendCommunity = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+
   const neighbors = bgp.neighbors.map(n => {
-    return {
+    const neighbor = {
       ip: n.ip,
       remoteAsn: n.remoteASN,
       password: n.password || '',
@@ -162,6 +195,12 @@ const transformBGP = async (device, includeTunnelNeighbors = false) => {
       holdInterval: bgp.holdInterval,
       keepaliveInterval: bgp.keepaliveInterval
     };
+
+    if (sendCommunity) {
+      neighbor.sendCommunity = n.sendCommunity;
+    }
+
+    return neighbor;
   });
 
   if (includeTunnelNeighbors) {
@@ -198,6 +237,7 @@ const transformBGP = async (device, includeTunnelNeighbors = false) => {
         outboundFilter: '',
         holdInterval: bgpConfig.holdInterval,
         keepaliveInterval: bgpConfig.keepaliveInterval
+        // no need to send community here, since it is only for 5.3 version
       });
     }
   }
