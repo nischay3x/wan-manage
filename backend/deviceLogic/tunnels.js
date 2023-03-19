@@ -1748,8 +1748,12 @@ const populateTunnelDestinations = (
   const deviceADefaultDstPort = isDevASupportsVxlanPort ? orgSourcePort : configSourcePort;
   const deviceBDefaultDstPort = isDevBSupportsVxlanPort ? orgSourcePort : configSourcePort;
 
-  const deviceAUseDefaultPort = !ifcA.PublicPort || ifcA.useFixedPublicPort;
-  const deviceBUseDefaultPort = !ifcB.PublicPort || ifcB.useFixedPublicPort;
+  // if one of the following met, use the default port and not the one detected by STUN.
+  //    1. Device does not have public port.
+  //    2. User forced to use default.
+  //    3. Both tunnel sides are in the same subnet.
+  const deviceAUseDefaultPort = !ifcA.PublicPort || ifcA.useFixedPublicPort || usePrivateIps;
+  const deviceBUseDefaultPort = !ifcB.PublicPort || ifcB.useFixedPublicPort || usePrivateIps;
 
   paramsA.dstPort = deviceBUseDefaultPort ? deviceBDefaultDstPort : ifcB.PublicPort;
   paramsB.dstPort = deviceAUseDefaultPort ? deviceADefaultDstPort : ifcA.PublicPort;
