@@ -274,7 +274,7 @@ class OrganizationsService {
       org.description = description;
       org.group = group;
       org.encryptionMethod = encryptionMethod;
-      org.vxlanPort = vxlanPort;
+      org.vxlanPort = vxlanPort ?? origVxlanPort; // if not specified by user, set the orig value
 
       const isVxlanPortChanged = origVxlanPort !== vxlanPort;
       if (isVxlanPortChanged) {
