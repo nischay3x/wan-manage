@@ -66,6 +66,7 @@ const OrgSchema = new Schema({
   vxlanPort: {
     type: String,
     default: configs.get('tunnelPort'),
+    required: true,
     validate: {
       validator: validators.validatePort,
       message: 'vxlanPort should be a valid Port value'
