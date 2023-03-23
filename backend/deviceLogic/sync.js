@@ -17,7 +17,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 // const deviceStatus = require('../periodic/deviceStatus')();
 const configs = require('../configs')();
-const mongoConns = require('../mongoConns')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
@@ -48,7 +47,8 @@ const {
   releasePublicAddrLimiterBlockage
 } = require('./events');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
-// const { publicPortLimiter } = require('../limiters/publicPort');
+const AsyncLock = require('async-lock');
+const lock = new AsyncLock({ maxOccupationTime: 60000 });
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -124,11 +124,10 @@ const toMessageContents = (message) => {
  * @returns
  */
 const setSyncStateOnJobQueue = async (machineId, message) => {
-  await mongoConns.mainDBwithTransaction(async (session) => {
+  lock.acquire('setSyncStateOnJobQueue', async () => {
     const device = await devices.findOne(
       { machineId: machineId },
-      { 'sync.hash': 1, 'sync.state': 1, versions: 1 },
-      { session }
+      { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
     );
 
     const { sync } = device;
@@ -161,7 +160,7 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
       device.sync.state = newState;
     }
 
-    await device.save({ session });
+    await device.save();
   });
 };
 
