@@ -1900,6 +1900,56 @@ paths:
       x-swagger-router-controller: Tunnels
       x-openapi-router-controller: TunnelsController
       x-openapi-router-service: TunnelsService
+  /tunnels/notifications:
+    put:
+      operationId: tunnelsNotificationsPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+             $ref: '#/components/schemas/TunnelsNotificationsPut'
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Add tunnel specific notifications settings
+      tags:
+      - Tunnels
+      x-swagger-router-controller: Tunnels
+      x-openapi-router-controller: TunnelsController
+      x-openapi-router-service: TunnelsService
   /devices/{id}/routes:
     get:
       operationId: devicesIdRoutesGET
@@ -10835,6 +10885,33 @@ components:
           type: boolean
         pendingReason:
           type: string
+      type: object
+    TunnelsNotificationsPut:
+      example:
+        org: organizationId,
+        tunnels: tunnelsList,
+        notifications: notifications
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        tunnelsList:
+          type: array
+          items:
+            type: string
+            maxLength: 24
+            minLength: 24
+        notifications:
+          type: array
+          properties:
+            warningThreshold:
+              type: number
+            criticalThreshold:
+              type: number
+            event:
+              type: string
+              enum: ['Link/Tunnel round trip time', 'Link/Tunnel default drop rate']
       type: object
     StaticRouteRequest:
       example:

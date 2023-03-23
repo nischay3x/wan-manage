@@ -22,7 +22,12 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
 const { getTunnelsPipeline } = require('../utils/tunnelUtils');
-
+const { getUserOrganizations } = require('../utils/membershipUtils');
+const configs = require('../configs')();
+const deviceQueues = require('../utils/deviceQueue')(
+  configs.get('kuePrefix'),
+  configs.get('redisUrl')
+);
 class TunnelsService {
   /**
    * Extends mongo results with tunnel status info
@@ -158,6 +163,119 @@ class TunnelsService {
         e.status || 500
       );
     };
+  }
+
+  /**
+   * Set tunnel specific notifications configuration
+   *
+   * @param {Array} tunnelsIdList - List of tunnel ids
+   * @param {Array} notifications - list of notifications (objects) to update
+   **/
+  static async tunnelsNotificationsPUT ({ tunnelsNotificationsPut }, { user }) {
+    try {
+      const { org: orgId, tunnelsIdList, notifications } = tunnelsNotificationsPut;
+      const userOrgList = await getUserOrganizations(user);
+      if (orgId) {
+        if (!Object.values(userOrgList).find(o => o.id === orgId)) {
+          return Service.rejectResponse(
+            'You do not have permission to access this organization', 403
+          );
+        }
+      }
+      const tunnels = await Tunnels.find({ _id: { $in: tunnelsIdList }, org: orgId })
+        .populate('deviceA', '_id name machineId')
+        .populate('deviceB', '_id name machineId')
+        .lean();
+      if (tunnels.length !== tunnelsIdList.length) {
+        return Service.rejectResponse(
+          'Please check again your tunnels id list', 500
+        );
+      }
+      await Tunnels.updateMany(
+        { _id: { $in: tunnelsIdList }, org: orgId },
+        { $set: { notificationsSettings: notifications } });
+      const notificationsDict = {};
+      for (const notification of notifications) {
+        const event = notification.event;
+        delete notification._id;
+        delete notification.event;
+        notificationsDict[event] = notification;
+      }
+      const tasks = [{
+        entity: 'agent',
+        message: 'modify-tunnel',
+        params: {
+          notificationsSettings: notificationsDict
+        }
+      }];
+      const jobs = [];
+      for (const tunnel of tunnels) {
+        tasks[0].params['tunnel-id'] = tunnel.num;
+        // Create a job for device A
+        const jobA = await deviceQueues.addJob(
+          (tunnel.deviceA.machineId).toString(),
+          user.username,
+          orgId,
+          // Data
+          {
+            title: `Modify tunnel notifications settings on device
+              ${tunnel.deviceA.name}`,
+            tasks
+          },
+          // Response data
+          {
+            method: 'notifications',
+            data: {
+              device: tunnel.deviceA._id,
+              org: orgId,
+              action: 'update-tunnel-notifications'
+            }
+          },
+          // Metadata
+          { priority: 'normal', attempts: 1, removeOnComplete: false },
+          // Complete callback
+          null
+        );
+
+        jobs.push(jobA);
+
+        if (tunnel.peer) {
+          continue;
+        }
+        // Create a job for device B
+        const jobB = await deviceQueues.addJob(
+          (tunnel.deviceB.machineId).toString(),
+          user.username,
+          orgId,
+          // Data
+          {
+            title: `Modify tunnel notifications settings on device
+              ${tunnel.deviceB.name}`,
+            tasks
+          },
+          // Response data
+          {
+            method: 'notifications',
+            data: {
+              device: tunnel.deviceB._id,
+              org: orgId,
+              action: 'update-tunnel-notifications'
+            }
+          },
+          // Metadata
+          { priority: 'normal', attempts: 1, removeOnComplete: false },
+          // Complete callback
+          null
+        );
+        jobs.push(jobB);
+      }
+      return Service.successResponse(null, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
   }
 }
 
