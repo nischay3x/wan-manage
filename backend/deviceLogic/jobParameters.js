@@ -278,11 +278,20 @@ const transformDHCP = dhcp => {
   };
 };
 
+const transformLte = lteInterface => {
+  return {
+    ...lteInterface.configuration,
+    dev_id: lteInterface.devId,
+    metric: lteInterface.metric
+  };
+};
+
 module.exports = {
   transformInterfaces,
   transformRoutingFilters,
   transformOSPF,
   transformBGP,
   transformDHCP,
-  transformVxlanConfig
+  transformVxlanConfig,
+  transformLte
 };
