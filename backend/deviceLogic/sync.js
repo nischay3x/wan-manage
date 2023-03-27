@@ -42,11 +42,14 @@ const appIdentificationCompleteHandler = require('./appIdentification').complete
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
-const activatePendingTunnelsOfDevice = require('./events')
-  .activatePendingTunnelsOfDevice;
-const publicAddrInfoLimiter = require('./publicAddressLimiter');
+const {
+  activatePendingTunnelsOfDevice,
+  releasePublicAddrLimiterBlockage
+} = require('./events');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const deviceNotificationsSync = require('./deviceNotifications').sync;
+const AsyncLock = require('async-lock');
+const lock = new AsyncLock({ maxOccupationTime: 60000 });
 
 // Create an object of all sync handlers
 const syncHandlers = {
@@ -125,47 +128,44 @@ const toMessageContents = (message) => {
  * @returns
  */
 const setSyncStateOnJobQueue = async (machineId, message) => {
-  // Calculate the new configuration hash
-  const { sync } = await devices.findOne(
-    { machineId: machineId },
-    { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
-  )
-    .lean();
+  lock.acquire('setSyncStateOnJobQueue', async () => {
+    const device = await devices.findOne(
+      { machineId: machineId },
+      { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
+    );
 
-  const { hash } = sync || {};
-  if (hash === null || hash === undefined) {
-    throw new Error('Failed to get device hash value');
-  }
-
-  // Reset hash value for full-sync messages
-  const messageContents = toMessageContents(message);
-  const newHash =
-    messageContents !== 'sync-device' ? calcChangeHash(hash, message) : '';
-
-  const { state } = sync;
-  const newState = state !== 'not-synced' ? 'syncing' : 'not-synced';
-  logger.info('New sync state calculated, updating database', {
-    params: { state, newState, hash, newHash }
-  });
-
-  // Update hash and reset autoSync state only when the added
-  // job is not sync-device. The hash for sync-device job will be
-  // reset after the job is completed. If sync-device job has
-  // failed, the hash will not be changed.
-  const updateFields = messageContents !== 'sync-device'
-    ? {
-      'sync.state': newState,
-      'sync.hash': newHash,
-      'sync.autoSync': 'on',
-      'sync.trials': 0
+    const { sync } = device;
+    const { hash } = sync || {};
+    if (hash === null || hash === undefined) {
+      throw new Error('Failed to get device hash value');
     }
-    : { 'sync.state': newState };
 
-  return devices.updateOne(
-    { machineId: machineId },
-    updateFields,
-    { upsert: false }
-  );
+    // Reset hash value for full-sync messages
+    const messageContents = toMessageContents(message);
+    const newHash =
+      messageContents !== 'sync-device' ? calcChangeHash(hash, message) : '';
+
+    const { state } = sync;
+    const newState = state !== 'not-synced' ? 'syncing' : 'not-synced';
+    logger.info('New sync state calculated, updating database', {
+      params: { state, newState, hash, newHash }
+    });
+
+    // Update hash and reset autoSync state only when the added
+    // job is not sync-device. The hash for sync-device job will be
+    // reset after the job is completed. If sync-device job has
+    // failed, the hash will not be changed.
+    if (messageContents !== 'sync-device') {
+      device.sync.state = newState;
+      device.sync.hash = newHash;
+      device.sync.autoSync = 'on';
+      device.sync.trials = 0;
+    } else {
+      device.sync.state = newState;
+    }
+
+    await device.save();
+  });
 };
 
 const updateSyncState = (org, deviceId, state) => {
@@ -212,7 +212,7 @@ const incAutoSyncTrials = (deviceId) => {
   );
 };
 
-const queueFullSyncJob = async (device, hash, org) => {
+const queueFullSyncJob = async (device, hash, org, username = 'system') => {
   // Queue full sync job
   // Add current hash to message so the device can
   // use it to check if it is already synced
@@ -231,7 +231,7 @@ const queueFullSyncJob = async (device, hash, org) => {
       requests,
       completeCbData,
       callComplete
-    } = await syncHandler(deviceId, org);
+    } = await syncHandler(deviceId, org, device);
 
     // Add the requests to the sync message params object
     requests.forEach(subTask => {
@@ -257,7 +257,7 @@ const queueFullSyncJob = async (device, hash, org) => {
 
   const job = await deviceQueues.addJob(
     machineId,
-    'system',
+    username,
     org,
     // Data
     { title: 'Sync device ' + hostname, tasks: tasks },
@@ -462,10 +462,8 @@ const apply = async (device, user, data) => {
 
   // release existing limiters if the device is blocked
   await reconfigErrorsLimiter.release(_id.toString());
-  const released = await releasePublicAddrLimiterBlockage(device[0]);
-  if (released) {
-    await activatePendingTunnelsOfDevice(updDevice);
-  }
+  await releasePublicAddrLimiterBlockage(device[0]);
+  await activatePendingTunnelsOfDevice(updDevice, true);
 
   // Get device current configuration hash
   const { sync } = await devices.findOne(
@@ -478,7 +476,8 @@ const apply = async (device, user, data) => {
   const job = await queueFullSyncJob(
     { deviceId: _id, machineId, hostname, versions },
     hash,
-    org
+    org,
+    user.username
   );
 
   if (!job) {
@@ -493,21 +492,27 @@ const apply = async (device, user, data) => {
   };
 };
 
-const releasePublicAddrLimiterBlockage = async (device) => {
-  let blockagesReleased = false;
-
-  const wanIfcs = device.interfaces.filter(i => i.type === 'WAN');
-  const deviceId = device._id.toString();
-
-  for (const ifc of wanIfcs) {
-    const ifcId = ifc._id.toString();
-    const isReleased = await publicAddrInfoLimiter.release(`${deviceId}:${ifcId}`);
-    if (isReleased) {
-      blockagesReleased = true;
-    }
-  }
-
-  return blockagesReleased;
+/**
+ * Function that put given devices in syncing state
+ * so the system will send sync immediately
+ *
+ * @param {array} devicesIds List of devices to put in syncing state
+ * @returns
+ */
+const forceDevicesSync = async devicesIds => {
+  await devices.updateMany(
+    { _id: { $in: devicesIds } },
+    {
+      $set: {
+        // set hardcoded hash to trigger a change on next get-device-stats
+        'sync.hash': 'FORCE_SYNC',
+        'sync.state': 'syncing',
+        'sync.autoSync': 'on',
+        'sync.trials': 0
+      }
+    },
+    { upsert: false }
+  );
 };
 
 // Register a method that updates sync state
@@ -523,5 +528,6 @@ module.exports = {
   updateSyncStatusBasedOnJobResult,
   apply,
   complete,
-  error
+  error,
+  forceDevicesSync
 };

@@ -145,7 +145,7 @@ const getFirewallParameters = (policy, device) => {
           permit: action === 'allow'
         }
       };
-      if ((priority >= 0) && (priority < globalShift)) {
+      if ((priority >= 0) && (priority < globalShift) && interfaces?.length) {
         // attach interfaces only for device specific rules
         jobRule.action.interfaces = interfaces;
       }
@@ -363,7 +363,7 @@ const updateDevicesBeforeJob = async (deviceIds, op, requestTime, firewallPolicy
  * @return {None}
  */
 const apply = async (deviceList, user, data) => {
-  const { org } = data;
+  const { org: orgId } = data;
   const { op, id } = data.meta;
 
   let firewallPolicy, deviceIds;
@@ -371,7 +371,7 @@ const apply = async (deviceList, user, data) => {
   try {
     if (op === 'install') {
       // Retrieve policy from database
-      firewallPolicy = await getFirewallPolicy(id, org);
+      firewallPolicy = await getFirewallPolicy(id, orgId);
 
       if (!firewallPolicy) {
         throw createError(404, `Firewall policy ${id} does not exist`);
@@ -385,17 +385,19 @@ const apply = async (deviceList, user, data) => {
 
     // Extract the device IDs to operate on
     deviceIds = data.devices
-      ? await getOpDevices(data.devices, org, firewallPolicy)
+      ? await getOpDevices(data.devices, orgId, firewallPolicy)
       : [deviceList[0]._id];
 
     if (op === 'install') {
       const reqDevices = await devices.find(
-        { org: org, _id: { $in: deviceIds } },
+        { org: orgId, _id: { $in: deviceIds } },
         { name: 1, interfaces: 1, 'firewall.rules': 1, deviceSpecificRulesEnabled: 1 }
-      ).lean();
+      ).populate('org').lean();
+
       for (const dev of reqDevices) {
         const { valid, err } = validateFirewallRules(
           [...firewallPolicy.rules, ...dev.firewall.rules],
+          dev.org,
           dev.interfaces
         );
         if (!valid) {
@@ -417,7 +419,7 @@ const apply = async (deviceList, user, data) => {
       message: 'The policy is not installed on any of the devices'
     };
   }
-  return applyPolicy(opDevices, firewallPolicy, op, user, org);
+  return applyPolicy(opDevices, firewallPolicy, op, user, orgId);
 };
 
 /**

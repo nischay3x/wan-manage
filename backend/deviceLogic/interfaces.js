@@ -58,7 +58,6 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
       pathlabels,
       gateway,
       metric,
-      mtu,
       dhcp,
       deviceType,
       configuration,
@@ -74,14 +73,14 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
     );
     // Skip interfaces with invalid IPv4 addresses.
     // Currently we allow empty IPv6 address
-    if (dhcp !== 'yes' && !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'wifi') continue;
+    if (dhcp !== 'yes' && type !== 'TRUNK' &&
+      !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'wifi') continue;
 
     const ifcInfo = {
       dev_id: devId,
       dhcp: dhcp || 'no',
       addr: `${(IPv4 && IPv4Mask ? `${IPv4}/${IPv4Mask}` : '')}`,
       addr6: `${(IPv6 && IPv6Mask ? `${IPv6}/${IPv6Mask}` : '')}`,
-      mtu,
       type,
       multilink: { labels: labels.map((label) => label._id.toString()) },
       deviceType,
@@ -130,6 +129,11 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
       ifcInfo.bridge_addr = ifcInfo.addr;
     } else {
       ifcInfo.bridge_addr = null;
+    }
+
+    // do not send MTU for VLANs
+    if (!ifc.vlanTag) {
+      ifcInfo.mtu = ifc.mtu;
     }
 
     interfaces.push(ifcInfo);
