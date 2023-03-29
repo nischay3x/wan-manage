@@ -161,6 +161,10 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
     }
 
     await device.save();
+  }).catch(err => {
+    logger.error('setSyncStateOnJobQueue failed. A sync message may be sent soon', {
+      params: { err: err.message, machineId, message }
+    });
   });
 };
 
