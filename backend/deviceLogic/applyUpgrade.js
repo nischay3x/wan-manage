@@ -94,6 +94,37 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
 };
 
 /**
+ * Queues OS upgrade jobs to a list of devices.
+ * @param  {Array}   devices       array of devices to which an upgrade job should be queued
+ * @param  {string}  user          user name of the user the queued the job
+ * @param  {string}  org           id of the organization to which the user belongs
+ * @return {Promise}               a promise for queuing an upgrade job
+ */
+const queueOsUpgradeJobs = (devices, user, org) => {
+  const tasks = [{
+    entity: 'agent',
+    message: 'upgrade-linux-sw',
+    params: {}
+  }];
+  const jobs = [];
+  devices.forEach(dev => {
+    deviceStatus.setDeviceState(dev.machineId, 'pending');
+    jobs.push(
+      deviceQueues.addJob(dev.machineId, user, org,
+        // Data
+        { title: `Upgrade OS for device ${dev.hostname}`, tasks: tasks },
+        // Response data
+        { method: 'osupgrade', data: { device: dev._id, org: org } },
+        // Metadata
+        { priority: 'normal', attempts: 1, removeOnComplete: false },
+        // Complete callback
+        null)
+    );
+  });
+  return Promise.all(jobs);
+};
+
+/**
  * Applies the upgrade request on all requested devices
  * @async
  * @param  {Array}    device    an array of the devices to be modified
@@ -121,6 +152,29 @@ const apply = async (opDevices, user, data) => {
   // as there's a pending upgrade task in a device's queue.
   const deviceIDs = opDevices.map(dev => { return dev._id; });
   await setQueuedUpgradeFlag(deviceIDs, org, true);
+  return { ids: jobResults.map(job => job.id), status: 'completed', message: '' };
+};
+
+/**
+ * Applies the OS upgrade request on all requested devices
+ * @async
+ * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Object}   user      User object
+ * @param  {Object}   data      Additional data used by caller
+ * @return {None}
+ */
+const osUpgradeApply = async (opDevices, user, data) => {
+  // opDevices is a filtered array of selected devices (mongoose objects)
+
+  const userName = user.username;
+  const org = data.org;
+  const jobResults = await queueOsUpgradeJobs(opDevices, userName, org);
+  jobResults.forEach(job => {
+    logger.info('OS upgrade device job queued', {
+      params: { jobId: job.id, machineId: job.type },
+      job: job
+    });
+  });
   return { ids: jobResults.map(job => job.id), status: 'completed', message: '' };
 };
 
@@ -157,6 +211,16 @@ const complete = async (jobId, res) => {
       params: { result: res, jobId: jobId }
     });
   }
+};
+
+/**
+ * Called when OS upgrade device job completes
+ * @async
+ * @param  {number} jobId Kue job ID number
+ * @param  {string} res   device object ID and username
+ * @return {void}
+ */
+const osUpgradeComplete = async (jobId, res) => {
 };
 
 /**
@@ -202,7 +266,9 @@ const remove = async (job) => {
 
 module.exports = {
   apply: apply,
+  osUpgradeApply: osUpgradeApply,
   complete: complete,
+  osUpgradeComplete: osUpgradeComplete,
   queueUpgradeJobs: queueUpgradeJobs,
   error: error,
   remove: remove
