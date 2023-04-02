@@ -115,16 +115,8 @@ const toMessageContents = (message) => {
     : message.tasks[0].message;
 };
 
-/**
- * Modifies sync state based on the queued job.
- * Gets called whenever job gets saved in the device queue.
- *
- * @param {*} machineId Device machine Id
- * @param {*} message Device message to be used in hash calculation
- * @returns
- */
-const setSyncStateOnJobQueue = async (machineId, message) => {
-  lock.acquire('setSyncStateOnJobQueue', async () => {
+const setSyncStateOnJobQueueFunc = async (machineId, message) => {
+  try {
     const device = await devices.findOne(
       { machineId: machineId },
       { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
@@ -159,12 +151,32 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
     } else {
       device.sync.state = newState;
     }
-
     await device.save();
-  }).catch(err => {
-    logger.error('setSyncStateOnJobQueue failed. A sync message may be sent soon', {
+  } catch (err) {
+    logger.error('setSyncStateOnJobQueueFunc failed. A sync message may be sent soon', {
       params: { err: err.message, machineId, message }
     });
+  }
+};
+
+/**
+ * Modifies sync state based on the queued job.
+ * Gets called whenever job gets saved in the device queue.
+ *
+ * @param {*} machineId Device machine Id
+ * @param {*} message Device message to be used in hash calculation
+ * @returns
+ */
+const setSyncStateOnJobQueue = async (machineId, message) => {
+  lock.acquire(
+    'setSyncStateOnJobQueue',
+    async () => await setSyncStateOnJobQueueFunc(machineId, message)
+  ).catch(async err => {
+    // try one more time, now, outside of the lock.
+    logger.error('setSyncStateOnJobQueue failed', {
+      params: { err: err.message, machineId, message }
+    });
+    await setSyncStateOnJobQueueFunc(machineId, message);
   });
 };
 
