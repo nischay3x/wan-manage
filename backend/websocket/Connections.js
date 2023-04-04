@@ -541,7 +541,7 @@ class Connections {
             updInterface.type = updInterface.gateway ? 'WAN' : 'LAN';
           }
 
-          updInterface.locked = true;
+          updInterface.locked = i.locked;
           interfaces.push(updInterface);
         });
 

@@ -1654,6 +1654,7 @@ class DevicesService {
               }
               // remove _id for added or modified VLAN interfaces
               delete updIntf._id;
+              updIntf.locked = false;
             }
 
             // check interface specific validation
