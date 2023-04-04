@@ -685,7 +685,8 @@ class Connections {
           certificateExpiration: Joi.string().allow('').optional(),
           error: Joi.string().allow('').optional()
         }).allow({}).optional(),
-        cpuInfo: Joi.object().optional()
+        cpuInfo: Joi.object().optional(),
+        distro: Joi.string().allow('').optional()
       }).custom((obj, helpers) => {
         for (const [component, info] of Object.entries(
           obj.components
@@ -768,6 +769,7 @@ class Connections {
       });
       origDevice.cpuInfo = cpuInfo;
       origDevice.versions = versions;
+      origDevice.distro = deviceInfo.message.distro;
       await origDevice.save();
 
       const { expireTime, jobQueued } = origDevice.IKEv2;

@@ -9284,6 +9284,8 @@ components:
         cpuInfo:
           powerSaving: true
           vppCores: 3
+        distro:
+          18.04-bionic
       properties:
         machineId:
           type: string
@@ -9349,6 +9351,8 @@ components:
           $ref: '#/components/schemas/DeviceVersion'
         cpuInfo:
           $ref: '#/components/schemas/DeviceCpuInfo'
+        distro:
+          type: string
       type: object
     OrganizationInfo:
       example:

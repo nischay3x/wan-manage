@@ -1121,6 +1121,11 @@ const deviceSchema = new Schema({
       type: Boolean,
       default: false
     }
+  },
+  distro: {
+    type: String,
+    maxlength: [50, 'Distribution string must be lower than 50'],
+    default: ''
   }
 },
 {

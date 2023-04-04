@@ -283,6 +283,7 @@ connectRouter.route('/register')
                     isConnected: false,
                     coords: ll,
                     cpuInfo: cpuInfo,
+                    distro: req.body.distro || '',
                     versions: versions
                   }], { session: session })
                     .then(async (result) => {
