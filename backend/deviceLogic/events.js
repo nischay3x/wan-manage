@@ -762,7 +762,9 @@ class Events {
     if (updatedIfc.IPv4 !== '') {
       return false;
     }
-
+    if (updatedIfc.type === 'TRUNK') { // TRUNK interfaces don't have an IP address
+      return false;
+    };
     return true;
   };
 }

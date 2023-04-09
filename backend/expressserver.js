@@ -277,7 +277,7 @@ class ExpressServer {
 
     const transformIndex = (origIndex) => {
       let modifiedIndex = configs.get('removeBranding', 'boolean')
-        ? origIndex.replace('<title>FlexiWAN Management</title>',
+        ? origIndex.replace('<title>flexiWAN Management</title>',
           `<title>${configs.get('companyName')} Management</title>`)
         : origIndex;
       const m = modifiedIndex.match(/const __FLEXIWAN_SERVER_CONFIG__=(.*?);/);

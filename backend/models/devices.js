@@ -69,6 +69,11 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // true if the interface exists in the linux config, not allowed to remove in manage
+  locked: {
+    type: Boolean,
+    default: false
+  },
   // VLAN Tag, used for VLAN sub-interfaces
   vlanTag: {
     type: String,
