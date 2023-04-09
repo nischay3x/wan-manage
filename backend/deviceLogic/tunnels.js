@@ -2116,7 +2116,7 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
 };
 
 const addBgpNeighborsIfNeeded = async tunnel => {
-  const { deviceA, deviceB, advancedOptions } = tunnel;
+  const { deviceA, deviceB, advancedOptions, peer } = tunnel;
   const { routing } = advancedOptions;
 
   const deviceATasks = [];
@@ -2125,8 +2125,8 @@ const addBgpNeighborsIfNeeded = async tunnel => {
   if (routing === 'bgp') {
     const majorA = getMajorVersion(deviceA.versions.agent);
     const minorA = getMinorVersion(deviceA.versions.agent);
-    const majorB = getMajorVersion(deviceB?.versions.agent);
-    const minorB = getMinorVersion(deviceB?.versions.agent);
+    const majorB = peer ? null : getMajorVersion(deviceB.versions.agent);
+    const minorB = peer ? null : getMinorVersion(deviceB.versions.agent);
 
     const isNeedToSendNeighborsA = majorA === 5 && minorA === 3;
     const isNeedToSendNeighborsB = majorB === 5 && minorB === 3;
