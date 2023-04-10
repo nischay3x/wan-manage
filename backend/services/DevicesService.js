@@ -1415,6 +1415,12 @@ class DevicesService {
               ifc.isAssigned = parentIfc.isAssigned;
               ifc.mtu = parentIfc.mtu;
             }
+            if (ifc.isAssigned && ifc.type === 'WAN' && ifc.bandwidthMbps) {
+              const { tx, rx } = ifc.bandwidthMbps;
+              if (+tx < 0.5 || +rx < 0.5) {
+                throw createError(400, `${ifc.name} Bandwidth value must be greater than 0.5 Mbps`);
+              }
+            }
             if (Array.isArray(ifc.pathlabels)) {
               ifc.pathlabels.forEach(pl => {
                 if (!orgPathLabels.includes(pl._id.toString())) {
