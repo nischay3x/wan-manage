@@ -47,9 +47,10 @@ const notificationsListToDict = (notificationsSettings) => {
   const notificationsDict = {};
   for (const notification of notificationsSettings) {
     const event = notification.event;
-    delete notification._id;
-    delete notification.event;
-    notificationsDict[event] = notification;
+    notificationsDict[event] = {
+      warningThreshold: notification.warningThreshold,
+      criticalThreshold: notification.criticalThreshold
+    };
   }
   return notificationsDict;
 };
@@ -1724,13 +1725,8 @@ const sync = async (deviceId, org) => {
       tunnelKeys,
       encryptionMethod,
       peer,
-      org: tunnelOrg,
-      notificationsSettings
+      org: tunnelOrg
     } = tunnel;
-
-    if (notificationsSettings) {
-      tunnel.notificationsSettings = notificationsSettings;
-    }
 
     if (!tunnelKeys && encryptionMethod === 'psk' && peer === null) {
       // No keys for some reason, probably version 2 upgraded.

@@ -269,7 +269,11 @@ class TunnelsService {
         );
         jobs.push(jobB);
       }
-      return Service.successResponse(null, 200);
+      return Service.successResponse({
+        code: 200,
+        message: 'Modify-tunnel job was added successfully',
+        data: 'Modify-tunnel job was added successfully'
+      });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

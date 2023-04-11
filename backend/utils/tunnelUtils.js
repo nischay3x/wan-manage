@@ -208,6 +208,7 @@ const getTunnelsPipeline = (orgList, filters) => {
       deviceBconf: 1,
       encryptionMethod: 1,
       advancedOptions: 1,
+      notificationsSettings: 1,
       'pathlabel.name': 1,
       'pathlabel.color': 1,
       isPending: 1,
