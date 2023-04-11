@@ -163,6 +163,7 @@ connectRouter.route('/register')
                   intf.vlanTag = idParts[1];
                   intf.parentDevId = idParts.slice(2).join('.');
                 }
+                intf.locked = true;
                 intf.isAssigned = false;
                 intf.useStun = true;
                 intf.useFixedPublicPort = false;

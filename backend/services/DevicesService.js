@@ -201,6 +201,7 @@ class DevicesService {
           'devId',
           'parentDevId',
           'vlanTag',
+          'locked',
           '_id',
           'pathlabels',
           'deviceType',
@@ -510,6 +511,7 @@ class DevicesService {
               PublicIP: 1,
               devId: 1,
               parentDevId: 1,
+              locked: 1,
               vlanTag: 1
             },
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
@@ -1454,8 +1456,8 @@ class DevicesService {
           for (const origIntf of origDevice.interfaces) {
             origInterfacesByDevId[origIntf.devId] = origIntf;
             const updIntf = interfacesByDevId[origIntf.devId];
-            if (!updIntf && !origIntf.parentDevId) {
-              // we allow to remove only sub-interfaces
+            if (!updIntf && (!origIntf.parentDevId || origIntf.locked)) {
+              // we allow to remove only not locked sub-interfaces
               logger.error('Not allowed to remove interfaces', { params: { origIntf } });
               throw createError(400, 'Not allowed to remove interfaces');
             };
@@ -1674,6 +1676,7 @@ class DevicesService {
               }
               // remove _id for added or modified VLAN interfaces
               delete updIntf._id;
+              updIntf.locked = false;
             }
 
             // check interface specific validation
