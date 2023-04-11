@@ -38,6 +38,7 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
     const ifcObg = {
       _id: ifc._id,
       devId: ifc.devId,
+      parentDevId: ifc.parentDevId,
       dhcp: ifc.dhcp ? ifc.dhcp : 'no',
       addr: ifc.IPv4 && ifc.IPv4Mask ? `${ifc.IPv4}/${ifc.IPv4Mask}` : '',
       addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
