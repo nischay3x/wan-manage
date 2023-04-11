@@ -212,14 +212,13 @@ const queueFirewallPolicyJob = async (deviceList, op, requestTime, policy, user,
   );
 
   deviceList.forEach(dev => {
-    const policyParams = getFirewallParameters(policy, dev);
-    if (!policyParams) op = 'uninstall';
-
-    const jobTitle = op === 'install'
+    const params = getFirewallParameters(policy, dev);
+    const devOp = !params ? 'uninstall' : op;
+    const jobTitle = devOp === 'install'
       ? policy ? `Install policy ${policy.name}` : 'Install device specific policy'
       : 'Uninstall policy';
 
-    const { tasks, data } = prepareFirewallJobInfo(dev, policyParams, op, org, apps, requestTime);
+    const { tasks, data } = prepareFirewallJobInfo(dev, params, devOp, org, apps, requestTime);
     jobs.push(
       deviceQueues.addJob(
         dev.machineId,
