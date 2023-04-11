@@ -1364,6 +1364,8 @@ class DevicesService {
         if (!origDevice) {
           throw createError(404, 'Device not found');
         }
+        const majorVersion = getMajorVersion(origDevice.versions.agent);
+        const minorVersion = getMinorVersion(origDevice.versions.agent);
 
         const orgId = origDevice.org._id;
 
@@ -1406,6 +1408,11 @@ class DevicesService {
           // request interfaces first loop: simple validation of input data
           deviceRequest.interfaces.forEach(ifc => {
             if (ifc.parentDevId) {
+              if (majorVersion < 6 || (majorVersion === 6 && minorVersion < 2)) {
+                throw createError(400,
+                  'The device does not run the required flexiWAN version for VLAN. ' +
+                  'Please remove sub-interfaces or upgrade the device');
+              }
               const parentIfc = interfacesByDevId[ifc.parentDevId];
               if (!parentIfc) {
                 logger.error('Unknown parent interface', { params: { ifc } });
@@ -1728,8 +1735,6 @@ class DevicesService {
           deviceToValidate.interfaces = origDevice.interfaces;
         }
 
-        const ver = getMajorVersion(origDevice.versions.agent);
-
         // Map dhcp config if needed
         if (Array.isArray(deviceRequest.dhcp)) {
           deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
@@ -1793,9 +1798,7 @@ class DevicesService {
         }
 
         if (deviceRequest?.bgp?.enable) {
-          const major = getMajorVersion(origDevice.versions.agent);
-          const minor = getMinorVersion(origDevice.versions.agent);
-          if (major <= 5 && minor < 3) {
+          if (majorVersion < 5 || (majorVersion === 5 && minorVersion < 3)) {
             throw createError(400,
               'The device does not run the required flexiWAN version for BGP. ' +
               'Please disable BGP or upgrade the device');
@@ -1837,7 +1840,7 @@ class DevicesService {
             }
 
             // don't set as pending for old version since we don't sent the IP for bridged interface
-            if (ver >= 5) {
+            if (majorVersion >= 5) {
               for (const ifc of interfacesWithoutIp) {
                 if (ifc.IPv4 === s.gateway) {
                   s.isPending = true;
