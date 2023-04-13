@@ -1017,7 +1017,7 @@ const prepareTunnelAddJob = async (
   if (tunnel.encryptionMethod === 'ikev2') {
     if (peer) {
       let localDeviceId = peer.localId;
-      if (localDeviceId === 'Automatic') {
+      if (localDeviceId === 'Automatic' && peer.idType === 'ip4-addr') {
         localDeviceId = deviceAIntf.PublicIP;
       }
 
@@ -1026,10 +1026,10 @@ const prepareTunnelAddJob = async (
         role: 'initiator',
         mode: 'psk',
         psk: peer.psk,
-        'local-device-id-type': peer.idType,
-        'remote-device-id-type': peer.idType,
-        'remote-device-id': peer.remoteId,
+        'local-device-id-type': peer.idType === 'email' ? 'rfc822' : peer.idType,
         'local-device-id': localDeviceId,
+        'remote-device-id-type': peer.remoteIdType === 'email' ? 'rfc822' : peer.remoteIdType,
+        'remote-device-id': peer.remoteId,
         lifetime: parseInt(peer.sessionLifeTime),
         ike: {
           'crypto-alg': peer.ikeCryptoAlg,
