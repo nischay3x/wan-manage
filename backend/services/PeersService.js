@@ -29,6 +29,7 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const validators = require('../models/validators');
 
 class PeersService {
   /**
@@ -60,6 +61,42 @@ class PeersService {
   }
 
   /**
+   * Validate peer object
+   *
+   * Note!
+   * This function does not fully validate each field as it is validated in UI and Mongo schema.
+   * Here, we only check dependencies between fields.
+   *
+   * @param  {object} peer peer request
+   * @return {{ valid: boolean, err: null|string}}
+   **/
+  static validatePeer (peer) {
+    const { idType, localId, remoteIdType, remoteId } = peer;
+
+    if (!idType || !localId || !remoteIdType || !remoteId) {
+      return { valid: false, err: 'Required fields are missing' };
+    }
+
+    if (idType === 'email' && !validators.validateEmail(localId)) {
+      return { valid: false, err: 'Local ID must be a valid email address' };
+    }
+
+    if (remoteIdType === 'email' && !validators.validateEmail(remoteId)) {
+      return { valid: false, err: 'Remote ID must be a valid email address' };
+    }
+
+    if (idType === 'ip4-addr' && localId !== 'Automatic' && !validators.validateIPv4(localId)) {
+      return { valid: false, err: 'Local ID must be a valid IPv4 address' };
+    }
+
+    if (remoteIdType === 'ip4-addr' && !validators.validateIPv4(remoteId)) {
+      return { valid: false, err: 'Remote ID must be a valid IPv4 address' };
+    }
+
+    return { valid: true, err: null };
+  }
+
+  /**
    * Create new peer
    *
    * peer
@@ -68,6 +105,11 @@ class PeersService {
   static async peersPOST ({ org, peer }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const { valid, err } = PeersService.validatePeer(peer);
+      if (!valid) {
+        throw new Error(err);
+      }
 
       const newPeer = await Peers.create({ ...peer, org: orgList[0].toString() });
       return Service.successResponse(newPeer);
@@ -101,6 +143,11 @@ class PeersService {
           params: { id, org, orgList, peer }
         });
         throw new Error('The peer was not updated. Please check the ID or org parameters');
+      }
+
+      const { valid, err } = PeersService.validatePeer(peer);
+      if (!valid) {
+        throw new Error(err);
       }
 
       const nonRelevantFields = ['name', 'urls', 'ips', '_id', 'org', 'createdAt', 'updatedAt'];
