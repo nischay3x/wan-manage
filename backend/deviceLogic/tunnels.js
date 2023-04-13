@@ -1359,7 +1359,16 @@ const applyTunnelDel = async (devices, user, data) => {
     tunnelIds = Object.keys(tunnels);
     tunnelsArray = await tunnelsModel.find(
       { _id: { $in: tunnelIds }, isActive: true, org: data.org }
-    ).populate('deviceA').populate('deviceB').populate('peer');
+    )
+      .populate('deviceA', '_id name staticroutes')
+      .populate('deviceB', '_id name staticroutes')
+      .populate('peer');
+
+    if (tunnelsArray.length !== tunnelIds.length) {
+      logger.error('Some tunnels were not found, try refresh and delete again',
+        { params: { tunnelIds, foundIds: tunnelsArray.map(t => t._id) } });
+      throw new Error('Some tunnels were not found, try refresh and delete again');
+    }
   } else if (filters) {
     const updateStatusInDb = filters.includes('tunnelStatus');
     const statusesInDb = require('../periodic/statusesInDb')();
@@ -1391,7 +1400,12 @@ const applyTunnelDel = async (devices, user, data) => {
 
     if (updateOps.length) {
       try {
-        await tunnelsModel.bulkWrite(updateOps);
+        const { matchedCount, modifiedCount } = await tunnelsModel.bulkWrite(updateOps);
+        if (modifiedCount !== updateOps.length) {
+          logger.error('Updated tunnels count does not match requested',
+            { params: { matchedCount, modifiedCount, updateOps } }
+          );
+        }
       } catch (err) {
         logger.warn('Failed to update tunnels in database', {
           params: { message: err.message }
@@ -1414,7 +1428,7 @@ const applyTunnelDel = async (devices, user, data) => {
       };
       return { fulfilled, reasons };
     }, { fulfilled: [], reasons: [] });
-    const status = fulfilled.length < tunnelIds.length
+    const status = fulfilled.length < tunnelsArray.length
       ? 'partially completed' : 'completed';
 
     const desired = delPromises.flat().map(job => job.id);
