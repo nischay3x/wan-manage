@@ -1748,8 +1748,12 @@ const populateTunnelDestinations = (
   const deviceADefaultDstPort = isDevASupportsVxlanPort ? orgSourcePort : configSourcePort;
   const deviceBDefaultDstPort = isDevBSupportsVxlanPort ? orgSourcePort : configSourcePort;
 
-  const deviceAUseDefaultPort = !ifcA.PublicPort || ifcA.useFixedPublicPort;
-  const deviceBUseDefaultPort = !ifcB.PublicPort || ifcB.useFixedPublicPort;
+  // if one of the following met, use the default port and not the one detected by STUN.
+  //    1. Device does not have public port.
+  //    2. User forced to use default.
+  //    3. Both tunnel sides are in the same subnet.
+  const deviceAUseDefaultPort = !ifcA.PublicPort || ifcA.useFixedPublicPort || usePrivateIps;
+  const deviceBUseDefaultPort = !ifcB.PublicPort || ifcB.useFixedPublicPort || usePrivateIps;
 
   paramsA.dstPort = deviceBUseDefaultPort ? deviceBDefaultDstPort : ifcB.PublicPort;
   paramsB.dstPort = deviceAUseDefaultPort ? deviceADefaultDstPort : ifcA.PublicPort;
@@ -2112,7 +2116,7 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
 };
 
 const addBgpNeighborsIfNeeded = async tunnel => {
-  const { deviceA, deviceB, advancedOptions } = tunnel;
+  const { deviceA, deviceB, advancedOptions, peer } = tunnel;
   const { routing } = advancedOptions;
 
   const deviceATasks = [];
@@ -2121,8 +2125,8 @@ const addBgpNeighborsIfNeeded = async tunnel => {
   if (routing === 'bgp') {
     const majorA = getMajorVersion(deviceA.versions.agent);
     const minorA = getMinorVersion(deviceA.versions.agent);
-    const majorB = getMajorVersion(deviceB?.versions.agent);
-    const minorB = getMinorVersion(deviceB?.versions.agent);
+    const majorB = peer ? null : getMajorVersion(deviceB.versions.agent);
+    const minorB = peer ? null : getMinorVersion(deviceB.versions.agent);
 
     const isNeedToSendNeighborsA = majorA === 5 && minorA === 3;
     const isNeedToSendNeighborsB = majorB === 5 && minorB === 3;
@@ -2143,7 +2147,7 @@ const addBgpNeighborsIfNeeded = async tunnel => {
 };
 
 const buildModifyBgpJob = async device => {
-  const bgpParams = await transformBGP(device, true);
+  const bgpParams = await transformBGP(device);
   return { entity: 'agent', message: 'modify-routing-bgp', params: bgpParams };
 };
 

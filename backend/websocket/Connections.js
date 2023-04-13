@@ -454,9 +454,18 @@ class Connections {
 
         const incomingInterfaces = deviceInfo.message.network.interfaces;
 
-        const interfaces = origDevice.interfaces.map(i => {
+        const interfaces = [];
+        origDevice.interfaces.forEach(i => {
           const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
           if (!updatedConfig) {
+            if (i.devId.startsWith('vlan')) {
+              // the VLAN sub-interface is removed in device
+              // it should be unlocked in manage if assigned or removed if not assigned
+              if (i.isAssigned) {
+                interfaces.push({ ...i.toObject(), locked: false });
+              }
+              return;
+            }
             logger.warn('Missing interface configuration in the get-device-info message', {
               params: {
                 reconfig: deviceInfo.message.reconfig,
@@ -464,7 +473,8 @@ class Connections {
                 interface: i.toJSON()
               }
             });
-            return i;
+            interfaces.push(i.toObject());
+            return;
           }
 
           // send a notification if the link changed to down
@@ -531,7 +541,8 @@ class Connections {
             updInterface.type = updInterface.gateway ? 'WAN' : 'LAN';
           }
 
-          return updInterface;
+          updInterface.locked = i.locked;
+          interfaces.push(updInterface);
         });
 
         const deviceId = origDevice._id.toString();

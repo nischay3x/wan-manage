@@ -201,6 +201,7 @@ class DevicesService {
           'devId',
           'parentDevId',
           'vlanTag',
+          'locked',
           '_id',
           'pathlabels',
           'deviceType',
@@ -510,6 +511,7 @@ class DevicesService {
               PublicIP: 1,
               devId: 1,
               parentDevId: 1,
+              locked: 1,
               vlanTag: 1
             },
             pathlabels: { name: 1, description: 1, color: 1, type: 1 },
@@ -1362,6 +1364,8 @@ class DevicesService {
         if (!origDevice) {
           throw createError(404, 'Device not found');
         }
+        const majorVersion = getMajorVersion(origDevice.versions.agent);
+        const minorVersion = getMinorVersion(origDevice.versions.agent);
 
         const orgId = origDevice.org._id;
 
@@ -1404,6 +1408,11 @@ class DevicesService {
           // request interfaces first loop: simple validation of input data
           deviceRequest.interfaces.forEach(ifc => {
             if (ifc.parentDevId) {
+              if (majorVersion < 6 || (majorVersion === 6 && minorVersion < 2)) {
+                throw createError(400,
+                  'The device does not run the required flexiWAN version for VLAN. ' +
+                  'Please remove sub-interfaces or upgrade the device');
+              }
               const parentIfc = interfacesByDevId[ifc.parentDevId];
               if (!parentIfc) {
                 logger.error('Unknown parent interface', { params: { ifc } });
@@ -1412,6 +1421,12 @@ class DevicesService {
               // update isAssigned and MTU of the parent for VLAN sub-interfaces
               ifc.isAssigned = parentIfc.isAssigned;
               ifc.mtu = parentIfc.mtu;
+            }
+            if (ifc.isAssigned && ifc.type === 'WAN' && ifc.bandwidthMbps) {
+              const { tx, rx } = ifc.bandwidthMbps;
+              if (+tx < 0.5 || +rx < 0.5) {
+                throw createError(400, `${ifc.name} Bandwidth value must be greater than 0.5 Mbps`);
+              }
             }
             if (Array.isArray(ifc.pathlabels)) {
               ifc.pathlabels.forEach(pl => {
@@ -1432,8 +1447,8 @@ class DevicesService {
           for (const origIntf of origDevice.interfaces) {
             origInterfacesByDevId[origIntf.devId] = origIntf;
             const updIntf = interfacesByDevId[origIntf.devId];
-            if (!updIntf && !origIntf.parentDevId) {
-              // we allow to remove only sub-interfaces
+            if (!updIntf && (!origIntf.parentDevId || origIntf.locked)) {
+              // we allow to remove only not locked sub-interfaces
               logger.error('Not allowed to remove interfaces', { params: { origIntf } });
               throw createError(400, 'Not allowed to remove interfaces');
             };
@@ -1450,7 +1465,7 @@ class DevicesService {
               }
               const hasTunnels = origTunnels.some(({ interfaceA, interfaceB }) => {
                 return interfaceA.toString() === origIntf._id.toString() ||
-                  interfaceB.toString() === origIntf._id.toString();
+                  (interfaceB && interfaceB.toString() === origIntf._id.toString());
               });
               if (hasTunnels) {
                 // eslint-disable-next-line max-len
@@ -1565,7 +1580,7 @@ class DevicesService {
                 if (remLabels.length > 0) {
                   const hasTunnels = origTunnels.some(({ interfaceA, interfaceB, pathlabel }) => {
                     return (interfaceA.toString() === origIntf._id.toString() ||
-                      interfaceB.toString() === origIntf._id.toString()) &&
+                      (interfaceB && interfaceB.toString() === origIntf._id.toString())) &&
                       remLabels.some(p => p._id.toString() === pathlabel.toString());
                   });
                   if (hasTunnels) {
@@ -1652,6 +1667,7 @@ class DevicesService {
               }
               // remove _id for added or modified VLAN interfaces
               delete updIntf._id;
+              updIntf.locked = false;
             }
 
             // check interface specific validation
@@ -1673,7 +1689,7 @@ class DevicesService {
 
             if (updIntf.isAssigned && updIntf.routing === 'BGP' && !deviceRequest.bgp.enable) {
               throw new Error(
-                `Can't set BGP on ${origIntf.name}. ` +
+                `Can't set BGP on ${updIntf.name}. ` +
                 'BGP is disabled, please configure BGP from routing settings first'
               );
             }
@@ -1685,7 +1701,7 @@ class DevicesService {
 
               // Prevent static IP without dns servers
               if (dhcp === 'no' && servers.length === 0) {
-                throw createError(400, `DNS ip address is required for ${origIntf.name}`);
+                throw createError(400, `DNS ip address is required for ${updIntf.name}`);
               }
 
               // Prevent override dhcp DNS info without dns servers
@@ -1718,8 +1734,6 @@ class DevicesService {
         if (typeof deviceToValidate.interfaces === 'undefined') {
           deviceToValidate.interfaces = origDevice.interfaces;
         }
-
-        const ver = getMajorVersion(origDevice.versions.agent);
 
         // Map dhcp config if needed
         if (Array.isArray(deviceRequest.dhcp)) {
@@ -1784,9 +1798,7 @@ class DevicesService {
         }
 
         if (deviceRequest?.bgp?.enable) {
-          const major = getMajorVersion(origDevice.versions.agent);
-          const minor = getMinorVersion(origDevice.versions.agent);
-          if (major <= 5 && minor < 3) {
+          if (majorVersion < 5 || (majorVersion === 5 && minorVersion < 3)) {
             throw createError(400,
               'The device does not run the required flexiWAN version for BGP. ' +
               'Please disable BGP or upgrade the device');
@@ -1828,7 +1840,7 @@ class DevicesService {
             }
 
             // don't set as pending for old version since we don't sent the IP for bridged interface
-            if (ver >= 5) {
+            if (majorVersion >= 5) {
               for (const ifc of interfacesWithoutIp) {
                 if (ifc.IPv4 === s.gateway) {
                   s.isPending = true;

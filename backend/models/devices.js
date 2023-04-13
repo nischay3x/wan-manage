@@ -69,6 +69,11 @@ const interfacesSchema = new Schema({
     },
     default: ''
   },
+  // true if the interface exists in the linux config, not allowed to remove in manage
+  locked: {
+    type: Boolean,
+    default: false
+  },
   // VLAN Tag, used for VLAN sub-interfaces
   vlanTag: {
     type: String,
@@ -614,12 +619,28 @@ const deviceApplicationSchema = new Schema({
  * Device routing filter schema
  */
 const deviceRoutingFilterRuleSchema = new Schema({
-  network: {
+  route: {
     type: String,
     validate: {
       validator: val => validators.validateIPv4WithMask(val),
-      message: 'network should be a valid IPv4/mask'
+      message: 'route should be a valid IPv4/mask'
     },
+    required: true
+  },
+  action: {
+    type: String,
+    enum: ['allow', 'deny'],
+    required: true
+  },
+  nextHop: {
+    type: String,
+    validate: {
+      validator: val => validators.validateIPv4(val),
+      message: 'nextHop should be a valid IPv4'
+    }
+  },
+  priority: {
+    type: Number,
     required: true
   }
 });
@@ -635,11 +656,6 @@ const deviceRoutingFiltersSchema = new Schema({
       validator: validators.validateStringNoSpaces,
       message: 'name cannot include spaces'
     }
-  },
-  defaultAction: {
-    type: String,
-    enum: ['deny', 'allow'],
-    default: 'deny'
   },
   description: {
     type: String,
@@ -803,6 +819,11 @@ const BGPNeighborSchema = new Schema({
   outboundFilter: {
     type: String,
     default: ''
+  },
+  sendCommunity: {
+    type: String,
+    enum: ['all', 'both', 'extended', 'large', 'standard', ''],
+    default: 'all'
   }
 }, {
   timestamps: true

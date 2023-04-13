@@ -60,7 +60,8 @@ const {
   transformOSPF,
   transformVxlanConfig,
   transformBGP,
-  transformDHCP
+  transformDHCP,
+  transformLte
 } = require('./jobParameters');
 
 const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
@@ -145,8 +146,6 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
   // If they are the same, do not initiate modify-device job.
   if (has(messageParams, 'modify_interfaces')) {
     const interfaces = messageParams.modify_interfaces.interfaces || [];
-    const lteInterfaces = messageParams.modify_interfaces.lte_enable_disable || [];
-
     if (interfaces.length > 0) {
       const modifiedInterfaces = prepareIfcParams(interfaces, newDevice);
       requests.push(...modifiedInterfaces.map(item => {
@@ -157,17 +156,26 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
         };
       }));
     }
+  }
 
-    if (lteInterfaces.length > 0) {
-      requests.push(...lteInterfaces.map(item => {
+  if (has(messageParams, 'modify_lte')) {
+    const { remove, add } = messageParams.modify_lte;
+    if (remove && remove.length > 0) {
+      requests.push(...remove.map(item => {
         return {
           entity: 'agent',
-          message: item.configuration.enable ? 'add-lte' : 'remove-lte',
-          params: {
-            ...item.configuration,
-            dev_id: item.devId,
-            metric: item.metric
-          }
+          message: 'remove-lte',
+          params: item
+        };
+      }));
+    }
+
+    if (add && add.length > 0) {
+      requests.push(...add.map(item => {
+        return {
+          entity: 'agent',
+          message: 'add-lte',
+          params: item
         };
       }));
     }
@@ -453,10 +461,7 @@ const queueModifyDeviceJob = async (
     (unassign || []).forEach(ifc => { interfacesIdsSet.add(ifc._id); });
   }
   if (has(messageParams, 'modify_interfaces')) {
-    const interfaces = [
-      ...messageParams.modify_interfaces.interfaces,
-      ...messageParams.modify_interfaces.lte_enable_disable
-    ];
+    const interfaces = [...messageParams.modify_interfaces.interfaces];
     interfaces.forEach(ifc => {
       interfacesIdsSet.add(ifc._id);
       modifiedIfcsMap[ifc._id] = ifc;
@@ -923,13 +928,9 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
  * @return {Object}            an object containing add and remove ospf parameters
  */
 const prepareModifyBGP = async (origDevice, newDevice) => {
-  const majorVersion = getMajorVersion(newDevice.versions.agent);
-  const minorVersion = getMinorVersion(newDevice.versions.agent);
-  const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
-
   const [origBGP, newBGP] = [
-    await transformBGP(origDevice, includeTunnelNeighbors),
-    await transformBGP(newDevice, includeTunnelNeighbors)
+    await transformBGP(origDevice),
+    await transformBGP(newDevice)
   ];
 
   const origEnable = origDevice.bgp.enable;
@@ -966,8 +967,8 @@ const prepareModifyBGP = async (origDevice, newDevice) => {
  */
 const prepareModifyRoutingFilters = (origDevice, newDevice) => {
   const [origLists, newLists] = [
-    transformRoutingFilters(origDevice.routingFilters),
-    transformRoutingFilters(newDevice.routingFilters)
+    transformRoutingFilters(origDevice.routingFilters, origDevice.versions.agent),
+    transformRoutingFilters(newDevice.routingFilters, newDevice.versions.agent)
   ];
 
   const [addRoutingFilters, removeRoutingFilters] = [
@@ -1066,6 +1067,37 @@ const prepareModifyDHCP = (origDevice, newDevice) => {
   });
 
   return { dhcpRemove, dhcpAdd };
+};
+
+const prepareAddRemoveLte = (origDevice, updatedDevice) => {
+  const oldLteInterfaces = origDevice.interfaces.filter(item => item.deviceType === 'lte');
+  const newLteInterfaces = updatedDevice.interfaces.filter(item => item.deviceType === 'lte');
+
+  const result = { add: [], remove: [] };
+
+  const lteInterfacesDiff = differenceWith(
+    newLteInterfaces,
+    oldLteInterfaces,
+    (origIfc, newIfc) => {
+      // no need to send job if LTE configuration changed but LTE is disable
+      if (!origIfc.configuration.enable && !newIfc.configuration.enable) {
+        return true;
+      }
+
+      return isEqual(origIfc.configuration, newIfc.configuration) &&
+        isEqual(origIfc.metric, newIfc.metric);
+    }
+  );
+
+  lteInterfacesDiff.forEach(lteIfc => {
+    if (lteIfc.configuration.enable) {
+      result.add.push(transformLte(lteIfc));
+    } else {
+      result.remove.push(transformLte(lteIfc));
+    }
+  });
+
+  return result;
 };
 
 /**
@@ -1298,26 +1330,15 @@ const apply = async (device, user, data) => {
 
   // add-lte job should be submitted even if unassigned interface
   // we send this job if configuration or interface metric was changed
-  const oldLteInterfaces = origTransformedIfcs.filter(item => item.deviceType === 'lte');
-  const newLteInterfaces = newTransformedIfcs.filter(item => item.deviceType === 'lte');
-  const lteInterfacesDiff = differenceWith(
-    newLteInterfaces,
-    oldLteInterfaces,
-    (origIfc, newIfc) => {
-      // no need to send job if LTE configuration changed but LTE is disable
-      if (!origIfc.configuration.enable && !newIfc.configuration.enable) {
-        return true;
-      }
+  // Create (add|remove)-lte parameters
+  const { add: addLte, remove: removeLte } = prepareAddRemoveLte(device[0], data.newDevice);
+  if (addLte.length > 0 || removeLte.length > 0) {
+    modifyParams.modify_lte = { remove: removeLte, add: addLte };
+  }
 
-      return isEqual(origIfc.configuration, newIfc.configuration) &&
-        isEqual(origIfc.metric, newIfc.metric);
-    }
-  );
-
-  if (assignedInterfacesDiff.length > 0 || lteInterfacesDiff.length > 0) {
+  if (assignedInterfacesDiff.length > 0) {
     modifyParams.modify_interfaces = {};
     modifyParams.modify_interfaces.interfaces = assignedInterfacesDiff;
-    modifyParams.modify_interfaces.lte_enable_disable = lteInterfacesDiff;
   }
 
   const origDevice = device[0];
@@ -1374,6 +1395,7 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_bgp') ||
       has(modifyParams, 'modify_firewall') ||
       has(modifyParams, 'modify_qos') ||
+      has(modifyParams, 'modify_lte') ||
       has(modifyParams, 'modify_dhcp_config');
 
   // Queue job only if the device has changed
@@ -1551,11 +1573,7 @@ const sync = async (deviceId, org) => {
       deviceConfRequests.push({
         entity: 'agent',
         message: 'add-lte',
-        params: {
-          ...lte.configuration,
-          dev_id: lte.devId,
-          metric: lte.metric
-        }
+        params: transformLte(lte)
       });
     });
   }
@@ -1573,7 +1591,7 @@ const sync = async (deviceId, org) => {
   }
 
   // Prepare add-routing-filter message
-  const routingFiltersData = transformRoutingFilters(routingFilters);
+  const routingFiltersData = transformRoutingFilters(routingFilters, versions.agent);
   routingFiltersData.forEach(entry => {
     deviceConfRequests.push({
       entity: 'agent',
@@ -1583,9 +1601,8 @@ const sync = async (deviceId, org) => {
   });
 
   const isBgpSupported = majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3);
-  const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
   if (isBgpSupported && bgp?.enable) {
-    const bgpData = await transformBGP(device, includeTunnelNeighbors);
+    const bgpData = await transformBGP(device);
     if (!isEmpty(bgpData)) {
       deviceConfRequests.push({
         entity: 'agent',
@@ -1702,6 +1719,7 @@ const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
     !has(messageParams, 'modify_ospf') &&
     !has(messageParams, 'modify_bgp') &&
     !has(messageParams, 'modify_routing_filters') &&
+    !has(messageParams, 'modify_lte') &&
     !has(messageParams, 'modify_firewall') &&
     !has(messageParams, 'modify_qos') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
