@@ -34,10 +34,7 @@ async function up () {
 
 async function down () {
   try {
-    await Peers.collection.updateMany(
-      { remoteIdType: { $exists: true } },
-      [{ $unset: ['remoteIdType'] }]
-    );
+    // Do not remove the new field "remoteIdType" on the downgrade, as it is not harm anything.
   } catch (err) {
     logger.error('Database migration failed', {
       params: { collections: ['peers'], operation: 'down', err: err.message }
