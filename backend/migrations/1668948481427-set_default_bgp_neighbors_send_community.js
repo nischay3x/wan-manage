@@ -100,7 +100,10 @@ async function up () {
       });
     }
 
-    const res = await devices.collection.bulkWrite(operations);
+    let res;
+    if (operations.length > 0) {
+      res = await devices.collection.bulkWrite(operations);
+    }
     logger.info('Device bgp.neighbors.sendCommunity and routingFilter migration succeeded', {
       params: { collections: ['devices'], operation: 'up', communityRes, res }
     });
