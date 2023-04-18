@@ -1018,7 +1018,14 @@ const prepareTunnelAddJob = async (
     if (peer) {
       let localDeviceId = peer.localId;
       if (localDeviceId === 'Automatic' && peer.idType === 'ip4-addr') {
-        localDeviceId = deviceAIntf.PublicIP;
+        if (deviceAIntf.PublicIP) {
+          localDeviceId = deviceAIntf.PublicIP;
+        } else if (deviceAIntf.IPv4) {
+          localDeviceId = deviceAIntf.IPv4;
+        } else {
+          // this error should not be raised as tunnel should be pending if no IPv4 address.
+          throw new Error('There is no IP on interface to use as peer local ID');
+        }
       }
 
       // construct IKEv2 tunnel
