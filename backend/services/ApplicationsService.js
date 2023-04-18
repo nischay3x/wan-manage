@@ -475,6 +475,50 @@ class ApplicationsService {
   }
 
   /**
+     * Action for application
+     *
+     * @static
+     * @param {*} { org, id }
+     * @param {*} { user }
+     * @returns
+     * @memberof ApplicationsService
+     */
+  static async appstorePurchasedIdActionPOST (request, { user }) {
+    try {
+      const { id, applicationOperationReq, org } = request;
+      const { action, params } = applicationOperationReq;
+
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      // check if user didn't pass request body or if app id is invalid
+      if (!ObjectId.isValid(id) || Object.keys(applicationOperationReq).length === 0) {
+        return Service.rejectResponse('Invalid request', 500);
+      }
+
+      const app = await applications
+        .findOne({ org: { $in: orgList }, _id: id })
+        .populate('appStoreApp').lean();
+
+      if (!app) {
+        return Service.rejectResponse('Invalid application id', 500);
+      }
+
+      const { err } = await appsLogic.performApplicationAction(
+        app.appStoreApp.identifier, app, action, params);
+
+      if (err) throw new Error(err);
+
+      const parsed = await ApplicationsService.selectApplicationParams(app);
+      return Service.successResponse(parsed);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
    * upgrade application
    *
    * @static

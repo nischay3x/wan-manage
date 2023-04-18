@@ -303,6 +303,18 @@ class ApplicationLogic extends IApplication {
     return this.call(identifier, 'updateApplicationBilling', null, app);
   };
 
+  async performApplicationAction (identifier, application, action, params) {
+    const defaultReturn = { err: 'Something went wrong' };
+    return await this.call(
+      identifier,
+      'performApplicationAction',
+      defaultReturn,
+      application,
+      action,
+      params
+    );
+  }
+
   /**
    * Pick the allowed fields only from client request.
    *

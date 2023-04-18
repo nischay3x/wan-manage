@@ -46,6 +46,18 @@ class IApplication {
   };
 
   /**
+   * Perform an action for application
+   *
+   * @param  {object} application  application object
+   * @param  {string} action  action name
+   * @param  {object} params  params object
+   * @return {object} result object.
+  */
+  async performApplicationAction (application, action, params) {
+    return { res: false, err: '' };
+  };
+
+  /**
    * Update billing stuff for application
    *
    * @param  {object} app application object

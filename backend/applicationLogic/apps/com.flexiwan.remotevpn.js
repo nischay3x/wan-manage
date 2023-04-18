@@ -41,6 +41,13 @@ const vpnIdentifier = 'com.flexiwan.remotevpn';
 const IApplication = require('../applicationsInterface');
 
 class RemoteVpn extends IApplication {
+  constructor () {
+    super();
+    this.actions = {
+      createCertificates: async (application) => this.createCertificates(application)
+    };
+  }
+
   async pickAllowedFieldsOnly (configurationRequest) {
     return pick(configurationRequest, allowedFields);
   };
@@ -246,6 +253,40 @@ class RemoteVpn extends IApplication {
     return { valid: true, err: '' };
   };
 
+  async createCertificates (application) {
+    const pems = await generateRemoteVpnPKI(application.org.toString());
+    const tlsKey = generateTlsKey();
+
+    const dhKeyDoc = await diffieHellmans.findOne();
+    if (!dhKeyDoc) {
+      // DH stack should be fulfilled automatically in vpn portal server
+      throw new Error(
+        'An error occurred while creating a DH key for your organization. ' +
+        'Please try again later');
+    }
+
+    const dhKey = dhKeyDoc.key;
+    await diffieHellmans.remove({ _id: dhKeyDoc._id });
+
+    const keysObj = {
+      caKey: pems.caKey,
+      caCrt: pems.caCert,
+      serverKey: pems.serverKey,
+      serverCrt: pems.serverCert,
+      clientKey: pems.clientKey,
+      clientCrt: pems.clientCert,
+      tlsKey,
+      dhKey
+    };
+
+    await applications.updateOne(
+      { _id: application._id },
+      { $set: { 'configuration.keys': keysObj } }
+    );
+
+    return keysObj;
+  }
+
   /**
    * Generate key for vpn server
    * @param {object} application the application to generate for
@@ -263,59 +304,25 @@ class RemoteVpn extends IApplication {
    */
   async getDeviceKeys (application) {
     let isNew = false;
-    let caKey;
-    let caCrt;
-    let serverKey;
-    let serverCrt;
-    let clientKey;
-    let clientCrt;
-    let tlsKey;
-    let dhKey;
 
+    let keys = null;
     if (!application.configuration.keys) {
       isNew = true;
-      const pems = await generateRemoteVpnPKI(application.org.toString());
-
-      caKey = pems.caKey;
-      caCrt = pems.caCert;
-      serverKey = pems.serverKey;
-      serverCrt = pems.serverCert;
-      clientKey = pems.clientKey;
-      clientCrt = pems.clientCert;
-
-      tlsKey = generateTlsKey();
-
-      const dhKeyDoc = await diffieHellmans.findOne();
-      if (!dhKeyDoc) {
-        // DH stack should be fulfilled automatically in vpn portal server
-        throw new Error(
-          'An error occurred while creating a DH key for your organization. ' +
-          'Please try again later');
-      }
-
-      dhKey = dhKeyDoc.key;
-      await diffieHellmans.remove({ _id: dhKeyDoc._id });
+      keys = await this.createCertificates(application);
     } else {
-      caKey = application.configuration.keys.caKey;
-      caCrt = application.configuration.keys.caCrt;
-      serverKey = application.configuration.keys.serverKey;
-      serverCrt = application.configuration.keys.serverCrt;
-      clientKey = application.configuration.keys.clientKey;
-      clientCrt = application.configuration.keys.clientCrt;
-      tlsKey = application.configuration.keys.tlsKey;
-      dhKey = application.configuration.keys.dhKey;
+      keys = application.configuration.keys;
     }
 
     return {
       isNew: isNew,
-      caKey,
-      caCrt,
-      serverKey,
-      serverCrt,
-      clientKey,
-      clientCrt,
-      tlsKey,
-      dhKey
+      caKey: keys.caKey,
+      caCrt: keys.caCrt,
+      serverKey: keys.serverKey,
+      serverCrt: keys.serverCrt,
+      clientKey: keys.clientKey,
+      clientCrt: keys.clientCrt,
+      tlsKey: keys.tlsKey,
+      dhKey: keys.dhKey
     };
   };
 
@@ -387,12 +394,6 @@ class RemoteVpn extends IApplication {
       // if is new keys, save them on db
       if (isNew) {
         const keysObj = { caKey, caCrt, serverKey, serverCrt, clientKey, clientCrt, tlsKey, dhKey };
-
-        await applications.updateOne(
-          { _id: application._id },
-          { $set: { 'configuration.keys': keysObj } }
-        );
-
         // store the keys in the "application" variable as well.
         // If user selected multiple devices to install the application,
         // we need to ensure that we don't generate different keys
@@ -520,7 +521,9 @@ class RemoteVpn extends IApplication {
   };
 
   async selectConfigurationParams (configuration) {
+    const keysExists = configuration.keys && 1; // "&& 1" to return a boolean, not the keys object.
     const res = omit(configuration, secretFields);
+    res.keysExists = keysExists;
     return res;
   };
 
@@ -541,6 +544,14 @@ class RemoteVpn extends IApplication {
 
     return status;
   };
+
+  async performApplicationAction (application, action, params) {
+    if (!(action in this.actions)) {
+      return { res: false, err: `The action ${action} is not supported` };
+    }
+
+    return await this.actions[action](application, params);
+  }
 }
 
 const allowedFields = [
