@@ -178,6 +178,7 @@ class PeersService {
             const removeJobs = await sendRemoveTunnelsJobs(ids, user.username, true);
             const addJobs = await sendAddTunnelsJobs(ids, user.username, true);
             jobs = jobs.concat([...removeJobs, ...addJobs]);
+            reconstructedTunnels += addJobs.length;
           } else {
             for (const tunnel of tunnels) {
               const tasks = [{
@@ -216,9 +217,9 @@ class PeersService {
               );
 
               jobs.push(job);
+              reconstructedTunnels++;
             }
           }
-          reconstructedTunnels = jobs.length;
 
           const jobsIds = jobs.flat().map(job => job.id);
           DevicesService.setLocationHeader(server, response, jobsIds, orgList[0]);
