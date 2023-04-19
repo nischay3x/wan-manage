@@ -736,7 +736,7 @@ class DevicesService {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const { versions, versionDeadline, distros } = (await devices.aggregate([
         { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
-        { $project: { distro: { $ifNull: ['$distro', 'NA'] } } },
+        { $project: { distro: { $ifNull: ['$distro.codename', 'NA'] } } },
         { $group: { _id: '$distro', count: { $sum: 1 } } },
         { $group: { _id: null, data: { $push: { k: '$_id', v: '$count' } } } },
         {
@@ -1981,7 +1981,7 @@ class DevicesService {
           };
         }
 
-        // don't  allow to change "versions" and "cpuInfo"
+        // don't  allow to change "versions", "cpuInfo" or "distro"
         deviceToValidate.versions = origDevice.versions;
         deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
         deviceToValidate.distro = origDevice.distro;

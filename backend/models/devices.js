@@ -1128,9 +1128,16 @@ const deviceSchema = new Schema({
     }
   },
   distro: {
-    type: String,
-    maxlength: [50, 'Distribution string must be lower than 50'],
-    default: ''
+    version: {
+      type: String,
+      maxlength: [50, 'Version string must be lower than 30'],
+      default: ''
+    },
+    codename: {
+      type: String,
+      maxlength: [50, 'codename string must be lower than 30'],
+      default: ''
+    }
   }
 },
 {

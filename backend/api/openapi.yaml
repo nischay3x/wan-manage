@@ -9285,7 +9285,8 @@ components:
           powerSaving: true
           vppCores: 3
         distro:
-          18.04-bionic
+          version: 20.04
+          codename: focal
       properties:
         machineId:
           type: string
@@ -9352,7 +9353,7 @@ components:
         cpuInfo:
           $ref: '#/components/schemas/DeviceCpuInfo'
         distro:
-          type: string
+          $ref: '#/components/schemas/DeviceDistro'
       type: object
     OrganizationInfo:
       example:
@@ -9799,6 +9800,16 @@ components:
           maximum: 65535
         powerSaving:
           type: boolean
+      type: object
+    DeviceDistro:
+      example:
+        version: 20.04
+        codename: focal
+      properties:
+        version:
+          type: string
+        codename:
+          type: string
       type: object
     Role:
       enum:
