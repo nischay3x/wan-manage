@@ -78,6 +78,7 @@ const prepareIfcParams = (interfaces, newDevice) => {
 
     newIfc.dev_id = newIfc.devId;
     delete newIfc.devId;
+    delete newIfc.parentDevId;
 
     // Device should only be aware of DIA labels.
     const labels = [];

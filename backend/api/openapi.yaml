@@ -10366,6 +10366,7 @@ components:
         _id: _id
         name: Cloud Provider Name
         idType: fqdn
+        remoteIdType: fqdn
         localId: a4bbd424b1
         remoteId: 100.100.100.100
         psk: 123456f5621c1a95997997c8cd123456
@@ -10403,6 +10404,13 @@ components:
           enum:
             - fqdn
             - ip4-addr
+            - email
+        remoteIdType:
+          type: string
+          enum:
+            - fqdn
+            - ip4-addr
+            - email
         localId:
           type: string
         remoteId:
