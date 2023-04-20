@@ -25,7 +25,6 @@ const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
 const { deviceStats } = require('../models/analytics/deviceStats');
-const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const validator = require('validator');
@@ -165,7 +164,8 @@ class DevicesService {
       'coords',
       'bgp',
       'routingFilters',
-      'cpuInfo'
+      'cpuInfo',
+      'distro'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -555,7 +555,8 @@ class DevicesService {
           'isConnected',
           'deviceState',
           'cpuInfo',
-          'coords'
+          'coords',
+          'distro'
         ];
         // populate pathlabels for every interface
         pipeline.push({
@@ -730,13 +731,34 @@ class DevicesService {
    *
    * returns DeviceLatestVersion
    **/
-  static async devicesLatestVersionsGET () {
+  static async devicesLatestVersionsGET ({ org }, { user }) {
     try {
-      const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
-      const { versions, versionDeadline } = await swUpdater.getLatestSwVersions();
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const { versions, versionDeadline, distros } = (await devices.aggregate([
+        { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
+        { $project: { distro: { $ifNull: ['$distro.codename', 'NA'] } } },
+        { $group: { _id: '$distro', count: { $sum: 1 } } },
+        { $group: { _id: null, data: { $push: { k: '$_id', v: '$count' } } } },
+        {
+          $lookup: {
+            from: 'deviceswversions',
+            pipeline: [{ $project: { versions: 1, versionDeadline: 1 } }],
+            as: 'versions'
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            distros: { $arrayToObject: '$data' },
+            versions: { $first: '$versions.versions' },
+            versionDeadline: { $first: '$versions.versionDeadline' }
+          }
+        }])
+      )[0];
       return Service.successResponse({
         versions,
-        versionDeadline
+        versionDeadline,
+        distros
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -1959,9 +1981,10 @@ class DevicesService {
           };
         }
 
-        // don't  allow to change "versions" and "cpuInfo"
+        // don't  allow to change "versions", "cpuInfo" or "distro"
         deviceToValidate.versions = origDevice.versions;
         deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
+        deviceToValidate.distro = origDevice.distro;
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
         const { valid, err } = validateDevice(

@@ -94,6 +94,47 @@ const queueUpgradeJobs = (devices, user, org, targetVersion) => {
 };
 
 /**
+ * Queues OS upgrade jobs to a list of devices.
+ * @param  {Array}   devices       array of devices to which an upgrade job should be queued
+ * @param  {string}  user          user name of the user the queued the job
+ * @param  {string}  org           id of the organization to which the user belongs
+ * @return {Promise}               a promise for queuing an upgrade job
+ */
+const queueOsUpgradeJobs = (devices, user, orgId, reasons) => {
+  const tasks = [{
+    entity: 'agent',
+    message: 'upgrade-linux-sw',
+    params: { 'upgrade-from': 'bionic' }
+  }];
+  const jobs = [];
+  devices.forEach(dev => {
+    // Only queue job if device version > 6.2.X
+    const majorVersion = getMajorVersion(dev.versions.device);
+    const minorVersion = getMinorVersion(dev.versions.device);
+    if (majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2)) {
+      deviceStatus.setDeviceState(dev.machineId, 'pending');
+      jobs.push(
+        deviceQueues.addJob(dev.machineId, user, orgId,
+        // Data
+          { title: `Upgrade OS for device ${dev.name}`, tasks: tasks },
+          // Response data
+          { method: 'osupgrade', data: { device: dev._id, org: orgId } },
+          // Metadata
+          { priority: 'normal', attempts: 1, removeOnComplete: false },
+          // Complete callback
+          null)
+      );
+    } else {
+      reasons.add('Devices with version lower than 6.2.X cannot be upgraded');
+      logger.info('OS upgrade device job skipped for device', {
+        params: { machineId: dev.machineId, version: dev.versions.device }
+      });
+    }
+  });
+  return jobs;
+};
+
+/**
  * Applies the upgrade request on all requested devices
  * @async
  * @param  {Array}    device    an array of the devices to be modified
@@ -122,6 +163,49 @@ const apply = async (opDevices, user, data) => {
   const deviceIDs = opDevices.map(dev => { return dev._id; });
   await setQueuedUpgradeFlag(deviceIDs, org, true);
   return { ids: jobResults.map(job => job.id), status: 'completed', message: '' };
+};
+
+/**
+ * Applies the OS upgrade request on all requested devices
+ * @async
+ * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Object}   user      User object
+ * @param  {Object}   data      Additional data used by caller
+ * @return {None}
+ */
+const osUpgradeApply = async (opDevices, user, data) => {
+  // opDevices is a filtered array of selected devices (mongoose objects)
+  const userName = user.username;
+  const org = data.org;
+  const reasons = new Set(); // unique messages array for errors
+  const jobTasks = await queueOsUpgradeJobs(opDevices, userName, org, reasons);
+
+  const promiseStatus = await Promise.allSettled(jobTasks);
+  const fulfilled = promiseStatus.reduce((arr, elem) => {
+    if (elem.status === 'fulfilled') {
+      const job = elem.value;
+      arr.push(job);
+    }
+    return arr;
+  }, []);
+
+  const status = fulfilled.length < jobTasks.length
+    ? 'partially completed' : 'completed';
+
+  const desired = jobTasks.flat().map(job => job.id);
+  const ids = fulfilled.flat().map(job => job.id);
+  let message = 'OS/Linux upgrade jobs added.';
+  if (desired.length === 0 || fulfilled.flat().length === 0) {
+    message = 'No ' + message;
+  } else if (ids.length < opDevices.length) {
+    message = `${ids.length} of ${opDevices.length} ${message}`;
+  } else {
+    message = `${ids.length} ${message}`;
+  }
+  if (reasons.size > 0) {
+    message = `${message} ${Array.from(reasons).join(' ')}`;
+  }
+  return { ids, status, message };
 };
 
 /**
@@ -157,6 +241,16 @@ const complete = async (jobId, res) => {
       params: { result: res, jobId: jobId }
     });
   }
+};
+
+/**
+ * Called when OS upgrade device job completes
+ * @async
+ * @param  {number} jobId Kue job ID number
+ * @param  {string} res   device object ID and username
+ * @return {void}
+ */
+const osUpgradeComplete = async (jobId, res) => {
 };
 
 /**
@@ -202,7 +296,9 @@ const remove = async (job) => {
 
 module.exports = {
   apply: apply,
+  osUpgradeApply: osUpgradeApply,
   complete: complete,
+  osUpgradeComplete: osUpgradeComplete,
   queueUpgradeJobs: queueUpgradeJobs,
   error: error,
   remove: remove

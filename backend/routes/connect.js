@@ -232,6 +232,7 @@ connectRouter.route('/register')
               const requestCpuInfo = req.body.cpuInfo
                 ?.replaceAll('\'', '"').replaceAll('False', 'false').replaceAll('True', 'true');
               const cpuInfo = getCpuInfo(requestCpuInfo ? JSON.parse(requestCpuInfo) : null);
+              const requestDistro = JSON.parse(req.body.distro?.replaceAll('\'', '"') || '{}');
 
               // Check that account didn't cross its device limit
               const account = decoded.account;
@@ -284,6 +285,10 @@ connectRouter.route('/register')
                     isConnected: false,
                     coords: ll,
                     cpuInfo: cpuInfo,
+                    distro: {
+                      version: requestDistro?.version ?? '',
+                      codename: requestDistro?.codename ?? ''
+                    },
                     versions: versions
                   }], { session: session })
                     .then(async (result) => {
