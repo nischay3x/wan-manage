@@ -147,10 +147,14 @@ connectRouter.route('/register')
               // Try to auto populate interfaces parameters
               const ifs = JSON.parse(req.body.interfaces);
 
+              if (!ifs || !Array.isArray(ifs) || ifs.length === 0) {
+                return next(createError(500, 'Device without interfaces is not allowed'));
+              }
+
               // first filter out not supported interfaces and allow to register with the rest
-              const interfaces = (ifs ?? []).filter((i, idx) => validators.validateDevId(i.devId));
+              const interfaces = ifs.filter((i, idx) => validators.validateDevId(i.devId));
               if (ifs.length !== interfaces.length) {
-                logger.warn('Unsupported interfaces was filtered out',
+                logger.warn('Unsupported interfaces were filtered out',
                   { params: { ifs, interfaces } });
               }
 
