@@ -734,11 +734,31 @@ class DevicesService {
   static async devicesLatestVersionsGET ({ org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
+
       const { versions, versionDeadline, distros } = (await devices.aggregate([
-        { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
-        { $project: { distro: { $ifNull: ['$distro.codename', 'NA'] } } },
-        { $group: { _id: '$distro', count: { $sum: 1 } } },
-        { $group: { _id: null, data: { $push: { k: '$_id', v: '$count' } } } },
+        {
+          $facet: {
+            found: [
+              { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
+              { $project: { distro: { $ifNull: ['$distro.codename', 'NA'] } } },
+              { $group: { _id: '$distro', count: { $sum: 1 } } }],
+            // Not found is used in case no devices exist in the organization
+            notFound: [{ $project: { _id: 'NA', count: { $const: 0 } } }, { $limit: 1 }]
+          }
+        },
+        {
+          $project: {
+            result: {
+              $cond: {
+                if: { $eq: [{ $size: '$found' }, 0] },
+                then: '$notFound',
+                else: '$found'
+              }
+            }
+          }
+        },
+        { $unwind: '$result' },
+        { $group: { _id: null, data: { $push: { k: '$result._id', v: '$result.count' } } } },
         {
           $lookup: {
             from: 'deviceswversions',
@@ -753,8 +773,8 @@ class DevicesService {
             versions: { $first: '$versions.versions' },
             versionDeadline: { $first: '$versions.versionDeadline' }
           }
-        }])
-      )[0];
+        }]))[0];
+
       return Service.successResponse({
         versions,
         versionDeadline,
