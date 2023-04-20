@@ -1405,6 +1405,8 @@ const applyTunnelDel = async (devices, user, data) => {
       }
     });
 
+    const promiseStatus = await Promise.allSettled(delPromises);
+
     if (updateOps.length) {
       try {
         const { matchedCount, modifiedCount } = await tunnelsModel.bulkWrite(updateOps);
@@ -1419,8 +1421,6 @@ const applyTunnelDel = async (devices, user, data) => {
         });
       }
     };
-
-    const promiseStatus = await Promise.allSettled(delPromises);
 
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
