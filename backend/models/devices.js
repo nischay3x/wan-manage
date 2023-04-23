@@ -1053,6 +1053,10 @@ const deviceSchema = new Schema({
       type: Boolean,
       default: true
     },
+    bestPathMultipathRelax: {
+      type: Boolean,
+      default: false
+    },
     neighbors: [BGPNeighborSchema]
   },
   ospf: {
