@@ -184,7 +184,7 @@ const transformBGP = async (device) => {
   const majorVersion = getMajorVersion(versions.agent);
   const minorVersion = getMinorVersion(versions.agent);
   const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
-  const sendCommunity = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+  const sendCommunityAndBestPath = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
 
   const neighbors = bgp.neighbors.map(n => {
     const neighbor = {
@@ -197,7 +197,7 @@ const transformBGP = async (device) => {
       keepaliveInterval: bgp.keepaliveInterval
     };
 
-    if (sendCommunity) {
+    if (sendCommunityAndBestPath) {
       neighbor.sendCommunity = n.sendCommunity;
     }
 
@@ -250,14 +250,19 @@ const transformBGP = async (device) => {
     });
   });
 
-  return {
+  const bgpConfig = {
     routerId: bgp.routerId,
     localAsn: bgp.localASN,
     neighbors: neighbors,
     redistributeOspf: bgp.redistributeOspf,
-    bestPathMultipathRelax: bgp.bestPathMultipathRelax ?? false,
     networks: networks
   };
+
+  if (sendCommunityAndBestPath) {
+    bgpConfig.bestPathMultipathRelax = true;
+  }
+
+  return bgpConfig;
 };
 
 /**
