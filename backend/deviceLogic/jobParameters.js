@@ -255,6 +255,7 @@ const transformBGP = async (device) => {
     localAsn: bgp.localASN,
     neighbors: neighbors,
     redistributeOspf: bgp.redistributeOspf,
+    bestPathMultipathRelax: bgp.bestPathMultipathRelax ?? false,
     networks: networks
   };
 };
