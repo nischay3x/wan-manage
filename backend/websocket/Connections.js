@@ -845,6 +845,12 @@ class Connections {
             }
             if (job?.errors?.length > 0) {
               jobToUpdate.error(JSON.stringify({ errors: job.errors }));
+              // unlike the jobs which got marked as failed due to the send timeout, in the case
+              // of the upgrade-device-sw job, it is initially marked as complete, so need to
+              // mark it as failed.
+              if (job.request === 'upgrade-device-sw') {
+                jobToUpdate.failed();
+              }
               jobToUpdate.data.metadata.jobUpdated = true;
               jobToUpdate.save();
             }
