@@ -9977,9 +9977,6 @@ components:
         redistributeOspf:
           type: boolean
           description: If to redistribute to BGP routes that learned by OSPF
-        bestPathMultipathRelax:
-          type: boolean
-          description: If to set the "bgp bestpath as-path multipath-relax" option
         neighbors:
           items:
             $ref: '#/components/schemas/BgpNeighbor'
