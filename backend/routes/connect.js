@@ -158,6 +158,10 @@ connectRouter.route('/register')
                   { params: { ifs, interfaces } });
               }
 
+              if (interfaces.length === 0) {
+                return next(createError(500, 'The interfaces are not supported'));
+              }
+
               // Get an interface with gateway and the lowest metric
               const defaultIntf = interfaces.reduce((res, intf) =>
                 intf.gateway && (!res || +res.metric > +intf.metric)
