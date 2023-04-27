@@ -25,7 +25,6 @@ const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
 const { deviceStats } = require('../models/analytics/deviceStats');
-const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const validator = require('validator');
@@ -165,7 +164,8 @@ class DevicesService {
       'coords',
       'bgp',
       'routingFilters',
-      'cpuInfo'
+      'cpuInfo',
+      'distro'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -555,7 +555,8 @@ class DevicesService {
           'isConnected',
           'deviceState',
           'cpuInfo',
-          'coords'
+          'coords',
+          'distro'
         ];
         // populate pathlabels for every interface
         pipeline.push({
@@ -730,13 +731,54 @@ class DevicesService {
    *
    * returns DeviceLatestVersion
    **/
-  static async devicesLatestVersionsGET () {
+  static async devicesLatestVersionsGET ({ org }, { user }) {
     try {
-      const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
-      const { versions, versionDeadline } = await swUpdater.getLatestSwVersions();
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      const { versions, versionDeadline, distros } = (await devices.aggregate([
+        {
+          $facet: {
+            found: [
+              { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
+              { $project: { distro: { $ifNull: ['$distro.codename', 'NA'] } } },
+              { $group: { _id: '$distro', count: { $sum: 1 } } }],
+            // Not found is used in case no devices exist in the organization
+            notFound: [{ $project: { _id: 'NA', count: { $const: 0 } } }, { $limit: 1 }]
+          }
+        },
+        {
+          $project: {
+            result: {
+              $cond: {
+                if: { $eq: [{ $size: '$found' }, 0] },
+                then: '$notFound',
+                else: '$found'
+              }
+            }
+          }
+        },
+        { $unwind: '$result' },
+        { $group: { _id: null, data: { $push: { k: '$result._id', v: '$result.count' } } } },
+        {
+          $lookup: {
+            from: 'deviceswversions',
+            pipeline: [{ $project: { versions: 1, versionDeadline: 1 } }],
+            as: 'versions'
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            distros: { $arrayToObject: '$data' },
+            versions: { $first: '$versions.versions' },
+            versionDeadline: { $first: '$versions.versionDeadline' }
+          }
+        }]))[0];
+
       return Service.successResponse({
         versions,
-        versionDeadline
+        versionDeadline,
+        distros
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -1364,6 +1406,8 @@ class DevicesService {
         if (!origDevice) {
           throw createError(404, 'Device not found');
         }
+        const majorVersion = getMajorVersion(origDevice.versions.agent);
+        const minorVersion = getMinorVersion(origDevice.versions.agent);
 
         const orgId = origDevice.org._id;
 
@@ -1406,6 +1450,11 @@ class DevicesService {
           // request interfaces first loop: simple validation of input data
           deviceRequest.interfaces.forEach(ifc => {
             if (ifc.parentDevId) {
+              if (majorVersion < 6 || (majorVersion === 6 && minorVersion < 2)) {
+                throw createError(400,
+                  'The device does not run the required flexiWAN version for VLAN. ' +
+                  'Please remove sub-interfaces or upgrade the device');
+              }
               const parentIfc = interfacesByDevId[ifc.parentDevId];
               if (!parentIfc) {
                 logger.error('Unknown parent interface', { params: { ifc } });
@@ -1414,6 +1463,12 @@ class DevicesService {
               // update isAssigned and MTU of the parent for VLAN sub-interfaces
               ifc.isAssigned = parentIfc.isAssigned;
               ifc.mtu = parentIfc.mtu;
+            }
+            if (ifc.isAssigned && ifc.type === 'WAN' && ifc.bandwidthMbps) {
+              const { tx, rx } = ifc.bandwidthMbps;
+              if (+tx < 0.5 || +rx < 0.5) {
+                throw createError(400, `${ifc.name} Bandwidth value must be greater than 0.5 Mbps`);
+              }
             }
             if (Array.isArray(ifc.pathlabels)) {
               ifc.pathlabels.forEach(pl => {
@@ -1722,8 +1777,6 @@ class DevicesService {
           deviceToValidate.interfaces = origDevice.interfaces;
         }
 
-        const ver = getMajorVersion(origDevice.versions.agent);
-
         // Map dhcp config if needed
         if (Array.isArray(deviceRequest.dhcp)) {
           deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
@@ -1787,9 +1840,7 @@ class DevicesService {
         }
 
         if (deviceRequest?.bgp?.enable) {
-          const major = getMajorVersion(origDevice.versions.agent);
-          const minor = getMinorVersion(origDevice.versions.agent);
-          if (major <= 5 && minor < 3) {
+          if (majorVersion < 5 || (majorVersion === 5 && minorVersion < 3)) {
             throw createError(400,
               'The device does not run the required flexiWAN version for BGP. ' +
               'Please disable BGP or upgrade the device');
@@ -1831,7 +1882,7 @@ class DevicesService {
             }
 
             // don't set as pending for old version since we don't sent the IP for bridged interface
-            if (ver >= 5) {
+            if (majorVersion >= 5) {
               for (const ifc of interfacesWithoutIp) {
                 if (ifc.IPv4 === s.gateway) {
                   s.isPending = true;
@@ -1950,9 +2001,10 @@ class DevicesService {
           };
         }
 
-        // don't  allow to change "versions" and "cpuInfo"
+        // don't  allow to change "versions", "cpuInfo" or "distro"
         deviceToValidate.versions = origDevice.versions;
         deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
+        deviceToValidate.distro = origDevice.distro;
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
         const { valid, err } = validateDevice(

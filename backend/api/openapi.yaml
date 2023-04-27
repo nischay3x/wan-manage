@@ -9745,6 +9745,9 @@ components:
         cpuInfo:
           powerSaving: true
           vppCores: 3
+        distro:
+          version: 20.04
+          codename: focal
       properties:
         machineId:
           type: string
@@ -9810,6 +9813,8 @@ components:
           $ref: '#/components/schemas/DeviceVersion'
         cpuInfo:
           $ref: '#/components/schemas/DeviceCpuInfo'
+        distro:
+          $ref: '#/components/schemas/DeviceDistro'
       type: object
     OrganizationInfo:
       example:
@@ -10256,6 +10261,16 @@ components:
           maximum: 65535
         powerSaving:
           type: boolean
+      type: object
+    DeviceDistro:
+      example:
+        version: 20.04
+        codename: focal
+      properties:
+        version:
+          type: string
+        codename:
+          type: string
       type: object
     Role:
       enum:
@@ -10812,6 +10827,7 @@ components:
         _id: _id
         name: Cloud Provider Name
         idType: fqdn
+        remoteIdType: fqdn
         localId: a4bbd424b1
         remoteId: 100.100.100.100
         psk: 123456f5621c1a95997997c8cd123456
@@ -10849,6 +10865,13 @@ components:
           enum:
             - fqdn
             - ip4-addr
+            - email
+        remoteIdType:
+          type: string
+          enum:
+            - fqdn
+            - ip4-addr
+            - email
         localId:
           type: string
         remoteId:

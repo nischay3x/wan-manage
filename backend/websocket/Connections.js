@@ -696,7 +696,8 @@ class Connections {
           certificateExpiration: Joi.string().allow('').optional(),
           error: Joi.string().allow('').optional()
         }).allow({}).optional(),
-        cpuInfo: Joi.object().optional()
+        cpuInfo: Joi.object().optional(),
+        distro: Joi.object().optional()
       }).custom((obj, helpers) => {
         for (const [component, info] of Object.entries(
           obj.components
@@ -779,6 +780,10 @@ class Connections {
       });
       origDevice.cpuInfo = cpuInfo;
       origDevice.versions = versions;
+      origDevice.distro = {
+        version: deviceInfo.message?.distro?.version ?? '',
+        codename: deviceInfo.message?.distro?.codename ?? ''
+      };
       await origDevice.save();
 
       const { expireTime, jobQueued } = origDevice.IKEv2;
@@ -845,6 +850,12 @@ class Connections {
             }
             if (job?.errors?.length > 0) {
               jobToUpdate.error(JSON.stringify({ errors: job.errors }));
+              // unlike the jobs which got marked as failed due to the send timeout, in the case
+              // of the upgrade-device-sw job, it is initially marked as complete, so need to
+              // mark it as failed.
+              if (job.request === 'upgrade-device-sw') {
+                jobToUpdate.failed();
+              }
               jobToUpdate.data.metadata.jobUpdated = true;
               jobToUpdate.save();
             }

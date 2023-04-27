@@ -1076,8 +1076,15 @@ const prepareTunnelAddJob = async (
   if (tunnel.encryptionMethod === 'ikev2') {
     if (peer) {
       let localDeviceId = peer.localId;
-      if (localDeviceId === 'Automatic') {
-        localDeviceId = deviceAIntf.PublicIP;
+      if (localDeviceId === 'Automatic' && peer.idType === 'ip4-addr') {
+        if (deviceAIntf.PublicIP) {
+          localDeviceId = deviceAIntf.PublicIP;
+        } else if (deviceAIntf.IPv4) {
+          localDeviceId = deviceAIntf.IPv4;
+        } else {
+          // this error should not be raised as tunnel should be pending if no IPv4 address.
+          throw new Error('There is no IP on interface to use as peer local ID');
+        }
       }
 
       // construct IKEv2 tunnel
@@ -1085,10 +1092,10 @@ const prepareTunnelAddJob = async (
         role: 'initiator',
         mode: 'psk',
         psk: peer.psk,
-        'local-device-id-type': peer.idType,
-        'remote-device-id-type': peer.idType,
-        'remote-device-id': peer.remoteId,
+        'local-device-id-type': peer.idType === 'email' ? 'rfc822' : peer.idType,
         'local-device-id': localDeviceId,
+        'remote-device-id-type': peer.remoteIdType === 'email' ? 'rfc822' : peer.remoteIdType,
+        'remote-device-id': peer.remoteId,
         lifetime: parseInt(peer.sessionLifeTime),
         ike: {
           'crypto-alg': peer.ikeCryptoAlg,
@@ -1415,8 +1422,21 @@ const applyTunnelDel = async (devices, user, data) => {
   const { tunnels, filters } = data;
   logger.info('Delete tunnels ', { params: { tunnels, filters } });
   let tunnelIds = [];
+  let tunnelsArray;
   if (tunnels) {
     tunnelIds = Object.keys(tunnels);
+    tunnelsArray = await tunnelsModel.find(
+      { _id: { $in: tunnelIds }, isActive: true, org: data.org }
+    )
+      .populate('deviceA', '_id name staticroutes')
+      .populate('deviceB', '_id name staticroutes')
+      .populate('peer');
+
+    if (tunnelsArray.length !== tunnelIds.length) {
+      logger.error('Some tunnels were not found, try refresh and delete again',
+        { params: { tunnelIds, foundIds: tunnelsArray.map(t => t._id) } });
+      throw new Error('Some tunnels were not found, try refresh and delete again');
+    }
   } else if (filters) {
     const updateStatusInDb = filters.includes('tunnelStatus');
     const statusesInDb = require('../periodic/statusesInDb')();
@@ -1426,25 +1446,42 @@ const applyTunnelDel = async (devices, user, data) => {
       await statusesInDb.updateTunnelsStatuses([data.org]);
     }
     const pipeline = await getTunnelsPipeline([data.org], filters, updateStatusInDb);
-    pipeline.push({ $project: { _id: { $toString: '$_id' } } });
-    const filteredIds = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
-    tunnelIds = filteredIds.map(t => t._id);
+    tunnelsArray = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
   }
-  if (devices && tunnelIds.length > 0) {
+
+  if (devices && tunnelsArray.length > 0) {
     const org = data.org;
     const userName = user.username;
 
     const delPromises = [];
-    tunnelIds.forEach(tunnelID => {
+    const updateOps = [];
+    tunnelsArray.forEach(tunnel => {
       try {
-        const delPromise = delTunnel(tunnelID, userName, org);
+        const delPromise = delTunnel(tunnel, userName, org, updateOps);
         delPromises.push(delPromise);
       } catch (err) {
-        logger.error('Delete tunnel error', { params: { tunnelID, error: err.message } });
+        logger.error('Delete tunnel error',
+          { params: { tunnelID: tunnel._id, error: err.message } }
+        );
       }
     });
 
     const promiseStatus = await Promise.allSettled(delPromises);
+
+    if (updateOps.length) {
+      try {
+        const { matchedCount, modifiedCount } = await tunnelsModel.bulkWrite(updateOps);
+        if (modifiedCount !== updateOps.length) {
+          logger.error('Updated tunnels count does not match requested',
+            { params: { matchedCount, modifiedCount, updateOps } }
+          );
+        }
+      } catch (err) {
+        logger.warn('Failed to update tunnels in database', {
+          params: { message: err.message }
+        });
+      }
+    };
 
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
@@ -1459,7 +1496,7 @@ const applyTunnelDel = async (devices, user, data) => {
       };
       return { fulfilled, reasons };
     }, { fulfilled: [], reasons: [] });
-    const status = fulfilled.length < tunnelIds.length
+    const status = fulfilled.length < tunnelsArray.length
       ? 'partially completed' : 'completed';
 
     const desired = delPromises.flat().map(job => job.id);
@@ -1486,25 +1523,13 @@ const applyTunnelDel = async (devices, user, data) => {
 
 /**
  * Deletes a single tunnel.
- * @param  {number}   tunnelID   the id of the tunnel to be deleted
+ * @param  {object}   tunnel     the tunnel object
  * @param  {string}   user       the user id of the requesting user
  * @param  {string}   org        the user's organization id
  * @return {array}    jobs created
  */
-const delTunnel = async (tunnelID, user, org) => {
-  const tunnelResp = await tunnelsModel.findOne({ _id: tunnelID, isActive: true, org: org })
-    .populate('deviceA')
-    .populate('deviceB')
-    .populate('peer');
-
-  logger.debug('Delete tunnels db response', { params: { response: tunnelResp } });
-
-  if (!tunnelResp) {
-    throw new Error('Tunnel not found');
-  };
-
-  // Define devices
-  const { num, deviceA, deviceB, peer } = tunnelResp;
+const delTunnel = async (tunnel, user, org, updateOps) => {
+  const { _id, isPending, num, deviceA, deviceB, peer } = tunnel;
 
   // Check is tunnel used by any static route
   const { ip1, ip2 } = generateTunnelParams(num);
@@ -1520,28 +1545,26 @@ const delTunnel = async (tunnelID, user, org) => {
     );
   };
 
-  logger.info('Deleting tunnels from database');
-  const resp = await tunnelsModel.findOneAndUpdate(
-    // Query
-    { _id: mongoose.Types.ObjectId(tunnelID), org: org },
-    // Update
-    {
-      isActive: false,
-      deviceAconf: false,
-      deviceBconf: false,
-      pendingTunnelModification: false,
-      status: 'down',
-      tunnelKeys: null
-    },
-    // Options
-    { upsert: false, new: true }
-  );
+  updateOps.push({
+    updateOne: {
+      filter: { _id, org },
+      update: {
+        isActive: false,
+        deviceAconf: false,
+        deviceBconf: false,
+        pendingTunnelModification: false,
+        status: 'down',
+        tunnelKeys: null
+      },
+      upsert: false
+    }
+  });
 
   let tunnelJobs = [];
 
   // don't send remove jobs for pending tunnels
-  if (!tunnelResp.isPending) {
-    tunnelJobs = await sendRemoveTunnelsJobs([tunnelID], user);
+  if (!isPending) {
+    tunnelJobs = await sendRemoveTunnelsJobs([_id], user);
   }
 
   // remove the tunnel status from memory
@@ -1552,11 +1575,9 @@ const delTunnel = async (tunnelID, user, org) => {
   }
 
   // throw this error after removing from database
-  if (tunnelResp.isPending) {
+  if (isPending) {
     throw new Error('Tunnel was in pending state');
   }
-
-  if (resp === null) throw new Error('Error deleting tunnel');
 
   return tunnelJobs;
 };
