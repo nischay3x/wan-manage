@@ -853,7 +853,7 @@ class Connections {
               // unlike the jobs which got marked as failed due to the send timeout, in the case
               // of the upgrade-device-sw job, it is initially marked as complete, so need to
               // mark it as failed.
-              if (job.request === 'upgrade-device-sw') {
+              if (job.request === 'upgrade-device-sw' || job.request === 'upgrade-linux-sw') {
                 jobToUpdate.failed();
               }
               jobToUpdate.data.metadata.jobUpdated = true;
