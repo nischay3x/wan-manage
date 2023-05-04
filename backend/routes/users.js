@@ -649,14 +649,12 @@ router.route('/mfa/generateRecoveryCodes')
       return next(createError(403, 'Two-Factor authentication is not configured'));
     }
 
-    if (req?.user?.mfa?.recoveryCodes?.length > 0) {
-      const availableCodes = req?.user?.mfa?.recoveryCodes.filter(r => r.usedTime === null);
-      res.json({ codes: availableCodes.map(c => c.code) });
-      return;
-    }
-
     const codes = []; // send to user as clear text
     const hashed = []; // store hashed in DB
+
+    if (req?.user?.mfa?.recoveryCodes?.length > 0 && req.query.regenerate !== 'true') {
+      res.json({ codes });
+    }
 
     for (let i = 0; i < 10; i++) {
       const code = randomKey(40);
