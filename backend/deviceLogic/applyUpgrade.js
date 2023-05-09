@@ -194,7 +194,7 @@ const osUpgradeApply = async (opDevices, user, data) => {
 
   const desired = jobTasks.flat().map(job => job.id);
   const ids = fulfilled.flat().map(job => job.id);
-  let message = 'OS/Linux upgrade jobs added.';
+  let message = 'Host OS upgrade jobs added.';
   if (desired.length === 0 || fulfilled.flat().length === 0) {
     message = 'No ' + message;
   } else if (ids.length < opDevices.length) {

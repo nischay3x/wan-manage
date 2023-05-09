@@ -20,6 +20,7 @@ const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
 const pathLabelsModel = require('../models/pathlabels');
+const Tokens = require('../models/tokens');
 const notificationsModel = require('../models/notifications');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
@@ -67,6 +68,8 @@ const applications = require('../models/applications');
 const applicationStore = require('../models/applicationStore');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
+const jwt = require('jsonwebtoken');
+const url = require('url');
 
 class DevicesService {
   /**
@@ -881,6 +884,58 @@ class DevicesService {
     } catch (e) {
       return DevicesService.handleRequestError(e,
         { deviceStatus: deviceStatus, configuration: [] });
+    }
+  }
+
+  /**
+   * Retrieve device recovery info
+   *
+   * id   - String Numeric ID of the Device to retrieve recovery info from
+   * org  - String containing the organization the device belongs to
+   * Returns Device Recovery Info
+   **/
+  static async devicesIdRecoveryInfoGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      // Find device for ID
+      const deviceObject = await devices.findOne({
+        _id: id,
+        org: { $in: orgList }
+      }, 'fromToken deviceToken').lean();
+      if (!deviceObject) {
+        return Service.rejectResponse('Device not found', 404);
+      };
+
+      let server = configs.get('agentBroker');
+      // Get device token
+      if (deviceObject?.fromToken) {
+        // Try to find the token from name,
+        // it may not always kept in the system or changed, so might failed
+        const token = await Tokens.findOne({
+          name: deviceObject.fromToken,
+          org: orgList[0]
+        }, 'token').lean();
+        if (token?.token) {
+          // Try to get the server from the token
+          const decodedToken = jwt.decode(token.token);
+          if (decodedToken?.server) {
+            const urlSchema = new url.URL(decodedToken.server);
+            server = `${urlSchema.hostname}:${urlSchema.port}`;
+          }
+        }
+      }
+
+      // Generate response
+      return Service.successResponse({
+        deviceToken: deviceObject.deviceToken,
+        server: server
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 

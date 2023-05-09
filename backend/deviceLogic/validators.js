@@ -816,7 +816,7 @@ const validateStaticRoute = (device, tunnels, route) => {
 
     // Don't allow putting static route on a bridged interface
     const anotherBridgedIfc = device.interfaces.some(i => {
-      return i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned;
+      return i.devId !== ifc.devId && ifc.IPv4 && i.IPv4 === ifc.IPv4 && i.isAssigned;
     });
     if (anotherBridgedIfc) {
       return {

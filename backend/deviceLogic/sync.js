@@ -463,7 +463,12 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
 };
 
 const apply = async (device, user, data) => {
-  const { _id, machineId, hostname, org, versions } = device[0];
+  const { _id, isApproved, machineId, hostname, org, versions } = device[0];
+
+  if (!isApproved) {
+    logger.error('Sync failed, the device is not approved', { params: { machineId } });
+    throw (new Error('Sync device failed, please approve device first'));
+  }
 
   // Reset auto sync in database
   const updDevice = await devices.findOneAndUpdate(
