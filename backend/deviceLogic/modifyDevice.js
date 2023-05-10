@@ -53,6 +53,7 @@ const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
 const { getBridges } = require('../utils/deviceUtils');
 const uniqWith = require('lodash/uniqWith');
+const cloneDeep = require('lodash/cloneDeep');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const {
   transformInterfaces,
@@ -74,7 +75,7 @@ const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
 const prepareIfcParams = (interfaces, newDevice) => {
   const bridges = getBridges(newDevice.interfaces);
   return interfaces.map(ifc => {
-    const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
+    const newIfc = cloneDeep(omit(ifc, ['_id', 'isAssigned', 'pathlabels']));
 
     newIfc.dev_id = newIfc.devId;
     delete newIfc.devId;
@@ -127,6 +128,22 @@ const prepareIfcParams = (interfaces, newDevice) => {
       if (newIfc.ospf) {
         // remove empty values since they are optional
         newIfc.ospf = omitBy(newIfc.ospf, val => val === '');
+      }
+
+      // Currently, when sending modify-x device the agent does smart replacement in a way
+      // that if only one field exists in a sub-object, it adds this field
+      // to the sub-object but it keeps the other existing fields.
+      // So, in WiFi we need to send both keys (2.4GHz, and 5GHz) always.
+      // Otherwise, if we will send only the enabled one, ans user changed the enabled band,
+      // in some case, at the agent both can be enabled which is not supported.
+      // Hence, we send both always.
+      if (newIfc.deviceType === 'wifi') {
+        if (!('2.4GHz' in newIfc.configuration)) {
+          newIfc.configuration['2.4GHz'] = { enable: false };
+        }
+        if (!('5GHz' in newIfc.configuration)) {
+          newIfc.configuration['5GHz'] = { enable: false };
+        }
       }
     }
     return newIfc;
