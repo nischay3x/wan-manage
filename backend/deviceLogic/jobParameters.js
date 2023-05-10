@@ -44,23 +44,30 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
       PublicIP: ifc.PublicIP,
       PublicPort: ifc.PublicPort,
-      useStun: ifc.useStun,
       useFixedPublicPort: ifc.useFixedPublicPort,
-      monitorInternet: ifc.monitorInternet,
-      gateway: ifc.gateway,
-      metric: ifc.metric,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
       pathlabels: ifc.pathlabels,
       configuration: ifc.configuration,
-      deviceType: ifc.deviceType,
-      dnsServers: ifc.dnsServers,
-      dnsDomains: ifc.dnsDomains,
-      useDhcpDnsServers: ifc.useDhcpDnsServers
+      deviceType: ifc.deviceType
     };
 
-    if (majorVersion >= 6) {
-      ifcObg.bandwidthMbps = ifc.bandwidthMbps;
+    if (ifc.type === 'WAN') {
+      ifcObg.gateway = ifc.gateway;
+      ifcObg.metric = ifc.metric;
+      ifcObg.useStun = ifc.useStun;
+      ifcObg.monitorInternet = ifc.monitorInternet;
+      ifcObg.dnsServers = ifc.dnsServers;
+      ifcObg.dnsDomains = ifc.dnsDomains;
+
+      // if useDhcpDnsServers is true, we set empty array to the agent
+      if (ifc.dhcp === 'yes' && ifc.useDhcpDnsServers === true) {
+        ifcObg.dnsServers = [];
+      }
+
+      if (majorVersion >= 6) {
+        ifcObg.bandwidthMbps = ifc.bandwidthMbps;
+      }
     }
 
     if (majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3)) {
