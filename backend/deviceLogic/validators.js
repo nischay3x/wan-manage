@@ -804,13 +804,31 @@ const validateStaticRoute = (device, tunnels, route) => {
       };
     };
 
-    if (!isPending && !cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
-      // A pending route may not overlap with an interface
-      if (onLink !== true) {
+    // check overlapping
+    //
+    // if route is pending, don't check
+    if (!isPending) {
+      // if specified interface does not have IP throw an error.
+      //
+      // Note! this is temporarily fix. The route should be pending,
+      // but UI sends "isPending" with "false".
+      // We need to move this route to pending on DeviceService.
+      // After correct fix, the below "if" block should be removed.
+      if (!ifc.IPv4) {
         return {
           valid: false,
-          err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+          err: `The static route via interface ${ifc.name} cannot be installed. ` +
+          'The interface does not have an IP Address'
         };
+      }
+
+      if (!cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
+        if (onLink !== true) { // onlink doesn't must to overlap
+          return {
+            valid: false,
+            err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+          };
+        }
       }
     }
 

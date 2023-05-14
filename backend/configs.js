@@ -84,6 +84,7 @@ const configEnv = {
     // Use automatic charges collection
     autoCollectionCharges: 'off', // "on" or "off"
     // Redis host and port, override default with environment variable REDIS_URL
+    // If 'requirepass' enabled in redis configuration use 'redis://authpass@host:port'
     redisUrl: 'redis://localhost:6379',
     // Redis connectivity options
     redisTotalRetryTime: 1000 * 60 * 60,
