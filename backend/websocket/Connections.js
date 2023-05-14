@@ -454,9 +454,18 @@ class Connections {
 
         const incomingInterfaces = deviceInfo.message.network.interfaces;
 
-        const interfaces = origDevice.interfaces.map(i => {
+        const interfaces = [];
+        origDevice.interfaces.forEach(i => {
           const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
           if (!updatedConfig) {
+            if (i.devId.startsWith('vlan')) {
+              // the VLAN sub-interface is removed in device
+              // it should be unlocked in manage if assigned or removed if not assigned
+              if (i.isAssigned) {
+                interfaces.push({ ...i.toObject(), locked: false });
+              }
+              return;
+            }
             logger.warn('Missing interface configuration in the get-device-info message', {
               params: {
                 reconfig: deviceInfo.message.reconfig,
@@ -464,7 +473,8 @@ class Connections {
                 interface: i.toJSON()
               }
             });
-            return i;
+            interfaces.push(i.toObject());
+            return;
           }
 
           // send a notification if the link changed to down
@@ -496,7 +506,8 @@ class Connections {
 
           // allow to modify the interface type dpdk/pppoe for unassigned interfaces
           if (!i.isAssigned && ['dpdk', 'pppoe'].includes(updatedConfig.deviceType)) {
-            if (i.deviceType !== 'lte') { // don't allow to change LTE device type dynamically
+            // don't allow to change LTE or WiFi deviceType dynamically
+            if (i.deviceType !== 'lte' && i.deviceType !== 'wifi') {
               updInterface.deviceType = updatedConfig.deviceType;
             }
             updInterface.dhcp = updatedConfig.dhcp;
@@ -531,7 +542,8 @@ class Connections {
             updInterface.type = updInterface.gateway ? 'WAN' : 'LAN';
           }
 
-          return updInterface;
+          updInterface.locked = i.locked;
+          interfaces.push(updInterface);
         });
 
         const deviceId = origDevice._id.toString();
@@ -685,7 +697,8 @@ class Connections {
           certificateExpiration: Joi.string().allow('').optional(),
           error: Joi.string().allow('').optional()
         }).allow({}).optional(),
-        cpuInfo: Joi.object().optional()
+        cpuInfo: Joi.object().optional(),
+        distro: Joi.object().optional()
       }).custom((obj, helpers) => {
         for (const [component, info] of Object.entries(
           obj.components
@@ -768,6 +781,10 @@ class Connections {
       });
       origDevice.cpuInfo = cpuInfo;
       origDevice.versions = versions;
+      origDevice.distro = {
+        version: deviceInfo.message?.distro?.version ?? '',
+        codename: deviceInfo.message?.distro?.codename ?? ''
+      };
       await origDevice.save();
 
       const { expireTime, jobQueued } = origDevice.IKEv2;
@@ -834,6 +851,12 @@ class Connections {
             }
             if (job?.errors?.length > 0) {
               jobToUpdate.error(JSON.stringify({ errors: job.errors }));
+              // unlike the jobs which got marked as failed due to the send timeout, in the case
+              // of the upgrade-device-sw job, it is initially marked as complete, so need to
+              // mark it as failed.
+              if (job.request === 'upgrade-device-sw' || job.request === 'upgrade-linux-sw') {
+                jobToUpdate.failed();
+              }
               jobToUpdate.data.metadata.jobUpdated = true;
               jobToUpdate.save();
             }

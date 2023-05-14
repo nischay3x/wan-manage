@@ -47,7 +47,8 @@ const {
   releasePublicAddrLimiterBlockage
 } = require('./events');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
-// const { publicPortLimiter } = require('../limiters/publicPort');
+const AsyncLock = require('async-lock');
+const lock = new AsyncLock({ maxOccupationTime: 60000 });
 
 // Create a object of all sync handlers
 const syncHandlers = {
@@ -114,6 +115,50 @@ const toMessageContents = (message) => {
     : message.tasks[0].message;
 };
 
+const setSyncStateOnJobQueueFunc = async (machineId, message) => {
+  try {
+    const device = await devices.findOne(
+      { machineId: machineId },
+      { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
+    );
+
+    const { sync } = device;
+    const { hash } = sync || {};
+    if (hash === null || hash === undefined) {
+      throw new Error('Failed to get device hash value');
+    }
+
+    // Reset hash value for full-sync messages
+    const messageContents = toMessageContents(message);
+    const newHash =
+      messageContents !== 'sync-device' ? calcChangeHash(hash, message) : '';
+
+    const { state } = sync;
+    const newState = state !== 'not-synced' ? 'syncing' : 'not-synced';
+    logger.info('New sync state calculated, updating database', {
+      params: { state, newState, hash, newHash }
+    });
+
+    // Update hash and reset autoSync state only when the added
+    // job is not sync-device. The hash for sync-device job will be
+    // reset after the job is completed. If sync-device job has
+    // failed, the hash will not be changed.
+    if (messageContents !== 'sync-device') {
+      device.sync.state = newState;
+      device.sync.hash = newHash;
+      device.sync.autoSync = 'on';
+      device.sync.trials = 0;
+    } else {
+      device.sync.state = newState;
+    }
+    await device.save();
+  } catch (err) {
+    logger.error('setSyncStateOnJobQueueFunc failed. A sync message may be sent soon', {
+      params: { err: err.message, machineId, message }
+    });
+  }
+};
+
 /**
  * Modifies sync state based on the queued job.
  * Gets called whenever job gets saved in the device queue.
@@ -123,47 +168,16 @@ const toMessageContents = (message) => {
  * @returns
  */
 const setSyncStateOnJobQueue = async (machineId, message) => {
-  // Calculate the new configuration hash
-  const { sync } = await devices.findOne(
-    { machineId: machineId },
-    { 'sync.hash': 1, 'sync.state': 1, versions: 1 }
-  )
-    .lean();
-
-  const { hash } = sync || {};
-  if (hash === null || hash === undefined) {
-    throw new Error('Failed to get device hash value');
-  }
-
-  // Reset hash value for full-sync messages
-  const messageContents = toMessageContents(message);
-  const newHash =
-    messageContents !== 'sync-device' ? calcChangeHash(hash, message) : '';
-
-  const { state } = sync;
-  const newState = state !== 'not-synced' ? 'syncing' : 'not-synced';
-  logger.info('New sync state calculated, updating database', {
-    params: { state, newState, hash, newHash }
+  lock.acquire(
+    'setSyncStateOnJobQueue',
+    async () => await setSyncStateOnJobQueueFunc(machineId, message)
+  ).catch(async err => {
+    // try one more time, now, outside of the lock.
+    logger.error('setSyncStateOnJobQueue failed', {
+      params: { err: err.message, machineId, message }
+    });
+    await setSyncStateOnJobQueueFunc(machineId, message);
   });
-
-  // Update hash and reset autoSync state only when the added
-  // job is not sync-device. The hash for sync-device job will be
-  // reset after the job is completed. If sync-device job has
-  // failed, the hash will not be changed.
-  const updateFields = messageContents !== 'sync-device'
-    ? {
-      'sync.state': newState,
-      'sync.hash': newHash,
-      'sync.autoSync': 'on',
-      'sync.trials': 0
-    }
-    : { 'sync.state': newState };
-
-  return devices.updateOne(
-    { machineId: machineId },
-    updateFields,
-    { upsert: false }
-  );
 };
 
 const updateSyncState = (org, deviceId, state) => {
@@ -445,7 +459,12 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
 };
 
 const apply = async (device, user, data) => {
-  const { _id, machineId, hostname, org, versions } = device[0];
+  const { _id, isApproved, machineId, hostname, org, versions } = device[0];
+
+  if (!isApproved) {
+    logger.error('Sync failed, the device is not approved', { params: { machineId } });
+    throw (new Error('Sync device failed, please approve device first'));
+  }
 
   // Reset auto sync in database
   const updDevice = await devices.findOneAndUpdate(
@@ -502,7 +521,8 @@ const forceDevicesSync = async devicesIds => {
     { _id: { $in: devicesIds } },
     {
       $set: {
-        'sync.hash': '',
+        // set hardcoded hash to trigger a change on next get-device-stats
+        'sync.hash': 'FORCE_SYNC',
         'sync.state': 'syncing',
         'sync.autoSync': 'on',
         'sync.trials': 0
