@@ -68,18 +68,20 @@ class ReleasePendingTunnels {
 
       const devicesToRelease = new Map();
       for (const tunnel of pendingTunnels) {
-        const { deviceA, deviceB, ifcA, ifcB, num, org, pendingType, pendingTime } = tunnel;
+        const {
+          deviceA, deviceB, interfaceA, interfaceB, num, org, pendingType, pendingTime
+        } = tunnel;
 
         if (pendingType === pendingTypes.publicPortHighRate) {
           // check if blockage is already removed.
           // If the block does not exist, it means that the public port is stable
           // and has not changed much recently. Therefore it can be released.
-          const keyA = `${deviceA}:${ifcA}`;
+          const keyA = `${deviceA._id.toString()}:${interfaceA.toString()}`;
           const isIfcABlocked = await publicAddrInfoLimiter.isBlocked(keyA);
           if (isIfcABlocked) continue;
 
           if (deviceB) {
-            const keyB = `${deviceB}:${ifcB}`;
+            const keyB = `${deviceB._id.toString()}:${interfaceB.toString()}`;
             const isIfcBBlocked = await publicAddrInfoLimiter.isBlocked(keyB);
             if (isIfcBBlocked) continue;
           }

@@ -24,7 +24,7 @@ const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance()
 
 // Globals
 const protocols = ['OSPF', 'NONE', 'BGP', 'OSPF,BGP'];
-const interfaceTypes = ['WAN', 'LAN', 'NONE'];
+const interfaceTypes = ['WAN', 'LAN', 'TRUNK', 'NONE'];
 
 // Helper functions
 const isEmpty = (val) => { return val === null || val === undefined; };
@@ -71,6 +71,13 @@ const validateIPaddr = (ip) => { return validateIPv4(ip) || validateIPv6(ip); };
 const validateDevId = (devId) => {
   return (
     validatePciAddress(devId) ||
+    validateUsbAddress(devId) ||
+    validateVlanAddress(devId)
+  );
+};
+const validateParentDevId = (devId) => {
+  return (
+    validatePciAddress(devId) ||
     validateUsbAddress(devId)
   );
 };
@@ -90,7 +97,14 @@ const validateUsbAddress = usb => {
     /^usb:usb[0-9]\/[0-9]+-[0-9]+\/[0-9]+-[0-9]+.[0-9]+\/[0-9]+-[0-9]+.[0-9]:[0-9].[0-9]+$/i.test(usb)
   );
 };
-const validateIfcName = (name) => { return /^[a-zA-Z0-9_]{1,15}$/i.test(name || ''); };
+const validateVlanAddress = devId => {
+  return (
+    devId === '' ||
+    /* eslint-disable max-len */
+    /^vlan\.([1-9]|[1-9][0-9]{1,2}|[1-3][0-9]{1,3}|40([0-8][0-9]|9[0-4]))\.pci:([A-F0-9]{2,4}:)?([A-F0-9]{2}|[A-F0-9]{4}):[A-F0-9]{2}\.[A-F0-9]{2}$/i.test(devId)
+  );
+};
+const validateIfcName = (name) => { return /^[a-zA-Z0-9_/.]{1,64}$/i.test(name || ''); };
 const validateIsNumber = (str) => { return !isNaN(Number(str)); };
 const validateDriverName = (name) => { return /^[a-z0-9_-]{1,30}$/i.test(name || ''); };
 const validateMacAddress = mac => {
@@ -132,6 +146,7 @@ const isPort = (val) => {
   return !isEmpty(val) && !(val === '') && validateIsInteger(+val) && val >= 0 && val <= 65535;
 };
 const validatePort = port => port === '' || isPort(port);
+const validateVxlanPort = port => validatePort(port) && port !== '500' && port !== '4500';
 const validatePortRange = (range) => {
   if (range === '') return true;
   if (!(range || '').includes('-')) return isPort(range);
@@ -176,6 +191,7 @@ const validateApplicationIdentifier = str => { return /[A-Za-z_.-]/i.test(str ||
 const validateBGPASN = val => val && validateIsInteger(val) && +val >= 1;
 const validateBGPInterval = val => val && validateIsInteger(val) && +val >= 0 && +val < 65535;
 const validateCpuCoresNumber = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
+const validateVlanTag = val => val === '' || (val && validateIsInteger(val) && +val >= 0 && +val <= 4096);
 
 module.exports = {
   validateDHCP,
@@ -185,6 +201,8 @@ module.exports = {
   validateIPaddr,
   validatePciAddress,
   validateDevId,
+  validateParentDevId,
+  validateVlanTag,
   validateIfcName,
   validateIPv4Mask,
   validateIPv6Mask,
@@ -224,5 +242,6 @@ module.exports = {
   validateBGPASN,
   validateBGPInterval,
   validateIsNumber,
-  validateCpuCoresNumber
+  validateCpuCoresNumber,
+  validateVxlanPort
 };

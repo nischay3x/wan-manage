@@ -29,6 +29,14 @@ class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org, devices = []) {
     const { _id, name, rules } = firewallPolicyRequest;
 
+    // Policy must have at least one enabled rule
+    if (!rules.some(r => r.enabled)) {
+      return {
+        valid: false,
+        message: 'Policy must have at least one enabled rule'
+      };
+    }
+
     // Duplicate names are not allowed in the same organization
     const hasDuplicateName = await FirewallPolicies.findOne(
       { org, name: { $regex: new RegExp(`^${name}$`, 'i') }, _id: { $ne: _id } }
