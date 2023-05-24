@@ -150,11 +150,11 @@ const firewallRuleSchema = new Schema({
   classification: {
     source: {
       type: sourceClassificationSchema,
-      default: sourceClassificationSchema
+      default: () => ({})
     },
     destination: {
       type: destinationClassificationSchema,
-      default: destinationClassificationSchema
+      default: () => ({})
     }
   },
   action: {

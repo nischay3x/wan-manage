@@ -974,7 +974,7 @@ const deviceSchema = new Schema({
   // schedule for upgrade process
   upgradeSchedule: {
     type: versionUpgradeSchema,
-    default: versionUpgradeSchema
+    default: () => ({})
   },
   // list of interfaces
   interfaces: [interfacesSchema],
@@ -983,15 +983,15 @@ const deviceSchema = new Schema({
   policies: {
     multilink: {
       type: devicePolicySchema('MultiLinkPolicies'),
-      default: devicePolicySchema('MultiLinkPolicies')
+      default: () => ({})
     },
     firewall: {
       type: devicePolicySchema('FirewallPolicies'),
-      default: devicePolicySchema('FirewallPolicies')
+      default: () => ({})
     },
     qos: {
       type: devicePolicySchema('QOSPolicies'),
-      default: devicePolicySchema('QOSPolicies')
+      default: () => ({})
     }
   },
   deviceSpecificRulesEnabled: {
@@ -1004,12 +1004,12 @@ const deviceSchema = new Schema({
   qosTrafficMap: QOSTrafficMapSchema,
   sync: {
     type: deviceSyncSchema,
-    default: deviceSyncSchema
+    default: () => ({})
   },
   // IKEv2 parameters
   IKEv2: {
     type: IKEv2Schema,
-    default: IKEv2Schema
+    default: () => ({})
   },
   bgp: {
     enable: {
