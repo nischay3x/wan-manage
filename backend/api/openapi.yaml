@@ -8684,8 +8684,8 @@ components:
       type: object
     AppIdentification:
       example:
-        _id: _id
-        id: _id
+        # _id: AppIdentification_id
+        # id: AppIdentificationid
         name: custom:app-name
         description: app identification description
         category: internet
@@ -8814,8 +8814,10 @@ components:
           type: string
         companyType:
           type: string
+          nullable: true
         companyDesc:
           type: string
+          nullable: true
         enableNotifications:
           default: true
           type: boolean
@@ -8824,6 +8826,7 @@ components:
           type: boolean
         trial_end:
           type: integer
+          nullable: true
         forceMfa:
           default: false
           type: boolean
@@ -9668,6 +9671,8 @@ components:
               type: string
             area:
               oneOf:
+              - type: string
+                pattern: "^[0-9]*$"
               - type: integer
               - type: string
                 format: ipv4
@@ -9878,8 +9883,8 @@ components:
         - connection
         - isApproved
     RoutingFilter:
-      example:
-        $ref: '#/components/examples/RoutingFilterExample'
+      # example:
+      #   $ref: '#/components/examples/RoutingFilterExample'
       properties:
         name:
           type: string
@@ -9891,8 +9896,8 @@ components:
           type: array
       type: object
     RoutingFilterRule:
-      example:
-        $ref: '#/components/examples/RoutingFilterRuleExample'
+      # example:
+      #   $ref: '#/components/examples/RoutingFilterRuleExample'
       properties:
         route:
           type: string
@@ -10845,7 +10850,7 @@ components:
           type: array
         summary:
           $ref: '#/components/schemas/BillingSummary'
-          nullable: true
+          # nullable: true
         subscription:
           type: string
     CouponRequest:
@@ -11211,9 +11216,9 @@ components:
       - rules
       type: object
     FirewallPolicyList:
-      example:
-        id: id
-        name: name
+      # example:
+      #   id: id
+      #   name: name
       properties:
         _id:
           maxLength: 24
@@ -11447,13 +11452,13 @@ components:
           - importance
           type: object
     QOSPolicy:
-      example:
-        _id: id
-        name: name
-        description: description
-        advanced: false
-        outbound: outbound
-        inbound: inbound
+      # example:
+      #   _id: id
+      #   name: name
+      #   description: description
+      #   advanced: false
+      #   outbound: outbound
+      #   inbound: inbound
       properties:
         _id:
           maxLength: 24
@@ -11476,9 +11481,9 @@ components:
       - name
       type: object
     QOSPolicyList:
-      example:
-        id: id
-        name: name
+      # example:
+      #   id: id
+      #   name: name
       properties:
         _id:
           maxLength: 24
