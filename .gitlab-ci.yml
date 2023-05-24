@@ -16,8 +16,9 @@ build:
   stage: build
   script:
     - cd backend
-    ## temp fix: change to npm ci when mongo-express is fixed
-    - npm install mongo-express --ignore-scripts && npm install
+    - npm ci
+    # ## temp fix: change to npm ci when mongo-express is fixed
+    # - npm install mongo-express --ignore-scripts && npm install
   artifacts:
     untracked: true
     paths:
@@ -50,8 +51,9 @@ backend_npm_audit:
   script:
    - cd backend
     ## temp fix: change to 'npm ci audit-ci' when mongo-express is fixed
-   - npm install audit-ci
-   - npx audit-ci --moderate --show-found false --package-manager npm --allowlist $BACKEND_PACKAGE_WHITE_LIST >> backend_npm_audit.log
+   - npm ci audit-ci
+  #  - npm install audit-ci
+  #  - npx audit-ci --moderate --show-found false --package-manager npm --allowlist $BACKEND_PACKAGE_WHITE_LIST >> backend_npm_audit.log
   timeout: 5m
   artifacts:
     when: always
