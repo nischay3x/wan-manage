@@ -159,7 +159,7 @@ class JobsService {
    *
    * no response value expected for this operation
    **/
-  static async jobsDELETE ({ org, jobsDeleteRequest }, { user }) {
+  static async jobsDELETE ({ org, ...jobsDeleteRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const { ids, filters } = jobsDeleteRequest;

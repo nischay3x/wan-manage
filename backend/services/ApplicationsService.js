@@ -408,8 +408,8 @@ class ApplicationsService {
    */
   static async appstorePurchasedIdPUT (request, { user }) {
     try {
-      const { id, purchasedApplicationConfigurationRequest, org } = request;
-      let configurationRequest = purchasedApplicationConfigurationRequest;
+      const { id, org, ...rest } = request;
+      let configurationRequest = rest;
 
       const orgList = await getAccessTokenOrgList(user, org, true);
 

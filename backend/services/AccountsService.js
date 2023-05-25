@@ -134,7 +134,7 @@ class AccountsService {
    * accountRequest AccountRequest  (optional)
    * returns Account
    **/
-  static async accountsIdPUT ({ id, accountRequest }, { user }, response) {
+  static async accountsIdPUT ({ id, ...accountRequest }, { user }, response) {
     try {
       if (user.defaultAccount._id.toString() !== id) {
         return Service.rejectResponse(

@@ -93,7 +93,7 @@ class OrganizationsService {
     }
   }
 
-  static async organizationsSelectPOST ({ organizationSelectRequest }, { user }, res) {
+  static async organizationsSelectPOST (organizationSelectRequest, { user }, res) {
     try {
       if (!user._id || !user.defaultAccount) {
         return Service.rejectResponse('Error in selecting organization', 500);

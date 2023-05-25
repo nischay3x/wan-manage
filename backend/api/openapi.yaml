@@ -8628,7 +8628,7 @@ components:
         creator:
           type: string
         cost:
-          type: string
+          type: number
         description:
           type: string
         identifier:
@@ -11205,6 +11205,7 @@ components:
           type: string
         isDefault:
           type: boolean
+          nullable: true
         rules:
           items:
             $ref: '#/components/schemas/FirewallRule'
@@ -11562,13 +11563,13 @@ components:
       type: string
     Error:
       properties:
-        code:
+        error:
           type: string
-        message:
-          type: string
+        # message:
+        #   type: string
       required:
-      - code
-      - message
+      - error
+      # - message
       type: object
     BadRequestError:
       properties:

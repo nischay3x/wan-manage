@@ -79,7 +79,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ org, deviceCommand }, { user, server }, response) {
+  static async devicesApplyPOST ({ org, ...deviceCommand }, { user, server }, response) {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -112,7 +112,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user, server }, response) {
+  static async devicesIdApplyPOST ({ id, org, ...deviceCommand }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevice = await devices.find({
@@ -1429,7 +1429,7 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user, server }, response) {
+  static async devicesIdPUT ({ id, org, ...deviceRequest }, { user, server }, response) {
     let sessionCopy;
 
     try {

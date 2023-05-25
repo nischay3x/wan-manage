@@ -204,7 +204,7 @@ class FirewallPoliciesService {
    * firewallPolicyRequest FirewallPolicyRequest  (optional)
    * returns FirewallPolicy
    **/
-  static async firewallPoliciesIdPUT ({ id, org, firewallPolicyRequest }, { user }) {
+  static async firewallPoliciesIdPUT ({ id, org, ...firewallPolicyRequest }, { user }) {
     try {
       const { name, description, isDefault, rules } = firewallPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -316,7 +316,7 @@ class FirewallPoliciesService {
    * org String Organization to be filtered by (optional)
    * returns FirewallPolicy
    **/
-  static async firewallPoliciesPOST ({ firewallPolicyRequest, org }, { user }) {
+  static async firewallPoliciesPOST ({ org, ...firewallPolicyRequest }, { user }) {
     try {
       const { name, description, isDefault, rules } = firewallPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);

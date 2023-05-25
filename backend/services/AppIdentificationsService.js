@@ -290,7 +290,7 @@ class AppIdentificationsService {
    * @returns
    * @memberof AppIdentificationsService
    */
-  static async appIdentificationsIdPUT ({ id, org, appIdentImpCustReq }, { user }) {
+  static async appIdentificationsIdPUT ({ id, org, ...appIdentImpCustReq }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const result =

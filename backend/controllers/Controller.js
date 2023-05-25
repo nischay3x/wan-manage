@@ -78,6 +78,9 @@ class Controller {
           // if request is not described in schema then skip unknown parameters validation
           requestParams = request.body;
         }
+      } else {
+        // if request is not described in schema then skip unknown parameters validation
+        requestParams = request.body;
       }
     }
 
