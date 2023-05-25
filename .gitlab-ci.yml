@@ -43,17 +43,14 @@ test_backend:
    - npm test
   timeout: 5m
 
+
 #### Package security auditing ####
 backend_npm_audit:
   stage: test
-  variables:
-    BACKEND_PACKAGE_WHITE_LIST: "dot-prop pug mquery extend async express-fileupload mongoose mpath node-forge minimist yargs-parser dicer redis"
   script:
    - cd backend
-    ## temp fix: change to 'npm ci audit-ci' when mongo-express is fixed
    - npm ci audit-ci
-  #  - npm install audit-ci
-  #  - npx audit-ci --moderate --show-found false --package-manager npm --allowlist $BACKEND_PACKAGE_WHITE_LIST >> backend_npm_audit.log
+   - npx audit-ci --config ../audit-ci.jsonc >> backend_npm_audit.log
   timeout: 5m
   artifacts:
     when: always
