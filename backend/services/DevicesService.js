@@ -1553,9 +1553,10 @@ class DevicesService {
               : updIntf.isAssigned ? updIntf.type : 'Unassigned';
 
             // Check tunnels connectivity and static routes for removed or modified interfaces
-            if ((origIntf.isAssigned) &&
-              (!updIntf || !updIntf.isAssigned || updIntf.type !== 'WAN')) {
-              if (Array.isArray(deviceRequest.staticroutes) &&
+            if (origIntf.isAssigned) {
+              const interfaceRemoved = !updIntf || !updIntf.isAssigned;
+              if ((interfaceRemoved || !['LAN', 'WAN'].includes(updIntf.type)) &&
+                Array.isArray(deviceRequest.staticroutes) &&
                 (deviceRequest.staticroutes.some(r => r.ifname === origIntf.devId))) {
                 // eslint-disable-next-line max-len
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing static routes, please delete related static routes before`);
@@ -1564,7 +1565,7 @@ class DevicesService {
                 return interfaceA.toString() === origIntf._id.toString() ||
                   (interfaceB && interfaceB.toString() === origIntf._id.toString());
               });
-              if (hasTunnels) {
+              if (hasTunnels && (interfaceRemoved || updIntf.type !== 'WAN')) {
                 // eslint-disable-next-line max-len
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing tunnels, please delete related tunnels before`);
               }
