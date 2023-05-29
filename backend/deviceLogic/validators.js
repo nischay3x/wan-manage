@@ -66,7 +66,9 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
     if (i.type !== orig.type ||
       i.dhcp !== orig.dhcp ||
       i.addr !== `${orig.IPv4}/${orig.IPv4Mask}` ||
-      i.gateway !== orig.gateway
+      // Check if both gateways are not falsy values (undefined, "", null, etc).
+      // In such case, we don't consider it as modification
+      (i.gateway && orig.gateway && i.gateway !== orig.gateway)
     ) {
       return true;
     } else {
