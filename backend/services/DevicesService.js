@@ -1679,7 +1679,7 @@ class DevicesService {
                   const hasTunnels = origTunnels.some(({ interfaceA, interfaceB, pathlabel }) => {
                     return (interfaceA.toString() === origIntf._id.toString() ||
                       (interfaceB && interfaceB.toString() === origIntf._id.toString())) &&
-                      remLabels.some(p => p._id.toString() === pathlabel.toString());
+                      remLabels.some(p => p._id.toString() === pathlabel?.toString());
                   });
                   if (hasTunnels) {
                   // eslint-disable-next-line max-len
