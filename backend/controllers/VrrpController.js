@@ -34,6 +34,14 @@ class VrrpController {
     await Controller.handleRequest(request, response, this.service.vrrpIdDELETE);
   }
 
+  async vrrpIdGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.vrrpIdGET);
+  }
+
+  async vrrpIdPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.vrrpIdPUT);
+  }
+
   async vrrpDeviceVrrpInterfacesGET (request, response) {
     await Controller.handleRequest(request, response, this.service.vrrpDeviceVrrpInterfacesGET);
   }

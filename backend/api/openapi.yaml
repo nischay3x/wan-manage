@@ -8556,7 +8556,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VrrpGroupRequest'
+              $ref: '#/components/schemas/VrrpGroup'
       responses:
         "200":
           content:
@@ -8604,6 +8604,139 @@ paths:
       x-openapi-router-controller: VrrpController
       x-openapi-router-service: VrrpService
   /vrrp/{id}:
+    get:
+      operationId: vrrpIdGET
+      parameters:
+      - description: VRRP Group ID to retrieve
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to get VRRP group from
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VrrpGroup'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve VRRP group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+    put:
+      operationId: vrrpIdPUT
+      parameters:
+      - description: VRRP Group ID to remove
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to update the VRRP group for
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VrrpGroup'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VrrpGroup'
+          description: VRRP has been added
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Update an existing VRRP Group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
     delete:
       operationId: vrrpIdDELETE
       parameters:
@@ -8615,6 +8748,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to delete VRRP group from
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       responses:
         "204":
           description: Successful operation
@@ -12143,13 +12283,13 @@ components:
         - _id: interfaceId
           name: eth1
           IPv4: 172.16.1.1/24
-    VrrpGroupRequest:
+    VrrpGroup:
       type: object
       properties:
         name:
           type: string
         virtualRouterId:
-          type: number
+          type: string
           minimum: 1
           maximum: 255
         virtualIp:
@@ -12169,7 +12309,7 @@ components:
               interface:
                 type: string
               priority:
-                type: number
+                type: string
                 minimum: 0
                 maximum: 255
               trackInterfaces:
@@ -12190,7 +12330,7 @@ components:
         name:
           type: string
         virtualRouterId:
-          type: number
+          type: string
           minimum: 1
           maximum: 255
         virtualIp:

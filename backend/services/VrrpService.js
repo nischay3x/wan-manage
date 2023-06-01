@@ -27,6 +27,23 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const ObjectId = require('mongoose').Types.ObjectId;
 
 class VrrpService {
+  static selectVrrpGroupParams (vrrpGroup) {
+    vrrpGroup._id = vrrpGroup._id.toString();
+    vrrpGroup.org = vrrpGroup.org.toString();
+    vrrpGroup.virtualRouterId = vrrpGroup.virtualRouterId.toString();
+    vrrpGroup.devices = vrrpGroup.devices.map(d => {
+      return {
+        ...d,
+        _id: d._id.toString(),
+        device: d.device.toString(),
+        interface: d.interface.toString(),
+        trackInterfaces: d.trackInterfaces.map(t => t.toString())
+      };
+    });
+
+    return vrrpGroup;
+  }
+
   /**
    * Get all VRRP groups
    *
@@ -63,30 +80,61 @@ class VrrpService {
   /**
    * Create new VRRP Group
    *
-   * vrrpGroupRequest vrrpGroupRequest
+   * VrrpGroup VrrpGroup
    * returns VRRP Group
    **/
-  static async vrrpPOST ({ org, vrrpGroupRequest }, { user }) {
+  static async vrrpPOST ({ org, vrrpGroup }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const { valid, err } = VrrpService.validateVrrp(vrrpGroupRequest);
+      const { valid, err } = VrrpService.validateVrrp(vrrpGroup);
       if (!valid) {
         throw new Error(err);
       }
 
-      // on creation, we set tempId for each device row so here we delete it.
-      // Note, it is not about device ID but ID of the vrrp device item in the list.
-      vrrpGroupRequest.devices = vrrpGroupRequest.devices.map(d => {
-        delete d._id;
-        return d;
-      });
-
-      const newPeer = await Vrrp.create({ ...vrrpGroupRequest, org: orgList[0].toString() });
+      const newVrrpGroup = await Vrrp.create({ ...vrrpGroup, org: orgList[0].toString() });
 
       // TODO: install on devices.
 
-      return Service.successResponse(newPeer);
+      return Service.successResponse(newVrrpGroup);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+  * Update a VRRP Group
+  **/
+  static async vrrpIdPUT ({ id, org, vrrpGroup }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const isExists = await Vrrp.findOne({ _id: id, org: { $in: orgList } }).lean();
+      if (!isExists) {
+        logger.error('Failed to get VRRP Group', {
+          params: { id, org, orgList }
+        });
+        return Service.rejectResponse('VRRP Group is not found', 404);
+      }
+
+      const { valid, err } = VrrpService.validateVrrp(vrrpGroup);
+      if (!valid) {
+        throw new Error(err);
+      }
+
+      const updatedVrrpGroup = await Vrrp.findOneAndUpdate(
+        { _id: id }, // no need to check for org as it was checked before
+        vrrpGroup,
+        { upsert: false, new: true, runValidators: true }
+      ).lean();
+
+      // TODO: update all devices.
+
+      const returnValue = VrrpService.selectVrrpGroupParams(updatedVrrpGroup);
+      return Service.successResponse(returnValue, 200);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -122,6 +170,31 @@ class VrrpService {
   }
 
   /**
+  * Get a VRRP Group
+  **/
+  static async vrrpIdGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      const vrrpGroup = await Vrrp.findOne({ _id: id, org: { $in: orgList } }).lean();
+      if (!vrrpGroup) {
+        logger.error('Failed to get VRRP Group', {
+          params: { id, org, orgList }
+        });
+        return Service.rejectResponse('VRRP Group is not found', 404);
+      }
+
+      const returnValue = VrrpService.selectVrrpGroupParams(vrrpGroup);
+      return Service.successResponse(returnValue, 200);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
   * Get devices which overlapping with the virtualIP
   **/
   static async vrrpDeviceVrrpInterfacesGET ({ org, virtualIp }, { user }) {
@@ -142,7 +215,7 @@ class VrrpService {
                     as: 'ifc',
                     cond: {
                       $and: [
-                        { $eq: ['$$ifc.type', 'LAN'] },
+                        // { $eq: ['$$ifc.type', 'LAN'] },
                         { $eq: ['$$ifc.isAssigned', true] },
                         { $ne: ['$$ifc.IPv4', ''] },
                         { $ne: ['$$ifc.IPv4Mask', ''] }
@@ -204,70 +277,31 @@ class VrrpService {
 
 function checkOverlapping (interfaces, virtualIP) {
   function checkSubnetIntersection (subnet1, subnet2) {
-    // Parse subnet strings into network address and mask
+    function u (n) { return n >>> 0; } // convert to unsigned
+    function addr32 (ip) {
+      const m = ip.split('.');
+      return m.reduce((a, o) => { return u(+a << 8) + +o; });
+    }
     const [address1, mask1] = subnet1.split('/');
     const [address2, mask2] = subnet2.split('/');
-    // Convert network addresses to binary format
-    const address1Binary = ipToBinary(address1);
-    const address2Binary = ipToBinary(address2);
-    // Convert masks to binary format
-    const mask1Binary = maskToBinary(mask1);
-    const mask2Binary = maskToBinary(mask2);
-    // Calculate the network address and broadcast address using bitwise AND
-    const network1 = bitwiseAnd(address1Binary, mask1Binary);
-    const network2 = bitwiseAnd(address2Binary, mask2Binary);
-    const broadcast1 = bitwiseOr(network1, bitwiseNot(mask1Binary));
-    const broadcast2 = bitwiseOr(network2, bitwiseNot(mask2Binary));
-    // Check for intersection by comparing network addresses and broadcast addresses
+
+    const binAddress1 = addr32(address1);
+    const binAddress2 = addr32(address2);
+    const binMask1 = u(~0 << (32 - +mask1));
+    const binMask2 = u(~0 << (32 - +mask2));
+
+    const [start1, end1] = [u(binAddress1 & binMask1), u(binAddress1 | ~binMask1)];
+    const [start2, end2] = [u(binAddress2 & binMask2), u(binAddress2 | ~binMask2)];
+
     return (
-      (network1 >= network2 && network1 <= broadcast2) ||
-      (network2 >= network1 && network2 <= broadcast1)
+      (start1 >= start2 && start1 <= end2) ||
+      (start2 >= start1 && start2 <= end1)
     );
-  }
-
-  // Helper function to convert an IP address to binary format
-  function ipToBinary (ipAddress) {
-    return ipAddress.split('.').map((segment) => {
-      return parseInt(segment).toString(2).padStart(8, '0');
-    }).join('');
-  }
-
-  // Helper function to convert a subnet mask to binary format
-  function maskToBinary (mask) {
-    const binaryMask = '1'.repeat(mask) + '0'.repeat(32 - mask);
-    return binaryMask;
-  }
-
-  // Helper function for bitwise AND operation
-  function bitwiseAnd (a, b) {
-    let result = '';
-    for (let i = 0; i < a.length; i++) {
-      result += a[i] === '1' && b[i] === '1' ? '1' : '0';
-    }
-    return result;
-  }
-
-  // Helper function for bitwise OR operation
-  function bitwiseOr (a, b) {
-    let result = '';
-    for (let i = 0; i < a.length; i++) {
-      result += a[i] === '1' || b[i] === '1' ? '1' : '0';
-    }
-    return result;
-  }
-
-  // Helper function for bitwise NOT operation
-  function bitwiseNot (a) {
-    let result = '';
-    for (let i = 0; i < a.length; i++) {
-      result += a[i] === '1' ? '0' : '1';
-    }
-    return result;
   }
 
   return interfaces.some(i => {
     return checkSubnetIntersection(i.IPv4, `${virtualIP}/32`);
   });
-};
+}
 
 module.exports = VrrpService;
