@@ -163,6 +163,10 @@ const methods = {
     apply: replace.apply,
     complete: errorNOOP,
     error: errorNOOP
+  },
+  vrrp: {
+    complete: errorNOOP,
+    error: errorNOOP
   }
 };
 

@@ -19,12 +19,12 @@
 
 const Service = require('./Service');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-// const jwt = require('jsonwebtoken');
-// const configs = require('../configs.js')();
 const Vrrp = require('../models/vrrp');
 const { devices } = require('../models/devices');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const ObjectId = require('mongoose').Types.ObjectId;
+const { isEqual } = require('lodash');
+const { queue } = require('../deviceLogic/vrrp');
 
 class VrrpService {
   static selectVrrpGroupParams (vrrpGroup) {
@@ -92,9 +92,19 @@ class VrrpService {
         throw new Error(err);
       }
 
-      const newVrrpGroup = await Vrrp.create({ ...vrrpGroup, org: orgList[0].toString() });
+      const newVrrpGroup = await Vrrp.create(
+        { ...vrrpGroup, org: orgList[0].toString() }
+      );
 
-      // TODO: install on devices.
+      // populate for the dispatcher only. For rest API we need to return it as is.
+      let updated = await newVrrpGroup.populate('devices.device').execPopulate();
+      updated = newVrrpGroup.toObject();
+      await queue(
+        null,
+        updated,
+        orgList[0].toString(),
+        user
+      );
 
       return Service.successResponse(newVrrpGroup);
     } catch (e) {
@@ -112,8 +122,10 @@ class VrrpService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const isExists = await Vrrp.findOne({ _id: id, org: { $in: orgList } }).lean();
-      if (!isExists) {
+      const origVrrp = await Vrrp.findOne(
+        { _id: id, org: { $in: orgList } }
+      ).populate('devices.device').lean();
+      if (!origVrrp) {
         logger.error('Failed to get VRRP Group', {
           params: { id, org, orgList }
         });
@@ -129,9 +141,19 @@ class VrrpService {
         { _id: id }, // no need to check for org as it was checked before
         vrrpGroup,
         { upsert: false, new: true, runValidators: true }
-      ).lean();
+      ).populate('devices.device').lean();
 
-      // TODO: update all devices.
+      if (isEqual(origVrrp, updatedVrrpGroup)) {
+        const returnValue = VrrpService.selectVrrpGroupParams(updatedVrrpGroup);
+        return Service.successResponse(returnValue, 200);
+      }
+
+      await queue(
+        origVrrp,
+        updatedVrrpGroup,
+        orgList[0].toString(),
+        user
+      );
 
       const returnValue = VrrpService.selectVrrpGroupParams(updatedVrrpGroup);
       return Service.successResponse(returnValue, 200);
@@ -150,15 +172,21 @@ class VrrpService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const resp = await Vrrp.deleteOne({ _id: id, org: { $in: orgList } });
-      if (resp?.deletedCount === 0) {
-        logger.error('Failed to remove VRRP Group', {
-          params: { id, org, orgList, resp: resp }
-        });
+      const origVrrp = await Vrrp.findOne(
+        { _id: id, org: { $in: orgList } }
+      ).populate('devices.device').lean();
+      if (!origVrrp) {
         return Service.rejectResponse('VRRP Group is not found', 404);
       }
 
-      // TODO: remove from devices.
+      await Vrrp.deleteOne({ _id: id, org: { $in: orgList } });
+
+      await queue(
+        origVrrp,
+        null,
+        orgList[0].toString(),
+        user
+      );
 
       return Service.successResponse(null, 204);
     } catch (e) {
@@ -271,6 +299,7 @@ class VrrpService {
   }
 
   static validateVrrp (vrrp) {
+    // 1. SAME INTERFACE CANNOT BE TWICE
     return { valid: true, err: '' };
   }
 }

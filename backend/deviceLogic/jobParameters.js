@@ -300,6 +300,33 @@ const transformLte = lteInterface => {
   };
 };
 
+const transformVrrp = (device, vrrpGroup) => {
+  const params = {
+    virtualRouterId: vrrpGroup.virtualRouterId,
+    virtualIp: vrrpGroup.virtualIp,
+    preemption: vrrpGroup.preemption,
+    acceptMode: vrrpGroup.acceptMode
+  };
+
+  params.priority = device.priority;
+  params.trackInterfaces = [];
+  params.devId = null; // will be populated later
+
+  const trackIfcsSet = new Set(device.trackInterfaces.map(i => i.toString()));
+  for (const deviceIfc of device.device.interfaces) {
+    if (device.interface.toString() === deviceIfc._id.toString()) {
+      params.devId = deviceIfc.devId;
+      continue;
+    }
+
+    if (trackIfcsSet.has(deviceIfc._id.toString())) {
+      params.trackInterfaces.push(deviceIfc.devId);
+    }
+  }
+
+  return params;
+};
+
 module.exports = {
   transformInterfaces,
   transformRoutingFilters,
@@ -307,5 +334,6 @@ module.exports = {
   transformBGP,
   transformDHCP,
   transformVxlanConfig,
-  transformLte
+  transformLte,
+  transformVrrp
 };
