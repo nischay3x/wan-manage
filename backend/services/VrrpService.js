@@ -23,7 +23,7 @@ const Vrrp = require('../models/vrrp');
 const { devices } = require('../models/devices');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const ObjectId = require('mongoose').Types.ObjectId;
-const { isEqual } = require('lodash');
+const { isEqual, keyBy } = require('lodash');
 const { queue } = require('../deviceLogic/vrrp');
 
 class VrrpService {
@@ -33,11 +33,11 @@ class VrrpService {
     vrrpGroup.virtualRouterId = vrrpGroup.virtualRouterId.toString();
     vrrpGroup.devices = vrrpGroup.devices.map(d => {
       return {
-        ...d,
         _id: d._id.toString(),
         device: d.device.toString(),
         interface: d.interface.toString(),
-        trackInterfaces: d.trackInterfaces.map(t => t.toString())
+        trackInterfaces: d.trackInterfaces.map(t => t.toString()),
+        priority: d.priority
       };
     });
 
@@ -62,7 +62,7 @@ class VrrpService {
           virtualRouterId: vrrp.virtualRouterId,
           virtualIp: vrrp.virtualIp,
           devices: vrrp.devices.map(d => {
-            return { name: d.device.name, _id: d.device._id.toString() };
+            return { name: d.device.name, _id: d.device._id.toString(), status: d.status };
           }),
           _id: vrrp._id.toString()
         };
@@ -87,26 +87,29 @@ class VrrpService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
-      const { valid, err } = VrrpService.validateVrrp(vrrpGroup);
+      const { valid, err } = await VrrpService.validateVrrp(vrrpGroup, orgList[0].toString());
       if (!valid) {
         throw new Error(err);
       }
 
-      const newVrrpGroup = await Vrrp.create(
-        { ...vrrpGroup, org: orgList[0].toString() }
-      );
+      const newVrrpGroup = await Vrrp.create({ ...vrrpGroup, org: orgList[0].toString() });
 
       // populate for the dispatcher only. For rest API we need to return it as is.
-      let updated = await newVrrpGroup.populate('devices.device').execPopulate();
+      let updated = await newVrrpGroup.populate(
+        'devices.device', 'machineId name _id interfaces'
+      ).execPopulate();
       updated = newVrrpGroup.toObject();
-      await queue(
+      const { ids, reasons } = await queue(
         null,
         updated,
         orgList[0].toString(),
         user
       );
 
-      return Service.successResponse(newVrrpGroup);
+      return Service.successResponse({
+        vrrpGroup: newVrrpGroup,
+        metadata: { jobs: ids.length, reasons }
+      });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -124,7 +127,7 @@ class VrrpService {
 
       const origVrrp = await Vrrp.findOne(
         { _id: id, org: { $in: orgList } }
-      ).populate('devices.device').lean();
+      ).populate('devices.device', 'machineId name _id interfaces').lean();
       if (!origVrrp) {
         logger.error('Failed to get VRRP Group', {
           params: { id, org, orgList }
@@ -132,23 +135,31 @@ class VrrpService {
         return Service.rejectResponse('VRRP Group is not found', 404);
       }
 
-      const { valid, err } = VrrpService.validateVrrp(vrrpGroup);
+      const { valid, err } = await VrrpService.validateVrrp(vrrpGroup);
       if (!valid) {
         throw new Error(err);
+      }
+
+      // keep the status fields in the devices if exists, don't override it with user info
+      const origDevices = keyBy(origVrrp.devices, '_id');
+      for (const vrrpDevice of vrrpGroup.devices) {
+        if (vrrpDevice._id in origDevices) {
+          vrrpDevice.status = origDevices[vrrpDevice._id].status;
+        }
       }
 
       const updatedVrrpGroup = await Vrrp.findOneAndUpdate(
         { _id: id }, // no need to check for org as it was checked before
         vrrpGroup,
         { upsert: false, new: true, runValidators: true }
-      ).populate('devices.device').lean();
+      ).populate('devices.device', 'machineId name _id interfaces').lean();
 
       if (isEqual(origVrrp, updatedVrrpGroup)) {
         const returnValue = VrrpService.selectVrrpGroupParams(updatedVrrpGroup);
         return Service.successResponse(returnValue, 200);
       }
 
-      await queue(
+      const { ids, reasons } = await queue(
         origVrrp,
         updatedVrrpGroup,
         orgList[0].toString(),
@@ -156,7 +167,10 @@ class VrrpService {
       );
 
       const returnValue = VrrpService.selectVrrpGroupParams(updatedVrrpGroup);
-      return Service.successResponse(returnValue, 200);
+      return Service.successResponse({
+        vrrpGroup: returnValue,
+        metadata: { jobs: ids.length, reasons }
+      });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -174,7 +188,7 @@ class VrrpService {
 
       const origVrrp = await Vrrp.findOne(
         { _id: id, org: { $in: orgList } }
-      ).populate('devices.device').lean();
+      ).populate('devices.device', 'machineId name _id interfaces').lean();
       if (!origVrrp) {
         return Service.rejectResponse('VRRP Group is not found', 404);
       }
@@ -298,8 +312,30 @@ class VrrpService {
     }
   }
 
-  static validateVrrp (vrrp) {
-    // 1. SAME INTERFACE CANNOT BE TWICE
+  static async validateVrrp (vrrp, org) {
+    // get other vrrp groups in the org.
+    const vrrpGroups = await Vrrp.find({ _id: { $ne: vrrp._id }, org }).lean();
+
+    const usedInterfaces = new Set();
+    for (const vrrpGroup of vrrpGroups) {
+      const groupId = vrrpGroup.virtualRouterId;
+      for (const vrrpGroupDevice of vrrpGroup.devices) {
+        const key = `${vrrpGroupDevice.interface.toString()}-${groupId}`;
+        usedInterfaces.add(key);
+      }
+    }
+
+    const groupId = vrrp.virtualRouterId;
+    for (const vrrpGroupDevice of vrrp.devices) {
+      const key = `${vrrpGroupDevice.interface}-${groupId}`;
+      if (usedInterfaces.has(key)) {
+        return {
+          valid: false,
+          err: 'Interface is already used in another VRRP group with the same Virtual Router ID'
+        };
+      }
+    }
+
     return { valid: true, err: '' };
   }
 }

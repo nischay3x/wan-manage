@@ -8562,7 +8562,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VrrpGroupListItem'
+                type: object
+                properties:
+                  vrrpGroup:
+                    $ref: '#/components/schemas/VrrpGroupListItem'
+                  metadata:
+                    $ref: '#/components/schemas/VrrpGroupPutPostResponse'
           description: VRRP has been added
         "400":
           content:
@@ -8696,7 +8701,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VrrpGroup'
+                type: object
+                properties:
+                  vrrpGroup:
+                    $ref: '#/components/schemas/VrrpGroup'
+                  metadata:
+                    $ref: '#/components/schemas/VrrpGroupPutPostResponse'
           description: VRRP has been added
         "400":
           content:
@@ -12283,6 +12293,15 @@ components:
         - _id: interfaceId
           name: eth1
           IPv4: 172.16.1.1/24
+    VrrpGroupPutPostResponse:
+      type: object
+      properties:
+        jobs:
+          type: number
+        reasons:
+          type: array
+          items:
+            type: string
     VrrpGroup:
       type: object
       properties:

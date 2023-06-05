@@ -44,8 +44,31 @@ const vrrpDeviceSchema = new Schema({
     type: [mongoose.Schema.Types.ObjectId],
     required: false,
     default: []
+  },
+  status: {
+    type: String,
+    enum: ['installed', 'pending', 'failed', 'removed']
   }
 }, {
+  timestamps: false
+});
+
+const statusSchema = new Schema({
+  installed: {
+    type: Number,
+    default: 0
+  },
+  pending: {
+    type: Number,
+    default: 0
+  },
+  failed: {
+    type: Number,
+    default: 0
+  }
+},
+{
+  _id: false,
   timestamps: false
 });
 
@@ -87,7 +110,11 @@ const vrrpSchema = new Schema({
     default: false,
     required: true
   },
-  devices: [vrrpDeviceSchema]
+  devices: [vrrpDeviceSchema],
+  status: {
+    type: statusSchema,
+    default: statusSchema
+  }
 }, {
   timestamps: true
 });

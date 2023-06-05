@@ -24,6 +24,7 @@ const deviceQueues = require('../utils/deviceQueue')(
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const { differenceWith, isEqual } = require('lodash');
 const { transformVrrp } = require('./jobParameters');
+const Vrrp = require('../models/vrrp');
 
 /**
  * Creates and queues the add/remove job.
@@ -44,7 +45,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
 
     if (!(deviceId in devicesTasks)) {
       devicesTasks[deviceId] = {
-        orig: [], updated: [], tasks: [], deviceObj: vrrpGroupDevice.device
+        orig: [], updated: [], tasks: [], deviceObj: vrrpGroupDevice.device, op: null
       };
     }
 
@@ -56,7 +57,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
 
     if (!(deviceId in devicesTasks)) {
       devicesTasks[deviceId] = {
-        orig: [], updated: [], tasks: [], deviceObj: vrrpGroupDevice.device
+        orig: [], updated: [], tasks: [], deviceObj: vrrpGroupDevice.device, op: null
       };
     }
 
@@ -85,6 +86,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
         message: 'remove-vrrp',
         params: r
       })));
+      devicesTasks[deviceId].op = 'remove';
     }
 
     if (addDevice.length > 0) {
@@ -93,6 +95,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
         message: 'add-vrrp',
         params: r
       })));
+      devicesTasks[deviceId].op = 'create';
     }
   }
 
@@ -108,6 +111,22 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
     // be updated again when the device sends periodic message
     await deviceStatus.setDeviceState(machineId, 'pending');
 
+    const vrrpGroup = newVrrpGroup || origVrrpGroup;
+    await Vrrp.updateOne(
+      { org: orgId, _id: vrrpGroup._id },
+      { $set: { 'devices.$[elem].status': 'pending' } },
+      { arrayFilters: [{ 'elem.device': _id }] }
+    );
+
+    let tasks = devicesTasks[deviceId].tasks;
+    if (tasks.length > 0) {
+      tasks = [{
+        entity: 'agent',
+        message: 'aggregated',
+        params: { requests: tasks }
+      }];
+    }
+
     applyPromises.push(deviceQueues.addJob(
       machineId,
       username,
@@ -115,14 +134,16 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
       // Data
       {
         title: 'Modify VRRP for device ' + name,
-        tasks: devicesTasks[deviceId].tasks
+        tasks: tasks
       },
       // Response data
       {
         method: 'vrrp',
         data: {
           device: _id,
-          org: orgId
+          vrrpGroup: newVrrpGroup,
+          op: devicesTasks[deviceId].op, // "remove" or "create"
+          orgId
         }
       },
       // Metadata
@@ -160,33 +181,138 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
   return { ids: fulfilled, reasons };
 };
 
-// /**
-//  * Called when reset device job completed
-//  * @param  {number} jobId Kue job ID number
-//  * @param  {Object} res   device object ID and organization
-//  * @return {void}
-//  */
-// const complete = (jobId, res) => {
-//   logger.info('Reset device job complete', {
-//     params: { result: res, jobId: jobId }
-//   });
-// };
+/**
+ * Called when VRRP job completed
+ * @param  {number} jobId Kue job ID number
+ * @param  {Object} res   device object ID and organization
+ * @return {void}
+ */
+const complete = async (jobId, res) => {
+  const { device: deviceId, orgId, vrrpGroup, op } = res;
 
-// /**
-//  * Called when reset device job failed
-//  * @param  {number} jobId Kue job ID number
-//  * @param  {Object} res   device object ID and organization
-//  * @return {void}
-//  */
-// const error = (jobId, res) => {
-//   logger.error('Reset device job failed', {
-//     params: { result: res, jobId: jobId }
-//   });
-// };
+  logger.info('VRRP job complete', {
+    params: { deviceId, orgId, vrrpGroupId: vrrpGroup._id, op, jobId: jobId }
+  });
+
+  if (op === 'create') { // for "remove" device is not exists so nothing to update
+    await Vrrp.updateOne(
+      { org: orgId, _id: vrrpGroup._id },
+      { $set: { 'devices.$[elem].status': 'installed' } },
+      { arrayFilters: [{ 'elem.device': deviceId }] }
+    );
+  }
+};
+
+/**
+ * Called when VRRP job failed
+ * @param  {number} jobId Kue job ID number
+ * @param  {Object} res   device object ID and organization
+ * @return {void}
+ */
+const error = async (jobId, res) => {
+  logger.error('VRRP job failed', {
+    params: { result: res, jobId: jobId }
+  });
+
+  const { device: deviceId, orgId, vrrpGroup, op } = res;
+
+  if (op === 'create') { // for "remove" device is not exists so nothing to update
+    await Vrrp.updateOne(
+      { org: orgId, _id: vrrpGroup._id },
+      { $set: { 'devices.$[elem].status': 'failed' } },
+      { arrayFilters: [{ 'elem.device': deviceId }] }
+    );
+  }
+};
+
+/**
+ * Creates the vrrp section in the full sync job.
+ * @return Object
+ */
+const sync = async (deviceId, org) => {
+  const vrrpGroups = await Vrrp.find(
+    { org: org, 'devices.device': deviceId }
+  ).populate('devices.device').lean();
+
+  const request = [];
+  const completeCbData = [];
+  let callComplete = false;
+  for (const vrrpGroup of vrrpGroups) {
+    for (const vrrpGroupDevice of vrrpGroup.devices) {
+      // Send vrrp job for the device that is should be synced only.
+      // Hence, filter out other devices in the vrrp group.
+      if (vrrpGroupDevice.device._id.toString() !== deviceId.toString()) {
+        continue;
+      }
+
+      const params = transformVrrp(vrrpGroupDevice, vrrpGroup);
+      request.push({
+        entity: 'agent',
+        message: 'add-vrrp',
+        params
+      });
+
+      completeCbData.push({
+        device: vrrpGroupDevice.device._id.toString(),
+        orgId: org,
+        op: 'create',
+        vrrpGroup
+      });
+
+      callComplete = true;
+    }
+  }
+
+  return {
+    requests: request,
+    completeCbData,
+    callComplete
+  };
+};
+
+/**
+ * Complete handler for sync job
+ * @return void
+ */
+const completeSync = async (jobId, jobsData) => {
+  try {
+    for (const data of jobsData) {
+      await complete(jobId, data);
+    }
+  } catch (err) {
+    logger.error('VRRP sync complete callback failed', {
+      params: { jobsData, reason: err.message }
+    });
+  }
+};
+
+/**
+ * Called if VRRP job was removed
+ * @async
+ * @param  {number} jobId Kue job ID
+ * @param  {Object} res
+ * @return {void}
+ */
+const remove = async (job) => {
+  if (['inactive', 'delayed', 'active'].includes(job._state)) {
+    logger.info('VRRP job removed', { params: { jobId: job.id } });
+
+    const { device: deviceId, orgId, vrrpGroup, op } = job.data.response.data;
+    if (op === 'create') { // for "remove" device is not exists so nothing to update
+      await Vrrp.updateOne(
+        { org: orgId, _id: vrrpGroup._id },
+        { $set: { 'devices.$[elem].status': 'removed' } },
+        { arrayFilters: [{ 'elem.device': deviceId }] }
+      );
+    }
+  }
+};
 
 module.exports = {
-  queue: queue
-  // apply: apply
-  // complete: complete,
-  // error: error
+  queue,
+  sync,
+  complete,
+  error,
+  remove,
+  completeSync
 };
