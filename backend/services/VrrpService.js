@@ -25,6 +25,7 @@ const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const ObjectId = require('mongoose').Types.ObjectId;
 const { isEqual, keyBy } = require('lodash');
 const { queue } = require('../deviceLogic/vrrp');
+const cidr = require('cidr-tools');
 
 class VrrpService {
   static selectVrrpGroupParams (vrrpGroup) {
@@ -36,7 +37,7 @@ class VrrpService {
         _id: d._id.toString(),
         device: d.device.toString(),
         interface: d.interface.toString(),
-        trackInterfaces: d.trackInterfaces.map(t => t.toString()),
+        trackInterfaces: d.trackInterfaces,
         priority: d.priority
       };
     });
@@ -49,10 +50,14 @@ class VrrpService {
    *
    * returns List
    **/
-  static async vrrpGET ({ org }, { user }) {
+  static async vrrpGET ({ org, deviceId }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
-      const result = await Vrrp.find({ org: { $in: orgList } })
+      const query = { org: { $in: orgList } };
+      if (deviceId) {
+        query['devices.device'] = deviceId;
+      }
+      const result = await Vrrp.find(query)
         .populate('devices.device', '_id name')
         .lean();
 
@@ -62,7 +67,12 @@ class VrrpService {
           virtualRouterId: vrrp.virtualRouterId,
           virtualIp: vrrp.virtualIp,
           devices: vrrp.devices.map(d => {
-            return { name: d.device.name, _id: d.device._id.toString(), status: d.status };
+            return {
+              name: d.device.name,
+              _id: d.device._id.toString(),
+              status: d.status,
+              interface: d.interface
+            };
           }),
           _id: vrrp._id.toString()
         };
@@ -130,12 +140,12 @@ class VrrpService {
       ).populate('devices.device', 'machineId name _id interfaces').lean();
       if (!origVrrp) {
         logger.error('Failed to get VRRP Group', {
-          params: { id, org, orgList }
+          params: { id, orgList }
         });
         return Service.rejectResponse('VRRP Group is not found', 404);
       }
 
-      const { valid, err } = await VrrpService.validateVrrp(vrrpGroup);
+      const { valid, err } = await VrrpService.validateVrrp(vrrpGroup, orgList[0].toString());
       if (!valid) {
         throw new Error(err);
       }
@@ -257,7 +267,6 @@ class VrrpService {
                     as: 'ifc',
                     cond: {
                       $and: [
-                        // { $eq: ['$$ifc.type', 'LAN'] },
                         { $eq: ['$$ifc.isAssigned', true] },
                         { $ne: ['$$ifc.IPv4', ''] },
                         { $ne: ['$$ifc.IPv4Mask', ''] }
@@ -267,7 +276,7 @@ class VrrpService {
                 },
                 as: 'ifc',
                 in: {
-                  _id: '$$ifc._id',
+                  devId: '$$ifc.devId',
                   name: '$$ifc.name',
                   IPv4: { $concat: ['$$ifc.IPv4', '/', '$$ifc.IPv4Mask'] }
                 }
@@ -295,13 +304,7 @@ class VrrpService {
       return res.map(r => {
         return {
           ...r,
-          _id: r._id.toString(),
-          interfaces: r.interfaces.map(i => {
-            return {
-              ...i,
-              _id: i._id.toString()
-            };
-          })
+          _id: r._id.toString()
         };
       });
     } catch (e) {
@@ -313,6 +316,56 @@ class VrrpService {
   }
 
   static async validateVrrp (vrrp, org) {
+    const devicesIds = vrrp.devices.map(d => d.device);
+    const devicesList = await devices.find({
+      org: org, _id: { $in: devicesIds }
+    }, '_id interfaces name').lean();
+    if (devicesList.length !== vrrp.devices.length) {
+      return {
+        valid: false,
+        err: 'Some or all VRRP devices are not exists'
+      };
+    }
+
+    const devicesById = keyBy(devicesList, '_id');
+    for (const vrrpDevice of vrrp.devices) {
+      if (!(vrrpDevice?.device in devicesById)) {
+        return {
+          valid: false,
+          err: `Device ID ${vrrpDevice.device} is not exists`
+        };
+      }
+
+      const deviceName = devicesById[vrrpDevice.device].name;
+      // check that interface IDs are exists.
+      const interfacesByDevId = keyBy(devicesById[vrrpDevice.device].interfaces, 'devId');
+      if (!(vrrpDevice.interface in interfacesByDevId)) {
+        return {
+          valid: false,
+          err: `Interface devId ${vrrpDevice.interface} is not exists in device ${deviceName}`
+        };
+      }
+
+      const ifc = interfacesByDevId[vrrpDevice.interface];
+      const ip = `${ifc.IPv4}/${ifc.IPv4Mask}`;
+      if (!cidr.overlap(ip, `${vrrp.virtualIp}/32`)) {
+        return {
+          valid: false,
+          err: `The interface ${ifc.name}'s IP ${ip} is not ` +
+          `overlapping with the VRRP's virtual IP ${vrrp.virtualIp}`
+        };
+      }
+
+      for (const trackIfcs of vrrpDevice.trackInterfaces) {
+        if (!(trackIfcs in interfacesByDevId)) {
+          return {
+            valid: false,
+            err: `Track interface devId ${trackIfcs} is not exists in device ${deviceName}`
+          };
+        }
+      }
+    }
+
     // get other vrrp groups in the org.
     const vrrpGroups = await Vrrp.find({ _id: { $ne: vrrp._id }, org }).lean();
 

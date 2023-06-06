@@ -65,6 +65,7 @@ const {
 } = require('../deviceLogic/events');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const applications = require('../models/applications');
+const Vrrp = require('../models/vrrp');
 const applicationStore = require('../models/applicationStore');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
@@ -1821,6 +1822,8 @@ class DevicesService {
             }
             return updIntf;
           });
+
+          await DevicesService.validateVrrp(orgId, origDevice._id, interfacesByDevId);
         };
 
         // add device id to device request
@@ -2144,6 +2147,84 @@ class DevicesService {
       );
     } finally {
       if (sessionCopy) sessionCopy.endSession();
+    }
+  }
+
+  static async validateVrrp (orgId, deviceId, interfacesByDevId) {
+    const deviceVrrps = await Vrrp.aggregate([
+      [
+        { $match: { org: orgId, 'devices.device': deviceId } },
+        { $unwind: { path: '$devices' } },
+        { $match: { 'devices.device': deviceId } },
+        {
+          $project: {
+            virtualIp: 1,
+            interface: '$devices.interface',
+            trackInterfaces: '$devices.trackInterfaces'
+          }
+        }
+      ]
+    ]).allowDiskUse(true);
+
+    for (const deviceVrrp of deviceVrrps) {
+      const ifc = interfacesByDevId[deviceVrrp.interface];
+      if (!ifc) {
+        throw createError(
+          400,
+          'There is VRRP configured on this device. ' +
+          'Please remove it first before changing interfaces'
+        );
+      }
+
+      if (ifc.type !== 'LAN') {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. Interface must be LAN`
+        );
+      }
+
+      if (!ifc.IPv4 || !ifc.IPv4Mask) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. IP must be configured on the interface`
+        );
+      }
+
+      if (!ifc.isAssigned) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. Interface must be assigned`
+        );
+      }
+
+      const ip = `${ifc.IPv4}/${ifc.IPv4Mask}`;
+      if (!cidr.overlap(ip, `${deviceVrrp.virtualIp}/32`)) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. ` +
+          `The IP ${ip} must ` +
+          `overlap with the VRRP virtual IP ${deviceVrrp.virtualIp}`
+        );
+      }
+
+      for (const trackIfc of deviceVrrp.trackInterfaces) {
+        const ifc = interfacesByDevId[trackIfc];
+        if (!ifc) {
+          throw createError(
+            400,
+            'There is VRRP track interface configured on this device. ' +
+            'Please remove it first before changing interfaces'
+          );
+        }
+
+        if (!ifc.isAssigned) {
+          throw createError(
+            400,
+            `The interface ${ifc.name} has configured as tracked interface in VRRP group. ` +
+            'Interface must be assigned'
+          );
+        }
+      }
     }
   }
 

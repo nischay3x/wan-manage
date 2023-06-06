@@ -8494,6 +8494,13 @@ paths:
         required: false
         schema:
           type: string
+      - description: Device ID to be filtered by
+        explode: true
+        in: query
+        name: deviceId
+        required: false
+        schema:
+          type: string
       responses:
         "200":
           content:
@@ -8676,7 +8683,7 @@ paths:
     put:
       operationId: vrrpIdPUT
       parameters:
-      - description: VRRP Group ID to remove
+      - description: VRRP Group ID to update
         explode: true
         in: path
         name: id

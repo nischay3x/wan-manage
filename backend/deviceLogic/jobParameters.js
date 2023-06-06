@@ -309,20 +309,8 @@ const transformVrrp = (device, vrrpGroup) => {
   };
 
   params.priority = device.priority;
-  params.trackInterfaces = [];
-  params.devId = null; // will be populated later
-
-  const trackIfcsSet = new Set(device.trackInterfaces.map(i => i.toString()));
-  for (const deviceIfc of device.device.interfaces) {
-    if (device.interface.toString() === deviceIfc._id.toString()) {
-      params.devId = deviceIfc.devId;
-      continue;
-    }
-
-    if (trackIfcsSet.has(deviceIfc._id.toString())) {
-      params.trackInterfaces.push(deviceIfc.devId);
-    }
-  }
+  params.trackInterfaces = device.trackInterfaces;
+  params.devId = device.interface;
 
   return params;
 };

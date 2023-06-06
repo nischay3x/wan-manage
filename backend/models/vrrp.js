@@ -18,7 +18,7 @@
 const mongoose = require('mongoose');
 const mongoConns = require('../mongoConns.js')();
 const Schema = mongoose.Schema;
-const { validateIPv4 } = require('./validators.js');
+const { validateIPv4, validateDevId } = require('./validators.js');
 
 // Define a getter on object ID that
 // converts it to a string
@@ -31,7 +31,11 @@ const vrrpDeviceSchema = new Schema({
     required: true
   },
   interface: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String,
+    validate: {
+      validator: validateDevId,
+      message: 'interface should be a valid interface devId'
+    },
     required: true
   },
   priority: {
@@ -41,8 +45,12 @@ const vrrpDeviceSchema = new Schema({
     max: [255, 'priority should be a number between 1-255']
   },
   trackInterfaces: {
-    type: [mongoose.Schema.Types.ObjectId],
+    type: [String],
     required: false,
+    validate: {
+      validator: val => val.every(validateDevId),
+      message: 'Track interfaces should contains only a valid interface devIds'
+    },
     default: []
   },
   status: {
@@ -50,25 +58,6 @@ const vrrpDeviceSchema = new Schema({
     enum: ['installed', 'pending', 'failed', 'removed']
   }
 }, {
-  timestamps: false
-});
-
-const statusSchema = new Schema({
-  installed: {
-    type: Number,
-    default: 0
-  },
-  pending: {
-    type: Number,
-    default: 0
-  },
-  failed: {
-    type: Number,
-    default: 0
-  }
-},
-{
-  _id: false,
   timestamps: false
 });
 
@@ -110,13 +99,12 @@ const vrrpSchema = new Schema({
     default: false,
     required: true
   },
-  devices: [vrrpDeviceSchema],
-  status: {
-    type: statusSchema,
-    default: statusSchema
-  }
+  devices: [vrrpDeviceSchema]
 }, {
   timestamps: true
 });
+
+// used for search many times so better to index it.
+vrrpSchema.index({ org: 1, 'devices.device': 1 }, { unique: false });
 
 module.exports = mongoConns.getMainDB().model('vrrp', vrrpSchema);
