@@ -1972,14 +1972,14 @@ const prepareTunnelParams = (
     };
     if (majorVersionA >= 6) {
       paramsDeviceA.remoteBandwidthMbps = {
-        tx: +deviceBIntf.bandwidthMbps.tx,
-        rx: +deviceBIntf.bandwidthMbps.rx
+        tx: +(deviceBIntf.bandwidthMbps?.tx ?? 100),
+        rx: +(deviceBIntf.bandwidthMbps?.rx ?? 100)
       };
     };
     if (majorVersionB >= 6) {
       paramsDeviceB.remoteBandwidthMbps = {
-        tx: +deviceAIntf.bandwidthMbps.tx,
-        rx: +deviceAIntf.bandwidthMbps.rx
+        tx: +(deviceAIntf.bandwidthMbps?.tx ?? 100),
+        rx: +(deviceAIntf.bandwidthMbps?.rx ?? 100)
       };
     };
     if (mssClamp !== 'no') {
