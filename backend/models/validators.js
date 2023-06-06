@@ -81,6 +81,10 @@ const validateParentDevId = (devId) => {
     validateUsbAddress(devId)
   );
 };
+
+// specific validator for interfaces used in firewall rules
+const validateFirewallDevId = (devId) => validateDevId(devId) || devId.startsWith('app_');
+
 const validatePciAddress = pci => {
   return (
     pci === '' ||
@@ -202,6 +206,7 @@ module.exports = {
   validatePciAddress,
   validateDevId,
   validateParentDevId,
+  validateFirewallDevId,
   validateVlanTag,
   validateIfcName,
   validateIPv4Mask,

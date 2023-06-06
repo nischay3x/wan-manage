@@ -17,7 +17,7 @@
 
 const { Schema, Types } = require('mongoose');
 const {
-  validateDevId,
+  validateFirewallDevId,
   validateIPv4WithMask,
   validateIPv4,
   validatePort,
@@ -76,7 +76,7 @@ const destinationClassificationSchema = new Schema({
     interface: {
       type: String,
       validate: {
-        validator: validateDevId,
+        validator: validateFirewallDevId,
         message: 'interface should be a valid interface devId'
       }
     }
@@ -166,7 +166,7 @@ const firewallRuleSchema = new Schema({
   interfaces: [{
     type: String,
     validate: {
-      validator: validateDevId,
+      validator: validateFirewallDevId,
       message: 'interface should be a valid interface devId'
     }
   }],
