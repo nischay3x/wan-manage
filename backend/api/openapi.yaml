@@ -10986,6 +10986,7 @@ components:
         host: "host1"
         mac: "08:00:27:fd:00:00"
         ipv4: "20.20.20.20"
+        hostName: PC1
       properties:
         host:
           description: Device hostname
@@ -11000,6 +11001,9 @@ components:
           description: IPv4 Address
           maxLength: 20
           type: string
+        hostName:
+          type: string
+          maxLength: 255
       required:
       - host
       - mac
@@ -11010,6 +11014,7 @@ components:
         rangeStart: "20.20.20.2"
         rangeEnd: "20.20.20.255"
         dns: ["8.8.8.8", "8.8.8.4"]
+        options: [{ "option": "routers", "code": "3", "value": "20.20.20.100"}]
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
       properties:
         interface:
@@ -11030,6 +11035,10 @@ components:
             type: string
             maxLength: 20
           type: array
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DhcpOptionItem'
         macAssign:
           description: List of MAC Assignments
           items:
@@ -11040,6 +11049,17 @@ components:
       - rangeStart
       - rangeEnd
       type: object
+    DhcpOptionItem:
+      type: object
+      properties:
+        option:
+          type: string
+          enum: [routers, tftp-server-name, ntp-servers]
+        code:
+          type: string
+          enum: ['3', '66', '42']
+        value:
+          type: string
     Dhcp:
       example:
         _id: "5e5f662f1b0eba50742b6223"
@@ -11048,6 +11068,7 @@ components:
         rangeEnd: "20.20.20.255"
         dns: ["8.8.8.8", "8.8.8.4"]
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
+        options: [{ "option": "routers", "code": "3", "value": "20.20.20.100"}]
         status: "completed"
       properties:
         _id:
@@ -11072,6 +11093,10 @@ components:
             type: string
             maxLength: 20
           type: array
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DhcpOptionItem'
         macAssign:
           description: List of MAC Assignments
           items:

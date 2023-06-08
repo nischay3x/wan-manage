@@ -279,14 +279,20 @@ const transformBGP = async (device) => {
  */
 const transformDHCP = dhcp => {
   const { rangeStart, rangeEnd, dns, macAssign } = dhcp;
+  const options = dhcp.options ?? [];
   return {
     interface: dhcp.interface,
     range_start: rangeStart,
     range_end: rangeEnd,
     dns: dns,
+    options: options.map(opt => {
+      return pick(opt, [
+        'option', 'value'
+      ]);
+    }),
     mac_assign: macAssign.map(mac => {
       return pick(mac, [
-        'host', 'mac', 'ipv4'
+        'host', 'mac', 'ipv4', 'hostName'
       ]);
     })
   };

@@ -265,14 +265,15 @@ class DevicesService {
           'dns',
           'status',
           'isPending',
-          'pendingReason'
+          'pendingReason',
+          'options'
         ]);
 
         let macAssignList;
         if (d.macAssign) {
           macAssignList = d.macAssign.map(m => {
             return pick(m, [
-              'host', 'mac', 'ipv4'
+              'host', 'mac', 'ipv4', 'hostName'
             ]);
           });
         } else macAssignList = [];

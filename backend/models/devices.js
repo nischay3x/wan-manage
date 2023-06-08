@@ -430,6 +430,23 @@ const staticroutesSchema = new Schema({
   timestamps: true
 });
 
+const OptionSchema = new Schema({
+  option: {
+    type: String,
+    required: true,
+    enum: ['routers', 'tftp-server-name', 'ntp-servers']
+  },
+  code: {
+    type: String,
+    required: true,
+    enum: ['3', '66', '42']
+  },
+  value: {
+    type: String,
+    require: true
+  }
+});
+
 const MACAssignmentSchema = new Schema({
   host: {
     type: String,
@@ -458,6 +475,16 @@ const MACAssignmentSchema = new Schema({
     validate: {
       validator: validators.validateIPv4,
       message: 'IPv4 should be a valid ip address'
+    },
+    default: ''
+  },
+  hostName: {
+    type: String,
+    maxlength: [255, 'hostName length must be at most 255'],
+    required: false,
+    validate: {
+      validator: validators.validateStringNoSpaces,
+      message: 'hostName should be a string without spaces'
     },
     default: ''
   }
@@ -492,6 +519,7 @@ const DHCPSchema = new Schema({
   },
   dns: [String],
   macAssign: [MACAssignmentSchema],
+  options: [OptionSchema],
   status: {
     type: String,
     default: 'failed'
