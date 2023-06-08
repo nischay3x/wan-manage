@@ -191,7 +191,7 @@ const complete = async (jobId, res) => {
   const { device: deviceId, orgId, vrrpGroup, op } = res;
 
   logger.info('VRRP job complete', {
-    params: { deviceId, orgId, vrrpGroupId: vrrpGroup._id, op, jobId: jobId }
+    params: { deviceId, orgId, vrrpGroupId: vrrpGroup?._id, op, jobId: jobId }
   });
 
   if (op === 'create') { // for "remove" device is not exists so nothing to update
