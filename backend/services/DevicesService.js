@@ -44,6 +44,7 @@ const {
   validateStaticRoute,
   validateQOSPolicy
 } = require('../deviceLogic/validators');
+const { validateFQDN } = require('../models/validators');
 const {
   mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
 } = require('../utils/deviceUtils');
@@ -71,6 +72,7 @@ const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
 const url = require('url');
+const Joi = require('joi');
 
 class DevicesService {
   /**
@@ -273,7 +275,7 @@ class DevicesService {
         if (d.macAssign) {
           macAssignList = d.macAssign.map(m => {
             return pick(m, [
-              'host', 'mac', 'ipv4', 'hostName'
+              'host', 'mac', 'ipv4', 'useHostNameAsDhcpOption'
             ]);
           });
         } else macAssignList = [];
@@ -3067,6 +3069,80 @@ class DevicesService {
     }
   }
 
+  static dhcpValidationSchema (dhcpRequest) {
+    const _ipListValidation = (option) => {
+      return Joi.string().required().custom((val, helpers) => {
+        const gateways = val.split(/\s*,\s*/);
+        const ipSchema = Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' });
+
+        const valid = gateways.every(d => {
+          const res = ipSchema.validate(d);
+          return res.error === undefined;
+        });
+
+        if (valid) {
+          return val;
+        } else {
+          return helpers.message(
+            `the value "${val}" is not a valid DHCP option for "${option}"`);
+        }
+      });
+    };
+
+    const _domainName = (option) => {
+      return Joi.string().required().custom((val, helpers) => {
+        const valid = validateFQDN(val, false);
+        if (!valid) {
+          return helpers.message(`Invalid value for DHCP option "${option}"`);
+        };
+      });
+    };
+
+    const _number = (min = Number.MIN_VALUE, max = Number.MAX_VALUE, option = '') => {
+      return Joi.number().integer().required().min(min).max(max).error(errors => {
+        errors.forEach(err => {
+          switch (err.code) {
+            case 'number.base':
+              err.message = `Value for DHCP Option "${option}" must be a number`;
+              break;
+            case 'number.min':
+              err.message = `Value for DHCP Option "${option}"  \
+              have to be greater than ${err.local.limit}`;
+              break;
+            case 'number.max':
+              err.message = `Value for DHCP Option "${option}"  \
+              have to be smaller than ${err.local.limit}`;
+              break;
+            default:
+              break;
+          }
+        });
+        return errors;
+      });
+    };
+
+    const option = Joi.object({
+      _id: Joi.string().optional(),
+      option: Joi.string().required().valid(
+        'routers', 'tftp-server-name', 'ntp-servers',
+        'interface-mtu', 'time-offset', 'domain-name'),
+      code: Joi.string().valid('3', '66', '42', '26', '2', '15').required(),
+      value: Joi.when('option', {
+        switch: [
+          { is: 'routers', then: _ipListValidation('routers') },
+          { is: 'domain-name', then: _domainName('domain-name') },
+          { is: 'tftp-server-name', then: _domainName('tftp-server-name') },
+          { is: 'ntp-servers', then: _ipListValidation('ntp-servers') },
+          { is: 'interface-mtu', then: _number(500, 9999, 'interface-mtu') },
+          { is: 'time-offset', then: _number(-2147483648, 2147483647, 'interface-mtu') } // int32
+        ]
+      })
+    });
+
+    const schema = Joi.array().items(option);
+    return schema.validate(dhcpRequest.options);
+  }
+
   /**
    * Validate that the dhcp request
    * @param {Object} device - the device object
@@ -3124,6 +3200,12 @@ class DevicesService {
     }
     if (uniqIPs.length !== macLen) {
       throw new Error('DHCP Server MAC bindings IPs are not unique');
+    }
+
+    // validate DHCP options values.
+    const result = this.dhcpValidationSchema(dhcpRequest);
+    if (result.error) {
+      throw new Error(`${result.error.details[0].message}`);
     }
   }
 

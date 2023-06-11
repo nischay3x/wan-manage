@@ -292,7 +292,7 @@ const transformDHCP = dhcp => {
     }),
     mac_assign: macAssign.map(mac => {
       return pick(mac, [
-        'host', 'mac', 'ipv4', 'hostName'
+        'host', 'mac', 'ipv4', 'useHostNameAsDhcpOption'
       ]);
     })
   };

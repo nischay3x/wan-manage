@@ -10986,7 +10986,7 @@ components:
         host: "host1"
         mac: "08:00:27:fd:00:00"
         ipv4: "20.20.20.20"
-        hostName: PC1
+        useHostNameAsDhcpOption: true
       properties:
         host:
           description: Device hostname
@@ -11001,9 +11001,8 @@ components:
           description: IPv4 Address
           maxLength: 20
           type: string
-        hostName:
-          type: string
-          maxLength: 255
+        useHostNameAsDhcpOption:
+          type: boolean
       required:
       - host
       - mac
@@ -11054,10 +11053,10 @@ components:
       properties:
         option:
           type: string
-          enum: [routers, tftp-server-name, ntp-servers]
+          enum: [routers, tftp-server-name, ntp-servers, interface-mtu, time-offset, domain-name]
         code:
           type: string
-          enum: ['3', '66', '42']
+          enum: ['3', '66', '42', '26', '2', '15']
         value:
           type: string
     Dhcp:

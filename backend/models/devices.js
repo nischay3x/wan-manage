@@ -434,12 +434,14 @@ const OptionSchema = new Schema({
   option: {
     type: String,
     required: true,
-    enum: ['routers', 'tftp-server-name', 'ntp-servers']
+    enum: [
+      'routers', 'tftp-server-name', 'ntp-servers', 'interface-mtu', 'time-offset', 'domain-name'
+    ]
   },
   code: {
     type: String,
     required: true,
-    enum: ['3', '66', '42']
+    enum: ['3', '66', '42', '26', '2', '15']
   },
   value: {
     type: String,
@@ -478,15 +480,10 @@ const MACAssignmentSchema = new Schema({
     },
     default: ''
   },
-  hostName: {
-    type: String,
-    maxlength: [255, 'hostName length must be at most 255'],
+  useHostNameAsDhcpOption: {
+    type: Boolean,
     required: false,
-    validate: {
-      validator: validators.validateStringNoSpaces,
-      message: 'hostName should be a string without spaces'
-    },
-    default: ''
+    default: false
   }
 });
 
