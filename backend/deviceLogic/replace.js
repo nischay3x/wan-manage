@@ -105,7 +105,7 @@ const apply = async (opDevices, user, data) => {
     // replace devices in DB
     await devicesModel.deleteOne(
       { _id: newId, org: org }
-    );
+    ).session(session);
     await devicesModel.updateOne(
       { _id: oldId, org: org },
       {
@@ -117,7 +117,7 @@ const apply = async (opDevices, user, data) => {
         }
       },
       { upsert: false }
-    );
+    ).session(session);
   });
 
   const status = 'completed';
