@@ -286,9 +286,16 @@ const transformDHCP = dhcp => {
     range_end: rangeEnd,
     dns: dns,
     options: options.map(opt => {
-      return pick(opt, [
+      const fields = pick(opt, [
         'option', 'value'
       ]);
+      // isc-dhcp requires this option to be a string.
+      // in case of first letter is number (value can be IP address)
+      // we adding and encoding the double quotes.
+      if (fields.option === 'tftp-server-name' && !Number.isNaN(fields.value[0])) {
+        fields.value = `\\"${fields.value}\\"`;
+      }
+      return fields;
     }),
     mac_assign: macAssign.map(mac => {
       return pick(mac, [

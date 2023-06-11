@@ -3131,7 +3131,7 @@ class DevicesService {
         switch: [
           { is: 'routers', then: _ipListValidation('routers') },
           { is: 'domain-name', then: _domainName('domain-name') },
-          { is: 'tftp-server-name', then: _domainName('tftp-server-name') },
+          { is: 'tftp-server-name', then: Joi.string().required() },
           { is: 'ntp-servers', then: _ipListValidation('ntp-servers') },
           { is: 'interface-mtu', then: _number(500, 9999, 'interface-mtu') },
           { is: 'time-offset', then: _number(-2147483648, 2147483647, 'interface-mtu') } // int32
