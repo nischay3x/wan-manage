@@ -125,10 +125,12 @@ class DevicesService {
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
 
-      const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
+      const {
+        ids, status, message, errorCodes = []
+      } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
       DevicesService.setLocationHeader(server, response, ids, orgList[0]);
-      return Service.successResponse({ ids, status, message }, 202);
+      return Service.successResponse({ ids, status, message, errorCodes }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -1433,8 +1435,11 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user, server }, response) {
+  static async devicesIdPUT (request, { user, server }, response) {
+    const { id, org, deviceRequest, allowOverlapping } = request;
+
     let sessionCopy;
+    let errorData = null;
 
     try {
       let orgList;
@@ -1486,7 +1491,7 @@ class DevicesService {
         const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
         let orgSubnets = [];
-        if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
+        if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
           orgSubnets = await getAllOrganizationSubnets(orgId);
         }
         const orgBgp = await getAllOrganizationBGPDevices(orgId);
@@ -2069,12 +2074,14 @@ class DevicesService {
         deviceToValidate.distro = origDevice.distro;
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
-        const { valid, err } = validateDevice(
+        const { valid, err, errCode = null } = validateDevice(
           deviceToValidate,
           origDevice.org,
           isRunning,
           orgSubnets,
-          orgBgp
+          orgBgp,
+          allowOverlapping,
+          origDevice
         );
 
         if (!valid) {
@@ -2082,6 +2089,9 @@ class DevicesService {
             {
               params: { device: deviceRequest, devStatus, err }
             });
+          if (errCode) {
+            errorData = { errorCodes: [errCode] };
+          }
           throw createError(400, err);
         }
 
@@ -2146,7 +2156,8 @@ class DevicesService {
       logger.error('update device failed', { params: { message: e.message, stack: e.stack } });
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
-        e.status || 500
+        e.status || 500,
+        errorData
       );
     } finally {
       if (sessionCopy) sessionCopy.endSession();

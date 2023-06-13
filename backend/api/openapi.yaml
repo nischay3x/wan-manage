@@ -1100,6 +1100,13 @@ paths:
         required: false
         schema:
           type: string
+      - description: Allow interfaces overlapping
+        explode: true
+        in: query
+        name: allowOverlapping
+        required: false
+        schema:
+          type: boolean
       requestBody:
        content:
          application/json:
