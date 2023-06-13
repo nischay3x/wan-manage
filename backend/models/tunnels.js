@@ -71,17 +71,12 @@ const tunnelAdvancedOptionsSchema = new Schema({
   }
 });
 
-const notificationsSchema = new Schema({
-  event: {
-    type: String,
-    required: true,
-    enum: [
-      'Link/Tunnel round trip time',
-      'Link/Tunnel default drop rate']
-  },
-  warningThreshold: { type: Number, default: null },
-  criticalThreshold: { type: Number, default: null }
-});
+const notificationsSchema = new Schema(
+  {
+    warningThreshold: { type: Number, default: null },
+    criticalThreshold: { type: Number, default: null }
+  }
+);
 
 /**
  * Tunnels Database Schema
@@ -167,7 +162,24 @@ const tunnelSchema = new Schema({
     type: tunnelAdvancedOptionsSchema,
     default: null
   },
-  notificationsSettings: [notificationsSchema],
+  // notificationsSettings: [notificationsSchema],
+  notificationsSettings: {
+    type: Map,
+    of: notificationsSchema,
+    validate: {
+      validator: function (value) {
+        // Check if all keys are valid event names
+        const validEvents = [
+          'Link/Tunnel round trip time',
+          'Link/Tunnel default drop rate'
+        ];
+        const keys = Array.from(value.keys());
+        return keys.every((key) => validEvents.includes(key));
+      },
+      message: 'Invalid event name in notificationsSettings'
+    },
+    default: {}
+  },
   ...pendingSchema
 }, {
   timestamps: true

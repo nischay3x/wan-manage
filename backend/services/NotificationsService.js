@@ -58,11 +58,9 @@ class NotificationsService {
           $project: {
             _id: { $toString: '$_id' },
             time: 1,
-            device: 1,
             title: 1,
             details: 1,
-            status: 1,
-            machineId: 1
+            status: 1
           }
         }
       ] : [];
@@ -130,7 +128,6 @@ class NotificationsService {
         ])
         : await notificationsDb.aggregate(pipeline).allowDiskUse(true);
 
-      let devicesNames = {};
       if (op !== 'count' && notifications[0].meta.length > 0) {
         response.setHeader('records-total', notifications[0].meta[0].total);
         if (!devicesArray) {
@@ -139,7 +136,6 @@ class NotificationsService {
             _id: { $in: notifications[0].records.map(n => n.device) }
           }, { name: 1 });
         }
-        devicesNames = devicesArray.reduce((r, d) => ({ ...r, [d._id]: d.name }), {});
       };
       const result = (op === 'count')
         ? notifications.map(element => {
@@ -152,8 +148,6 @@ class NotificationsService {
           return {
             ...element,
             _id: element._id.toString(),
-            deviceId: element.device.toString() || null,
-            device: element.device ? devicesNames[element.device] : null || null,
             time: element.time.toISOString()
           };
         });
@@ -202,8 +196,7 @@ class NotificationsService {
         status: notifications[0].status,
         details: notifications[0].details,
         title: notifications[0].title,
-        device: (notifications[0].device) ? notifications[0].device.name : null,
-        machineId: notifications[0].machineId,
+        targets: notifications[0].targets,
         time: notifications[0].time.toISOString()
       };
 
@@ -320,58 +313,38 @@ class NotificationsService {
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
-      let response;
       const orgIds = await NotificationsService.validateParams(org, account, group, user);
       if (orgIds.error) {
         return orgIds;
       }
+      const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { rules: 1, _id: 0 }).lean();
       if (org) {
-        response = await notificationsConf.find({ org: org }, { rules: 1, _id: 0 });
-        return Service.successResponse(response[0].rules);
+        const sortedRules = Object.fromEntries(
+          Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+        );
+        return Service.successResponse([sortedRules]);
       } else {
-        response = await notificationsConf.aggregate([
-          { $match: { org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } } },
-          { $unwind: '$rules' },
-          {
-            $group: {
-              _id: '$rules._id',
-              warningThreshold: { $addToSet: '$rules.warningThreshold' },
-              criticalThreshold: { $addToSet: '$rules.criticalThreshold' },
-              thresholdUnit: { $addToSet: '$rules.thresholdUnit' },
-              severity: { $addToSet: '$rules.severity' },
-              immediateEmail: { $addToSet: '$rules.immediateEmail' },
-              resolvedAlert: { $addToSet: '$rules.resolvedAlert' },
-              event: { $addToSet: '$rules.event' }
+        const mergedRules = {};
+        const keysOfInterest = ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'severity', 'immediateEmail', 'resolvedAlert', 'type'];
+        response.forEach(org => {
+          Object.keys(org.rules).forEach(ruleName => {
+            if (!mergedRules[ruleName]) {
+              mergedRules[ruleName] = {};
+              keysOfInterest.forEach(key => {
+                if (org.rules[ruleName].hasOwnProperty(key)) {
+                  mergedRules[ruleName][key] = org.rules[ruleName][key];
+                }
+              });
+            } else {
+              keysOfInterest.forEach(key => {
+                if (mergedRules[ruleName][key] !== org.rules[ruleName][key]) {
+                  mergedRules[ruleName][key] = 'varies';
+                }
+              });
             }
-          },
-          { $sort: { event: 1 } },
-          {
-            $project: {
-              warningThreshold: {
-                $cond: [{ $gt: [{ $size: '$warningThreshold' }, 1] }, 'not the same', { $arrayElemAt: ['$warningThreshold', 0] }]
-              },
-              criticalThreshold: {
-                $cond: [{ $gt: [{ $size: '$criticalThreshold' }, 1] }, 'not the same', { $arrayElemAt: ['$criticalThreshold', 0] }]
-              },
-              thresholdUnit: {
-                $cond: [{ $gt: [{ $size: '$thresholdUnit' }, 1] }, 'not the same', { $arrayElemAt: ['$thresholdUnit', 0] }]
-              },
-              severity: {
-                $cond: [{ $gt: [{ $size: '$severity' }, 1] }, 'not the same', { $arrayElemAt: ['$severity', 0] }]
-              },
-              immediateEmail: {
-                $cond: [{ $gt: [{ $size: '$immediateEmail' }, 1] }, 'not the same', { $arrayElemAt: ['$immediateEmail', 0] }]
-              },
-              resolvedAlert: {
-                $cond: [{ $gt: [{ $size: '$resolvedAlert' }, 1] }, 'not the same', { $arrayElemAt: ['$resolvedAlert', 0] }]
-              },
-              event: {
-                $cond: [{ $gt: [{ $size: '$event' }, 1] }, 'not the same', { $arrayElemAt: ['$event', 0] }]
-              }
-            }
-          }
-        ]);
-        return Service.successResponse(response);
+          });
+        });
+        return Service.successResponse([mergedRules]);
       }
     } catch (e) {
       return Service.rejectResponse(
@@ -384,7 +357,6 @@ class NotificationsService {
   /**
    * Modify the notifications settings of a given organization/account/group
    **/
-
   static async notificationsConfPUT ({ notificationsConfPut }, { user }) {
     try {
       const { org: orgId, account, group, rules: newRules, setAsDefault = false } = notificationsConfPut;
@@ -408,27 +380,28 @@ class NotificationsService {
       } else {
         for (const org of orgIds) {
           const devicesList = [];
-          for (let i = 0; i < newRules.length; i++) {
+          for (const event in newRules) {
             const updateData = { $set: {} };
-            if (newRules[i].warningThreshold !== 'not the same') {
-              updateData.$set['rules.$[el].warningThreshold'] = newRules[i].warningThreshold;
+            const rule = newRules[event];
+            if (rule.warningThreshold !== 'varies') {
+              updateData.$set[`rules.${event}.warningThreshold`] = rule.warningThreshold;
             }
-            if (newRules[i].criticalThreshold !== 'not the same') {
-              updateData.$set['rules.$[el].criticalThreshold'] = newRules[i].criticalThreshold;
+            if (rule.criticalThreshold !== 'varies') {
+              updateData.$set[`rules.${event}.criticalThreshold`] = rule.criticalThreshold;
             }
-            if (newRules[i].thresholdUnit !== 'not the same') {
-              updateData.$set['rules.$[el].thresholdUnit'] = newRules[i].thresholdUnit;
+            if (rule.thresholdUnit !== 'varies') {
+              updateData.$set[`rules.${event}.thresholdUnit`] = rule.thresholdUnit;
             }
-            if (newRules[i].severity !== 'not the same') {
-              updateData.$set['rules.$[el].severity'] = newRules[i].severity;
+            if (rule.severity !== 'varies') {
+              updateData.$set[`rules.${event}.severity`] = rule.severity;
             }
-            if (newRules[i].immediateEmail !== 'not the same') {
-              updateData.$set['rules.$[el].immediateEmail'] = newRules[i].immediateEmail;
+            if (rule.immediateEmail !== 'varies') {
+              updateData.$set[`rules.${event}.immediateEmail`] = rule.immediateEmail;
             }
-            if (newRules[i].resolvedAlert !== 'not the same') {
-              updateData.$set['rules.$[el].resolvedAlert'] = newRules[i].resolvedAlert;
+            if (rule.resolvedAlert !== 'varies') {
+              updateData.$set[`rules.${event}.resolvedAlert`] = rule.resolvedAlert;
             }
-            await notificationsConf.updateOne({ org: org, 'rules.event': newRules[i].event }, updateData, { arrayFilters: [{ 'el.event': newRules[i].event }] });
+            await notificationsConf.updateOne({ org: org }, updateData);
           }
           const orgDevices = await devices.find({ org: org });
           devicesList.push(orgDevices);
@@ -460,18 +433,21 @@ class NotificationsService {
   static async notificationsDefaultConfGET ({ account = null }, { user }) {
     try {
       let response;
-      // TODO validate membership of the account (account owner)
       if (account) {
-        response = await notificationsConf.find({ account: account }, { rules: 1, _id: 0 });
+        response = await notificationsConf.find({ account: account }, { rules: 1, _id: 0 }).lean();
         if (response.length > 0) {
-          const sortedRules = response[0].rules.sort((a, b) => (a.event > b.event) ? 1 : -1);
-          return Service.successResponse(sortedRules);
+          const sortedRules = Object.fromEntries(
+            Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+          );
+          return Service.successResponse([sortedRules]);
         }
       // If the account doesn't have a default or the user asked the system default - retrieve the system default
       } if (!account || response.length === 0) {
-        response = await notificationsConf.find({ name: 'Default notifications settings' }, { rules: 1, _id: 0 });
-        const sortedRules = response[0].rules.sort((a, b) => (a.event > b.event) ? 1 : -1);
-        return Service.successResponse(sortedRules);
+        response = await notificationsConf.find({ name: 'Default notifications settings' }, { rules: 1, _id: 0 }).lean();
+        const sortedRules = Object.fromEntries(
+          Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+        );
+        return Service.successResponse([sortedRules]);
       }
     } catch (e) {
       return Service.rejectResponse(
@@ -615,7 +591,6 @@ class NotificationsService {
       } else {
         // verify that all the users have a permission to access all the organizations under the account/group
         for (let i = 0; i < orgIds.length; i++) {
-          // TODO add membership validation
           for (let j = 0; j < emailsSigning.length; j++) {
             const emailSigning = emailsSigning[j];
             const userData = await users.findOne({ _id: emailSigning._id }).populate('defaultAccount');

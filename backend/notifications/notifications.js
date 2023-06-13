@@ -18,9 +18,10 @@
 const configs = require('../configs')();
 const notificationsDb = require('../models/notifications');
 const organizations = require('../models/organizations');
-const accountsModel = require('../models/accounts');
+const tunnels = require('../models/tunnels');
 const devicesModel = require('../models/devices').devices;
-const { membership } = require('../models/membership');
+const notificationsConf = require('../models/notificationsConf');
+const users = require('../models/users');
 const logger = require('../logging/logging')({ module: module.filename, type: 'notifications' });
 const mailer = require('../utils/mailer')(
   configs.get('mailerHost'),
@@ -28,6 +29,108 @@ const mailer = require('../utils/mailer')(
   configs.get('mailerBypassCert', 'boolean')
 );
 const mongoose = require('mongoose');
+
+/**
+ * Notification events hierarchy class
+ */
+// Initialize the events hierarchy
+const hierarchyMap = {};
+
+class Event {
+  constructor (eventName, parents) {
+    this.eventName = eventName;
+    this.parents = parents;
+
+    hierarchyMap[eventName] = this;
+  }
+
+  getAllParents () {
+    const parents = [];
+    if (this.parents.length === 1) {
+      parents.push(this.parents[0]);
+    } else {
+      for (const parent of this.parents) {
+        parents.push(parent.getAllParents());
+      }
+    }
+    return parents;
+  }
+
+  async getTarget (deviceId, interfaceId, tunnelId) {
+    // MUST BE IMPLEMENTED IN CHILD CLASSES
+  }
+
+  async getQuery (deviceId, interfaceId, tunnelId) {
+    const query = [];
+    const parents = this.getAllParents();
+    if (parents.length === 0) {
+      query.push(await this.getTarget());
+    }
+    for (const parentEvent of parents) {
+      const parent = hierarchyMap[parentEvent.eventName]; // Get the instance of the parent event
+      query.push(await parent.getTarget(deviceId, interfaceId, tunnelId));
+    }
+    return query;
+  }
+}
+
+class DeviceConnectionEventClass extends Event {
+  async getTarget (deviceId, interfaceId, tunnelId) {
+    return {
+      eventType: this.eventName,
+      'targets.deviceId': deviceId,
+      resolved: false
+    };
+  }
+}
+class RunningRouterEventClass extends Event {
+  async getTarget (deviceId, interfaceId, tunnelId) {
+    return {
+      eventType: this.eventName,
+      'targets.deviceId': deviceId,
+      resolved: false
+    };
+  }
+}
+
+class InterfaceConnectionEventClass extends Event {
+  async getTarget (deviceId, interfaceId, tunnelId) {
+    // when tunnelId is provided there is no interfaceId
+    if (tunnelId) {
+      const tunnel = await tunnels.findOne({
+        num: tunnelId,
+        $or: [
+          { deviceA: deviceId },
+          { deviceB: deviceId }
+        ],
+        isActive: true
+      });
+      const interfaces = [tunnel.interfaceA];
+      if (!tunnel.peer) {
+        interfaces.push(tunnel.interfaceB);
+      }
+      interfaceId = {
+        $in: interfaces
+      };
+    }
+    return {
+      eventType: this.eventName,
+      'targets.deviceId': deviceId,
+      'targets.interfaceId': interfaceId,
+      resolved: false
+    };
+  }
+}
+
+const DeviceConnectionEvent = new DeviceConnectionEventClass('Device connection', []);
+const RunningRouterEvent = new RunningRouterEventClass('Running router', [DeviceConnectionEvent]);
+const InterfaceConnection = new InterfaceConnectionEventClass('Interface connection', [
+  RunningRouterEvent
+]);
+// eslint-disable-next-line no-unused-vars
+const RttEvent = new Event('Link/Tunnel round trip time', [InterfaceConnection]);
+// eslint-disable-next-line no-unused-vars
+const DropRateEvent = new Event('Link/Tunnel default drop rate', [InterfaceConnection]);
 
 /**
  * Notification Manager class
@@ -39,6 +142,36 @@ class NotificationsManager {
      * @param  {Array} notifications an array of notification objects
      * @return {void}
      */
+
+  async getUserEmail (userIds) {
+    const userEmails = [];
+    for (const userId of userIds) {
+      const userData = await users.findOne({ _id: userId });
+      if (userData) {
+        userEmails.push(userData.email);
+      }
+    }
+    return userEmails;
+  };
+
+  async sendEmailNotification (
+    title, orgNotificationsConf, severity, emailBody) {
+    const userIds = severity === 'warning' ? orgNotificationsConf.signedToWarning
+      : orgNotificationsConf.signedToCritical;
+    const emailAddresses = await this.getUserEmail(userIds);
+    if (emailAddresses.length > 0) {
+      await mailer.sendMailHTML(
+        configs.get('mailerEnvelopeFromAddress'),
+        configs.get('mailerFromAddress'),
+        emailAddresses,
+        title,
+        (`<p>Please be aware that ${emailBody.toLowerCase()}.</p>
+        </p>To make changes to the notification settings in flexiManage, 
+        please access the "Account -> Notifications" section</p>`)
+      );
+    }
+  }
+
   async sendNotifications (notifications) {
     try {
       // Get the accounts of the notifications by the organization
@@ -47,13 +180,38 @@ class NotificationsManager {
       // the notifications that belongs to it, which we'll use later
       // to add the proper account ID to each of the notifications.
       const orgsMap = new Map();
-      notifications.forEach(notification => {
+      for (const notification of notifications) {
+        if (notification.orgNotificationsConf) {
+          const {
+            details, eventType, orgNotificationsConf,
+            severity, title, targets, resolved
+          } = notification;
+          const event = hierarchyMap[eventType];
+          const rules = orgNotificationsConf.rules;
+          // If the event exists in the hierarchy check if there is already a parent event in the db
+          if (event && !resolved) {
+            const parentsQuery = await event.getQuery(
+              targets.deviceId,
+              targets.interfaceId, targets.tunnelId);
+            const foundParentNotification = await notificationsDb.findOne({
+              resolved: false,
+              org: notification.org,
+              $or: parentsQuery
+            });
+            if (foundParentNotification) {
+              continue; // Ignore since there is a parent event
+            }
+          }
+          // TODO only for flexiManage alerts: check if the alert exists and increase count
+          if (rules.hasOwnProperty(eventType) && rules[eventType].immediateEmail) {
+            await this.sendEmailNotification(title, orgNotificationsConf, severity, details);
+          }
+        }
         const key = notification.org.toString();
         const notificationList = orgsMap.get(key);
         if (!notificationList) orgsMap.set(key, []);
         orgsMap.get(key).push(notification);
-      });
-
+      }
       // Create an array of org ID and account ID pairs
       const orgIDs = Array.from(orgsMap.keys()).map(key => {
         return mongoose.Types.ObjectId(key);
@@ -67,17 +225,25 @@ class NotificationsManager {
           }
         }
       ]);
+      const bulkWriteOps = [];
 
       // Go over all accounts and update all notifications that
       // belong to the organization to which the account belongs.
       accounts.forEach(account => {
         const notificationList = orgsMap.get(account._id.toString());
-        notificationList.forEach(notification => { notification.account = account.accountID; });
+        const currentTime = new Date();
+        notificationList.forEach(notification => {
+          notification.account = account.accountID;
+          notification.time = currentTime;
+          bulkWriteOps.push({ insertOne: { document: notification } });
+        });
       });
 
-      await notificationsDb.insertMany(notifications);
-      // Log notification for logging systems
-      logger.info('New notifications', { params: { notifications: notifications } });
+      if (bulkWriteOps.length > 0) {
+        await notificationsDb.bulkWrite(bulkWriteOps);
+        // Log notification for logging systems
+        logger.info('New notifications', { params: { notifications: notifications } });
+      }
     } catch (err) {
       logger.warn('Failed to store notifications in database', {
         params: { notifications: notifications, err: err.message }
@@ -97,59 +263,23 @@ class NotificationsManager {
     // support the 'lookup' command across different databases:
     // 1. Get the list of account IDs with pending notifications.
     // 2. Go over the list, populate the users and send them emails.
-    let accountIDs = [];
+    let orgIDs = [];
     try {
-      accountIDs = await notificationsDb.distinct('account', { status: 'unread' });
+      orgIDs = await notificationsDb.distinct('org', { status: 'unread' });
     } catch (err) {
       logger.warn('Failed to get account IDs with pending notifications', {
         params: { err: err.message }
       });
     }
     // Notify users only if there are unread notifications
-    for (const accountID of accountIDs) {
+    for (const orgID of orgIDs) {
       try {
-        const res = await membership.aggregate([
-          {
-            $match: {
-              $and: [
-                { account: accountID },
-                { to: 'account' },
-                { role: 'owner' }
-              ]
-            }
-          },
-          {
-            $lookup: {
-              from: 'users',
-              localField: 'user',
-              foreignField: '_id',
-              as: 'users'
-            }
-          },
-          { $unwind: '$users' },
-          { $addFields: { email: '$users.email' } },
-          {
-            $lookup: {
-              from: 'accounts',
-              localField: 'account',
-              foreignField: '_id',
-              as: 'accounts'
-            }
-          },
-          { $unwind: '$accounts' },
-          { $addFields: { notify: '$accounts.enableNotifications' } }
-        ]);
-
-        // Send a reminder email to each email address that belongs to the account
-        const emailAddresses = res.reduce(
-          (result, { email, notify }) =>
-            notify ? result.concat(email) : result,
-          []
-        );
-        if (emailAddresses.length) {
-          const account = await accountsModel.findOne({ _id: accountID });
+        const orgNotificationsConf = await notificationsConf.findOne({ org: orgID });
+        const emailAddresses = await this.getUserEmail(orgNotificationsConf.signedToDaily);
+        if (emailAddresses.length > 0) {
+          const organization = await organizations.findOne({ _id: orgID }, { account: 1 });
           const messages = await notificationsDb.find(
-            { account: accountID, status: 'unread' },
+            { org: orgID, status: 'unread' },
             'time device details machineId'
           ).sort({ time: -1 })
             .limit(configs.get('unreadNotificationsMaxSent', 'number'))
@@ -163,8 +293,9 @@ class NotificationsManager {
             'Pending unread notifications',
             `<h2>${configs.get('companyName')} Notification Reminder</h2>
             <p style="font-size:16px">This email was sent to you since you have pending
-             unread notifications in account
-             "${account ? account.name : 'Deleted'} : ${accountID.toString().substring(0, 13)}".</p>
+             unread notifications in the organization
+             "${organization ? organization.name : 'Deleted'} : 
+             ${orgID.toString().substring(0, 13)}".</p>
              <i><small>
              <ul>
               ${messages.map(message => `
@@ -206,7 +337,7 @@ class NotificationsManager {
         }
       } catch (err) {
         logger.warn('Failed to notify users about pending notifications', {
-          params: { err: err.message, account: accountID }
+          params: { err: err.message, organization: orgID }
         });
       }
     }

@@ -23,89 +23,98 @@ async function up () {
     // Create default Notifications settings (factory default)
     await notificationConfModel.create([{
       name: 'Default notifications settings',
-      rules: [
-        {
-          event: 'Device connection',
+      rules: {
+        'Device connection': {
           warningThreshold: null,
           criticalThreshold: null,
           thresholdUnit: null,
           severity: 'critical',
           immediateEmail: false,
-          resolvedAlert: true
+          resolvedAlert: false,
+          type: 'device'
         },
-        {
-          event: 'Running router',
+        'Running router': {
           warningThreshold: null,
           criticalThreshold: null,
           thresholdUnit: null,
           severity: 'critical',
           immediateEmail: false,
-          resolvedAlert: true
+          resolvedAlert: false,
+          type: 'device'
         },
-        {
-          rowKey: 3,
-          event: 'Link/Tunnel round trip time',
+        'Link/Tunnel round trip time': {
           warningThreshold: 300,
           criticalThreshold: 600,
           thresholdUnit: 'ms',
           severity: null,
           immediateEmail: false,
-          resolvedAlert: true
+          resolvedAlert: false,
+          type: 'tunnel'
         },
-        {
-          event: 'Link/Tunnel default drop rate',
+        'Link/Tunnel default drop rate': {
           warningThreshold: 5,
           criticalThreshold: 20,
           thresholdUnit: '%',
           severity: null,
           immediateEmail: false,
-          resolvedAlert: true
+          resolvedAlert: false,
+          type: 'tunnel'
         },
-        {
-          event: 'Device memory usage',
+        'Device memory usage': {
           warningThreshold: 85,
           criticalThreshold: 95,
           thresholdUnit: '%',
           severity: null,
           immediateEmail: false,
-          resolvedAlert: true
+          resolvedAlert: false,
+          type: 'device'
         },
-        {
-          event: 'Hard drive usage',
+        'Hard drive usage': {
           warningThreshold: 85,
           criticalThreshold: 95,
           thresholdUnit: '%',
           severity: null,
           immediateEmail: false,
-          resolvedAlert: true
+          resolvedAlert: false,
+          type: 'device'
         },
-        {
-          event: 'Temperature',
+        Temperature: {
           warningThreshold: null,
           criticalThreshold: null,
           thresholdUnit: 'C°',
           severity: 'critical',
           immediateEmail: false,
-          resolvedAlert: true
+          resolvedAlert: false,
+          type: 'device'
         },
-        {
-          event: 'Policy change',
+        'Policy change': {
           warningThreshold: null,
           criticalThreshold: null,
           thresholdUnit: null,
           severity: 'warning',
           immediateEmail: false,
-          resolvedAlert: null
+          resolvedAlert: null,
+          type: 'policy'
         },
-        {
-          event: 'Software update',
+        'Software update': {
           warningThreshold: null,
           criticalThreshold: null,
           thresholdUnit: null,
           severity: 'warning',
           immediateEmail: false,
-          resolvedAlert: null
-        }]
+          resolvedAlert: null,
+          type: 'device'
+        },
+        'Interface connection': {
+          warningThreshold: null,
+          criticalThreshold: null,
+          thresholdUnit: null,
+          severity: 'critical',
+          immediateEmail: false,
+          resolvedAlert: false,
+          type: 'interface'
+        }
+      }
     }]);
   } catch (err) {
     logger.error('Database migration failed', {

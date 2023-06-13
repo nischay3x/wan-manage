@@ -32,16 +32,22 @@ const deviceNotificationTypes = ['Device memory usage', 'Hard drive usage', 'Lin
 /**
  * Creates and queues the set-notifications-config job.
  * @async
- * @param  {Array}    device    an array of the devices to be modified
+ * @param  {Array}    devicesList    an array of the devices to be modified
  * @param  {Object}   user      User object
- * @param  {Object}   data      Additional data used by caller
+ * @param  {Object}   data      Additional data used by caller includes the orgId and the rules
  * @param  {Object}   org       The organization Id
+ * @param  {Object}   rules     object in which: keys= notification event name, values = notification settings
  * @return {None}
  */
 
 const apply = async (devicesList, user, data) => {
   const { org: orgId, rules } = data;
-  const filteredRules = rules.filter(rule => deviceNotificationTypes.includes(rule.event));
+  const filteredRules = Object.keys(rules)
+    .filter(event => deviceNotificationTypes.includes(event))
+    .reduce((obj, key) => {
+      obj[key] = rules[key];
+      return obj;
+    }, {});
   const opDevices = await Promise.all(devicesList.map(d => d.populate('policies.firewall.policy', '_id name rules')
     .populate('interfaces.pathlabels', '_id name description color type')
     .execPopulate()
@@ -126,7 +132,12 @@ const sync = async (deviceId) => {
     const orgId = device.org;
     const getDeviceNotificationsConf = await notificationsConf.findOne({ org: orgId.toString() });
     const deviceNotificationsConf = getDeviceNotificationsConf.rules;
-    const filteredRules = deviceNotificationsConf.filter(rule => deviceNotificationTypes.includes(rule.event));
+    const filteredRules = Object.keys(deviceNotificationsConf)
+      .filter(event => deviceNotificationTypes.includes(event))
+      .reduce((obj, key) => {
+        obj[key] = deviceNotificationsConf[key];
+        return obj;
+      }, {});
     request.push({ entity: 'agent', message: 'add-notifications-config', params: { org: orgId, rules: filteredRules } });
     completeCbData.push({ orgId, deviceId, op: 'notifications' });
     callComplete = true;

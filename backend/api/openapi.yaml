@@ -9482,24 +9482,178 @@ components:
         group:
           type: string
         rules:
-          type: array
-          items:
-            type: object
-            properties:
-              warningThreshold:
-                type: number
-              criticalThreshold:
-                type: number
-              thresholdUnit:
-                type: string
-              severity:
-                type: string
-              immediateEmail:
-                type: boolean
-              resolvedAlert:
-                type: boolean
-              event:
-                type: string
+          type: object
+          properties:
+            'Device connection':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Running router':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Link/Tunnel round trip time':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Link/Tunnel default drop rate':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Device memory usage':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Hard drive usage':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Temperature':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Policy change':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Software update':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
+            'Interface connection':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+                thresholdUnit:
+                  type: string
+                severity:
+                  type: string
+                immediateEmail:
+                  type: boolean
+                resolvedAlert:
+                  type: boolean
+                type:
+                  type: string
       type: object
     NotificationsDeleteRequest:
       properties:
@@ -10997,15 +11151,22 @@ components:
             maxLength: 24
             minLength: 24
         notifications:
-          type: array
+          type: object
           properties:
-            warningThreshold:
-              type: number
-            criticalThreshold:
-              type: number
-            event:
-              type: string
-              enum: ['Link/Tunnel round trip time', 'Link/Tunnel default drop rate']
+            'Link/Tunnel round trip time':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
+            'Link/Tunnel default drop rate':
+              type: object
+              properties:
+                warningThreshold:
+                  type: number
+                criticalThreshold:
+                  type: number
       type: object
     StaticRouteRequest:
       example:

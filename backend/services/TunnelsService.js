@@ -23,6 +23,7 @@ const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
 const { getTunnelsPipeline } = require('../utils/tunnelUtils');
 const { getUserOrganizations } = require('../utils/membershipUtils');
+const notificationsConf = require('../models/notificationsConf');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -62,6 +63,20 @@ class TunnelsService {
     retTunnel._id = retTunnel._id.toString();
 
     return retTunnel;
+  }
+
+  static getOnlyTunnelsEvents (notifications) {
+    const notificationsDict = {};
+    for (const [notificationName, notificationSettings] of Object.entries(notifications)) {
+      const { type, warningThreshold, criticalThreshold } = notificationSettings;
+      if (type === 'tunnel') {
+        notificationsDict[notificationName] = {
+          warningThreshold: warningThreshold,
+          criticalThreshold: criticalThreshold
+        };
+      }
+    }
+    return notificationsDict;
   }
 
   /**
@@ -168,19 +183,25 @@ class TunnelsService {
   /**
    * Set tunnel specific notifications configuration
    *
-   * @param {Array} tunnelsIdList - List of tunnel ids
+   * @param {Array} tunnelsIdList - List of tunnel ids (Strings)
    * @param {Array} notifications - list of notifications (objects) to update
    **/
+
   static async tunnelsNotificationsPUT ({ tunnelsNotificationsPut }, { user }) {
     try {
       const { org: orgId, tunnelsIdList, notifications } = tunnelsNotificationsPut;
       const userOrgList = await getUserOrganizations(user);
-      if (orgId) {
-        if (!Object.values(userOrgList).find(o => o.id === orgId)) {
-          return Service.rejectResponse(
-            'You do not have permission to access this organization', 403
-          );
-        }
+      if (!orgId || !tunnelsIdList || !notifications) {
+        return Service.rejectResponse(
+          'Missing parameter: org, tunnels list or notifications settings',
+          400
+        );
+      }
+      if (!Object.values(userOrgList).find((o) => o.id === orgId)) {
+        return Service.rejectResponse(
+          'You do not have permission to access this organization',
+          403
+        );
       }
       const tunnels = await Tunnels.find({ _id: { $in: tunnelsIdList }, org: orgId })
         .populate('deviceA', '_id name machineId')
@@ -188,83 +209,94 @@ class TunnelsService {
         .lean();
       if (tunnels.length !== tunnelsIdList.length) {
         return Service.rejectResponse(
-          'Please check again your tunnels id list', 500
+          'Please check again your tunnels id list',
+          500
         );
       }
-      await Tunnels.updateMany(
-        { _id: { $in: tunnelsIdList }, org: orgId },
-        { $set: { notificationsSettings: notifications } });
-      const notificationsDict = {};
-      for (const notification of notifications) {
-        const event = notification.event;
-        delete notification._id;
-        delete notification.event;
-        notificationsDict[event] = notification;
-      }
-      const tasks = [{
-        entity: 'agent',
-        message: 'modify-tunnel',
-        params: {
-          notificationsSettings: notificationsDict
-        }
-      }];
       const jobs = [];
       for (const tunnel of tunnels) {
-        tasks[0].params['tunnel-id'] = tunnel.num;
-        // Create a job for device A
+        let currentSettingsDict;
+        if (tunnel.notificationsSettings) {
+          currentSettingsDict = tunnel.notificationsSettings;
+        } else {
+          const orgNotifications = await notificationsConf.find(
+            { org: orgId },
+            { rules: 1, _id: 0 }
+          );
+          currentSettingsDict = TunnelsService.getOnlyTunnelsEvents(orgNotifications[0].rules);
+        }
+        const notificationsDict = {};
+        for (const [event, { warningThreshold, criticalThreshold }] of
+          Object.entries(notifications)) {
+          let eventCriticalThreshold = currentSettingsDict[event]?.criticalThreshold;
+          let eventWarningThreshold = currentSettingsDict[event]?.warningThreshold;
+
+          if (criticalThreshold != null) {
+            eventCriticalThreshold = criticalThreshold;
+          }
+          if (warningThreshold != null) {
+            eventWarningThreshold = warningThreshold;
+          }
+
+          if (eventCriticalThreshold != null || eventWarningThreshold != null) {
+            notificationsDict[event] = {
+              ...(eventWarningThreshold != null && { warningThreshold: eventWarningThreshold }),
+              ...(eventCriticalThreshold != null && { criticalThreshold: eventCriticalThreshold })
+            };
+          }
+        }
+
+        await Tunnels.updateOne(
+          { _id: tunnel._id, org: orgId },
+          {
+            $set: {
+              notificationsSettings: notificationsDict
+
+            }
+          }
+        );
+        const task = {
+          entity: 'agent',
+          message: 'modify-tunnel',
+          params: {
+            notificationsSettings: notificationsDict
+          }
+        };
+        task.params['tunnel-id'] = tunnel.num;
+        const data = {
+          method: 'notifications',
+          data: {
+            device: tunnel.deviceA._id,
+            org: orgId,
+            action: 'update-tunnel-notifications'
+          }
+        };
         const jobA = await deviceQueues.addJob(
-          (tunnel.deviceA.machineId).toString(),
+          tunnel.deviceA.machineId.toString(),
           user.username,
           orgId,
-          // Data
           {
-            title: `Modify tunnel notifications settings on device
-              ${tunnel.deviceA.name}`,
-            tasks
+            title: `Modify tunnel notifications settings on device ${tunnel.deviceA.name}`,
+            tasks: [task]
           },
-          // Response data
-          {
-            method: 'notifications',
-            data: {
-              device: tunnel.deviceA._id,
-              org: orgId,
-              action: 'update-tunnel-notifications'
-            }
-          },
-          // Metadata
+          data,
           { priority: 'normal', attempts: 1, removeOnComplete: false },
-          // Complete callback
           null
         );
-
         jobs.push(jobA);
-
         if (tunnel.peer) {
           continue;
         }
-        // Create a job for device B
         const jobB = await deviceQueues.addJob(
-          (tunnel.deviceB.machineId).toString(),
+          tunnel.deviceB.machineId.toString(),
           user.username,
           orgId,
-          // Data
           {
-            title: `Modify tunnel notifications settings on device
-              ${tunnel.deviceB.name}`,
-            tasks
+            title: `Modify tunnel notifications settings on device ${tunnel.deviceB.name}`,
+            tasks: [task]
           },
-          // Response data
-          {
-            method: 'notifications',
-            data: {
-              device: tunnel.deviceB._id,
-              org: orgId,
-              action: 'update-tunnel-notifications'
-            }
-          },
-          // Metadata
+          data,
           { priority: 'normal', attempts: 1, removeOnComplete: false },
-          // Complete callback
           null
         );
         jobs.push(jobB);

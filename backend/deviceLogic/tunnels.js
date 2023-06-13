@@ -43,18 +43,6 @@ const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
 const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
 const { transformBGP } = require('./jobParameters');
 
-const notificationsListToDict = (notificationsSettings) => {
-  const notificationsDict = {};
-  for (const notification of notificationsSettings) {
-    const event = notification.event;
-    notificationsDict[event] = {
-      warningThreshold: notification.warningThreshold,
-      criticalThreshold: notification.criticalThreshold
-    };
-  }
-  return notificationsDict;
-};
-
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
   ifcLabelsA.forEach(label => {
@@ -574,15 +562,13 @@ const applyTunnelAdd = async (devices, user, data) => {
     peers, topology, hub, notificationsSettings = null
   } = data.meta;
   if (notificationsSettings) {
-    for (let i = 0; i < notificationsSettings.length; i++) {
-      const eventType = notificationsSettings[i].event;
-      const warningThreshold = notificationsSettings[i].warningThreshold;
-      const criticalThreshold = notificationsSettings[i].criticalThreshold;
+    for (const eventType in Object.keys(notificationsSettings)) {
+      const { warningThreshold, criticalThreshold } = notificationsSettings[eventType];
       if (warningThreshold !== undefined && criticalThreshold !== undefined &&
         (isNaN(warningThreshold) || isNaN(criticalThreshold) ||
         warningThreshold >= criticalThreshold || warningThreshold < 1 || criticalThreshold < 1)) {
         logger.error('Wrong threshold value when creating tunnels',
-          { params: notificationsSettings[i] });
+          { params: notificationsSettings[eventType] });
         throw new Error(
           // eslint-disable-next-line max-len
           'Please ensure that the notification thresholds are defined as positive values and that the warning threshold is kept smaller than the critical threshold.');
@@ -591,7 +577,7 @@ const applyTunnelAdd = async (devices, user, data) => {
         case 'Link/Tunnel round trip time':
           if (warningThreshold > 30000 || criticalThreshold > 30000) {
             logger.error('Wrong threshold value when creating tunnels',
-              { params: notificationsSettings[i] });
+              { params: notificationsSettings[eventType] });
             throw new Error(
             // eslint-disable-next-line max-len
               'RTT thresholds must be between 1ms to 30 seconds');
@@ -600,7 +586,7 @@ const applyTunnelAdd = async (devices, user, data) => {
         case 'Link/Tunnel default drop rate':
           if (warningThreshold > 100 || criticalThreshold > 100) {
             logger.error('Wrong threshold value when creating tunnels',
-              { params: notificationsSettings[i] });
+              { params: notificationsSettings[eventType] });
             throw new Error(
             // eslint-disable-next-line max-len
               'Drop rate thresholds must be between 1 to 100(%)');
@@ -1865,9 +1851,8 @@ const prepareTunnelParams = (
 
   // add tunnel notifications settings for both devices
   if (tunnel.notificationsSettings) {
-    const notificationsDict = notificationsListToDict(tunnel.notificationsSettings);
-    paramsDeviceA.notificationsSettings = notificationsDict;
-    paramsDeviceB.notificationsSettings = notificationsDict;
+    paramsDeviceA.notificationsSettings = tunnel.notificationsSettings;
+    paramsDeviceB.notificationsSettings = tunnel.notificationsSettings;
   }
 
   // need to check versions for some parameters compatibility

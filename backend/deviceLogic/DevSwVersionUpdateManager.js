@@ -29,6 +29,7 @@ const mailer = require('../utils/mailer')(
   configs.get('mailerPort'),
   configs.get('mailerBypassCert', 'boolean')
 );
+const notificationsConf = require('../models/notificationsConf');
 
 const dummyVersionObject = {
   versions: {
@@ -40,6 +41,8 @@ const dummyVersionObject = {
   },
   versionDeadline: new Date(0)
 };
+const connections = require('../websocket/Connections')();
+
 /***
  * This class serves as the software update manager, responsible for
  * polling our package repository for new software versions, and take
@@ -100,15 +103,28 @@ class SwVersionUpdateManager {
         }
       ]);
 
-      orgDevicesList.forEach(orgDevices => {
+      orgDevicesList.forEach(async orgDevices => {
+        const orgNotificationsConf = await notificationsConf.findOne({ org: orgDevices.id });
+        let severity;
+        const eventKey = 'Software update';
+        if (orgNotificationsConf.rules.hasOwnProperty(eventKey)) {
+          severity = orgNotificationsConf.rules[eventKey].severity;
+        }
         orgDevices.devices.forEach(device => {
+          const deviceInfo = connections.getDeviceInfo(device._id);
           notifications.push({
             org: orgDevices._id,
             title: 'Device upgrade',
-            time: new Date(),
-            device: device._id,
-            machineId: device.machineId,
-            details: `This device requires upgrade to version ${versions.device}`
+            details: `The device ${deviceInfo.name} requires upgrade to version ${versions.device}`,
+            targets: {
+              deviceId: device._id,
+              tunnelId: null,
+              interfaceId: null,
+              policyId: null
+            },
+            eventType: 'Software update',
+            severity: severity,
+            orgNotificationsConf
           });
         });
       });

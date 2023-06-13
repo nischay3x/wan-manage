@@ -86,7 +86,8 @@ class ApplicationsUpdateManager {
           installedVersion: 1,
           org: 1,
           'devices._id': 1,
-          'devices.machineId': 1
+          'devices.machineId': 1,
+          'devices.name': 1
         }
       }
     ]);
@@ -106,11 +107,16 @@ class ApplicationsUpdateManager {
             notifications.push({
               org: app.org,
               title: `Application ${appStoreApp.name} upgrade`,
-              time: new Date(),
-              device: device._id,
-              machineId: device.machineId,
               details:
-              `This application requires upgrade from version ${oldVersion} to ${newVersion}`
+              `This application requires upgrade from version ${oldVersion} to ${newVersion}
+               in the device ${device.name} `,
+              targets: {
+                deviceId: device._id,
+                tunnelId: null,
+                interfaceId: null,
+                policyId: null
+              },
+              resolved: true
             });
           });
 

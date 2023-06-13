@@ -19,6 +19,41 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 
+const targetsSchema = new Schema({
+  deviceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'devices',
+    required: false
+  },
+  tunnelId: {
+    type: String,
+    required: false
+  },
+  interfaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'interfaces',
+    required: false
+  },
+  policyId: {
+    type: Schema.Types.ObjectId,
+    ref: 'policies',
+    required: false
+  }
+});
+
+const alertInfoSchema = new Schema({
+  value: {
+    type: Number
+  },
+  threshold: {
+    type: Number
+  },
+  unit: {
+    type: String,
+    enum: ['%', 'ms', 'C°']
+  }
+});
+
 /**
  * Notifications Database Schema
  */
@@ -45,17 +80,6 @@ const notificationsSchema = new Schema({
     type: Date,
     required: true
   },
-  // device
-  device: {
-    type: Schema.Types.ObjectId,
-    ref: 'devices',
-    required: true
-  },
-  // machineId (device id)
-  machineId: {
-    type: String,
-    required: true
-  },
   // additional details, description
   details: {
     type: String,
@@ -66,6 +90,45 @@ const notificationsSchema = new Schema({
     type: String,
     required: true,
     default: 'unread'
+  },
+  count: {
+    type: Number,
+    required: false,
+    default: 1
+  },
+  eventType: {
+    type: String,
+    required: false,
+    enum: ['Device connection',
+      'Running router',
+      'Link/Tunnel round trip time',
+      'Link/Tunnel default drop rate',
+      'Device memory usage',
+      'Hard drive usage',
+      'Temperature',
+      'Policy change',
+      'Software update',
+      'Interface connection']
+  },
+  resolved:
+  {
+    type: Boolean,
+    required: false,
+    default: false
+  },
+  targets: {
+    type: targetsSchema,
+    required: false
+  },
+  severity: {
+    type: String,
+    required: false,
+    enum: ['warning', 'critical']
+  },
+  agentAlertsInfo: {
+    type: alertInfoSchema,
+    required: false,
+    default: {}
   }
 }, {
   timestamps: true

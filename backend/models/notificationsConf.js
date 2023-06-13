@@ -20,25 +20,17 @@ const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 
 const ruleSchema = new Schema({
-  event: {
-    type: String,
-    required: true,
-    enum: ['Device connection',
-      'Running router',
-      'Link/Tunnel round trip time',
-      'Link/Tunnel default drop rate',
-      'Device memory usage',
-      'Hard drive usage',
-      'Temperature',
-      'Policy change',
-      'Software update']
-  },
   warningThreshold: { type: Number, default: null },
   criticalThreshold: { type: Number, default: null },
   thresholdUnit: { type: String, default: null, enum: ['%', 'ms', 'C°', null] },
   severity: { type: String, default: null, enum: ['critical', 'warning', null] },
   immediateEmail: { type: Boolean, default: false },
-  resolvedAlert: { type: Boolean, default: true }
+  resolvedAlert: { type: Boolean, default: true },
+  type: {
+    type: String,
+    required: false,
+    enum: ['device', 'tunnel', 'policy', 'interface']
+  }
 });
 
 /**
@@ -56,7 +48,18 @@ const notificationsConfSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'accounts'
   },
-  rules: [ruleSchema],
+  rules: {
+    'Device connection': ruleSchema,
+    'Running router': ruleSchema,
+    'Link/Tunnel round trip time': ruleSchema,
+    'Link/Tunnel default drop rate': ruleSchema,
+    'Device memory usage': ruleSchema,
+    'Hard drive usage': ruleSchema,
+    Temperature: ruleSchema,
+    'Policy change': ruleSchema,
+    'Software update': ruleSchema,
+    'Interface connection': ruleSchema
+  },
   signedToCritical:
   [
     { type: mongoose.Schema.Types.ObjectId, ref: 'users' }

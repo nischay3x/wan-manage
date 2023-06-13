@@ -39,6 +39,8 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const notificationsConf = require('../models/notificationsConf');
+const notifications = require('../models/notifications');
 
 class Connections {
   constructor () {
@@ -257,11 +259,14 @@ class Connections {
 
               this.devices.setDeviceInfo(device, {
                 org: resp[0].org.toString(),
+                name: resp[0].name,
                 deviceObj: resp[0]._id,
                 machineId: resp[0].machineId,
                 version: resp[0].versions.agent,
                 ready: false,
-                running: devInfo ? devInfo.running : null
+                running: devInfo ? devInfo.running : null,
+                notificationsHash: devInfo ? devInfo.notificationsHash : '',
+                alerts: devInfo ? devInfo.alerts : ''
               });
               return done(true);
             } else {
@@ -310,10 +315,10 @@ class Connections {
   createConnection (socket, req) {
     const connectionURL = new URL(`${req.headers.origin}${req.url}`);
     const device = connectionURL.pathname.substr(1);
-    const info = this.devices.getDeviceInfo(device);
+    const deviceInfo = this.devices.getDeviceInfo(device);
 
     // Set the received socket into the device info
-    info.socket = socket;
+    deviceInfo.socket = socket;
     const msgQ = this.msgQueue;
 
     // Initialize to alive connection, with 3 retries
@@ -372,7 +377,50 @@ class Connections {
     // device version, network information, tunnel keys, etc.)
     // Only after getting the device's response and updating
     // the information, the device can be considered ready.
-    this.sendDeviceInfoMsg(device, info.deviceObj, info.org, true);
+    this.sendDeviceInfoMsg(device, deviceInfo.deviceObj, deviceInfo.org, true);
+    let severity, resolvedAlert;
+    notificationsConf.findOne({ org: deviceInfo.org }).then((orgNotificationsConf) => {
+      if (orgNotificationsConf.rules.hasOwnProperty('Device connection')) {
+        resolvedAlert = orgNotificationsConf.rules['Device connection'].resolvedAlert;
+        severity = orgNotificationsConf.rules['Device connection'].severity;
+      }
+      notifications.findOne({
+        eventType: { $regex: 'Device connection', $options: 'i' },
+        resolved: false,
+        'targets.deviceId': deviceInfo.deviceObj
+      }).then((res) => {
+        if (res) {
+          notifications.updateOne(
+            {
+              eventType: { $regex: 'Device connection', $options: 'i' },
+              resolved: false,
+              'targets.deviceId': deviceInfo.deviceObj
+            },
+            { $set: { resolved: true } }
+          );
+        }
+        if (resolvedAlert) {
+          notificationsMgr.sendNotifications([
+            {
+              org: deviceInfo.org,
+              title: 'Device connection change',
+              details: `Device ${deviceInfo.name} reconnected to management`,
+              eventType: 'Device connection',
+              targets: {
+                deviceId: deviceInfo.deviceObj,
+                tunnelId: null,
+                interfaceId: null,
+                policyId: null
+              },
+              severity: severity,
+              orgNotificationsConf,
+              resolved: true
+            }
+          ]);
+        }
+      });
+    }
+    );
   }
 
   /**
@@ -479,15 +527,18 @@ class Connections {
 
           // send a notification if the link changed to down
           if (updatedConfig.link === 'down' && i.linkStatus !== 'down') {
-            const { org, deviceObj } = prevDeviceInfo;
+            const { org } = prevDeviceInfo;
             notificationsMgr.sendNotifications([
               {
                 org: org,
                 title: 'Link status changed',
-                time: new Date(),
-                device: deviceObj,
-                machineId: machineId,
-                details: `Link ${i.name} ${i.IPv4} is DOWN`
+                details: `Link ${i.name} ${i.IPv4} is DOWN`,
+                targets: {
+                  deviceId: deviceInfo.deviceObj,
+                  tunnelId: null,
+                  interfaceId: null,
+                  policyId: null
+                }
               }
             ]);
           }
@@ -638,7 +689,6 @@ class Connections {
             await notificationsMgr.sendNotifications([{
               org: origDevice.org,
               title: 'Unsuccessful self-healing operations',
-              time: new Date(),
               device: deviceId,
               machineId: machineId,
               details: 'Unsuccessful updating device data. Please contact flexiWAN support'
@@ -906,15 +956,26 @@ class Connections {
     // Device has no information, probably not connected, just return
     const deviceInfo = this.devices.getDeviceInfo(device);
     if (!deviceInfo) return;
-    const { org, deviceObj, machineId } = deviceInfo;
+    let orgNotificationsConf, severity;
+    notificationsConf.findOne({ org: deviceInfo.org }).then((res) => {
+      orgNotificationsConf = res;
+      severity = orgNotificationsConf.rules['Device connection'].severity;
+    });
+    const { org, deviceObj, name } = deviceInfo;
     notificationsMgr.sendNotifications([
       {
         org: org,
         title: 'Device connection change',
-        time: new Date(),
-        device: deviceObj,
-        machineId: machineId,
-        details: 'Device disconnected from management'
+        details: `Device ${name} disconnected from management`,
+        eventType: 'Device connection',
+        targets: {
+          deviceId: deviceObj,
+          tunnelId: null,
+          interfaceId: null,
+          policyId: null
+        },
+        severity: severity,
+        orgNotificationsConf
       }
     ]);
     this.devices.removeDeviceInfo(device);

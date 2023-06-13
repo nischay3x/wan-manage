@@ -27,6 +27,8 @@ const { apply } = require('./modifyDevice');
 const { pendingTypes, getReason } = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
 const { getMajorVersion } = require('../versioning');
+const notificationsConf = require('../models/notificationsConf');
+const notifications = require('../models/notifications');
 
 class Events {
   constructor () {
@@ -64,10 +66,13 @@ class Events {
     await notificationsMgr.sendNotifications([{
       org: device.org,
       title: `Static route via ${route.gateway} in device ${device.name} is in pending state`,
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: reason
+      details: reason,
+      targets: {
+        deviceId: device._id,
+        tunnelId: null,
+        interfaceId: null,
+        policyId: null
+      }
     }]);
   }
 
@@ -160,16 +165,60 @@ class Events {
    * @param  {boolean} state if true, the connectivity is online
   */
   async interfaceConnectivityChanged (device, origIfc, state) {
+    const orgNotificationsConf = await notificationsConf.findOne({ org: device.org });
+    let severity;
+    let sendResolved;
+    if (orgNotificationsConf.rules.hasOwnProperty('Interface connection')) {
+      severity = orgNotificationsConf.rules['Interface connection'].severity;
+      sendResolved = orgNotificationsConf.rules['Interface connection'].resolvedAlert;
+    }
     const stateTxt = state === 'yes' ? 'online' : 'offline';
-    logger.info(`Interface connectivity changed to ${stateTxt}`, { params: { origIfc } });
-    await notificationsMgr.sendNotifications([{
-      org: device.org,
-      title: 'Interface connection changed',
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: `Interface ${origIfc.name} state changed to "${stateTxt}"`
-    }]);
+    if (stateTxt === 'online') {
+      await notifications.updateOne(
+        {
+          eventType: { $regex: 'Interface connection', $options: 'i' },
+          resolved: false,
+          'targets.interfaceId': origIfc._id
+        },
+        { $set: { resolved: true } }
+      );
+      if (!sendResolved) {
+        return;
+      }
+    }
+    const existingNotification = await notifications.findOne({
+      eventType: { $regex: 'Interface connection', $options: 'i' },
+      resolved: false,
+      'targets.interfaceId': origIfc._id
+    });
+    if (existingNotification) {
+      await notifications.updateOne(
+        {
+          eventType: { $regex: 'Interface connection', $options: 'i' },
+          resolved: false,
+          'targets.interfaceId': origIfc._id
+        },
+        { $set: { count: existingNotification._doc.count + 1 } }
+      );
+    // create a new alert
+    } else {
+      logger.info(`Interface connectivity changed to ${stateTxt}`, { params: { origIfc } });
+      await notificationsMgr.sendNotifications([{
+        org: device.org,
+        title: 'Interface connection changed',
+        details: `Interface ${origIfc.name} state changed to "${stateTxt}"`,
+        eventType: 'Interface connection',
+        targets: {
+          deviceId: device._id,
+          tunnelId: null,
+          interfaceId: origIfc._id,
+          policyId: null
+        },
+        severity,
+        orgNotificationsConf,
+        resolved: stateTxt === 'online'
+      }]);
+    }
   };
 
   /**
@@ -193,10 +242,13 @@ class Events {
       await notificationsMgr.sendNotifications([{
         org: device.org,
         title: 'Interface IP restored',
-        time: new Date(),
-        device: device._id,
-        machineId: device.machineId,
-        details: `The IP address of Interface ${origIfc.name} has been restored`
+        details: `The IP address of Interface ${origIfc.name} has been restored`,
+        targets: {
+          deviceId: null,
+          tunnelId: null,
+          interfaceId: origIfc._id,
+          policyId: null
+        }
       }]);
     }
 
@@ -266,10 +318,13 @@ class Events {
       await notificationsMgr.sendNotifications([{
         org: device.org,
         title: 'Interface IP missing',
-        time: new Date(),
-        device: device._id,
-        machineId: device.machineId,
-        details: `The interface ${origIfc.name} has no IP address`
+        details: `The interface ${origIfc.name} has no IP address`,
+        targets: {
+          deviceId: null,
+          tunnelId: null,
+          interfaceId: origIfc._id,
+          policyId: null
+        }
       }]);
     }
 
@@ -453,10 +508,13 @@ class Events {
       await notificationsMgr.sendNotifications([{
         org: tunnel.org,
         title: `Tunnel number ${tunnel.num} is in pending state`,
-        time: new Date(),
-        device: device._id,
-        machineId: device.machineId,
-        details: reason
+        details: reason,
+        targets: {
+          deviceId: null,
+          tunnelId: tunnel._id,
+          interfaceId: null,
+          policyId: null
+        }
       }]);
     }
 
@@ -530,7 +588,7 @@ class Events {
       for (const devId in orig) {
         const origIfc = orig[devId];
         const updatedIfc = updated[devId];
-
+        // await this.interfaceConnectivityChanged(origDevice, origIfc, 'no');
         // no need to send events for unassigned interfaces
         if (!origIfc.isAssigned) {
           continue;

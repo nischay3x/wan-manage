@@ -57,14 +57,14 @@ const apply = async (opDevices, user, data) => {
   const oldHwCores = oldDevice.cpuInfo.hwCores;
   const newHwCores = newDevice.cpuInfo.hwCores;
   if (!isEqual(oldHwCores, newHwCores)) {
-    throw new Error('The number of CPU cores is not the same in both devices.');
+    throw new Error('The number of CPU cores is varies in both devices.');
   }
 
   // check that vpp cores cpu equal
   const oldVppCores = oldDevice.cpuInfo.vppCores;
   const newVppCores = newDevice.cpuInfo.vppCores;
   if (!isEqual(oldVppCores, newVppCores)) {
-    throw new Error('The number of VRouter cores is not the same in both devices.');
+    throw new Error('The number of VRouter cores is varies in both devices.');
   }
 
   // check the new device config

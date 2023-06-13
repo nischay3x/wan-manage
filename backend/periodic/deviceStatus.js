@@ -18,6 +18,8 @@
 const periodic = require('./periodic')();
 const connections = require('../websocket/Connections')();
 const { deviceStats, deviceAggregateStats } = require('../models/analytics/deviceStats');
+const notifications = require('../models/notifications');
+const notificationsConf = require('../models/notificationsConf');
 const applicationStats = require('../models/analytics/applicationStats');
 const Joi = require('joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
@@ -27,6 +29,8 @@ const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
+const AsyncLock = require('async-lock');
+const lock = new AsyncLock({ maxOccupationTime: 60000 });
 
 /***
  * This class gets periodic status from all connected devices
@@ -174,6 +178,191 @@ class DeviceStatus {
     });
   }
 
+  async handleAlert (
+    deviceID, deviceInfo, alertKey, orgNotificationsConf, lastUpdateEntry, tunnelNum = null) {
+    let { severity, value, unit, threshold } = tunnelNum
+      ? lastUpdateEntry.alerts[alertKey][tunnelNum]
+      : lastUpdateEntry.alerts[alertKey];
+    try {
+      const condition = {
+        org: deviceInfo.org,
+        eventType: alertKey,
+        severity: severity,
+        resolved: false
+      };
+      if (tunnelNum) {
+        condition['targets.tunnelId'] = tunnelNum;
+      } else {
+        condition['targets.deviceId'] = deviceInfo.deviceObj;
+      }
+      const updated = await notifications.findOneAndUpdate(
+        condition,
+        { $inc: { count: 1 } },
+        { new: true }
+      );
+
+      if (!updated) {
+        // create a new alert
+        value = value.toFixed(2);
+        this.events.push({
+          org: deviceInfo.org,
+          title: alertKey + ' change',
+          details: `The value of the ${alertKey} in the ${tunnelNum ? `tunnel ${tunnelNum}`
+              : `device ${deviceInfo.name}`} has increased to ${value}${unit}`,
+          eventType: alertKey,
+          targets: {
+            deviceId: deviceInfo.deviceObj,
+            tunnelId: tunnelNum || null,
+            interfaceId: null,
+            policyId: null
+          },
+          severity: severity,
+          orgNotificationsConf: orgNotificationsConf,
+          agentAlertsInfo: { value: value, threshold: threshold, unit: unit }
+        });
+      }
+    } catch (err) {
+      logger.warn('Failed to handle device alert', {
+        params: { deviceID: deviceID, err: err.message },
+        periodic: { task: this.taskInfo }
+      });
+    }
+  }
+
+  async handleResolvedAlerts (
+    alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
+    const deviceOnlyAlerts = ['Link/Tunnel round trip time', 'Link/Tunnel default drop rate',
+      'Device memory usage', 'Hard drive usage', 'Temperature'];
+    const notificationsConfRules = orgNotificationsConf.rules;
+    for (const alertKey in alerts) {
+      // if the alert is from flexiManage or from the device but
+      // already exists in the current alerts dictionary continue
+      if (!deviceOnlyAlerts.includes(alertKey) ||
+        (alertKey in lastUpdateEntry.alerts && !alertKey.toLowerCase().includes('tunnel'))) {
+        continue;
+      }
+      // a "tunnel" kind of alert
+      if (!('value' in alerts[alertKey])) {
+        for (const tunnelId in alerts[alertKey]) {
+          if (!(lastUpdateEntry.alerts[alertKey]) ||
+           !(tunnelId in lastUpdateEntry.alerts[alertKey])) {
+            const updated = await notifications.updateOne(
+              {
+                eventType: { $regex: alertKey, $options: 'i' },
+                resolved: false,
+                'targets.tunnelId': tunnelId
+              },
+              { $set: { resolved: true } }
+            );
+            if (updated && notificationsConfRules.hasOwnProperty(alertKey) &&
+            notificationsConfRules[alertKey].resolvedAlert) {
+              this.events.push({
+                org: deviceInfo.org,
+                title: `${alertKey} change`,
+                details: `The value of the ${alertKey} in tunnel ${tunnelId} has returned 
+                  to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
+                    notificationsConfRules[alertKey].thresholdUnit})`,
+                eventType: alertKey,
+                targets: {
+                  deviceId: null,
+                  tunnelId: tunnelId,
+                  interfaceId: null,
+                  policyId: null
+                },
+                severity: alerts[alertKey][tunnelId].severity,
+                orgNotificationsConf: orgNotificationsConf,
+                resolved: true
+              });
+            }
+          }
+        }
+      // a device kind of alert
+      } else {
+        await notifications.updateOne(
+          {
+            'targets.deviceId': deviceInfo.deviceObj,
+            eventType: { $regex: alertKey, $options: 'i' },
+            resolved: false
+          },
+          { $set: { resolved: true } }
+        );
+        if (notificationsConfRules.hasOwnProperty(alertKey) &&
+        notificationsConfRules[alertKey].resolvedAlert) {
+          this.events.push({
+            org: deviceInfo.org,
+            title: `${alertKey} change`,
+            details: `The value of the ${alertKey} in the device 
+              ${deviceInfo.name} has returned
+              to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
+                deviceInfo.alerts[alertKey].unit})`,
+            eventType: alertKey,
+            targets: {
+              deviceId: deviceInfo.deviceObj,
+              tunnelId: null,
+              interfaceId: null,
+              policyId: null
+            },
+            severity: alerts[alertKey].severity,
+            orgNotificationsConf: orgNotificationsConf,
+            resolved: true
+          });
+        }
+      }
+    }
+  }
+
+  async calculateNotifications (deviceID, deviceInfo, lastUpdateEntry) {
+    const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
+    for (const alertKey in lastUpdateEntry.alerts) {
+      if (alertKey.toLowerCase().includes('tunnel')) {
+        for (const tunnelId in lastUpdateEntry.alerts[alertKey]) {
+          await this.handleAlert(
+            deviceID, deviceInfo, alertKey, orgNotificationsConf, lastUpdateEntry, tunnelId);
+        }
+      } else {
+        await this.handleAlert(
+          deviceID, deviceInfo, alertKey, orgNotificationsConf, lastUpdateEntry);
+      }
+    }
+    // handle resolved alerts if needed (exist in the memory but not in the current alerts)
+    if (deviceInfo.alerts) {
+      await this.handleResolvedAlerts(
+        deviceInfo.alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo);
+    // There is no memory so we should look after the unresolved alerts in th db
+    } else {
+      const previousAlerts = await notifications.find({
+        'targets.deviceId': deviceInfo.deviceObj,
+        resolved: false
+      });
+      const prevAlertsDict = {};
+      for (let i = 0; i < previousAlerts.length; i++) {
+        if (previousAlerts[i].severity) {
+          if (previousAlerts[i].targets?.tunnelId) {
+            const tunnelId = previousAlerts[i].targets.tunnelId;
+            const eventType = previousAlerts[i].eventType;
+            prevAlertsDict[eventType] = {
+              [tunnelId]: {
+                value: previousAlerts[i].agentAlertsInfo.value,
+                threshold: previousAlerts[i].agentAlertsInfo.threshold,
+                severity: previousAlerts[i].severity,
+                unit: previousAlerts[i].agentAlertsInfo.unit
+              }
+            };
+          } else {
+            prevAlertsDict[previousAlerts[i].eventType] = {
+              value: previousAlerts[i].agentAlertsInfo.value,
+              threshold: previousAlerts[i].agentAlertsInfo.threshold,
+              severity: previousAlerts[i].severity,
+              unit: previousAlerts[i].agentAlertsInfo.unit
+            };
+          }
+        }
+      }
+      await this.handleResolvedAlerts(
+        prevAlertsDict, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo);
+    }
+  }
+
   /**
      * Sends a get-device-stats message to a device.
      * @param  {string} deviceID the host id of the device
@@ -196,11 +385,29 @@ class DeviceStatus {
               });
               return;
             }
-            this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
+            await this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
-            this.generateDevStatsNotifications();
+            lock.acquire(
+              'notifications',
+              async () => {
+                if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
+              deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
+                  await this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry);
+                  connections.devices.updateDeviceInfo(
+                    deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
+                  connections.devices.updateDeviceInfo(
+                    deviceID, 'alerts', lastUpdateEntry.alerts);
+                }
+                await this.generateDevStatsNotifications();
+              }
+            ).catch((err) => {
+              logger.warn('Failed to calculate device notifications', {
+                params: { deviceID: deviceID, err: err.message },
+                periodic: { task: this.taskInfo }
+              });
+            });
             this.updateDeviceSyncStatus(
               deviceInfo.org,
               deviceInfo.deviceObj,
@@ -423,7 +630,7 @@ class DeviceStatus {
    * @param  {string} state       device state
    * @return {void}
    */
-  setDeviceState (machineId, newState) {
+  async setDeviceState (machineId, newState) {
     // Generate an event if there was a transition in the device's status
     const deviceInfo = connections.getDeviceInfo(machineId);
     if (!deviceInfo) {
@@ -432,19 +639,78 @@ class DeviceStatus {
       });
       return;
     }
+    const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
+    const notificationsConfRules = orgNotificationsConf.rules;
+    const severity = notificationsConfRules['Running router'].severity;
     const { org, deviceObj } = deviceInfo;
     if (!this.status[machineId] || newState !== this.status[machineId].state) {
-      this.events.push({
-        org: org,
-        title: 'Router state change',
-        time: new Date(),
-        device: deviceObj,
-        machineId: machineId,
-        details: `Router state changed to "${newState === 'running' ? 'Running' : 'Not running'}"`
+      const existingNotification = await notifications.findOne({
+        'targets.deviceId': deviceInfo.deviceObj,
+        eventType: { $regex: 'Running router', $options: 'i' },
+        resolved: false
       });
+      if (existingNotification) {
+        // if there is already an alert: mark as resolved
+        if (newState === 'running') {
+          await notifications.updateOne(
+            {
+              device: deviceInfo.deviceObj,
+              eventType: { $regex: 'Running router', $options: 'i' },
+              resolved: false,
+              'targets.deviceId': deviceInfo.deviceObj
+            },
+            { $set: { resolved: true } }
+          );
+          if (orgNotificationsConf.rules.hasOwnProperty('Running router') &&
+          orgNotificationsConf.rules['Running router'].resolvedAlert) {
+            this.events.push({
+              org: org,
+              title: 'Router state change',
+              details: `Router state changed to running 
+               in the device ${deviceInfo.name}`,
+              eventType: 'Running router',
+              targets: {
+                deviceId: deviceInfo.deviceObj,
+                tunnelId: null,
+                interfaceId: null,
+                policyId: null
+              },
+              severity: severity,
+              orgNotificationsConf: orgNotificationsConf,
+              resolved: true
+            });
+          }
+        } else if (newState === 'Not running') {
+          await notifications.updateOne(
+            {
+              device: deviceInfo.deviceObj,
+              eventType: { $regex: 'Running router', $options: 'i' },
+              resolved: false,
+              'targets.deviceId': deviceInfo.deviceObj
+            },
+            { $set: { count: existingNotification._doc.count + 1 } }
+          );
+        }
+      } else if (newState !== 'running') {
+        this.events.push({
+          org: org,
+          title: 'Router state change',
+          details: `Router state changed to Not running 
+         in the device ${deviceInfo.name}`,
+          eventType: 'Running router',
+          targets: {
+            deviceId: deviceInfo.deviceObj,
+            tunnelId: null,
+            interfaceId: null,
+            policyId: null
+          },
+          severity: severity,
+          orgNotificationsConf: orgNotificationsConf
+        });
+      }
       this.setDevicesStatusByOrg(org, deviceObj, newState);
+      this.setDeviceStatsField(machineId, 'state', newState);
     }
-    this.setDeviceStatsField(machineId, 'state', newState);
   }
 
   /**
@@ -499,7 +765,7 @@ class DeviceStatus {
      * @param  {Object} rawStats   device stats supplied by the device
      * @return {void}
      */
-  setDeviceStatus (machineId, deviceInfo, rawStats) {
+  async setDeviceStatus (machineId, deviceInfo, rawStats) {
     let devStatus = 'failed';
     if (rawStats.hasOwnProperty('state')) { // Agent v1.X.X
       devStatus = rawStats.state;
@@ -508,8 +774,8 @@ class DeviceStatus {
       devStatus = rawStats.running === true ? 'running' : 'stopped';
     }
 
-    this.setDeviceState(machineId, devStatus);
-    const { org, deviceObj } = deviceInfo;
+    await this.setDeviceState(machineId, devStatus);
+    const { org } = deviceInfo;
 
     // Interface statistics
     const timeDelta = rawStats.period;
@@ -586,38 +852,13 @@ class DeviceStatus {
           this.events.push({
             org: org,
             title: 'Tunnel change',
-            time: new Date(),
-            device: deviceObj,
-            machineId: machineId,
-            details: `Tunnel ${tunnelID} state changed to "Not connected"`
-          });
-        }
-        // Generate a notification only if drop rate has
-        // changed, and the new drop rate is higher than 50%
-        if ((firstTunnelUpdate ||
-            tunnelState.drop_rate !== this.status[machineId].tunnelStatus[tunnelID].drop_rate) &&
-            tunnelState.drop_rate > 50) {
-          this.events.push({
-            org: org,
-            title: 'Tunnel drop rate',
-            time: new Date(),
-            device: deviceObj,
-            machineId: machineId,
-            details: `Tunnel ${tunnelID} drop rate reached ${tunnelState.drop_rate}%`
-          });
-        }
-        // Generate a notification only if RTT has changed,
-        // and the new RTT is higher than 300 milliseconds
-        if ((firstTunnelUpdate ||
-                    tunnelState.rtt !== this.status[machineId].tunnelStatus[tunnelID].rtt) &&
-                    tunnelState.rtt > 300) {
-          this.events.push({
-            org: org,
-            title: 'Tunnel latency',
-            time: new Date(),
-            device: deviceObj,
-            machineId: machineId,
-            details: `Tunnel ${tunnelID} latency reached ${tunnelState.rtt}ms`
+            details: `Tunnel ${tunnelID} state changed to "Not connected"`,
+            targets: {
+              deviceId: null,
+              tunnelId: tunnelID,
+              interfaceId: null,
+              policyId: null
+            }
           });
         }
       });
@@ -644,10 +885,10 @@ class DeviceStatus {
     * events created while processing the device reply.
     * @return {void}
     */
-  generateDevStatsNotifications () {
+  async generateDevStatsNotifications () {
     // Send notifications if exist
     if (this.events.length > 0) {
-      notificationsMgr.sendNotifications([...this.events]);
+      await notificationsMgr.sendNotifications([...this.events]);
       this.events = [];
     }
   }
