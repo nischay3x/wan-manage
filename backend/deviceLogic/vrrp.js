@@ -114,7 +114,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
     const vrrpGroup = newVrrpGroup || origVrrpGroup;
     await Vrrp.updateOne(
       { org: orgId, _id: vrrpGroup._id },
-      { $set: { 'devices.$[elem].status': 'pending' } },
+      { $set: { 'devices.$[elem].jobStatus': 'pending' } },
       { arrayFilters: [{ 'elem.device': _id }] }
     );
 
@@ -143,7 +143,8 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
           device: _id,
           vrrpGroup: newVrrpGroup,
           op: devicesTasks[deviceId].op, // "remove" or "create"
-          orgId
+          orgId,
+          machineId
         }
       },
       // Metadata
@@ -171,13 +172,6 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
     };
     return { fulfilled, reasons };
   }, { fulfilled: [], reasons: [] });
-  // const status = fulfilled.length < devices.length
-  //   ? 'partially completed' : 'completed';
-  // const message = fulfilled.length < devices.length
-  //   ? `Warning: ${fulfilled.length} of ${devices.length} VRRP jobs added.` +
-  //     `Some devices have following errors: ${reasons.join('. ')}`
-  //   : `VRRP job${devices.length > 1 ? 's' : ''} added successfully`;
-  // return { ids: fulfilled, status, message };
   return { ids: fulfilled, reasons };
 };
 
@@ -188,7 +182,14 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
  * @return {void}
  */
 const complete = async (jobId, res) => {
-  const { device: deviceId, orgId, vrrpGroup, op } = res;
+  const { device: deviceId = null, orgId, vrrpGroup, op, machineId } = res;
+
+  if (!deviceId) {
+    logger.warn('VRRP Job completed without deviceId', {
+      params: { orgId, vrrpGroupId: vrrpGroup?._id, op, jobId: jobId }
+    });
+    return;
+  }
 
   logger.info('VRRP job complete', {
     params: { deviceId, orgId, vrrpGroupId: vrrpGroup?._id, op, jobId: jobId }
@@ -197,9 +198,14 @@ const complete = async (jobId, res) => {
   if (op === 'create') { // for "remove" device is not exists so nothing to update
     await Vrrp.updateOne(
       { org: orgId, _id: vrrpGroup._id },
-      { $set: { 'devices.$[elem].status': 'installed' } },
+      { $set: { 'devices.$[elem].jobStatus': 'installed' } },
       { arrayFilters: [{ 'elem.device': deviceId }] }
     );
+  }
+
+  if (op === 'remove') {
+    // clear vrrp status from memory for this device
+    deviceStatus.clearDeviceVrrpStatus(machineId);
   }
 };
 
@@ -219,7 +225,7 @@ const error = async (jobId, res) => {
   if (op === 'create') { // for "remove" device is not exists so nothing to update
     await Vrrp.updateOne(
       { org: orgId, _id: vrrpGroup._id },
-      { $set: { 'devices.$[elem].status': 'failed' } },
+      { $set: { 'devices.$[elem].jobStatus': 'failed' } },
       { arrayFilters: [{ 'elem.device': deviceId }] }
     );
   }
@@ -301,7 +307,7 @@ const remove = async (job) => {
     if (op === 'create') { // for "remove" device is not exists so nothing to update
       await Vrrp.updateOne(
         { org: orgId, _id: vrrpGroup._id },
-        { $set: { 'devices.$[elem].status': 'removed' } },
+        { $set: { 'devices.$[elem].jobStatus': 'removed' } },
         { arrayFilters: [{ 'elem.device': deviceId }] }
       );
     }

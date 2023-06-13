@@ -26,6 +26,7 @@ const ObjectId = require('mongoose').Types.ObjectId;
 const { isEqual, keyBy } = require('lodash');
 const { queue } = require('../deviceLogic/vrrp');
 const cidr = require('cidr-tools');
+const deviceStatus = require('../periodic/deviceStatus')();
 
 class VrrpService {
   static selectVrrpGroupParams (vrrpGroup) {
@@ -58,7 +59,7 @@ class VrrpService {
         query['devices.device'] = deviceId;
       }
       const result = await Vrrp.find(query)
-        .populate('devices.device', '_id name')
+        .populate('devices.device', '_id name machineId')
         .lean();
 
       const vrrpGroups = result.map(vrrp => {
@@ -67,10 +68,14 @@ class VrrpService {
           virtualRouterId: vrrp.virtualRouterId,
           virtualIp: vrrp.virtualIp,
           devices: vrrp.devices.map(d => {
+            const machineId = d.device.machineId;
+            const status = deviceStatus.getDeviceVrrpStatus(machineId, vrrp.virtualRouterId);
+
             return {
               name: d.device.name,
               _id: d.device._id.toString(),
-              status: d.status,
+              jobStatus: d.jobStatus,
+              status: status,
               interface: d.interface
             };
           }),
@@ -154,7 +159,7 @@ class VrrpService {
       const origDevices = keyBy(origVrrp.devices, '_id');
       for (const vrrpDevice of vrrpGroup.devices) {
         if (vrrpDevice._id in origDevices) {
-          vrrpDevice.status = origDevices[vrrpDevice._id].status;
+          vrrpDevice.jobStatus = origDevices[vrrpDevice._id].jobStatus;
         }
       }
 
@@ -390,6 +395,47 @@ class VrrpService {
     }
 
     return { valid: true, err: '' };
+  }
+
+  /**
+  * Get devices which overlapping with the virtualIP
+  **/
+  static async vrrpStatusGET ({ org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const vrrpGroups = await Vrrp.find({ org: orgList[0] })
+        .populate('devices.device', '_id name machineId')
+        .lean();
+
+      const res = vrrpGroups.map(vrrpGroup => {
+        for (const vrrpDevice of vrrpGroup.devices) {
+          const machineId = vrrpDevice.device.machineId;
+          const status = deviceStatus.getDeviceVrrpStatus(machineId, vrrpGroup.virtualRouterId);
+          vrrpDevice.status = status;
+        }
+        return {
+          _id: vrrpGroup._id.toString(),
+          name: vrrpGroup.name,
+          virtualRouterId: vrrpGroup.virtualRouterId,
+          virtualIp: vrrpGroup.virtualIp,
+          devices: vrrpGroup.devices.map(d => {
+            return {
+              _id: d.device._id.toString(),
+              priority: d.priority,
+              name: d.device.name,
+              status: d.status
+            };
+          })
+        };
+      });
+
+      return Service.successResponse(res);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
   }
 }
 

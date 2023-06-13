@@ -8615,6 +8615,55 @@ paths:
       x-swagger-router-controller: Vrrp
       x-openapi-router-controller: VrrpController
       x-openapi-router-service: VrrpService
+  /vrrp/status:
+    get:
+      operationId: vrrpStatusGET
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VrrpStatus'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve VRRP Status
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
   /vrrp/{id}:
     get:
       operationId: vrrpIdGET
@@ -12333,6 +12382,45 @@ components:
           type: array
           items:
             type: string
+    VrrpStatus:
+      type: array
+      items:
+        type: object
+        properties:
+          _id:
+            type: string
+          name:
+            type: string
+          virtualIp:
+            type: string
+            format: ipv4
+          virtualRouterId:
+            type: string
+          devices:
+            type: array
+            items:
+              type: object
+              properties:
+                _id:
+                  type: string
+                name:
+                  type: string
+                priority:
+                  type: string
+                status:
+                  type: object
+                  properties:
+                    state:
+                      type: string
+                      enum:
+                      - Master
+                      - Backup
+                      - Initialize
+                      - Interface Down
+                    time:
+                      type: number
+                    adjusted_priority:
+                      type: number
     VrrpGroup:
       type: object
       properties:
@@ -12392,6 +12480,12 @@ components:
               name:
                 type: string
               _id:
+                type: string
+              jobStatus:
+                type: string
+              status:
+                type: object
+              interface:
                 type: string
           type: array
       type: object

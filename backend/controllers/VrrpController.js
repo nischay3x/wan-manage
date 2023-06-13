@@ -45,6 +45,10 @@ class VrrpController {
   async vrrpDeviceVrrpInterfacesGET (request, response) {
     await Controller.handleRequest(request, response, this.service.vrrpDeviceVrrpInterfacesGET);
   }
+
+  async vrrpStatusGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.vrrpStatusGET);
+  }
 }
 
 module.exports = VrrpController;

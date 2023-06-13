@@ -53,7 +53,7 @@ const vrrpDeviceSchema = new Schema({
     },
     default: []
   },
-  status: {
+  jobStatus: {
     type: String,
     enum: ['installed', 'pending', 'failed', 'removed']
   }
