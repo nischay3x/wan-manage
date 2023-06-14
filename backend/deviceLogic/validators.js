@@ -531,7 +531,7 @@ const validateDevice = (
             // then no need to throw error as it was saved with user approval.
             // hence we check here if it was overlapped with "origDevice".
             const origIfc = origDevice?.interfaces?.find(i => i.devId === currentLanIfc.devId);
-            if (origIfc) {
+            if (origIfc?.IPv4) {
               const origIfcSubnet = `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
               if (cidr.overlap(origIfcSubnet, subnet)) {
                 continue;
