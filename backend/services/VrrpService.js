@@ -272,9 +272,9 @@ class VrrpService {
                     as: 'ifc',
                     cond: {
                       $and: [
-                        { $eq: ['$$ifc.isAssigned', true] },
-                        { $ne: ['$$ifc.IPv4', ''] },
-                        { $ne: ['$$ifc.IPv4Mask', ''] }
+                        { $eq: ['$$ifc.isAssigned', true] }
+                        // { $ne: ['$$ifc.IPv4', ''] },
+                        // { $ne: ['$$ifc.IPv4Mask', ''] }
                       ]
                     }
                   }
@@ -283,6 +283,7 @@ class VrrpService {
                 in: {
                   devId: '$$ifc.devId',
                   name: '$$ifc.name',
+                  dhcp: '$$ifc.dhcp',
                   IPv4: { $concat: ['$$ifc.IPv4', '/', '$$ifc.IPv4Mask'] }
                 }
               }
@@ -464,6 +465,9 @@ function checkOverlapping (interfaces, virtualIP) {
   }
 
   return interfaces.some(i => {
+    if (i.IPv4 === '/') {
+      return true;
+    }
     return checkSubnetIntersection(i.IPv4, `${virtualIP}/32`);
   });
 }

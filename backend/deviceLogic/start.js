@@ -40,7 +40,9 @@ const { buildInterfaces } = require('./interfaces');
 const apply = async (devices, user, data) => {
   const { username } = user;
   const { org: orgId, meta = {} } = data;
-  const { allowOverlapping = false } = meta;
+  // Note! on start, the "allowOverlapping" is true by default.
+  // User should allowed it on the configuration time.
+  const { allowOverlapping = true } = meta;
   const opDevices = await Promise.all(devices.map(d => d
     .populate('policies.firewall.policy', '_id name rules')
     .populate('interfaces.pathlabels', '_id name description color type')

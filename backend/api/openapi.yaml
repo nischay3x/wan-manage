@@ -12373,6 +12373,8 @@ components:
                 type: string
               IPv4:
                 type: string
+              dhcp:
+                type: string
       example:
         id: deviceId
         name: Berlin
