@@ -19,6 +19,7 @@ const Service = require('./Service');
 const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
+const vrrp = require('../models/vrrp');
 const pathLabelsModel = require('../models/pathlabels');
 const Tokens = require('../models/tokens');
 const notificationsModel = require('../models/notifications');
@@ -1383,6 +1384,12 @@ class DevicesService {
             { params: { deviceId: id }, user: user });
           throw createError(400, 'All device tunnels must be deleted before deleting a device');
         }
+
+        // remove vrrp that configured on this device
+        await vrrp.updateMany(
+          { org: { $in: orgList } },
+          { $pull: { devices: { device: mongoose.Types.ObjectId(id) } } }
+        ).session(session);
 
         const deviceCount = await devices.countDocuments({
           account: delDevice.account
