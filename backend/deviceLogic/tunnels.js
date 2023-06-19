@@ -2212,8 +2212,13 @@ const getTunnelConfigDependencies = async (tunnel, isPending) => {
     });
   }
 
+  // // tunnel.org sometimes populated and sometimes does not.
+  // // since the "aggregate" below requires using mongoose object ID,
+  // // here is a safer workaround to get the always the object ID.
+  const orgId = tunnel?.org?._id?.toString() ?? tunnel.org;
+
   const devicesStaticRoutes = await devicesModel.aggregate([
-    { $match: { org: tunnel.org } }, // org match is very important here
+    { $match: { org: mongoose.Types.ObjectId(orgId) } }, // org match is very important here
     {
       $addFields: {
         staticroutes: {
