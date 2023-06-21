@@ -11071,6 +11071,8 @@ components:
         dns: ["8.8.8.8", "8.8.8.4"]
         options: [{ "option": "routers", "code": "3", "value": "20.20.20.100"}]
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
+        maxLeaseTime: 7200
+        defaultLeaseTime: 600
       properties:
         interface:
           description: Interface bus Address
@@ -11099,6 +11101,14 @@ components:
           items:
             $ref: '#/components/schemas/DhcpMacAssign'
           type: array
+        defaultLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+        maxLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
       required:
       - interface
       - rangeStart
@@ -11125,6 +11135,8 @@ components:
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
         options: [{ "option": "routers", "code": "3", "value": "20.20.20.100"}]
         status: "completed"
+        maxLeaseTime: 7200
+        defaultLeaseTime: 600
       properties:
         _id:
           maxLength: 24
@@ -11160,6 +11172,16 @@ components:
         status:
           description: Route status
           type: string
+        defaultLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+          nullable: true
+        maxLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+          nullable: true
       type: object
     ResetPasswordRequest:
       example:

@@ -16,6 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { membership } = require('../models/membership');
+const { devices } = require('../models/devices');
 const { addPerms, removePerms } = require('./utils/updatePerms');
 const logger = require('../logging/logging')({
   module: module.filename,
@@ -26,6 +27,12 @@ async function up () {
   // Add vrrp to user permission
   try {
     await addPerms(membership, 'vrrp');
+
+    await devices.updateMany(
+      { },
+      { $set: { 'dhcp.$[].options': [] } },
+      { upsert: false }
+    );
   } catch (err) {
     logger.error('Database migration failed', {
       params: {
@@ -42,6 +49,12 @@ async function down () {
   try {
     // Remove vrrp permissions
     await removePerms(membership, 'vrrp');
+
+    await devices.updateMany(
+      { },
+      { $unset: { 'dhcp.$[].options': '' } },
+      { upsert: false }
+    );
   } catch (err) {
     logger.error('Database migration failed', {
       params: {

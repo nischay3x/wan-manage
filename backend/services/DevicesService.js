@@ -271,7 +271,9 @@ class DevicesService {
           'status',
           'isPending',
           'pendingReason',
-          'options'
+          'options',
+          'defaultLeaseTime',
+          'maxLeaseTime'
         ]);
 
         let macAssignList;

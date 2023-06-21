@@ -517,6 +517,26 @@ const DHCPSchema = new Schema({
   dns: [String],
   macAssign: [MACAssignmentSchema],
   options: [OptionSchema],
+  defaultLeaseTime: {
+    type: Number,
+    required: false,
+    min: [-1, 'defaultLeaseTime should be a number between -1 - 31536000'],
+    max: [31536000, 'defaultLeaseTime should be a number between -1 - 31536000'],
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'Default lease time should be a number'
+    }
+  },
+  maxLeaseTime: {
+    type: Number,
+    required: false,
+    min: [-1, 'maxLeaseTime should be a number between -1 - 31536000'],
+    max: [31536000, 'maxLeaseTime should be a number between -1 - 31536000'],
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'Max lease time should be a number'
+    }
+  },
   status: {
     type: String,
     default: 'failed'

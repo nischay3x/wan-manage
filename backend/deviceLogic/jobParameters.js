@@ -280,7 +280,8 @@ const transformBGP = async (device) => {
 const transformDHCP = dhcp => {
   const { rangeStart, rangeEnd, dns, macAssign } = dhcp;
   const options = dhcp.options ?? [];
-  return {
+
+  const res = {
     interface: dhcp.interface,
     range_start: rangeStart,
     range_end: rangeEnd,
@@ -303,6 +304,16 @@ const transformDHCP = dhcp => {
       ]);
     })
   };
+
+  if (dhcp?.defaultLeaseTime) {
+    res.defaultLeaseTime = dhcp.defaultLeaseTime;
+  }
+
+  if (dhcp?.maxLeaseTime) {
+    res.maxLeaseTime = dhcp.maxLeaseTime;
+  }
+
+  return res;
 };
 
 const transformLte = lteInterface => {
