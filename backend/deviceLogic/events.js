@@ -166,10 +166,8 @@ class Events {
   */
   async interfaceConnectivityChanged (device, origIfc, state) {
     const orgNotificationsConf = await notificationsConf.findOne({ org: device.org });
-    let severity;
     let sendResolved;
     if (orgNotificationsConf.rules.hasOwnProperty('Interface connection')) {
-      severity = orgNotificationsConf.rules['Interface connection'].severity;
       sendResolved = orgNotificationsConf.rules['Interface connection'].resolvedAlert;
     }
     const stateTxt = state === 'yes' ? 'online' : 'offline';
@@ -214,7 +212,6 @@ class Events {
           interfaceId: origIfc._id,
           policyId: null
         },
-        severity,
         orgNotificationsConf,
         resolved: stateTxt === 'online'
       }]);
@@ -318,6 +315,7 @@ class Events {
       await notificationsMgr.sendNotifications([{
         org: device.org,
         title: 'Interface IP missing',
+        eventType: 'Interface ip',
         details: `The interface ${origIfc.name} has no IP address`,
         targets: {
           deviceId: null,

@@ -299,8 +299,6 @@ class QOSPoliciesService {
       const applied = await applyPolicy(opDevices, qosPolicy, 'install', user, orgList[0], true);
       // send a notification
       const orgNotificationsConf = await notificationsConf.findOne({ org: orgList[0] });
-      const notificationsConfRules = orgNotificationsConf.rules;
-      const severity = notificationsConfRules['Policy change'].severity;
       notificationsMgr.sendNotifications([
         {
           org: orgList[0],
@@ -313,7 +311,6 @@ class QOSPoliciesService {
             interfaceId: null,
             policyId: id
           },
-          severity: severity,
           orgNotificationsConf: orgNotificationsConf,
           resolved: true
         }

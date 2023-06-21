@@ -30,7 +30,8 @@ const ruleSchema = new Schema({
     type: String,
     required: false,
     enum: ['device', 'tunnel', 'policy', 'interface']
-  }
+  },
+  sendWebHook: { type: Boolean, default: false }
 });
 
 /**
@@ -58,7 +59,8 @@ const notificationsConfSchema = new Schema({
     Temperature: ruleSchema,
     'Policy change': ruleSchema,
     'Software update': ruleSchema,
-    'Interface connection': ruleSchema
+    'Interface connection': ruleSchema,
+    'Link status': ruleSchema
   },
   signedToCritical:
   [

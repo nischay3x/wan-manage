@@ -30,7 +30,7 @@ const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 const AsyncLock = require('async-lock');
-const lock = new AsyncLock({ maxOccupationTime: 60000 });
+const lock = new AsyncLock({ maxOccupationTime: 30000, timeout: 20000 });
 
 /***
  * This class gets periodic status from all connected devices
@@ -207,7 +207,7 @@ class DeviceStatus {
         this.events.push({
           org: deviceInfo.org,
           title: alertKey + ' change',
-          details: `The value of the ${alertKey} in the ${tunnelNum ? `tunnel ${tunnelNum}`
+          details: `The value of the ${alertKey} in ${tunnelNum ? `tunnel ${tunnelNum}`
               : `device ${deviceInfo.name}`} has increased to ${value}${unit}`,
           eventType: alertKey,
           targets: {
@@ -246,15 +246,21 @@ class DeviceStatus {
         for (const tunnelId in alerts[alertKey]) {
           if (!(lastUpdateEntry.alerts[alertKey]) ||
            !(tunnelId in lastUpdateEntry.alerts[alertKey])) {
-            const updated = await notifications.updateOne(
+            let resolvedAlertDeviceId;
+            const updatedDocument = await notifications.findOneAndUpdate(
               {
                 eventType: { $regex: alertKey, $options: 'i' },
                 resolved: false,
-                'targets.tunnelId': tunnelId
+                'targets.tunnelId': tunnelId,
+                severity: alerts[alertKey][tunnelId].severity
               },
-              { $set: { resolved: true } }
+              { $set: { resolved: true } },
+              { returnOriginal: false }
             );
-            if (updated && notificationsConfRules.hasOwnProperty(alertKey) &&
+            if (updatedDocument) {
+              resolvedAlertDeviceId = updatedDocument.targets.deviceId;
+            }
+            if (updatedDocument && resolvedAlertDeviceId !== deviceInfo.deviceObj &&
             notificationsConfRules[alertKey].resolvedAlert) {
               this.events.push({
                 org: deviceInfo.org,
@@ -291,7 +297,7 @@ class DeviceStatus {
           this.events.push({
             org: deviceInfo.org,
             title: `${alertKey} change`,
-            details: `The value of the ${alertKey} in the device 
+            details: `The value of the ${alertKey} in device 
               ${deviceInfo.name} has returned
               to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
                 deviceInfo.alerts[alertKey].unit})`,
@@ -407,6 +413,13 @@ class DeviceStatus {
                 params: { deviceID: deviceID, err: err.message },
                 periodic: { task: this.taskInfo }
               });
+              // The lock throws time out error if the item in th queue didn't
+              // execute the calculate notifications function. We want to reset the hash in order to
+              // execute the function next time.
+              if (err.message.includes('async-lock timed out in queue')) {
+                connections.devices.updateDeviceInfo(
+                  deviceID, 'notificationsHash', '');
+              }
             });
             this.updateDeviceSyncStatus(
               deviceInfo.org,

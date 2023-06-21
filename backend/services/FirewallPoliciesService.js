@@ -277,8 +277,6 @@ class FirewallPoliciesService {
       const converted = JSON.parse(JSON.stringify(firewallPolicy));
       // send a notification
       const orgNotificationsConf = await notificationsConf.findOne({ org: orgList[0] });
-      const notificationsConfRules = orgNotificationsConf.rules;
-      const severity = notificationsConfRules['Policy change'].severity;
 
       notificationsMgr.sendNotifications([
         {
@@ -292,7 +290,6 @@ class FirewallPoliciesService {
             interfaceId: null,
             policyId: id
           },
-          severity: severity,
           orgNotificationsConf: orgNotificationsConf,
           resolved: true
         }

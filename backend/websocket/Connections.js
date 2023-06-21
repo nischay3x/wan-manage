@@ -378,49 +378,44 @@ class Connections {
     // Only after getting the device's response and updating
     // the information, the device can be considered ready.
     this.sendDeviceInfoMsg(device, deviceInfo.deviceObj, deviceInfo.org, true);
-    let severity, resolvedAlert;
-    notificationsConf.findOne({ org: deviceInfo.org }).then((orgNotificationsConf) => {
-      if (orgNotificationsConf.rules.hasOwnProperty('Device connection')) {
-        resolvedAlert = orgNotificationsConf.rules['Device connection'].resolvedAlert;
-        severity = orgNotificationsConf.rules['Device connection'].severity;
-      }
-      notifications.findOne({
+    let resolvedAlert;
+    (async () => {
+      const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
+      resolvedAlert = orgNotificationsConf.rules['Device connection'].resolvedAlert;
+      const query = {
         eventType: { $regex: 'Device connection', $options: 'i' },
         resolved: false,
         'targets.deviceId': deviceInfo.deviceObj
-      }).then((res) => {
-        if (res) {
-          notifications.updateOne(
-            {
-              eventType: { $regex: 'Device connection', $options: 'i' },
-              resolved: false,
-              'targets.deviceId': deviceInfo.deviceObj
+      };
+      const existingDisconnectionAlert = await notifications.findOneAndUpdate(
+        query,
+        { $set: { resolved: true } }
+      );
+      if (existingDisconnectionAlert && resolvedAlert) {
+        await notificationsMgr.sendNotifications([
+          {
+            org: deviceInfo.org,
+            title: 'Device connection change',
+            details: `Device ${deviceInfo.name} reconnected to management`,
+            eventType: 'Device connection',
+            targets: {
+              deviceId: deviceInfo.deviceObj,
+              tunnelId: null,
+              interfaceId: null,
+              policyId: null
             },
-            { $set: { resolved: true } }
-          );
-        }
-        if (resolvedAlert) {
-          notificationsMgr.sendNotifications([
-            {
-              org: deviceInfo.org,
-              title: 'Device connection change',
-              details: `Device ${deviceInfo.name} reconnected to management`,
-              eventType: 'Device connection',
-              targets: {
-                deviceId: deviceInfo.deviceObj,
-                tunnelId: null,
-                interfaceId: null,
-                policyId: null
-              },
-              severity: severity,
-              orgNotificationsConf,
-              resolved: true
-            }
-          ]);
+            orgNotificationsConf,
+            resolved: true
+          }
+        ]);
+      }
+    })().catch(error => {
+      logger.error('Error during the DB operations', {
+        params: {
+          err: error.message
         }
       });
-    }
-    );
+    });
   }
 
   /**
@@ -503,7 +498,7 @@ class Connections {
         const incomingInterfaces = deviceInfo.message.network.interfaces;
 
         const interfaces = [];
-        origDevice.interfaces.forEach(i => {
+        for (const i of origDevice.interfaces) {
           const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
           if (!updatedConfig) {
             if (i.devId.startsWith('vlan')) {
@@ -525,22 +520,75 @@ class Connections {
             return;
           }
 
-          // send a notification if the link changed to down
-          if (updatedConfig.link === 'down' && i.linkStatus !== 'down') {
-            const { org } = prevDeviceInfo;
-            notificationsMgr.sendNotifications([
+          // send a notification if the link's status has been changed
+          const { org, deviceObj: deviceId } = prevDeviceInfo;
+          const orgNotificationsConf = await notificationsConf.findOne({ org: org });
+          let sendResolved;
+          if (orgNotificationsConf.rules.hasOwnProperty('Link status')) {
+            sendResolved = orgNotificationsConf.rules['Link status'].resolvedAlert;
+          }
+          if (updatedConfig.link === 'up' && i.linkStatus === 'up') {
+            const updated = await notifications.findOneAndUpdate(
               {
+                eventType: { $regex: 'Link status', $options: 'i' },
+                resolved: false,
+                'targets.interfaceId': i._id
+              },
+              { $set: { resolved: true } }
+            );
+            if (updated && sendResolved) {
+              logger.info(`Link status changed to ${updatedConfig.link}`,
+                { params: { interface: i } });
+              await notificationsMgr.sendNotifications([{
+                org: org,
+                title: 'Link status changed',
+                details: `Link ${i.name} ${i.IPv4} is UP`,
+                eventType: 'Link status',
+                targets: {
+                  deviceId: deviceId,
+                  tunnelId: null,
+                  interfaceId: i._id,
+                  policyId: null
+                },
+                orgNotificationsConf,
+                resolved: true
+              }]);
+            }
+          } else if (updatedConfig.link === 'down' && i.linkStatus !== 'down') {
+            // TODO - decide if count is relevant to flexiManage alerts
+            const existingNotification = await notifications.findOne({
+              eventType: { $regex: 'Link status', $options: 'i' },
+              resolved: false,
+              'targets.interfaceId': i._id
+            });
+
+            if (existingNotification) {
+              await notifications.updateOne(
+                {
+                  eventType: { $regex: 'Link status', $options: 'i' },
+                  resolved: false,
+                  'targets.interfaceId': i._id
+                },
+                { $set: { count: existingNotification._doc.count + 1 } }
+              );
+            } else {
+              logger.info(`Link status changed to ${updatedConfig.link}`,
+                { params: { interface: i } });
+              await notificationsMgr.sendNotifications([{
                 org: org,
                 title: 'Link status changed',
                 details: `Link ${i.name} ${i.IPv4} is DOWN`,
+                eventType: 'Link status',
                 targets: {
-                  deviceId: deviceInfo.deviceObj,
+                  deviceId: deviceId,
                   tunnelId: null,
-                  interfaceId: null,
+                  interfaceId: i._id,
                   policyId: null
-                }
-              }
-            ]);
+                },
+                orgNotificationsConf,
+                resolved: false
+              }]);
+            }
           }
           const updInterface = {
             ...i.toJSON(),
@@ -595,7 +643,7 @@ class Connections {
 
           updInterface.locked = i.locked;
           interfaces.push(updInterface);
-        });
+        };
 
         const deviceId = origDevice._id.toString();
 
@@ -956,28 +1004,26 @@ class Connections {
     // Device has no information, probably not connected, just return
     const deviceInfo = this.devices.getDeviceInfo(device);
     if (!deviceInfo) return;
-    let orgNotificationsConf, severity;
+    let orgNotificationsConf;
     notificationsConf.findOne({ org: deviceInfo.org }).then((res) => {
       orgNotificationsConf = res;
-      severity = orgNotificationsConf.rules['Device connection'].severity;
+      const { org, deviceObj, name } = deviceInfo;
+      notificationsMgr.sendNotifications([
+        {
+          org: org,
+          title: 'Device connection change',
+          details: `Device ${name} disconnected from management`,
+          eventType: 'Device connection',
+          targets: {
+            deviceId: deviceObj,
+            tunnelId: null,
+            interfaceId: null,
+            policyId: null
+          },
+          orgNotificationsConf
+        }
+      ]);
     });
-    const { org, deviceObj, name } = deviceInfo;
-    notificationsMgr.sendNotifications([
-      {
-        org: org,
-        title: 'Device connection change',
-        details: `Device ${name} disconnected from management`,
-        eventType: 'Device connection',
-        targets: {
-          deviceId: deviceObj,
-          tunnelId: null,
-          interfaceId: null,
-          policyId: null
-        },
-        severity: severity,
-        orgNotificationsConf
-      }
-    ]);
     this.devices.removeDeviceInfo(device);
     this.callRegisteredCallbacks(this.closeCallbacks, device);
     logger.info('Device connection closed', { params: { deviceId: device } });

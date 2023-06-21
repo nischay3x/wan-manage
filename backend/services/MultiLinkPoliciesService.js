@@ -328,8 +328,6 @@ class MultiLinkPoliciesService {
       const converted = JSON.parse(JSON.stringify(populated));
       // send a notification
       const orgNotificationsConf = await notificationsConf.findOne({ org: orgList[0] });
-      const notificationsConfRules = orgNotificationsConf.rules;
-      const severity = notificationsConfRules['Policy change'].severity;
       notificationsMgr.sendNotifications([
         {
           org: orgList[0],
@@ -342,7 +340,6 @@ class MultiLinkPoliciesService {
             interfaceId: null,
             policyId: id
           },
-          severity: severity,
           orgNotificationsConf: orgNotificationsConf,
           resolved: true
         }

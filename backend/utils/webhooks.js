@@ -19,8 +19,13 @@ class WebHooks {
   async sendToWebHook (url, message, secret) {
     // For an empty url (development), return true
     if (url === '') return Promise.resolve(true);
-
-    const data = JSON.stringify({ ...message, secret: secret });
+    let data;
+    if (message.details) {
+      const unescapedDetails = message.details.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+      data = JSON.stringify({ ...message, secret: secret, details: unescapedDetails });
+    } else {
+      data = JSON.stringify({ ...message, secret: secret });
+    }
     const headers = {
       'Content-Type': 'application/json',
       'Content-Length': data.length,

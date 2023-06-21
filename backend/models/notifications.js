@@ -108,7 +108,8 @@ const notificationsSchema = new Schema({
       'Temperature',
       'Policy change',
       'Software update',
-      'Interface connection']
+      'Interface connection',
+      'Link status']
   },
   resolved:
   {
@@ -122,8 +123,9 @@ const notificationsSchema = new Schema({
   },
   severity: {
     type: String,
-    required: false,
-    enum: ['warning', 'critical']
+    required: true,
+    enum: ['warning', 'critical', null],
+    default: null
   },
   agentAlertsInfo: {
     type: alertInfoSchema,

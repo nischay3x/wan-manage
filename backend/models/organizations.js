@@ -71,6 +71,11 @@ const OrgSchema = new Schema({
       validator: validators.validateVxlanPort,
       message: 'vxlanPort should be a valid Port value'
     }
+  },
+  webhookURL: {
+    type: String,
+    default: null,
+    required: false
   }
 });
 

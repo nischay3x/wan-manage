@@ -60,7 +60,9 @@ class NotificationsService {
             time: 1,
             title: 1,
             details: 1,
-            status: 1
+            targets: 1,
+            status: 1,
+            severity: 1
           }
         }
       ] : [];
@@ -325,7 +327,7 @@ class NotificationsService {
         return Service.successResponse([sortedRules]);
       } else {
         const mergedRules = {};
-        const keysOfInterest = ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'severity', 'immediateEmail', 'resolvedAlert', 'type'];
+        const keysOfInterest = ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'severity', 'immediateEmail', 'resolvedAlert', 'type', 'sendWebHook'];
         response.forEach(org => {
           Object.keys(org.rules).forEach(ruleName => {
             if (!mergedRules[ruleName]) {
@@ -344,7 +346,8 @@ class NotificationsService {
             }
           });
         });
-        return Service.successResponse([mergedRules]);
+        const sortedMergedRules = Object.fromEntries(Object.entries(mergedRules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB)));
+        return Service.successResponse([sortedMergedRules]);
       }
     } catch (e) {
       return Service.rejectResponse(
@@ -400,6 +403,9 @@ class NotificationsService {
             }
             if (rule.resolvedAlert !== 'varies') {
               updateData.$set[`rules.${event}.resolvedAlert`] = rule.resolvedAlert;
+            }
+            if (rule.sendWebHook !== 'varies') {
+              updateData.$set[`rules.${event}.sendWebHook`] = rule.sendWebHook;
             }
             await notificationsConf.updateOne({ org: org }, updateData);
           }

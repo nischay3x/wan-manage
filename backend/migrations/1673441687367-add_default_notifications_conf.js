@@ -113,6 +113,15 @@ async function up () {
           immediateEmail: false,
           resolvedAlert: false,
           type: 'interface'
+        },
+        'Link status': {
+          warningThreshold: null,
+          criticalThreshold: null,
+          thresholdUnit: null,
+          severity: 'critical',
+          immediateEmail: false,
+          resolvedAlert: false,
+          type: 'interface'
         }
       }
     }]);

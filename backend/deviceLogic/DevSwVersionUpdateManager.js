@@ -105,11 +105,6 @@ class SwVersionUpdateManager {
 
       orgDevicesList.forEach(async orgDevices => {
         const orgNotificationsConf = await notificationsConf.findOne({ org: orgDevices.id });
-        let severity;
-        const eventKey = 'Software update';
-        if (orgNotificationsConf.rules.hasOwnProperty(eventKey)) {
-          severity = orgNotificationsConf.rules[eventKey].severity;
-        }
         orgDevices.devices.forEach(device => {
           const deviceInfo = connections.getDeviceInfo(device._id);
           notifications.push({
@@ -123,7 +118,6 @@ class SwVersionUpdateManager {
               policyId: null
             },
             eventType: 'Software update',
-            severity: severity,
             orgNotificationsConf
           });
         });

@@ -29,6 +29,7 @@ const mailer = require('../utils/mailer')(
   configs.get('mailerBypassCert', 'boolean')
 );
 const mongoose = require('mongoose');
+const webHooks = require('../utils/webhooks')();
 
 /**
  * Notification events hierarchy class
@@ -45,15 +46,11 @@ class Event {
   }
 
   getAllParents () {
-    const parents = [];
-    if (this.parents.length === 1) {
-      parents.push(this.parents[0]);
-    } else {
-      for (const parent of this.parents) {
-        parents.push(parent.getAllParents());
-      }
+    const parentNames = [];
+    for (const parent of this.parents) {
+      parentNames.push(parent.eventName, ...parent.getAllParents());
     }
-    return parents;
+    return parentNames;
   }
 
   async getTarget (deviceId, interfaceId, tunnelId) {
@@ -62,12 +59,12 @@ class Event {
 
   async getQuery (deviceId, interfaceId, tunnelId) {
     const query = [];
-    const parents = this.getAllParents();
-    if (parents.length === 0) {
-      query.push(await this.getTarget());
+    const parentNames = this.getAllParents();
+    if (parentNames.length === 0) {
+      query.push(await this.getTarget(deviceId, interfaceId, tunnelId));
     }
-    for (const parentEvent of parents) {
-      const parent = hierarchyMap[parentEvent.eventName]; // Get the instance of the parent event
+    for (const parentName of parentNames) {
+      const parent = hierarchyMap[parentName]; // Get the instance of the parent event
       query.push(await parent.getTarget(deviceId, interfaceId, tunnelId));
     }
     return query;
@@ -95,24 +92,28 @@ class RunningRouterEventClass extends Event {
 
 class InterfaceConnectionEventClass extends Event {
   async getTarget (deviceId, interfaceId, tunnelId) {
-    // when tunnelId is provided there is no interfaceId
-    if (tunnelId) {
-      const tunnel = await tunnels.findOne({
-        num: tunnelId,
-        $or: [
-          { deviceA: deviceId },
-          { deviceB: deviceId }
-        ],
-        isActive: true
-      });
-      const interfaces = [tunnel.interfaceA];
-      if (!tunnel.peer) {
-        interfaces.push(tunnel.interfaceB);
-      }
-      interfaceId = {
-        $in: interfaces
-      };
-    }
+    return {
+      eventType: this.eventName,
+      'targets.deviceId': deviceId,
+      'targets.interfaceId': interfaceId,
+      resolved: false
+    };
+  }
+}
+
+class MissingInterfaceIPEventClass extends Event {
+  async getTarget (deviceId, interfaceId, tunnelId) {
+    return {
+      eventType: this.eventName,
+      'targets.deviceId': deviceId,
+      'targets.interfaceId': interfaceId,
+      resolved: false
+    };
+  }
+}
+
+class LinkStatusEventClass extends Event {
+  async getTarget (deviceId, interfaceId, tunnelId) {
     return {
       eventType: this.eventName,
       'targets.deviceId': deviceId,
@@ -124,13 +125,21 @@ class InterfaceConnectionEventClass extends Event {
 
 const DeviceConnectionEvent = new DeviceConnectionEventClass('Device connection', []);
 const RunningRouterEvent = new RunningRouterEventClass('Running router', [DeviceConnectionEvent]);
-const InterfaceConnection = new InterfaceConnectionEventClass('Interface connection', [
+const LinkStatusEvent = new LinkStatusEventClass('Link status', [
   RunningRouterEvent
 ]);
+const InterfaceConnectionEvent = new InterfaceConnectionEventClass('Interface connection', [
+  LinkStatusEvent
+]);
+const InterfaceIpChangeEvent = new MissingInterfaceIPEventClass('Interface ip', [
+  LinkStatusEvent
+]);
 // eslint-disable-next-line no-unused-vars
-const RttEvent = new Event('Link/Tunnel round trip time', [InterfaceConnection]);
+const RttEvent = new Event('Link/Tunnel round trip time',
+  [InterfaceConnectionEvent, InterfaceIpChangeEvent]);
 // eslint-disable-next-line no-unused-vars
-const DropRateEvent = new Event('Link/Tunnel default drop rate', [InterfaceConnection]);
+const DropRateEvent = new Event('Link/Tunnel default drop rate',
+  [InterfaceConnectionEvent, InterfaceIpChangeEvent]);
 
 /**
  * Notification Manager class
@@ -172,6 +181,20 @@ class NotificationsManager {
     }
   }
 
+  async sendWebHook (title, details, severity) {
+    const webHookMessage = {
+      title,
+      details,
+      severity
+    };
+    if (!await webHooks.sendToWebHook('http://localhost:7000/webhook',
+      webHookMessage,
+      ''
+    )) {
+      logger.error('Web hook call failed', { params: { message: webHookMessage } });
+    }
+  }
+
   async sendNotifications (notifications) {
     try {
       // Get the accounts of the notifications by the organization
@@ -183,28 +206,65 @@ class NotificationsManager {
       for (const notification of notifications) {
         if (notification.orgNotificationsConf) {
           const {
-            details, eventType, orgNotificationsConf,
-            severity, title, targets, resolved
+            details, eventType, orgNotificationsConf, title, severity = null,
+            targets, resolved
           } = notification;
           const event = hierarchyMap[eventType];
           const rules = orgNotificationsConf.rules;
+          if (!severity) {
+            const currentSeverity = rules[eventType].severity;
+            notification.severity = currentSeverity;
+          }
           // If the event exists in the hierarchy check if there is already a parent event in the db
           if (event && !resolved) {
+            let interfaceId, deviceId;
+            if (targets.tunnelId) {
+              const tunnel = await tunnels.findOne({
+                num: targets.tunnelId,
+                $or: [
+                  { deviceA: targets.deviceId },
+                  { deviceB: targets.deviceId }
+                ],
+                isActive: true
+              });
+              const interfaces = [tunnel.interfaceA];
+              if (!tunnel.peer) {
+                interfaces.push(tunnel.interfaceB);
+              }
+              interfaceId = {
+                $in: interfaces
+              };
+              const devices = [tunnel.deviceA, tunnel.deviceB];
+              deviceId = {
+                $in: devices
+              };
+            }
             const parentsQuery = await event.getQuery(
-              targets.deviceId,
-              targets.interfaceId, targets.tunnelId);
-            const foundParentNotification = await notificationsDb.findOne({
-              resolved: false,
-              org: notification.org,
-              $or: parentsQuery
-            });
+              deviceId || targets.deviceId,
+              interfaceId || targets.interfaceId, targets.tunnelId);
+            let foundParentNotification = false;
+            for (const query of parentsQuery) {
+              const result = await notificationsDb.findOne({
+                resolved: false,
+                org: notification.org,
+                ...query
+              });
+              if (result) {
+                foundParentNotification = true;
+                break;
+              }
+            }
             if (foundParentNotification) {
               continue; // Ignore since there is a parent event
             }
           }
           // TODO only for flexiManage alerts: check if the alert exists and increase count
-          if (rules.hasOwnProperty(eventType) && rules[eventType].immediateEmail) {
-            await this.sendEmailNotification(title, orgNotificationsConf, severity, details);
+          if (rules[eventType].immediateEmail) {
+            await this.sendEmailNotification(title, orgNotificationsConf,
+              severity || notification.severity, details);
+          }
+          if (rules[eventType].sendWebHook) {
+            await this.sendWebHook(title, details, severity || notification.severity);
           }
         }
         const key = notification.org.toString();
