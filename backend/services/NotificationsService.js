@@ -62,7 +62,8 @@ class NotificationsService {
             details: 1,
             targets: 1,
             status: 1,
-            severity: 1
+            severity: 1,
+            count: 1
           }
         }
       ] : [];
