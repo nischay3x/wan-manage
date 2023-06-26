@@ -22,8 +22,8 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const { differenceWith, isEqual } = require('lodash');
-const { transformVrrp } = require('./jobParameters');
+const { differenceWith, isEqual, keyBy } = require('lodash');
+const { transformVrrp, transformDHCP } = require('./jobParameters');
 const Vrrp = require('../models/vrrp');
 
 /**
@@ -38,33 +38,50 @@ const Vrrp = require('../models/vrrp');
 const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
   const { username } = user;
   const applyPromises = [];
-
   const devicesTasks = {};
-  for (const vrrpGroupDevice of origVrrpGroup?.devices ?? []) {
+
+  const _addTasks = (vrrpGroupDevice, key, vrrpGroup) => {
     const deviceId = vrrpGroupDevice.device._id.toString();
 
     if (!(deviceId in devicesTasks)) {
       devicesTasks[deviceId] = {
-        orig: [], updated: [], tasks: [], deviceObj: vrrpGroupDevice.device, op: null
+        orig: [],
+        updated: [],
+        tasks: [],
+        origDeviceObj: key === 'orig' ? vrrpGroupDevice.device : null,
+        updatedDeviceObj: key === 'updated' ? vrrpGroupDevice.device : null,
+        op: null,
+        origDhcp: {},
+        updatedDhcp: {},
+        newVrrpGroup: null,
+        origVrrpGroup: null
       };
     }
 
-    devicesTasks[deviceId].orig.push(transformVrrp(vrrpGroupDevice, origVrrpGroup));
+    if (key === 'updated') {
+      devicesTasks[deviceId].newVrrpGroup = vrrpGroup;
+    }
+    if (key === 'orig') {
+      devicesTasks[deviceId].origVrrpGroup = vrrpGroup;
+    }
+
+    devicesTasks[deviceId][key].push(transformVrrp(vrrpGroupDevice, vrrpGroup));
+
+    const dhcpKey = `${key}Dhcp`;
+    devicesTasks[deviceId][dhcpKey] = keyBy(vrrpGroupDevice.device.dhcp, 'interface');
+  };
+
+  for (const vrrpGroupDevice of origVrrpGroup?.devices ?? []) {
+    _addTasks(vrrpGroupDevice, 'orig', origVrrpGroup);
   }
 
   for (const vrrpGroupDevice of newVrrpGroup?.devices ?? []) {
-    const deviceId = vrrpGroupDevice.device._id.toString();
-
-    if (!(deviceId in devicesTasks)) {
-      devicesTasks[deviceId] = {
-        orig: [], updated: [], tasks: [], deviceObj: vrrpGroupDevice.device, op: null
-      };
-    }
-
-    devicesTasks[deviceId].updated.push(transformVrrp(vrrpGroupDevice, newVrrpGroup));
+    _addTasks(vrrpGroupDevice, 'updated', newVrrpGroup);
   }
 
   for (const deviceId in devicesTasks) {
+    const newVrrpGroup = devicesTasks[deviceId].newVrrpGroup;
+    const origVrrpGroup = devicesTasks[deviceId].origVrrpGroup;
     const [addDevice, removeDevice] = [
       differenceWith(
         devicesTasks[deviceId].updated,
@@ -81,21 +98,106 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
     ];
 
     if (removeDevice.length > 0) {
-      devicesTasks[deviceId].tasks.push(...removeDevice.map(r => ({
-        entity: 'agent',
-        message: 'remove-vrrp',
-        params: r
-      })));
+      devicesTasks[deviceId].tasks.push(...removeDevice.map(d => {
+        return {
+          entity: 'agent',
+          message: 'remove-vrrp',
+          params: d
+        };
+      }));
       devicesTasks[deviceId].op = 'remove';
     }
 
     if (addDevice.length > 0) {
-      devicesTasks[deviceId].tasks.push(...addDevice.map(r => ({
-        entity: 'agent',
-        message: 'add-vrrp',
-        params: r
-      })));
+      devicesTasks[deviceId].tasks.push(...addDevice.map(d => {
+        return {
+          entity: 'agent',
+          message: 'add-vrrp',
+          params: d
+        };
+      }));
       devicesTasks[deviceId].op = 'create';
+    }
+
+    // handle changes in DHCP
+    const origDhcp = devicesTasks[deviceId].origDhcp;
+    const updatedDhcp = devicesTasks[deviceId].updatedDhcp;
+
+    for (const dhcpInterface in origDhcp) {
+      // device now removed - if there is dhcp, need to recreate with lan ip
+      if (!(dhcpInterface in updatedDhcp)) {
+        devicesTasks[deviceId].tasks.push({
+          entity: 'agent',
+          message: 'remove-dhcp-config',
+          params: transformDHCP(origDhcp[dhcpInterface], deviceId, [origVrrpGroup])
+        });
+        devicesTasks[deviceId].tasks.push({
+          entity: 'agent',
+          message: 'add-dhcp-config',
+          params: transformDHCP(origDhcp[dhcpInterface], deviceId, [])
+        });
+        continue;
+      }
+    }
+
+    for (const dhcpInterface in updatedDhcp) {
+      // device now added - if there is dhcp, need to recreate with vrrp gateway
+      if (!(dhcpInterface in origDhcp)) {
+        devicesTasks[deviceId].tasks.push({
+          entity: 'agent',
+          message: 'remove-dhcp-config',
+          params: transformDHCP(updatedDhcp[dhcpInterface], deviceId, [])
+        });
+        devicesTasks[deviceId].tasks.push({
+          entity: 'agent',
+          message: 'add-dhcp-config',
+          params: transformDHCP(updatedDhcp[dhcpInterface], deviceId, [newVrrpGroup])
+        });
+        continue;
+      }
+    }
+
+    // check modification
+    const origTransformed = Object.values(devicesTasks[deviceId].updatedDhcp).map(dhcp => {
+      return transformDHCP(dhcp, deviceId, origVrrpGroup ? [origVrrpGroup] : null);
+    });
+    const updatedTransformed = Object.values(devicesTasks[deviceId].origDhcp).map(dhcp => {
+      return transformDHCP(dhcp, deviceId, newVrrpGroup ? [newVrrpGroup] : null);
+    });
+    const [addDhcpDevice, removeDhcpDevice] = [
+      differenceWith(
+        updatedTransformed,
+        origTransformed,
+        (updated, orig) => {
+          return isEqual(updated, orig);
+        }),
+      differenceWith(
+        origTransformed,
+        updatedTransformed,
+        (orig, updated) => {
+          return isEqual(orig, updated);
+        })
+    ];
+    if (removeDhcpDevice.length === addDhcpDevice.length) {
+      if (removeDhcpDevice.length > 0) {
+        devicesTasks[deviceId].tasks.push(...removeDhcpDevice.map(d => {
+          return {
+            entity: 'agent',
+            message: 'remove-dhcp-config',
+            params: d
+          };
+        }));
+      }
+
+      if (addDhcpDevice.length > 0) {
+        devicesTasks[deviceId].tasks.push(...addDhcpDevice.map(d => {
+          return {
+            entity: 'agent',
+            message: 'add-dhcp-config',
+            params: d
+          };
+        }));
+      }
     }
   }
 
@@ -104,7 +206,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
       continue;
     }
 
-    const device = devicesTasks[deviceId].deviceObj;
+    const device = devicesTasks[deviceId].origDeviceObj || devicesTasks[deviceId].updatedDeviceObj;
     const { machineId, name, _id } = device;
 
     // Set the device state to "pending". Device state will

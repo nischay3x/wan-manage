@@ -275,11 +275,15 @@ const transformBGP = async (device) => {
 /**
  * Transform add-dhcp params
  * @param  {object} dhcp DHCP config
+ * @param  {string} deviceId device ID
+ * @param  {[object]} vrrpGroups list of vrrp group
  * @return {object} DHCP config
  */
-const transformDHCP = dhcp => {
+const transformDHCP = (dhcp, deviceId, vrrpGroups = []) => {
   const { rangeStart, rangeEnd, dns, macAssign } = dhcp;
   const options = dhcp.options ?? [];
+
+  let isRouterOptionConfigured = false;
 
   const res = {
     interface: dhcp.interface,
@@ -296,6 +300,10 @@ const transformDHCP = dhcp => {
       if (fields.option === 'tftp-server-name' && !Number.isNaN(fields.value[0])) {
         fields.value = `\\"${fields.value}\\"`;
       }
+
+      if (fields.option === 'routers') {
+        isRouterOptionConfigured = true;
+      }
       return fields;
     }),
     mac_assign: macAssign.map(mac => {
@@ -311,6 +319,22 @@ const transformDHCP = dhcp => {
 
   if (dhcp?.maxLeaseTime) {
     res.maxLeaseTime = dhcp.maxLeaseTime;
+  }
+
+  if (!isRouterOptionConfigured) {
+    const routers = new Set();
+    for (const vrrpGroup of vrrpGroups ?? []) {
+      for (const dev of vrrpGroup.devices) {
+        if (dev.device._id.toString() !== deviceId.toString()) {
+          continue;
+        }
+        routers.add(vrrpGroup.virtualIp);
+      }
+    }
+
+    if (routers.size > 0) {
+      res.options.push({ option: 'routers', value: Array.from(routers).join(',') });
+    }
   }
 
   return res;

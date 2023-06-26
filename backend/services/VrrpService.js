@@ -111,7 +111,7 @@ class VrrpService {
 
       // populate for the dispatcher only. For rest API we need to return it as is.
       let updated = await newVrrpGroup.populate(
-        'devices.device', 'machineId name _id interfaces'
+        'devices.device', 'machineId name _id interfaces dhcp'
       ).execPopulate();
       updated = newVrrpGroup.toObject();
       const { ids, reasons } = await queue(
@@ -142,7 +142,7 @@ class VrrpService {
 
       const origVrrp = await Vrrp.findOne(
         { _id: id, org: { $in: orgList } }
-      ).populate('devices.device', 'machineId name _id interfaces').lean();
+      ).populate('devices.device', 'machineId name _id interfaces dhcp').lean();
       if (!origVrrp) {
         logger.error('Failed to get VRRP Group', {
           params: { id, orgList }
@@ -167,7 +167,7 @@ class VrrpService {
         { _id: id }, // no need to check for org as it was checked before
         vrrpGroup,
         { upsert: false, new: true, runValidators: true }
-      ).populate('devices.device', 'machineId name _id interfaces').lean();
+      ).populate('devices.device', 'machineId name _id interfaces dhcp').lean();
 
       if (isEqual(origVrrp, updatedVrrpGroup)) {
         const returnValue = VrrpService.selectVrrpGroupParams(updatedVrrpGroup);
@@ -203,7 +203,7 @@ class VrrpService {
 
       const origVrrp = await Vrrp.findOne(
         { _id: id, org: { $in: orgList } }
-      ).populate('devices.device', 'machineId name _id interfaces').lean();
+      ).populate('devices.device', 'machineId name _id interfaces dhcp').lean();
       if (!origVrrp) {
         return Service.rejectResponse('VRRP Group is not found', 404);
       }
