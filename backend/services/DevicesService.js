@@ -744,7 +744,8 @@ class DevicesService {
             found: [
               { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
               { $project: { distro: { $ifNull: ['$distro.codename', 'NA'] } } },
-              { $group: { _id: '$distro', count: { $sum: 1 } } }],
+              { $group: { _id: '$distro', count: { $sum: 1 } } }
+            ],
             // Not found is used in case no devices exist in the organization
             notFound: [{ $project: { _id: 'NA', count: { $const: 0 } } }, { $limit: 1 }]
           }
@@ -754,6 +755,7 @@ class DevicesService {
             result: {
               $cond: {
                 if: { $eq: [{ $size: '$found' }, 0] },
+                //then: [{ _id: 'NA', count: 0 }],
                 then: '$notFound',
                 else: '$found'
               }
