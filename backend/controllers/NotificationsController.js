@@ -57,5 +57,13 @@ class NotificationsController {
   async notificationsDELETE (request, response) {
     await Controller.handleRequest(request, response, this.service.notificationsDELETE);
   }
+
+  async webhookSettingsGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.webhookSettingsGET);
+  }
+
+  async webhookSettingsPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.webhookSettingsPUT);
+  }
 }
 module.exports = NotificationsController;

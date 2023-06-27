@@ -131,6 +131,11 @@ const notificationsSchema = new Schema({
     type: alertInfoSchema,
     required: false,
     default: {}
+  },
+  emailSent: {
+    type: Date,
+    required: false,
+    default: null
   }
 }, {
   timestamps: true

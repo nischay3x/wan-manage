@@ -163,8 +163,7 @@ class NotificationsManager {
     return userEmails;
   };
 
-  async sendEmailNotification (
-    title, orgNotificationsConf, severity, emailBody) {
+  async sendEmailNotification (title, orgNotificationsConf, severity, emailBody) {
     const userIds = severity === 'warning' ? orgNotificationsConf.signedToWarning
       : orgNotificationsConf.signedToCritical;
     const emailAddresses = await this.getUserEmail(userIds);
@@ -175,10 +174,12 @@ class NotificationsManager {
         emailAddresses,
         title,
         (`<p>Please be aware that ${emailBody.toLowerCase()}.</p>
-        </p>To make changes to the notification settings in flexiManage, 
-        please access the "Account -> Notifications" section</p>`)
+            </p>To make changes to the notification settings in flexiManage, 
+            please access the "Account -> Notifications" section</p>`)
       );
+      return new Date();
     }
+    return null;
   }
 
   async sendWebHook (title, details, severity) {
@@ -260,8 +261,11 @@ class NotificationsManager {
           }
           // TODO only for flexiManage alerts: check if the alert exists and increase count
           if (rules[eventType].immediateEmail) {
-            await this.sendEmailNotification(title, orgNotificationsConf,
+            const emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
               severity || notification.severity, details);
+            if (emailSent) {
+              notification.emailSent = emailSent;
+            }
           }
           if (rules[eventType].sendWebHook) {
             await this.sendWebHook(title, details, severity || notification.severity);

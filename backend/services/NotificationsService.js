@@ -63,7 +63,8 @@ class NotificationsService {
             targets: 1,
             status: 1,
             severity: 1,
-            count: 1
+            count: 1,
+            emailSent: 1
           }
         }
       ] : [];
@@ -325,7 +326,7 @@ class NotificationsService {
         const sortedRules = Object.fromEntries(
           Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
         );
-        return Service.successResponse([sortedRules]);
+        return Service.successResponse(sortedRules);
       } else {
         const mergedRules = {};
         const keysOfInterest = ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'severity', 'immediateEmail', 'resolvedAlert', 'type', 'sendWebHook'];
@@ -348,7 +349,7 @@ class NotificationsService {
           });
         });
         const sortedMergedRules = Object.fromEntries(Object.entries(mergedRules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB)));
-        return Service.successResponse([sortedMergedRules]);
+        return Service.successResponse(sortedMergedRules);
       }
     } catch (e) {
       return Service.rejectResponse(
@@ -385,29 +386,13 @@ class NotificationsService {
         for (const org of orgIds) {
           const devicesList = [];
           for (const event in newRules) {
-            const updateData = { $set: {} };
             const rule = newRules[event];
-            if (rule.warningThreshold !== 'varies') {
-              updateData.$set[`rules.${event}.warningThreshold`] = rule.warningThreshold;
-            }
-            if (rule.criticalThreshold !== 'varies') {
-              updateData.$set[`rules.${event}.criticalThreshold`] = rule.criticalThreshold;
-            }
-            if (rule.thresholdUnit !== 'varies') {
-              updateData.$set[`rules.${event}.thresholdUnit`] = rule.thresholdUnit;
-            }
-            if (rule.severity !== 'varies') {
-              updateData.$set[`rules.${event}.severity`] = rule.severity;
-            }
-            if (rule.immediateEmail !== 'varies') {
-              updateData.$set[`rules.${event}.immediateEmail`] = rule.immediateEmail;
-            }
-            if (rule.resolvedAlert !== 'varies') {
-              updateData.$set[`rules.${event}.resolvedAlert`] = rule.resolvedAlert;
-            }
-            if (rule.sendWebHook !== 'varies') {
-              updateData.$set[`rules.${event}.sendWebHook`] = rule.sendWebHook;
-            }
+            const updateData = { $set: {} };
+            Object.entries(rule).forEach(([field, value]) => {
+              if (value !== 'varies') {
+                updateData.$set[`rules.${event}.${field}`] = value;
+              }
+            });
             await notificationsConf.updateOne({ org: org }, updateData);
           }
           const orgDevices = await devices.find({ org: org });
@@ -446,7 +431,7 @@ class NotificationsService {
           const sortedRules = Object.fromEntries(
             Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
           );
-          return Service.successResponse([sortedRules]);
+          return Service.successResponse(sortedRules);
         }
       // If the account doesn't have a default or the user asked the system default - retrieve the system default
       } if (!account || response.length === 0) {
@@ -454,7 +439,7 @@ class NotificationsService {
         const sortedRules = Object.fromEntries(
           Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
         );
-        return Service.successResponse([sortedRules]);
+        return Service.successResponse(sortedRules);
       }
     } catch (e) {
       return Service.rejectResponse(
@@ -631,6 +616,67 @@ class NotificationsService {
           }
         }
       }
+      return Service.successResponse({
+        code: 200,
+        message: 'Success',
+        data: 'updated successfully'
+      });
+    } catch (e) {
+      return Service.rejectResponse({
+        code: e.status || 500,
+        message: e.message || 'Internal Server Error'
+      });
+    }
+  }
+
+  static async webhookSettingsGET ({ org, account, group }, { user }) {
+    try {
+      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      if (orgIds.error) {
+        return orgIds;
+      }
+      const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
+      if (org) {
+        return Service.successResponse(response[0].webHookSettings);
+      } else {
+        const mergedSettings = {};
+        for (let i = 0; i < response.length; i++) {
+          Object.keys(response[i].webHookSettings).forEach(setting => {
+            if (!mergedSettings.hasOwnProperty(setting)) {
+              mergedSettings[setting] = response[i].webHookSettings[setting];
+            } else {
+              if (mergedSettings[setting] !== response[i].webHookSettings[setting]) {
+                mergedSettings[setting] = null;
+              }
+            }
+          });
+        }
+        return Service.successResponse(mergedSettings);
+      }
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  static async webhookSettingsPUT ({ webhookSettingsPut }, { user }) {
+    try {
+      const { org: orgId, account, group, webHookSettings, setAsDefault = false } = webhookSettingsPut;
+      const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
+      if (orgIds && orgIds.error) {
+        return orgIds;
+      }
+      for (const org of orgIds) {
+        const updateData = { $set: {} };
+        Object.entries(webHookSettings).forEach(([field, value]) => {
+          if (value !== null) {
+            updateData.$set[`webHookSettings.${field}`] = value;
+          }
+        });
+        await notificationsConf.findOneAndUpdate({ org: org }, updateData);
+      };
       return Service.successResponse({
         code: 200,
         message: 'Success',

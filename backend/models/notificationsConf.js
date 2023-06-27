@@ -34,6 +34,12 @@ const ruleSchema = new Schema({
   sendWebHook: { type: Boolean, default: false }
 });
 
+const webHookSchema = new Schema({
+  webhookURL: { type: String },
+  sendCriticalAlerts: { type: Boolean, default: true },
+  sendWarningAlerts: { type: Boolean, default: false }
+});
+
 /**
  * Notifications configuration Database Schema
  */
@@ -73,7 +79,8 @@ const notificationsConfSchema = new Schema({
   signedToDaily:
   [
     { type: mongoose.Schema.Types.ObjectId, ref: 'users' }
-  ]
+  ],
+  webHookSettings: webHookSchema
 });
 
 notificationsConfSchema.index({ org: 1 }, { unique: true, sparse: true });
