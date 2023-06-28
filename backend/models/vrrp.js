@@ -41,7 +41,7 @@ const vrrpDeviceSchema = new Schema({
   priority: {
     type: Number,
     required: true,
-    min: [0, 'priority should be a number between 1-255'],
+    min: [1, 'priority should be a number between 1-255'],
     max: [255, 'priority should be a number between 1-255']
   },
   trackInterfaces: {
