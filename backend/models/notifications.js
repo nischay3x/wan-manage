@@ -133,9 +133,15 @@ const notificationsSchema = new Schema({
     default: {}
   },
   emailSent: {
-    type: Date,
-    required: false,
-    default: null
+    sendingTime: {
+      type: Date,
+      required: false,
+      default: null
+    },
+    rateLimitedCount: {
+      type: Number,
+      default: 0
+    }
   }
 }, {
   timestamps: true

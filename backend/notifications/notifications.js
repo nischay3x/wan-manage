@@ -261,52 +261,94 @@ class NotificationsManager {
           }
           // TODO only for flexiManage alerts: check if the alert exists and increase count
           if (rules[eventType].immediateEmail) {
-            const emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
-              severity || notification.severity, details);
+            let emailSent;
+            // Check if there is already an event like this for the same device(for device alerts)
+            const existingNotification = targets.deviceId
+              ? await notificationsDb.findOne({
+                eventType: eventType,
+                'targets.deviceId': targets.deviceId,
+                'targets.tunnelId': null,
+                'targets.interfaceId': null,
+                'targets.policyId': null,
+                'emailSent.sendingTime': { $exists: true, $ne: null }
+              })
+              : null;
+
+            // Send an email for this event and device if 60 minutes have passed since the last one.
+            if (existingNotification) {
+              const emailRateLimit = configs.get('emailRateLimit');
+              const timeDiff = Math.abs(new Date() - existingNotification.emailSent.sendingTime);
+              const diffInMinutes = Math.ceil(timeDiff / (1000 * 60));
+              if (emailRateLimit < diffInMinutes) {
+                emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
+                  severity || notification.severity, details);
+              } else {
+                await notificationsDb.findOneAndUpdate(
+                  {
+                    eventType: eventType,
+                    'targets.deviceId': targets.deviceId,
+                    'targets.tunnelId': null,
+                    'targets.interfaceId': null,
+                    'targets.policyId': null,
+                    'emailSent.sendingTime': { $exists: true, $ne: null }
+                  },
+                  { $inc: { 'emailSent.rateLimitedCount': 1 } }
+                );
+              }
+            } else {
+              emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
+                severity || notification.severity, details);
+            }
             if (emailSent) {
-              notification.emailSent = emailSent;
+              if (!notification.emailSent) {
+                notification.emailSent = {
+                  sendingTime: null,
+                  rateLimitedCount: 0
+                };
+              }
+              notification.emailSent.sendingTime = emailSent;
+            }
+            if (rules[eventType].sendWebHook) {
+              await this.sendWebHook(title, details, severity || notification.severity);
             }
           }
-          if (rules[eventType].sendWebHook) {
-            await this.sendWebHook(title, details, severity || notification.severity);
-          }
+          const key = notification.org.toString();
+          const notificationList = orgsMap.get(key);
+          if (!notificationList) orgsMap.set(key, []);
+          orgsMap.get(key).push(notification);
         }
-        const key = notification.org.toString();
-        const notificationList = orgsMap.get(key);
-        if (!notificationList) orgsMap.set(key, []);
-        orgsMap.get(key).push(notification);
-      }
-      // Create an array of org ID and account ID pairs
-      const orgIDs = Array.from(orgsMap.keys()).map(key => {
-        return mongoose.Types.ObjectId(key);
-      });
-      const accounts = await organizations.aggregate([
-        { $match: { _id: { $in: orgIDs } } },
-        {
-          $group: {
-            _id: '$_id',
-            accountID: { $push: '$$ROOT.account' }
-          }
-        }
-      ]);
-      const bulkWriteOps = [];
-
-      // Go over all accounts and update all notifications that
-      // belong to the organization to which the account belongs.
-      accounts.forEach(account => {
-        const notificationList = orgsMap.get(account._id.toString());
-        const currentTime = new Date();
-        notificationList.forEach(notification => {
-          notification.account = account.accountID;
-          notification.time = currentTime;
-          bulkWriteOps.push({ insertOne: { document: notification } });
+        // Create an array of org ID and account ID pairs
+        const orgIDs = Array.from(orgsMap.keys()).map(key => {
+          return mongoose.Types.ObjectId(key);
         });
-      });
+        const accounts = await organizations.aggregate([
+          { $match: { _id: { $in: orgIDs } } },
+          {
+            $group: {
+              _id: '$_id',
+              accountID: { $push: '$$ROOT.account' }
+            }
+          }
+        ]);
+        const bulkWriteOps = [];
 
-      if (bulkWriteOps.length > 0) {
-        await notificationsDb.bulkWrite(bulkWriteOps);
-        // Log notification for logging systems
-        logger.info('New notifications', { params: { notifications: notifications } });
+        // Go over all accounts and update all notifications that
+        // belong to the organization to which the account belongs.
+        accounts.forEach(account => {
+          const notificationList = orgsMap.get(account._id.toString());
+          const currentTime = new Date();
+          notificationList.forEach(notification => {
+            notification.account = account.accountID;
+            notification.time = currentTime;
+            bulkWriteOps.push({ insertOne: { document: notification } });
+          });
+        });
+
+        if (bulkWriteOps.length > 0) {
+          await notificationsDb.bulkWrite(bulkWriteOps);
+          // Log notification for logging systems
+          logger.info('New notifications', { params: { notifications: notifications } });
+        }
       }
     } catch (err) {
       logger.warn('Failed to store notifications in database', {

@@ -199,6 +199,8 @@ const configEnv = {
     ticketingSystemUrl: '',
     // Ticketing system account ID to view
     ticketingSystemAccountId: '',
+    // Email alerts rate limit in minutes
+    emailRateLimit: 60,
     /****************************************************/
     /*         Client Fields                            */
     /****************************************************/
