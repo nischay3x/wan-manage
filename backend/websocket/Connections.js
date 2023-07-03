@@ -58,15 +58,17 @@ class Connections {
     this.callRegisteredCallbacks = this.callRegisteredCallbacks.bind(this);
     this.sendDeviceInfoMsg = this.sendDeviceInfoMsg.bind(this);
     this.pingCheck = this.pingCheck.bind(this);
-
+    this.startUnresponsiveDeviceChecker = this.triggerAlertWhenNeeded.bind(this);
     this.devices = new Devices();
     this.msgSeq = 0;
     this.msgQueue = {};
     this.connectCallbacks = {}; // Callback functions to be called on connect
     this.closeCallbacks = {}; // Callback functions to be called on close
-
+    this.unresponsiveDevices = new Map();
     // Ping each client every 30 sec, with two retries
     this.ping_interval = setInterval(this.pingCheck, 20000);
+    // Check every 1 min if a device disconnection alert is needed
+    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 60000);
   }
 
   /**
@@ -527,7 +529,7 @@ class Connections {
           if (orgNotificationsConf.rules.hasOwnProperty('Link status')) {
             sendResolved = orgNotificationsConf.rules['Link status'].resolvedAlert;
           }
-          if (updatedConfig.link === 'up' && i.linkStatus === 'up') {
+          if (updatedConfig.link === 'up' && i.linkStatus !== 'up') {
             const updated = await notifications.findOneAndUpdate(
               {
                 eventType: { $regex: 'Link status', $options: 'i' },
@@ -737,6 +739,7 @@ class Connections {
             await notificationsMgr.sendNotifications([{
               org: origDevice.org,
               title: 'Unsuccessful self-healing operations',
+              eventType: 'Failed self-healing operation',
               device: deviceId,
               machineId: machineId,
               details: 'Unsuccessful updating device data. Please contact flexiWAN support'
@@ -996,34 +999,54 @@ class Connections {
   }
 
   /**
+   * This function periodically checks and alerts if a device has remained disconnected for
+   * a specified duration.
+  */
+  triggerAlertWhenNeeded () {
+    if (!this.unresponsiveDevices) {
+      return;
+    }
+    const currentTime = new Date().getTime();
+    this.unresponsiveDevices.forEach((deviceInfo, device) => {
+      if (currentTime - deviceInfo.timeFirstUnresponsive >= configs.get('timeoutDuration')) {
+        let orgNotificationsConf;
+        notificationsConf.findOne({ org: deviceInfo.org }).then((res) => {
+          orgNotificationsConf = res;
+          const { org, deviceObj, name } = deviceInfo;
+          notificationsMgr.sendNotifications([
+            {
+              org: org,
+              title: 'Device connection change',
+              details: `Device ${name} disconnected from management`,
+              eventType: 'Device connection',
+              targets: {
+                deviceId: deviceObj,
+                tunnelId: null,
+                interfaceId: null,
+                policyId: null
+              },
+              orgNotificationsConf
+            }
+          ]);
+          this.unresponsiveDevices.delete(device);
+        });
+      }
+    });
+  }
+
+  /**
    * Websocket close event callback, called when a connection is closed.
    * @param  {string} device device machine id
    * @return {void}
    */
   closeConnection (device) {
-    // Device has no information, probably not connected, just return
+    const currentTime = new Date().getTime();
     const deviceInfo = this.devices.getDeviceInfo(device);
     if (!deviceInfo) return;
-    let orgNotificationsConf;
-    notificationsConf.findOne({ org: deviceInfo.org }).then((res) => {
-      orgNotificationsConf = res;
-      const { org, deviceObj, name } = deviceInfo;
-      notificationsMgr.sendNotifications([
-        {
-          org: org,
-          title: 'Device connection change',
-          details: `Device ${name} disconnected from management`,
-          eventType: 'Device connection',
-          targets: {
-            deviceId: deviceObj,
-            tunnelId: null,
-            interfaceId: null,
-            policyId: null
-          },
-          orgNotificationsConf
-        }
-      ]);
-    });
+    if (!this.unresponsiveDevices.has(device)) {
+      deviceInfo.timeFirstUnresponsive = currentTime;
+      this.unresponsiveDevices.set(device, deviceInfo);
+    }
     this.devices.removeDeviceInfo(device);
     this.callRegisteredCallbacks(this.closeCallbacks, device);
     logger.info('Device connection closed', { params: { deviceId: device } });
