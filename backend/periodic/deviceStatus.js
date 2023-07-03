@@ -74,6 +74,32 @@ class DeviceStatus {
     this.getTunnelsStatusByOrg = this.getTunnelsStatusByOrg.bind(this);
     this.clearTunnelsStatusByOrg = this.clearTunnelsStatusByOrg.bind(this);
 
+    // register a callback function to be called when a device status is received on channel
+    connections.registerStatusCallback((machineId, status) => {
+      // set the status received from another host
+      if (this.status[machineId]?.state !== status.state) {
+        const deviceInfo = connections.getDeviceInfo(machineId);
+        if (!deviceInfo) {
+          logger.warn('Failed to get device info', {
+            params: { machineId }
+          });
+          return;
+        }
+        const { org, deviceObj } = deviceInfo;
+        this.setDevicesStatusByOrg(org, deviceObj, status.state);
+      }
+      this.status[machineId] = status;
+
+      // Update changed tunnel status in memory by org
+      if (status.tunnelStatus) {
+        const { tunnelStatus } = status;
+        const { org } = connections.getDeviceInfo(machineId) ?? {};
+        for (const tunnelID in tunnelStatus) {
+          this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelStatus.status);
+        }
+      }
+    });
+
     // Task information
     this.updateSyncStatus = async () => {};
     this.taskInfo = {
@@ -168,7 +194,9 @@ class DeviceStatus {
   periodicPollDevices () {
     const devices = connections.getAllDevices();
     devices.forEach((deviceID) => {
-      if (connections.isConnected(deviceID)) this.periodicPollOneDevice(deviceID);
+      // run periodic task if device is connected to this host
+      const { socket } = connections.getDeviceInfo(deviceID) ?? {};
+      if (connections.isSocketAlive(socket)) this.periodicPollOneDevice(deviceID);
     });
   }
 
@@ -247,6 +275,8 @@ class DeviceStatus {
                 });
               }
             }
+            // status received and updated in memory, so it can be published to other hosts
+            connections.publishStatus(deviceID, this.status[deviceID]);
           } else {
             this.setDeviceState(deviceID, 'pending');
           }
@@ -421,7 +451,7 @@ class DeviceStatus {
    * @param  {string} state       device state
    * @return {void}
    */
-  setDeviceState (machineId, newState) {
+  setDeviceState (machineId, newState, needToPublish = true) {
     // Generate an event if there was a transition in the device's status
     const deviceInfo = connections.getDeviceInfo(machineId);
     if (!deviceInfo) {
@@ -443,6 +473,10 @@ class DeviceStatus {
       this.setDevicesStatusByOrg(org, deviceObj, newState);
     }
     this.setDeviceStatsField(machineId, 'state', newState);
+    // status updated in memory, publish it to other hosts
+    if (needToPublish) {
+      connections.publishStatus(machineId, this.status[machineId]);
+    }
   }
 
   /**
@@ -506,7 +540,7 @@ class DeviceStatus {
       devStatus = rawStats.running === true ? 'running' : 'stopped';
     }
 
-    this.setDeviceState(machineId, devStatus);
+    this.setDeviceState(machineId, devStatus, false);
     const { org, deviceObj } = deviceInfo;
 
     // Interface statistics

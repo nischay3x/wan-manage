@@ -15,9 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-// TBD: use memory based devices now, add to Redis in future
 class Devices {
-  constructor () {
+  constructor ({ publishInfoHandler }) {
+    this.publishInfoHandler = publishInfoHandler;
     this.devices = {};
     this.setDeviceInfo = this.setDeviceInfo.bind(this);
     this.getDeviceInfo = this.getDeviceInfo.bind(this);
@@ -39,11 +39,18 @@ class Devices {
      * device with deviceID machine id.
      * @param  {string} deviceID device machine id
      * @param  {Object} info     device info
+     * @param  {bool}   needToPublish  publishes on redis channel if true
      * @return {void}
      */
-  setDeviceInfo (deviceID, info) {
+  setDeviceInfo (deviceID, info, needToPublish = true) {
     this.devices[deviceID] = info;
-    this.setConnectionStatusByOrg(deviceID, false);
+    if (needToPublish) {
+      const infoToPublish = { ...info };
+      // no need to send socket object to other hosts
+      delete infoToPublish.socket;
+      // publish the device info to other hosts
+      this.publishInfoHandler(deviceID, infoToPublish);
+    }
   }
 
   /**
@@ -51,14 +58,19 @@ class Devices {
      * @param  {string} deviceID device machine id
      * @param  {string} key      name of the filed to be set
      * @param  {*}      value    value to be set
+     * @param  {bool}   needToPublish  publishes on redis channel if true
      * @return {void}
      */
-  updateDeviceInfo (deviceID, key, value) {
+  updateDeviceInfo (deviceID, key, value, needToPublish = true) {
     if (this.devices[deviceID]) {
       if (key === 'ready') {
         this.setConnectionStatusByOrg(deviceID, value);
       }
       this.devices[deviceID][key] = value;
+    }
+    if (needToPublish) {
+      // publish the updated value for other servers
+      this.publishInfoHandler(deviceID, { [key]: value });
     }
   }
 

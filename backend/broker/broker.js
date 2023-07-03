@@ -104,16 +104,10 @@ const deviceProcessor = async (job) => {
           job.failed();
         }
         try {
-          if (connections.isConnected(mId)) {
-            const deviceInfo = connections.getDeviceInfo(mId);
-            if (deviceInfo) {
-              // This call takes care of setting the legacy device sync status to not-synced.
-              await updateSyncStatusBasedOnJobResult(org, deviceInfo.deviceObj, mId, false);
-            } else {
-              logger.warn('Failed to update sync status, no device info returned', {
-                params: { machineId: mId }
-              });
-            }
+          const { socket, deviceObj } = connections.getDeviceInfo(mId) ?? {};
+          if (connections.isSocketAlive(socket)) {
+            // This call takes care of setting the legacy device sync status to not-synced.
+            await updateSyncStatusBasedOnJobResult(org, deviceObj, mId, false);
           } else {
             logger.warn('Failed to update sync status, device not connected', {
               params: { machineId: mId }
