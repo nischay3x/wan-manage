@@ -23,7 +23,7 @@ const tunnels = require('../models/tunnels');
 const { devices } = require('../models/devices');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
 const configs = require('../configs')();
-const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
+const ha = require('../utils/highAvailability')(configs.get('redisUrl'));
 
 /***
  * This class periodically updates devices/tunnels statuses from memory to db
@@ -51,10 +51,44 @@ class StatusesInDb {
   * Starts the periodic task.
   * @return {void}
   */
-  start () {
+  async start () {
     const { name, func, period } = this.taskInfo;
     periodic.registerTask(name, func, period);
+    await this.fetchStatusesFromDB();
     periodic.startTask(name);
+  }
+
+  /**
+  * Fetch statuses from DB and update them in memory
+  * when a new server is started it should be populated
+  * with current state of devices/tunnels
+  * @async
+  * @return {void}
+  */
+  async fetchStatusesFromDB () {
+    try {
+      const connectedDevices = await devices.find(
+        { isConnected: true },
+        { org: 1, machineId: 1, isConnected: 1, status: 1, versions: 1 }
+      );
+      for (const device of connectedDevices) {
+        const { org, _id, machineId, versions, status } = device;
+        const info = {
+          org: org,
+          deviceObj: _id,
+          machineId: machineId,
+          version: versions.agent,
+          ready: true,
+          running: status === 'running',
+          status: status
+        };
+        connections.devices.setDeviceInfo(machineId, info, false);
+      }
+    } catch (err) {
+      logger.warn('Failed to statuses statuses from database', {
+        params: { message: err.message }
+      });
+    }
   }
 
   /**
@@ -84,7 +118,7 @@ class StatusesInDb {
   * @return {void}
   */
   runTask () {
-    roleSelector.runIfActive('websocketHandler', () => {
+    ha.runIfActive(() => {
       this.updateDevicesStatuses();
       this.updateTunnelsStatuses();
     });
@@ -128,14 +162,14 @@ class StatusesInDb {
           const status = devicesStatuses[deviceId];
           if (!devicesByState[status]) devicesByState[status] = [];
           devicesByState[status].push(mongoose.Types.ObjectId(deviceId));
-          for (const state in devicesByState) {
-            updateDiffs.push({
-              updateMany: {
-                filter: { _id: { $in: devicesByState[state] } },
-                update: { $set: { status: state === 'pending' ? '' : state } }
-              }
-            });
-          }
+        }
+        for (const state in devicesByState) {
+          updateDiffs.push({
+            updateMany: {
+              filter: { _id: { $in: devicesByState[state] } },
+              update: { $set: { status: state === 'pending' ? '' : state } }
+            }
+          });
         }
       }
     }
@@ -165,7 +199,7 @@ class StatusesInDb {
     });
     if (connectedDevices.length !== connectedInDbCount) {
       logger.info('Different counts of connected devices in memory and DB, syncing statuses', {
-        params: { dbCount: connectedInDbCount, memCount: connectedDevices.count }
+        params: { dbCount: connectedInDbCount, memCount: connectedDevices.length }
       });
       const updateFull = [];
       updateFull.push({
