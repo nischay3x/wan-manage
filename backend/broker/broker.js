@@ -105,7 +105,7 @@ const deviceProcessor = async (job) => {
         }
         try {
           const { socket, deviceObj } = connections.getDeviceInfo(mId) ?? {};
-          if (connections.isSocketAlive(socket)) {
+          if (deviceObj && connections.isSocketAlive(socket)) {
             // This call takes care of setting the legacy device sync status to not-synced.
             await updateSyncStatusBasedOnJobResult(org, deviceObj, mId, false);
           } else {

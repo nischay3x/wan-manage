@@ -73,32 +73,10 @@ class DeviceStatus {
     this.setTunnelsStatusByOrg = this.setTunnelsStatusByOrg.bind(this);
     this.getTunnelsStatusByOrg = this.getTunnelsStatusByOrg.bind(this);
     this.clearTunnelsStatusByOrg = this.clearTunnelsStatusByOrg.bind(this);
+    this.statusCallback = this.statusCallback.bind(this);
 
     // register a callback function to be called when a device status is received on channel
-    connections.registerStatusCallback((machineId, status) => {
-      // set the status received from another host
-      if (this.status[machineId]?.state !== status.state) {
-        const deviceInfo = connections.getDeviceInfo(machineId);
-        if (!deviceInfo) {
-          logger.warn('Failed to get device info', {
-            params: { machineId }
-          });
-          return;
-        }
-        const { org, deviceObj } = deviceInfo;
-        this.setDevicesStatusByOrg(org, deviceObj, status.state);
-      }
-      this.status[machineId] = status;
-
-      // Update changed tunnel status in memory by org
-      if (status.tunnelStatus) {
-        const { tunnelStatus } = status;
-        const { org } = connections.getDeviceInfo(machineId) ?? {};
-        for (const tunnelID in tunnelStatus) {
-          this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelStatus.status);
-        }
-      }
-    });
+    connections.registerStatusCallback(this.statusCallback);
 
     // Task information
     this.updateSyncStatus = async () => {};
@@ -930,6 +908,36 @@ class DeviceStatus {
   clearTunnelsStatusByOrg (org) {
     if (org && this.tunnelsStatusByOrg.hasOwnProperty(org)) {
       delete this.tunnelsStatusByOrg[org];
+    }
+  }
+
+  /**
+   * Called when a device status is received on the hosts channel from another server
+   * @param  {string} machineId the machine id
+   * @param  {object} status    new status of the device
+   * @return {void}
+   */
+  statusCallback (machineId, status) {
+    if (this.status[machineId]?.state !== status.state) {
+      const deviceInfo = connections.getDeviceInfo(machineId);
+      if (!deviceInfo) {
+        logger.warn('Failed to get device info', {
+          params: { machineId }
+        });
+        return;
+      }
+      const { org, deviceObj } = deviceInfo;
+      this.setDevicesStatusByOrg(org, deviceObj, status.state);
+    }
+    this.status[machineId] = status;
+
+    // Update changed tunnel status in memory by org
+    if (status.tunnelStatus) {
+      const { tunnelStatus } = status;
+      const { org } = connections.getDeviceInfo(machineId) ?? {};
+      for (const tunnelID in tunnelStatus) {
+        this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelStatus.status);
+      }
     }
   }
 }

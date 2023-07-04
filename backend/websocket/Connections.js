@@ -46,18 +46,27 @@ const httpsPort = configs.get('httpsPort');
 const hostname = require('os').hostname();
 const hostId = `${hostname}:${httpsPort}:${uuid.v4()}`;
 
+// devices info channel name, devices will publish statuses to this common channel
 const devInfoChannelName = configs.get('devInfoChannelName') ?? 'fw-dev-info';
 
+// devices channel prefix, will be used for unique channel name of every device
+// web-socket requests will be published on this channel
 const deviceChannelPrefix = configs.get('deviceChannelPrefix') ?? 'fw-dev';
-const hostChannelPrefix = configs.get('hostChannelPrefix') ?? 'fw-host';
 
+// host channel prefix, will be used for unique channel name of every host
+const hostChannelPrefix = configs.get('hostChannelPrefix') ?? 'fw-host';
+// web-socket responses will be published on this channel
 const hostChannelName = `${hostChannelPrefix}:${hostId}`;
 
+// unique sequence key with expiration time will be set for every socket message
+// to store the hostId which will proceed the response
 const sequencePrefix = configs.get('sequencePrefix') ?? 'fw-seq';
 const sequenceExpireTime = configs.get('sequenceExpireTime') ?? 300; // seconds
 
+// unique device key, will be set on connect and updated on web-socket pong response
+// the device will be considered as disconnected on expiration of this key
 const connectDevicePrefix = configs.get('connectDevicePrefix') ?? 'fw-conn';
-const connectExpireTime = configs.get('connectExpireTime') ?? 180; // seconds
+const connectExpireTime = configs.get('connectExpireTime') ?? 300; // seconds
 
 class Connections {
   constructor () {
@@ -78,6 +87,8 @@ class Connections {
     this.isSocketAlive = this.isSocketAlive.bind(this);
     this.registerStatusCallback = this.registerStatusCallback.bind(this);
     this.publishStatus = this.publishStatus.bind(this);
+    this.processChannelMessage = this.processChannelMessage.bind(this);
+    this.processDeviceMessage = this.processDeviceMessage.bind(this);
 
     this.msgSeq = 0;
     this.msgQueue = {};
@@ -95,50 +106,7 @@ class Connections {
     // start listening on unique host channel
     this.subscriber.subscribe(hostChannelName);
 
-    this.subscriber.on('message', (channel, message) => {
-      if (channel === hostChannelName) {
-        // websocket response was received on a different host and published on the channel
-        logger.debug('Response received on the hosts channel', {
-          params: { channel, hostId }
-        });
-        this.processDeviceMessage(message);
-      } else if (channel === devInfoChannelName) {
-        // all devices will publish their state on this common channel
-        const { hostId: remoteHostId, machineId, action, info } = JSON.parse(message);
-        if (remoteHostId && hostId !== remoteHostId && machineId && action) {
-          if (action === 'info' && info?.constructor === Object) {
-            const fields = Object.keys(info);
-            if (fields.length === 1) {
-              // only update one parameter
-              this.devices.updateDeviceInfo(machineId, fields[0], info[fields[0]], false);
-            } else {
-              // set the new device info
-              this.devices.setDeviceInfo(machineId, info, false);
-            }
-          } else if (action === 'status' && info?.constructor === Object) {
-            // status message from the get-device-stats request received
-            this.statusCallback(machineId, info);
-          }
-        }
-      } else if (channel.startsWith(deviceChannelPrefix + ':')) {
-        // extract machineId from the channel
-        const machineId = channel.replace(deviceChannelPrefix + ':', '');
-        // check if device is connected and send the message on socket
-        const { socket } = this.devices.getDeviceInfo(machineId) ?? {};
-        if (this.isSocketAlive(socket)) {
-          // the sequence key is already injected into the message
-          socket.send(message);
-        } else {
-          logger.warn('Websocket message received on Redis channel but device is disconnected',
-            { params: { channel, machineId, message } }
-          );
-          // the socket is disconnected hence unsubscribing from the channel
-          this.subscriber.unsubscribe(channel);
-        }
-      } else {
-        logger.warn('Message received on unknown channel', { params: { channel, message } });
-      }
-    });
+    this.subscriber.on('message', this.processChannelMessage);
 
     this.subscriber.on('error',
       err => logger.error('Redis Subscription Error', { params: { message: err.message } })
@@ -180,6 +148,57 @@ class Connections {
     this.redisClient.publish(devInfoChannelName, JSON.stringify({
       hostId, machineId, action, info
     }));
+  }
+
+  /**
+   * Process a message received on channel from a different host
+   * @param  {string} channel the channel where the message is published
+   * @param  {string} message the message to process
+   * @return {void}
+   */
+  processChannelMessage (channel, message) {
+    if (channel === hostChannelName) {
+      // websocket response was received on a different host and published on the channel
+      logger.debug('Response received on the hosts channel', {
+        params: { channel, hostId }
+      });
+      this.processDeviceMessage(message);
+    } else if (channel === devInfoChannelName) {
+      // all devices will publish their state on this common channel
+      const { hostId: remoteHostId, machineId, action, info } = JSON.parse(message);
+      if (remoteHostId && hostId !== remoteHostId && machineId && action) {
+        if (action === 'info' && info?.constructor === Object) {
+          const fields = Object.keys(info);
+          if (fields.length === 1) {
+            // only update one parameter
+            this.devices.updateDeviceInfo(machineId, fields[0], info[fields[0]], false);
+          } else {
+            // set the new device info
+            this.devices.setDeviceInfo(machineId, info, false);
+          }
+        } else if (action === 'status' && info?.constructor === Object) {
+          // status message from the get-device-stats request received
+          this.statusCallback(machineId, info);
+        }
+      }
+    } else if (channel.startsWith(deviceChannelPrefix + ':')) {
+      // a message for the device websocket is received from another host
+      const machineId = channel.replace(deviceChannelPrefix + ':', '');
+      // check if device is connected and send the message on socket
+      const { socket } = this.devices.getDeviceInfo(machineId) ?? {};
+      if (this.isSocketAlive(socket)) {
+        // the sequence key is already injected into the message
+        socket.send(message);
+      } else {
+        logger.warn('Websocket message received on Redis channel but device is disconnected',
+          { params: { channel, machineId, message } }
+        );
+        // the socket is disconnected hence unsubscribing from the channel
+        this.subscriber.unsubscribe(channel);
+      }
+    } else {
+      logger.warn('Message received on unknown channel', { params: { channel, message } });
+    }
   }
 
   /**
