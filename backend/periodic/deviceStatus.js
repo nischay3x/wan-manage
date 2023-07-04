@@ -78,58 +78,6 @@ class DeviceStatus {
     // register a callback function to be called when a device status is received on channel
     connections.registerStatusCallback(this.statusCallback);
 
-    // register a callback function to be called when a device status is received on channel
-    connections.registerStatusCallback((machineId, status) => {
-      // set the status received from another host
-      if (this.status[machineId]?.state !== status.state) {
-        const deviceInfo = connections.getDeviceInfo(machineId);
-        if (!deviceInfo) {
-          logger.warn('Failed to get device info', {
-            params: { machineId }
-          });
-          return;
-        }
-        const { org, deviceObj } = deviceInfo;
-        this.setDevicesStatusByOrg(org, deviceObj, status.state);
-      }
-      this.status[machineId] = status;
-
-      // Update changed tunnel status in memory by org
-      if (status.tunnelStatus) {
-        const { tunnelStatus } = status;
-        const { org } = connections.getDeviceInfo(machineId) ?? {};
-        for (const tunnelID in tunnelStatus) {
-          this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelStatus.status);
-        }
-      }
-    });
-
-    // register a callback function to be called when a device status is received on channel
-    connections.registerStatusCallback((machineId, status) => {
-      // set the status received from another host
-      if (this.status[machineId]?.state !== status.state) {
-        const deviceInfo = connections.getDeviceInfo(machineId);
-        if (!deviceInfo) {
-          logger.warn('Failed to get device info', {
-            params: { machineId }
-          });
-          return;
-        }
-        const { org, deviceObj } = deviceInfo;
-        this.setDevicesStatusByOrg(org, deviceObj, status.state);
-      }
-      this.status[machineId] = status;
-
-      // Update changed tunnel status in memory by org
-      if (status.tunnelStatus) {
-        const { tunnelStatus } = status;
-        const { org } = connections.getDeviceInfo(machineId) ?? {};
-        for (const tunnelID in tunnelStatus) {
-          this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelStatus.status);
-        }
-      }
-    });
-
     // Task information
     this.updateSyncStatus = async () => {};
     this.taskInfo = {
