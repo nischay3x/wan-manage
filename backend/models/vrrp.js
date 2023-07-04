@@ -44,7 +44,16 @@ const vrrpDeviceSchema = new Schema({
     min: [1, 'priority should be a number between 1-255'],
     max: [255, 'priority should be a number between 1-255']
   },
-  trackInterfaces: {
+  trackInterfacesOptional: {
+    type: [String],
+    required: false,
+    validate: {
+      validator: val => val.every(validateDevId),
+      message: 'Track interfaces should contains only a valid interface devIds'
+    },
+    default: []
+  },
+  trackInterfacesMandatory: {
     type: [String],
     required: false,
     validate: {

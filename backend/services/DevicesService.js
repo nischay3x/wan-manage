@@ -2183,7 +2183,8 @@ class DevicesService {
           $project: {
             virtualIp: 1,
             interface: '$devices.interface',
-            trackInterfaces: '$devices.trackInterfaces'
+            trackInterfacesMandatory: '$devices.trackInterfacesMandatory',
+            trackInterfacesOptional: '$devices.trackInterfacesOptional'
           }
         }
       ]
@@ -2230,7 +2231,11 @@ class DevicesService {
         );
       }
 
-      for (const trackIfc of deviceVrrp.trackInterfaces) {
+      const tracked = [
+        ...deviceVrrp.trackInterfacesOptional,
+        ...deviceVrrp.trackInterfacesOptional
+      ];
+      for (const trackIfc of tracked) {
         const ifc = interfacesByDevId[trackIfc];
         if (!ifc) {
           throw createError(

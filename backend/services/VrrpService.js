@@ -38,7 +38,8 @@ class VrrpService {
         _id: d._id.toString(),
         device: d.device.toString(),
         interface: d.interface.toString(),
-        trackInterfaces: d.trackInterfaces,
+        trackInterfacesOptional: d.trackInterfacesOptional,
+        trackInterfacesMandatory: d.trackInterfacesMandatory,
         priority: d.priority
       };
     });
@@ -362,13 +363,25 @@ class VrrpService {
         };
       }
 
-      for (const trackIfcs of vrrpDevice.trackInterfaces) {
+      const tracked = [
+        ...vrrpDevice.trackInterfacesOptional ?? [],
+        ...vrrpDevice.trackInterfacesMandatory ?? []
+      ];
+      for (const trackIfcs of tracked) {
         if (!(trackIfcs in interfacesByDevId)) {
           return {
             valid: false,
             err: `Track interface devId ${trackIfcs} is not exists in device ${deviceName}`
           };
         }
+      }
+      // duplication of interfaces
+      const uniqueTrackedInterfaces = new Set(tracked);
+      if (uniqueTrackedInterfaces.size !== tracked.length) {
+        return {
+          valid: false,
+          err: 'It looks like you have duplicates in the tracked interfaces lists'
+        };
       }
     }
 

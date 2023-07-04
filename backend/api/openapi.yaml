@@ -12481,7 +12481,11 @@ components:
                 type: string
                 minimum: 1
                 maximum: 255
-              trackInterfaces:
+              trackInterfacesMandatory:
+                type: array
+                items:
+                  type: string
+              trackInterfacesOptional:
                 type: array
                 items:
                   type: string

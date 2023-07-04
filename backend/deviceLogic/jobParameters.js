@@ -360,9 +360,14 @@ const transformVrrp = (device, vrrpGroup) => {
 
   // use it as objects and not strings of devId only since we
   // may want to add "priority" field in the future.
-  params.trackInterfaces = device.trackInterfaces.map(t => {
-    return { devId: t };
-  });
+  params.trackInterfaces = [
+    ...(device.trackInterfacesOptional ?? []).map(t => {
+      return { devId: t, isMandatory: false };
+    }),
+    ...(device.trackInterfacesMandatory ?? []).map(t => {
+      return { devId: t, isMandatory: true };
+    })
+  ];
   params.devId = device.interface;
 
   return params;
