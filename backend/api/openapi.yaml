@@ -10352,8 +10352,9 @@ components:
         espCryptoAlg: aes-cbc
         espKeySize: 256
         espIntegAlg: hmac-sha2-256-128
-        espDhGroup: ecp-256
         sessionLifeTime: 3600
+        ikeLifeTime: 86400
+        pfs: false
         localIpRangeStart: 0.0.0.0
         localIpRangeEnd: 255.255.255.255
         localPortRangeStart: 0
@@ -10409,8 +10410,6 @@ components:
           $ref: '#/components/schemas/PeerKeySize'
         ikeIntegAlg:
           $ref: '#/components/schemas/PeerIntegAlg'
-        espDhGroup:
-          $ref: '#/components/schemas/PeerDhGroup'
         espCryptoAlg:
           $ref: '#/components/schemas/PeerCryptoAlg'
         espKeySize:
@@ -10418,6 +10417,10 @@ components:
         espIntegAlg:
           $ref: '#/components/schemas/PeerIntegAlg'
         sessionLifeTime:
+          type: string
+        pfs:
+          type: boolean
+        ikeLifeTime:
           type: string
         localIpRangeStart:
           type: string

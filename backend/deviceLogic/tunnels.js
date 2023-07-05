@@ -1038,6 +1038,8 @@ const prepareTunnelAddJob = async (
         'remote-device-id-type': peer.remoteIdType === 'email' ? 'rfc822' : peer.remoteIdType,
         'remote-device-id': peer.remoteId,
         lifetime: parseInt(peer.sessionLifeTime),
+        ike_lifetime: parseInt(peer.ikeLifeTime),
+        pfs: peer.pfs ?? false,
         ike: {
           'crypto-alg': peer.ikeCryptoAlg,
           'integ-alg': peer.ikeIntegAlg,
@@ -1047,7 +1049,6 @@ const prepareTunnelAddJob = async (
         esp: {
           'crypto-alg': peer.espCryptoAlg,
           'integ-alg': peer.espIntegAlg,
-          'dh-group': peer.espDhGroup,
           'key-size': parseInt(peer.espKeySize)
         },
         'local-ts': {

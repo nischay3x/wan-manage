@@ -186,11 +186,6 @@ const peerSchema = new Schema({
   },
 
   // ESP parameters
-  espDhGroup: {
-    type: String,
-    enum: dhGroupValues,
-    required: [true, 'espDhGroup must be set']
-  },
   espCryptoAlg: {
     type: String,
     enum: cryptoAlgsValues,
@@ -206,12 +201,26 @@ const peerSchema = new Schema({
     enum: integAlgsValues,
     required: [true, 'espIntegAlg must be set']
   },
-  sessionLifeTime: {
+  pfs: {
+    type: Boolean,
+    default: false
+  },
+  sessionLifeTime: { // phase 2
     type: String,
     required: [true, 'sessionLifeTime must be set'],
+    default: '3600',
     validate: {
       validator: validators.validateIsInteger,
       message: 'sessionLifeTime should be an integer'
+    }
+  },
+  ikeLifeTime: { // phase 1
+    type: String,
+    required: [true, 'ikeLifeTime must be set'],
+    default: '86400',
+    validate: {
+      validator: validators.validateIsInteger,
+      message: 'ikeLifeTime should be an integer'
     }
   },
 
