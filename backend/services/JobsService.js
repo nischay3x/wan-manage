@@ -33,7 +33,7 @@ class JobsService {
    * Select the API fields from jobs Object
    * @param {Object} item - jobs object
    */
-  static selectJobsParams (item, devicesByMachineId) {
+  static selectJobsParams (item, devicesByMachineId = {}) {
     item._id = item.id;
     const madeAttempts = item._attempts ? item._attempts : 0;
     item.attempts = {
