@@ -1049,6 +1049,7 @@ const prepareTunnelAddJob = async (
         esp: {
           'crypto-alg': peer.espCryptoAlg,
           'integ-alg': peer.espIntegAlg,
+          'dh-group': peer.espDhGroup,
           'key-size': parseInt(peer.espKeySize)
         },
         'local-ts': {

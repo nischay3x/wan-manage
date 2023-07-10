@@ -186,6 +186,11 @@ const peerSchema = new Schema({
   },
 
   // ESP parameters
+  espDhGroup: {
+    type: String,
+    enum: dhGroupValues,
+    required: [true, 'espDhGroup must be set']
+  },
   espCryptoAlg: {
     type: String,
     enum: cryptoAlgsValues,

@@ -25,10 +25,7 @@ async function up () {
   try {
     await peersModel.updateMany(
       { ikeLifeTime: { $exists: false } },
-      {
-        $unset: { espDhGroup: '' },
-        $set: { ikeLifeTime: '86400', pfs: false }
-      },
+      { $set: { ikeLifeTime: '86400', pfs: false } },
       { upsert: false }
     );
   } catch (err) {
