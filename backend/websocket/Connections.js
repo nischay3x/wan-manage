@@ -130,7 +130,7 @@ class Connections {
    * Returns true if web socket is alive and can process messages
    */
   isSocketAlive (socket) {
-    return socket?.isAlive > 5;
+    return socket && ![socket.CLOSING, socket.CLOSED].includes(socket.readyState);
   }
 
   /**
@@ -1237,7 +1237,7 @@ class Connections {
             reject(new Error('Failed to set redis sequence key'));
             return;
           }
-          if (this.isSocketAlive(info.socket)) {
+          if (this.isSocketAlive(info?.socket)) {
             // the device is connected to this server directly
             info.socket.send(messageToDevice);
           } else {
