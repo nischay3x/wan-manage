@@ -28,7 +28,6 @@ const { pendingTypes, getReason } = require('./events/eventReasons');
 const publicAddrInfoLimiter = require('./publicAddressLimiter');
 const { getMajorVersion } = require('../versioning');
 const notificationsConf = require('../models/notificationsConf');
-const notifications = require('../models/notifications');
 
 class Events {
   constructor () {
@@ -63,17 +62,28 @@ class Events {
    * @param  {string} reason  notification reason
   */
   async staticRouteSetToPending (route, device, reason) {
-    await notificationsMgr.sendNotifications([{
-      org: device.org,
-      title: `Static route via ${route.gateway} in device ${device.name} is in pending state`,
-      details: reason,
-      targets: {
-        deviceId: device._id,
-        tunnelId: null,
-        interfaceId: null,
-        policyId: null
-      }
-    }]);
+    const { org, name, _id } = device;
+    const orgNotificationsConf = await notificationsConf.findOne({ org });
+    const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+      eventType: 'Static route state',
+      deviceId: _id,
+      markAsResolved: false
+    });
+    if (!existingAlert) {
+      await notificationsMgr.sendNotifications([{
+        org,
+        title: `Static route via ${route.gateway} in device ${name} is in pending state`,
+        eventType: 'Static route state',
+        details: reason,
+        targets: {
+          deviceId: _id,
+          tunnelId: null,
+          interfaceId: null,
+          policyId: null
+        },
+        orgNotificationsConf
+      }]);
+    }
   }
 
   /**
@@ -131,7 +141,7 @@ class Events {
       await this.tunnelSetToPending(tunnel, device, reason);
     } else {
       this.activeTunnels.add(tunnel._id.toString());
-      await this.tunnelSetToActive(tunnel);
+      await this.tunnelSetToActive(tunnel, device);
     }
   };
 
@@ -166,46 +176,21 @@ class Events {
   */
   async interfaceConnectivityChanged (device, origIfc, state) {
     const orgNotificationsConf = await notificationsConf.findOne({ org: device.org });
-    let sendResolved;
-    if (orgNotificationsConf.rules.hasOwnProperty('Interface connection')) {
-      sendResolved = orgNotificationsConf.rules['Interface connection'].resolvedAlert;
-    }
+    const sendResolved = orgNotificationsConf.rules['Internet connection'].resolvedAlert;
     const stateTxt = state === 'yes' ? 'online' : 'offline';
-    if (stateTxt === 'online') {
-      await notifications.updateOne(
-        {
-          eventType: { $regex: 'Interface connection', $options: 'i' },
-          resolved: false,
-          'targets.interfaceId': origIfc._id
-        },
-        { $set: { resolved: true } }
-      );
-      if (!sendResolved) {
-        return;
-      }
-    }
-    const existingNotification = await notifications.findOne({
-      eventType: { $regex: 'Interface connection', $options: 'i' },
-      resolved: false,
-      'targets.interfaceId': origIfc._id
+    const existingNotification = await notificationsMgr.resolveOrIncreaseCount({
+      eventType: 'Internet connection',
+      interfaceId: origIfc._id,
+      markAsResolved: state === 'online'
     });
-    if (existingNotification) {
-      await notifications.updateOne(
-        {
-          eventType: { $regex: 'Interface connection', $options: 'i' },
-          resolved: false,
-          'targets.interfaceId': origIfc._id
-        },
-        { $set: { count: existingNotification._doc.count + 1 } }
-      );
-    // create a new alert
-    } else {
-      logger.info(`Interface connectivity changed to ${stateTxt}`, { params: { origIfc } });
+    logger.info(`Internet connectivity changed to ${stateTxt}`, { params: { origIfc } });
+    if ((state === 'online' && existingNotification && sendResolved) ||
+      (state === 'offline' && !existingNotification)) {
       await notificationsMgr.sendNotifications([{
         org: device.org,
-        title: 'Interface connection changed',
+        title: 'Internet connection changed',
         details: `Interface ${origIfc.name} state changed to "${stateTxt}"`,
-        eventType: 'Interface connection',
+        eventType: 'Internet connection',
         targets: {
           deviceId: device._id,
           tunnelId: null,
@@ -235,18 +220,30 @@ class Events {
         }
       });
 
-      // only at the first time - send notification
-      await notificationsMgr.sendNotifications([{
-        org: device.org,
-        title: 'Interface IP restored',
-        details: `The IP address of Interface ${origIfc.name} has been restored`,
-        targets: {
-          deviceId: null,
-          tunnelId: null,
-          interfaceId: origIfc._id,
-          policyId: null
-        }
-      }]);
+      // only at the first time - send a notification
+      const orgNotificationsConf = await notificationsConf.findOne({ org: device.org });
+      const sendResolvedAlert = orgNotificationsConf.rules['Missing interface ip'].resolvedAlert;
+      const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+        eventType: 'Missing interface ip',
+        interfaceId: origIfc._id,
+        markAsResolved: true
+      });
+      if (sendResolvedAlert && existingAlert) {
+        await notificationsMgr.sendNotifications([{
+          org: device.org,
+          title: 'Interface IP restored',
+          eventType: 'Missing interface ip',
+          details: `The IP address of Interface ${origIfc.name} has been restored`,
+          targets: {
+            deviceId: device._id,
+            tunnelId: null,
+            interfaceId: origIfc._id,
+            policyId: null
+          },
+          resolved: true,
+          orgNotificationsConf
+        }]);
+      }
     }
 
     if (origIfc.type === 'WAN') {
@@ -311,19 +308,28 @@ class Events {
   async interfaceIpMissing (device, origIfc, ifc) {
     // only at the first time - send notification
     if (origIfc.hasIpOnDevice) {
+      const orgNotificationsConf = await notificationsConf.findOne({ org: device.org });
+      const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+        eventType: 'Missing interface ip',
+        interfaceId: origIfc._id,
+        markAsResolved: false
+      });
       logger.info('Interface IP missing', { params: { origIfc, ifc } });
-      await notificationsMgr.sendNotifications([{
-        org: device.org,
-        title: 'Interface IP missing',
-        eventType: 'Interface ip',
-        details: `The interface ${origIfc.name} has no IP address`,
-        targets: {
-          deviceId: null,
-          tunnelId: null,
-          interfaceId: origIfc._id,
-          policyId: null
-        }
-      }]);
+      if (!existingAlert) {
+        await notificationsMgr.sendNotifications([{
+          org: device.org,
+          title: 'Interface IP missing',
+          eventType: 'Missing interface ip',
+          details: `The interface ${origIfc.name} has no IP address`,
+          targets: {
+            deviceId: device._id,
+            tunnelId: null,
+            interfaceId: origIfc._id,
+            policyId: null
+          },
+          orgNotificationsConf
+        }]);
+      }
     }
 
     const pendingType = pendingTypes.interfaceHasNoIp;
@@ -503,17 +509,29 @@ class Events {
   */
   async tunnelSetToPending (tunnel, device, reason, notify = true) {
     if (notify) {
-      await notificationsMgr.sendNotifications([{
+      const orgNotificationsConf = await notificationsConf.findOne({ org: device.org });
+      const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+        eventType: 'Pending tunnel',
+        tunnelId: tunnel.num,
         org: tunnel.org,
-        title: `Tunnel number ${tunnel.num} is in pending state`,
-        details: reason,
-        targets: {
-          deviceId: null,
-          tunnelId: tunnel._id,
-          interfaceId: null,
-          policyId: null
-        }
-      }]);
+        markAsResolved: false
+      });
+      if (!existingAlert) {
+        await notificationsMgr.sendNotifications([{
+          org: tunnel.org,
+          title: `Tunnel number ${tunnel.num} is in pending state`,
+          eventType: 'Pending tunnel',
+          details: reason,
+          targets: {
+            deviceId: device._id,
+            tunnelId: tunnel.num,
+            interfaceId: null,
+            policyId: null
+          },
+          resolved: false,
+          orgNotificationsConf
+        }]);
+      }
     }
 
     const dependedDevices = await getTunnelConfigDependencies(tunnel, false);
@@ -531,7 +549,31 @@ class Events {
    * Handle event: tunnel configured as a active
    * @param  {object} tunnel tunnel object
   */
-  async tunnelSetToActive (tunnel) {
+  async tunnelSetToActive (tunnel, device) {
+    const orgNotificationsConf = await notificationsConf.findOne({ org: tunnel.org });
+    const sendResolvedAlert = orgNotificationsConf.rules['Pending tunnel'].resolvedAlert;
+    const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+      eventType: 'Pending tunnel',
+      tunnelId: tunnel.num,
+      org: tunnel.org,
+      markAsResolved: true
+    });
+    if (sendResolvedAlert && existingAlert) {
+      await notificationsMgr.sendNotifications([{
+        org: tunnel.org,
+        title: 'Tunnel state change',
+        eventType: 'Pending tunnel',
+        details: `Tunnel number ${tunnel.num} has become active again`,
+        targets: {
+          deviceId: device._id,
+          tunnelId: tunnel.num,
+          interfaceId: null,
+          policyId: null
+        },
+        resolved: true,
+        orgNotificationsConf
+      }]);
+    }
     // get tunnel static routes
     const dependedDevices = await getTunnelConfigDependencies(tunnel, true);
 
@@ -586,7 +628,6 @@ class Events {
       for (const devId in orig) {
         const origIfc = orig[devId];
         const updatedIfc = updated[devId];
-        // await this.interfaceConnectivityChanged(origDevice, origIfc, 'no');
         // no need to send events for unassigned interfaces
         if (!origIfc.isAssigned) {
           continue;

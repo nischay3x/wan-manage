@@ -118,7 +118,8 @@ class SwVersionUpdateManager {
               policyId: null
             },
             eventType: 'Software update',
-            orgNotificationsConf
+            orgNotificationsConf,
+            resolved: true
           });
         });
       });

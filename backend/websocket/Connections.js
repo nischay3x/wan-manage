@@ -40,7 +40,6 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const notificationsConf = require('../models/notificationsConf');
-const notifications = require('../models/notifications');
 
 class Connections {
   constructor () {
@@ -58,13 +57,13 @@ class Connections {
     this.callRegisteredCallbacks = this.callRegisteredCallbacks.bind(this);
     this.sendDeviceInfoMsg = this.sendDeviceInfoMsg.bind(this);
     this.pingCheck = this.pingCheck.bind(this);
-    this.startUnresponsiveDeviceChecker = this.triggerAlertWhenNeeded.bind(this);
+    this.triggerAlertWhenNeeded = this.triggerAlertWhenNeeded.bind(this);
     this.devices = new Devices();
     this.msgSeq = 0;
     this.msgQueue = {};
     this.connectCallbacks = {}; // Callback functions to be called on connect
     this.closeCallbacks = {}; // Callback functions to be called on close
-    this.unresponsiveDevices = new Map();
+    this.unresponsiveDevices = {};
     // Ping each client every 30 sec, with two retries
     this.ping_interval = setInterval(this.pingCheck, 20000);
     // Check every 1 min if a device disconnection alert is needed
@@ -382,26 +381,24 @@ class Connections {
     this.sendDeviceInfoMsg(device, deviceInfo.deviceObj, deviceInfo.org, true);
     let resolvedAlert;
     (async () => {
-      const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
+      const { org, name, deviceObj } = deviceInfo;
+      const orgNotificationsConf = await notificationsConf.findOne({ org: org });
       resolvedAlert = orgNotificationsConf.rules['Device connection'].resolvedAlert;
-      const query = {
-        eventType: { $regex: 'Device connection', $options: 'i' },
-        resolved: false,
-        'targets.deviceId': deviceInfo.deviceObj
-      };
-      const existingDisconnectionAlert = await notifications.findOneAndUpdate(
-        query,
-        { $set: { resolved: true } }
-      );
+      const existingDisconnectionAlert = await notificationsMgr.resolveOrIncreaseCount({
+        eventType: 'Device connection',
+        deviceId: deviceObj,
+        markAsResolved: true
+      });
+      delete this.unresponsiveDevices[device];
       if (existingDisconnectionAlert && resolvedAlert) {
         await notificationsMgr.sendNotifications([
           {
             org: deviceInfo.org,
             title: 'Device connection change',
-            details: `Device ${deviceInfo.name} reconnected to management`,
+            details: `Device ${name} reconnected to management`,
             eventType: 'Device connection',
             targets: {
-              deviceId: deviceInfo.deviceObj,
+              deviceId: deviceObj,
               tunnelId: null,
               interfaceId: null,
               policyId: null
@@ -521,77 +518,44 @@ class Connections {
             interfaces.push(i.toObject());
             return;
           }
-
-          // send a notification if the link's status has been changed
-          const { org, deviceObj: deviceId } = prevDeviceInfo;
-          const orgNotificationsConf = await notificationsConf.findOne({ org: org });
-          let sendResolved;
-          if (orgNotificationsConf.rules.hasOwnProperty('Link status')) {
-            sendResolved = orgNotificationsConf.rules['Link status'].resolvedAlert;
-          }
-          if (updatedConfig.link === 'up' && i.linkStatus !== 'up') {
-            const updated = await notifications.findOneAndUpdate(
-              {
-                eventType: { $regex: 'Link status', $options: 'i' },
-                resolved: false,
-                'targets.interfaceId': i._id
-              },
-              { $set: { resolved: true } }
-            );
-            if (updated && sendResolved) {
-              logger.info(`Link status changed to ${updatedConfig.link}`,
-                { params: { interface: i } });
-              await notificationsMgr.sendNotifications([{
-                org: org,
-                title: 'Link status changed',
-                details: `Link ${i.name} ${i.IPv4} is UP`,
+          if (prevDeviceInfo) {
+            const { org, deviceObj: deviceId } = prevDeviceInfo;
+            const linkStatusChanged = (updatedConfig.link === 'up' && i.linkStatus !== 'up') ||
+            (updatedConfig.link === 'down' && i.linkStatus !== 'down');
+            // send a notification if the link's status has been changed
+            if (linkStatusChanged) {
+              const orgNotificationsConf = await notificationsConf.findOne({ org: org });
+              const sendResolvedAlert = orgNotificationsConf?.rules['Link status']?.resolvedAlert;
+              const resolved = updatedConfig.link === 'up' && i.linkStatus !== 'up';
+              const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
                 eventType: 'Link status',
-                targets: {
-                  deviceId: deviceId,
-                  tunnelId: null,
-                  interfaceId: i._id,
-                  policyId: null
-                },
-                orgNotificationsConf,
-                resolved: true
-              }]);
-            }
-          } else if (updatedConfig.link === 'down' && i.linkStatus !== 'down') {
-            // TODO - decide if count is relevant to flexiManage alerts
-            const existingNotification = await notifications.findOne({
-              eventType: { $regex: 'Link status', $options: 'i' },
-              resolved: false,
-              'targets.interfaceId': i._id
-            });
-
-            if (existingNotification) {
-              await notifications.updateOne(
-                {
-                  eventType: { $regex: 'Link status', $options: 'i' },
-                  resolved: false,
-                  'targets.interfaceId': i._id
-                },
-                { $set: { count: existingNotification._doc.count + 1 } }
-              );
-            } else {
-              logger.info(`Link status changed to ${updatedConfig.link}`,
-                { params: { interface: i } });
-              await notificationsMgr.sendNotifications([{
-                org: org,
-                title: 'Link status changed',
-                details: `Link ${i.name} ${i.IPv4} is DOWN`,
-                eventType: 'Link status',
-                targets: {
-                  deviceId: deviceId,
-                  tunnelId: null,
-                  interfaceId: i._id,
-                  policyId: null
-                },
-                orgNotificationsConf,
-                resolved: false
-              }]);
+                deviceId: deviceId,
+                interfaceId: i._id,
+                markAsResolved: resolved
+              });
+              const alertCondition = (existingAlert && resolved && sendResolvedAlert) ||
+              (!existingAlert && !resolved);
+              if (alertCondition) {
+                logger.info(`Link status changed to ${updatedConfig.link}`,
+                  { params: { interface: i } });
+                await notificationsMgr.sendNotifications([{
+                  org: org,
+                  title: 'Link status changed',
+                  details: `Link ${i.name} ${i.IPv4} is ${(updatedConfig.link).toUpperCase()}`,
+                  eventType: 'Link status',
+                  targets: {
+                    deviceId: deviceId,
+                    tunnelId: null,
+                    interfaceId: i._id,
+                    policyId: null
+                  },
+                  orgNotificationsConf,
+                  resolved
+                }]);
+              }
             }
           }
+
           const updInterface = {
             ...i.toJSON(),
             PublicIP: updatedConfig.public_ip && i.useStun
@@ -735,14 +699,19 @@ class Connections {
           const { allowed, blockedNow } = await reconfigErrorsLimiter.use(deviceId);
           if (!allowed && blockedNow) {
             logger.error('Reconfig errors rate-limit exceeded', { params: { deviceId } });
-
+            const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
             await notificationsMgr.sendNotifications([{
               org: origDevice.org,
               title: 'Unsuccessful self-healing operations',
-              eventType: 'Failed self-healing operation',
-              device: deviceId,
-              machineId: machineId,
-              details: 'Unsuccessful updating device data. Please contact flexiWAN support'
+              eventType: 'Failed self-healing',
+              targets: {
+                deviceId: deviceId,
+                tunnelId: null,
+                interfaceId: null,
+                policyId: null
+              },
+              details: 'Unsuccessful updating device data. Please contact flexiWAN support',
+              orgNotificationsConf
             }]);
           }
 
@@ -1003,32 +972,39 @@ class Connections {
    * a specified duration.
   */
   triggerAlertWhenNeeded () {
-    if (!this.unresponsiveDevices) {
+    if (!Object.keys(this.unresponsiveDevices).length) {
       return;
     }
     const currentTime = new Date().getTime();
-    this.unresponsiveDevices.forEach((deviceInfo, device) => {
+    Object.entries(this.unresponsiveDevices).forEach(([device, deviceInfo]) => {
       if (currentTime - deviceInfo.timeFirstUnresponsive >= configs.get('timeoutDuration')) {
         let orgNotificationsConf;
-        notificationsConf.findOne({ org: deviceInfo.org }).then((res) => {
+        notificationsConf.findOne({ org: deviceInfo.org }).then(async (res) => {
           orgNotificationsConf = res;
           const { org, deviceObj, name } = deviceInfo;
-          notificationsMgr.sendNotifications([
-            {
-              org: org,
-              title: 'Device connection change',
-              details: `Device ${name} disconnected from management`,
-              eventType: 'Device connection',
-              targets: {
-                deviceId: deviceObj,
-                tunnelId: null,
-                interfaceId: null,
-                policyId: null
-              },
-              orgNotificationsConf
-            }
-          ]);
-          this.unresponsiveDevices.delete(device);
+          const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+            eventType: 'Device connection',
+            deviceId: deviceObj,
+            markAsResolved: false
+          });
+          if (!existingAlert) {
+            notificationsMgr.sendNotifications([
+              {
+                org: org,
+                title: 'Device connection change',
+                details: `Device ${name} disconnected from management`,
+                eventType: 'Device connection',
+                targets: {
+                  deviceId: deviceObj,
+                  tunnelId: null,
+                  interfaceId: null,
+                  policyId: null
+                },
+                orgNotificationsConf
+              }
+            ]);
+          }
+          delete this.unresponsiveDevices[device];
         });
       }
     });
@@ -1043,9 +1019,9 @@ class Connections {
     const currentTime = new Date().getTime();
     const deviceInfo = this.devices.getDeviceInfo(device);
     if (!deviceInfo) return;
-    if (!this.unresponsiveDevices.has(device)) {
+    if (!this.unresponsiveDevices.hasOwnProperty(device)) {
       deviceInfo.timeFirstUnresponsive = currentTime;
-      this.unresponsiveDevices.set(device, deviceInfo);
+      this.unresponsiveDevices[device] = deviceInfo;
     }
     this.devices.removeDeviceInfo(device);
     this.callRegisteredCallbacks(this.closeCallbacks, device);

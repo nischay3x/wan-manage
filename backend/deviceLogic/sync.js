@@ -50,6 +50,8 @@ const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const deviceNotificationsSync = require('./deviceNotifications').sync;
 const AsyncLock = require('async-lock');
 const lock = new AsyncLock({ maxOccupationTime: 60000 });
+const notificationsMgr = require('../notifications/notifications')();
+const notificationsConf = require('../models/notificationsConf');
 
 // Create an object of all sync handlers
 const syncHandlers = {
@@ -436,9 +438,39 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
     }
 
     // If the device is synced, we have nothing to do anyway.
-    // If the device is not-synced, user has to first resync
+    // If the device is not-synced, we need to notify the user and he has to first resync
     // the device manually
-    if (['synced', 'not-synced'].includes(newState)) return;
+    if (['synced', 'not-synced'].includes(newState)) {
+      const orgNotificationsConf = await notificationsConf.findOne({ org });
+      const sendResolvedAlert = orgNotificationsConf.rules['Synced device'].resolvedAlert;
+      if (newState === 'not-synced' && trials < 3) {
+        return;
+      } else {
+        const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+          eventType: 'Synced device',
+          deviceId: deviceId,
+          markAsResolved: newState === 'synced'
+        });
+        if ((existingAlert && newState === 'synced' && sendResolvedAlert) ||
+        (!existingAlert && newState === 'not-synced')) {
+          notificationsMgr.sendNotifications({
+            org: org,
+            title: 'Device sync state change',
+            details: `The device ${hostname} is now ${newState}`,
+            eventType: 'Synced device',
+            targets: {
+              deviceId,
+              tunnelId: null,
+              interfaceId: null,
+              policyId: null
+            },
+            orgNotificationsConf: orgNotificationsConf,
+            resolved: newState === 'synced'
+          });
+        }
+      }
+      return;
+    }
 
     // Don't attempt to sync if there are pending jobs
     // in the queue, as sync state might change when

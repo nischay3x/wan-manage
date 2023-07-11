@@ -64,7 +64,8 @@ class NotificationsService {
             status: 1,
             severity: 1,
             count: 1,
-            emailSent: 1
+            emailSent: 1,
+            resolved: 1
           }
         }
       ] : [];

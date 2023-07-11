@@ -65,8 +65,14 @@ const notificationsConfSchema = new Schema({
     Temperature: ruleSchema,
     'Policy change': ruleSchema,
     'Software update': ruleSchema,
-    'Interface connection': ruleSchema,
-    'Link status': ruleSchema
+    'Internet connection': ruleSchema,
+    'Link status': ruleSchema,
+    'Missing interface ip': ruleSchema,
+    'Tunnel connection': ruleSchema,
+    'Pending tunnel': ruleSchema,
+    'Failed self-healing': ruleSchema,
+    'Static route state': ruleSchema,
+    'Synced device': ruleSchema
   },
   signedToCritical:
   [

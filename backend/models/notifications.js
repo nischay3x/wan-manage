@@ -108,8 +108,15 @@ const notificationsSchema = new Schema({
       'Temperature',
       'Policy change',
       'Software update',
-      'Interface connection',
-      'Link status']
+      'Internet connection',
+      'Link status',
+      'Missing interface ip',
+      'Pending tunnel',
+      'Tunnel connection',
+      'Failed self-healing',
+      'Static route state',
+      'Synced device'
+    ]
   },
   resolved:
   {

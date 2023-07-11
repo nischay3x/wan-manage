@@ -184,34 +184,30 @@ class DeviceStatus {
       ? lastUpdateEntry.alerts[alertKey][tunnelNum]
       : lastUpdateEntry.alerts[alertKey];
     try {
+      const { org, name, deviceObj: deviceId } = deviceInfo;
       const condition = {
-        org: deviceInfo.org,
+        org: org,
         eventType: alertKey,
         severity: severity,
-        resolved: false
+        markAsResolved: false
       };
       if (tunnelNum) {
-        condition['targets.tunnelId'] = tunnelNum;
+        condition.tunnelId = tunnelNum;
       } else {
-        condition['targets.deviceId'] = deviceInfo.deviceObj;
+        condition.deviceId = deviceId;
       }
-      const updated = await notifications.findOneAndUpdate(
-        condition,
-        { $inc: { count: 1 } },
-        { new: true }
-      );
-
-      if (!updated) {
+      const existingAlert = await notificationsMgr.resolveOrIncreaseCount(condition);
+      if (!existingAlert) {
         // create a new alert
         value = value.toFixed(2);
         this.events.push({
-          org: deviceInfo.org,
+          org,
           title: alertKey + ' change',
           details: `The value of the ${alertKey} in ${tunnelNum ? `tunnel ${tunnelNum}`
-              : `device ${deviceInfo.name}`} has increased to ${value}${unit}`,
+              : `device ${name}`} has increased to ${value}${unit}`,
           eventType: alertKey,
           targets: {
-            deviceId: deviceInfo.deviceObj,
+            deviceId: deviceId,
             tunnelId: tunnelNum || null,
             interfaceId: null,
             policyId: null
@@ -231,89 +227,91 @@ class DeviceStatus {
 
   async handleResolvedAlerts (
     alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
-    const deviceOnlyAlerts = ['Link/Tunnel round trip time', 'Link/Tunnel default drop rate',
-      'Device memory usage', 'Hard drive usage', 'Temperature'];
-    const notificationsConfRules = orgNotificationsConf.rules;
-    for (const alertKey in alerts) {
-      // if the alert is from flexiManage or from the device but
-      // already exists in the current alerts dictionary continue
-      if (!deviceOnlyAlerts.includes(alertKey) ||
-        (alertKey in lastUpdateEntry.alerts && !alertKey.toLowerCase().includes('tunnel'))) {
-        continue;
-      }
-      // a "tunnel" kind of alert
-      if (!('value' in alerts[alertKey])) {
-        for (const tunnelId in alerts[alertKey]) {
-          if (!(lastUpdateEntry.alerts[alertKey]) ||
-           !(tunnelId in lastUpdateEntry.alerts[alertKey])) {
-            let resolvedAlertDeviceId;
-            const updatedDocument = await notifications.findOneAndUpdate(
-              {
-                eventType: { $regex: alertKey, $options: 'i' },
-                resolved: false,
-                'targets.tunnelId': tunnelId,
-                severity: alerts[alertKey][tunnelId].severity
-              },
-              { $set: { resolved: true } },
-              { returnOriginal: false }
-            );
-            if (updatedDocument) {
-              resolvedAlertDeviceId = updatedDocument.targets.deviceId;
-            }
-            if (updatedDocument && resolvedAlertDeviceId !== deviceInfo.deviceObj &&
-            notificationsConfRules[alertKey].resolvedAlert) {
-              this.events.push({
-                org: deviceInfo.org,
-                title: `${alertKey} change`,
-                details: `The value of the ${alertKey} in tunnel ${tunnelId} has returned 
-                  to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
-                    notificationsConfRules[alertKey].thresholdUnit})`,
+    try {
+      const { org, deviceObj: deviceId, name } = deviceInfo;
+      const deviceOnlyAlerts = ['Link/Tunnel round trip time', 'Link/Tunnel default drop rate',
+        'Device memory usage', 'Hard drive usage', 'Temperature'];
+      const notificationsConfRules = orgNotificationsConf.rules;
+      for (const alertKey in alerts) {
+        // if the alert is from flexiManage or from the device but
+        // already exists in the current alerts dictionary continue
+        if (!deviceOnlyAlerts.includes(alertKey) ||
+          (alertKey in lastUpdateEntry.alerts && !alertKey.toLowerCase().includes('tunnel'))) {
+          continue;
+        }
+        // a "tunnel" kind of alert
+        if (!('value' in alerts[alertKey])) {
+          for (const tunnelId in alerts[alertKey]) {
+            if (!(lastUpdateEntry.alerts[alertKey]) ||
+             !(tunnelId in lastUpdateEntry.alerts[alertKey])) {
+              let resolvedAlertDeviceId;
+              const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
                 eventType: alertKey,
-                targets: {
-                  deviceId: null,
-                  tunnelId: tunnelId,
-                  interfaceId: null,
-                  policyId: null
-                },
+                tunnelId,
                 severity: alerts[alertKey][tunnelId].severity,
-                orgNotificationsConf: orgNotificationsConf,
-                resolved: true
+                org,
+                markAsResolved: true
               });
+              if (existingAlert) {
+                resolvedAlertDeviceId = existingAlert.targets.deviceId;
+              }
+              if (existingAlert && resolvedAlertDeviceId !== deviceId &&
+              notificationsConfRules[alertKey].resolvedAlert) {
+                this.events.push({
+                  org,
+                  title: `${alertKey} change`,
+                  details: `The value of the ${alertKey} in tunnel ${tunnelId} has returned 
+                    to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
+                      notificationsConfRules[alertKey].thresholdUnit})`,
+                  eventType: alertKey,
+                  targets: {
+                    deviceId,
+                    tunnelId,
+                    interfaceId: null,
+                    policyId: null
+                  },
+                  severity: alerts[alertKey][tunnelId].severity,
+                  orgNotificationsConf: orgNotificationsConf,
+                  resolved: true
+                });
+              }
             }
           }
-        }
-      // a device kind of alert
-      } else {
-        await notifications.updateOne(
-          {
-            'targets.deviceId': deviceInfo.deviceObj,
-            eventType: { $regex: alertKey, $options: 'i' },
-            resolved: false
-          },
-          { $set: { resolved: true } }
-        );
-        if (notificationsConfRules.hasOwnProperty(alertKey) &&
-        notificationsConfRules[alertKey].resolvedAlert) {
-          this.events.push({
-            org: deviceInfo.org,
-            title: `${alertKey} change`,
-            details: `The value of the ${alertKey} in device 
-              ${deviceInfo.name} has returned
-              to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
-                deviceInfo.alerts[alertKey].unit})`,
+        // a device kind of alert
+        } else {
+          const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+            deviceId,
             eventType: alertKey,
-            targets: {
-              deviceId: deviceInfo.deviceObj,
-              tunnelId: null,
-              interfaceId: null,
-              policyId: null
-            },
             severity: alerts[alertKey].severity,
-            orgNotificationsConf: orgNotificationsConf,
-            resolved: true
+            markAsResolved: true
           });
+          if (existingAlert && notificationsConfRules[alertKey].resolvedAlert) {
+            this.events.push({
+              org,
+              title: `${alertKey} change`,
+              details: `The value of the ${alertKey} in device 
+                ${name} has returned
+                to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
+                  deviceInfo.alerts[alertKey].unit})`,
+              eventType: alertKey,
+              targets: {
+                deviceId,
+                tunnelId: null,
+                interfaceId: null,
+                policyId: null
+              },
+              severity: alerts[alertKey].severity,
+              orgNotificationsConf: orgNotificationsConf,
+              resolved: true
+            });
+          }
         }
       }
+    } catch (error) {
+      logger.warn('Failed to resolve alert', {
+        params: { deviceID: deviceID, err: error.message },
+        periodic: { task: this.taskInfo }
+      });
     }
   }
 
@@ -653,77 +651,36 @@ class DeviceStatus {
       return;
     }
     const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
-    const notificationsConfRules = orgNotificationsConf.rules;
-    const severity = notificationsConfRules['Running router'].severity;
-    const { org, deviceObj } = deviceInfo;
+    const { org, deviceObj: deviceId, name } = deviceInfo;
+    const sendResolvedAlert = orgNotificationsConf.rules['Running router'].resolvedAlert;
     if (!this.status[machineId] || newState !== this.status[machineId].state) {
-      const existingNotification = await notifications.findOne({
-        'targets.deviceId': deviceInfo.deviceObj,
-        eventType: { $regex: 'Running router', $options: 'i' },
-        resolved: false
+      const existingNotification = await notificationsMgr.resolveOrIncreaseCount({
+        eventType: 'Running router',
+        deviceId: deviceId,
+        org: org,
+        markAsResolved: newState === 'running'
       });
-      if (existingNotification) {
-        // if there is already an alert: mark as resolved
-        if (newState === 'running') {
-          await notifications.updateOne(
-            {
-              device: deviceInfo.deviceObj,
-              eventType: { $regex: 'Running router', $options: 'i' },
-              resolved: false,
-              'targets.deviceId': deviceInfo.deviceObj
-            },
-            { $set: { resolved: true } }
-          );
-          if (orgNotificationsConf.rules.hasOwnProperty('Running router') &&
-          orgNotificationsConf.rules['Running router'].resolvedAlert) {
-            this.events.push({
-              org: org,
-              title: 'Router state change',
-              details: `Router state changed to running 
-               in the device ${deviceInfo.name}`,
-              eventType: 'Running router',
-              targets: {
-                deviceId: deviceInfo.deviceObj,
-                tunnelId: null,
-                interfaceId: null,
-                policyId: null
-              },
-              severity: severity,
-              orgNotificationsConf: orgNotificationsConf,
-              resolved: true
-            });
-          }
-        } else if (newState === 'Not running') {
-          await notifications.updateOne(
-            {
-              device: deviceInfo.deviceObj,
-              eventType: { $regex: 'Running router', $options: 'i' },
-              resolved: false,
-              'targets.deviceId': deviceInfo.deviceObj
-            },
-            { $set: { count: existingNotification._doc.count + 1 } }
-          );
-        }
-      } else if (newState !== 'running') {
+      if ((newState === 'running' && existingNotification && sendResolvedAlert) ||
+        (newState === 'not running' && !existingNotification)) {
         this.events.push({
           org: org,
           title: 'Router state change',
-          details: `Router state changed to Not running 
-         in the device ${deviceInfo.name}`,
+          details: `Router state changed to running
+                 in the device ${name}`,
           eventType: 'Running router',
           targets: {
-            deviceId: deviceInfo.deviceObj,
+            deviceId: deviceId,
             tunnelId: null,
             interfaceId: null,
             policyId: null
           },
-          severity: severity,
-          orgNotificationsConf: orgNotificationsConf
+          orgNotificationsConf: orgNotificationsConf,
+          resolved: newState === 'running'
         });
       }
-      this.setDevicesStatusByOrg(org, deviceObj, newState);
-      this.setDeviceStatsField(machineId, 'state', newState);
+      this.setDevicesStatusByOrg(org, deviceId, newState);
     }
+    this.setDeviceStatsField(machineId, 'state', newState);
   }
 
   /**
@@ -788,7 +745,7 @@ class DeviceStatus {
     }
 
     await this.setDeviceState(machineId, devStatus);
-    const { org } = deviceInfo;
+    const { org, deviceObj: deviceId } = deviceInfo;
 
     // Interface statistics
     const timeDelta = rawStats.period;
@@ -858,19 +815,38 @@ class DeviceStatus {
         }
 
         // Generate a notification if tunnel status has changed since
-        // the last update, and only if the new status is 'down'
-        if ((firstTunnelUpdate ||
-            tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status) &&
-            tunnelState.status === 'down') {
-          this.events.push({
-            org: org,
-            title: 'Tunnel change',
-            details: `Tunnel ${tunnelID} state changed to "Not connected"`,
-            targets: {
-              deviceId: null,
+        // the last update
+        if (
+          (firstTunnelUpdate ||
+            tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
+        ) {
+          notificationsConf.find({ org: org }).then(async (res) => {
+            const orgNotificationsConf = res[0];
+            const sendResolvedAlert = orgNotificationsConf.rules['Tunnel connection'].resolvedAlert;
+            const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+              eventType: 'Tunnel connection',
               tunnelId: tunnelID,
-              interfaceId: null,
-              policyId: null
+              deviceId,
+              org: org,
+              markAsResolved: tunnelState.status === 'up'
+            });
+            if ((tunnelState.status === 'down' && !existingAlert) ||
+            (tunnelState.status === 'up' && existingAlert && sendResolvedAlert)) {
+              this.events.push({
+                org: org,
+                title: 'Tunnel state change',
+                details: `Tunnel ${tunnelID} state changed to 
+                ${tunnelState.status === 'down' ? 'Not connected' : 'Connected'}`,
+                targets: {
+                  deviceId,
+                  tunnelId: tunnelID,
+                  interfaceId: null,
+                  policyId: null
+                },
+                eventType: 'Tunnel connection',
+                orgNotificationsConf,
+                resolved: tunnelState.status === 'up'
+              });
             }
           });
         }

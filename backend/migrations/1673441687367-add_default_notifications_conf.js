@@ -105,7 +105,7 @@ async function up () {
           resolvedAlert: null,
           type: 'device'
         },
-        'Interface connection': {
+        'Internet connection': {
           warningThreshold: null,
           criticalThreshold: null,
           thresholdUnit: null,
@@ -122,6 +122,60 @@ async function up () {
           immediateEmail: false,
           resolvedAlert: false,
           type: 'interface'
+        },
+        'Missing interface ip': {
+          warningThreshold: null,
+          criticalThreshold: null,
+          thresholdUnit: null,
+          severity: 'critical',
+          immediateEmail: false,
+          resolvedAlert: false,
+          type: 'interface'
+        },
+        'Pending tunnel': {
+          warningThreshold: null,
+          criticalThreshold: null,
+          thresholdUnit: null,
+          severity: 'critical',
+          immediateEmail: false,
+          resolvedAlert: false,
+          type: 'tunnel'
+        },
+        'Tunnel connection': {
+          warningThreshold: null,
+          criticalThreshold: null,
+          thresholdUnit: null,
+          severity: 'critical',
+          immediateEmail: false,
+          resolvedAlert: false,
+          type: 'tunnel'
+        },
+        'Failed self-healing': {
+          warningThreshold: null,
+          criticalThreshold: null,
+          thresholdUnit: null,
+          severity: 'critical',
+          immediateEmail: false,
+          resolvedAlert: null,
+          type: 'device'
+        },
+        'Static route state': {
+          warningThreshold: null,
+          criticalThreshold: null,
+          thresholdUnit: null,
+          severity: 'critical',
+          immediateEmail: false,
+          resolvedAlert: null,
+          type: 'device'
+        },
+        'Synced device': {
+          warningThreshold: null,
+          criticalThreshold: null,
+          thresholdUnit: null,
+          severity: 'critical',
+          immediateEmail: false,
+          resolvedAlert: false,
+          type: 'device'
         }
       }
     }]);

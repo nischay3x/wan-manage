@@ -9807,7 +9807,7 @@ components:
                   type: boolean
                 type:
                   type: string
-            'Interface connection':
+            'Internet connection':
               type: object
               properties:
                 warningThreshold:
