@@ -247,17 +247,22 @@ class NotificationsManager {
     }
   }
 
-  async sendWebHook (title, details, severity) {
+  async sendWebHook (title, details, severity, orgNotificationsConf) {
     const webHookMessage = {
       title,
       details,
       severity
     };
-    if (!await webHooks.sendToWebHook('http://localhost:7000/webhook',
-      webHookMessage,
-      ''
-    )) {
-      logger.error('Web hook call failed', { params: { message: webHookMessage } });
+    const { webhookURL, sendCriticalAlerts, sendWarningAlerts } =
+    orgNotificationsConf.webHookSettings;
+    if ((severity === 'warning' && sendWarningAlerts) ||
+    (severity === 'critical' && sendCriticalAlerts)) {
+      if (!await webHooks.sendToWebHook(webhookURL,
+        webHookMessage,
+        ''
+      )) {
+        logger.error('Web hook call failed', { params: { message: webHookMessage } });
+      }
     }
   }
 
@@ -367,7 +372,8 @@ class NotificationsManager {
             notification.emailSent.sendingTime = emailSent;
           }
           if (rules[eventType].sendWebHook) {
-            await this.sendWebHook(title, details, severity || notification.severity);
+            await this.sendWebHook(title, details,
+              severity || notification.severity, orgNotificationsConf);
           }
         }
         const key = notification.org.toString();
