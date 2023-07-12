@@ -9284,7 +9284,6 @@ components:
         country: country
         companyType: companyType
         companyDesc: companyDesc
-        enableNotifications: true
         isSubscriptionValid: true
         trial_end: 1676591999
         forceMfa: false
@@ -9302,9 +9301,6 @@ components:
           type: string
         companyDesc:
           type: string
-        enableNotifications:
-          default: true
-          type: boolean
         isSubscriptionValid:
           default: true
           type: boolean
@@ -9320,7 +9316,6 @@ components:
         country: country
         companyType: companyType
         companyDesc: companyDesc
-        enableNotifications: true
         forceMfa: false
       properties:
         name:
@@ -9332,9 +9327,6 @@ components:
           type: string
         companyDesc:
           type: string
-        enableNotifications:
-          default: true
-          type: boolean
         forceMfa:
           default: false
           type: boolean

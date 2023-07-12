@@ -43,7 +43,6 @@ class AccountsService {
       items.push(...[
         'companyType',
         'companyDesc',
-        'enableNotifications',
         'name',
         'country'
       ]);
@@ -142,12 +141,12 @@ class AccountsService {
         );
       }
       const {
-        name, companyType, companyDesc, country, enableNotifications, forceMfa
+        name, companyType, companyDesc, country, forceMfa
       } = accountRequest;
 
       const account = await Accounts.findOneAndUpdate(
         { _id: id },
-        { $set: { name, companyType, companyDesc, country, enableNotifications, forceMfa } },
+        { $set: { name, companyType, companyDesc, country, forceMfa } },
         { upsert: false, new: true, runValidators: true });
 
       // Update token

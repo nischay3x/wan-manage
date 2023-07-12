@@ -96,11 +96,6 @@ const Accounts = new Schema({
     ],
     maxlength: [255, 'Company description length must be at most 255']
   },
-  // enable or disable notifications
-  enableNotifications: {
-    type: Boolean,
-    default: false
-  },
   // logo file url. Not used
   logoFile: {
     type: String,
