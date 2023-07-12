@@ -101,7 +101,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
       devicesTasks[deviceId].tasks.push(...removeDevice.map(d => {
         return {
           entity: 'agent',
-          message: 'remove-vrrp',
+          message: 'remove-vrrp-group',
           params: d
         };
       }));
@@ -112,7 +112,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
       devicesTasks[deviceId].tasks.push(...addDevice.map(d => {
         return {
           entity: 'agent',
-          message: 'add-vrrp',
+          message: 'add-vrrp-group',
           params: d
         };
       }));
@@ -356,7 +356,7 @@ const sync = async (deviceId, org) => {
       const params = transformVrrp(vrrpGroupDevice, vrrpGroup);
       request.push({
         entity: 'agent',
-        message: 'add-vrrp',
+        message: 'add-vrrp-group',
         params
       });
 
