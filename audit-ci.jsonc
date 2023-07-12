@@ -11,6 +11,7 @@
 
         "GHSA-35q2-47q7-3pc3|redis",
         "GHSA-p8p7-x288-28g6|node-zendesk>request",
+        "GHSA-72xf-g2v4-qvf3|node-zendesk>request>tough-cookie",
         "GHSA-p9pc-299p-vxgp|migrate-mongoose>yargs>yargs-parser"
     ]
 }
