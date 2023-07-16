@@ -119,7 +119,7 @@ const passFilters = (obj, filters) => {
     let objVal = obj;
     // the key can be complex, like 'data.message.title'
     for (const prop of props) {
-      if (!objVal.hasOwnProperty(prop)) return false;
+      if (objVal[prop] === undefined) return false;
       objVal = objVal[prop];
     }
     // must be the same type to compare

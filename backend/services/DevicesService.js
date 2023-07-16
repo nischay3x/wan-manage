@@ -744,9 +744,8 @@ class DevicesService {
             found: [
               { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
               { $project: { distro: { $ifNull: ['$distro.codename', 'NA'] } } },
-              { $group: { _id: '$distro', count: { $sum: 1 } } }],
-            // Not found is used in case no devices exist in the organization
-            notFound: [{ $project: { _id: 'NA', count: { $const: 0 } } }, { $limit: 1 }]
+              { $group: { _id: '$distro', count: { $sum: 1 } } }
+            ]
           }
         },
         {
@@ -754,7 +753,7 @@ class DevicesService {
             result: {
               $cond: {
                 if: { $eq: [{ $size: '$found' }, 0] },
-                then: '$notFound',
+                then: [{ _id: 'NA', count: 0 }],
                 else: '$found'
               }
             }
@@ -969,7 +968,8 @@ class DevicesService {
             defaultSettings: {},
             pinState: {},
             connectionState: null,
-            registrationNetworkState: {}
+            registrationNetworkState: {},
+            state: null
           },
           parseResponse: async response => {
             response = parseLteStatus(response);
@@ -1553,9 +1553,10 @@ class DevicesService {
               : updIntf.isAssigned ? updIntf.type : 'Unassigned';
 
             // Check tunnels connectivity and static routes for removed or modified interfaces
-            if ((origIntf.isAssigned) &&
-              (!updIntf || !updIntf.isAssigned || updIntf.type !== 'WAN')) {
-              if (Array.isArray(deviceRequest.staticroutes) &&
+            if (origIntf.isAssigned) {
+              const interfaceRemoved = !updIntf || !updIntf.isAssigned;
+              if ((interfaceRemoved || !['LAN', 'WAN'].includes(updIntf.type)) &&
+                Array.isArray(deviceRequest.staticroutes) &&
                 (deviceRequest.staticroutes.some(r => r.ifname === origIntf.devId))) {
                 // eslint-disable-next-line max-len
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing static routes, please delete related static routes before`);
@@ -1564,7 +1565,7 @@ class DevicesService {
                 return interfaceA.toString() === origIntf._id.toString() ||
                   (interfaceB && interfaceB.toString() === origIntf._id.toString());
               });
-              if (hasTunnels) {
+              if (hasTunnels && (interfaceRemoved || updIntf.type !== 'WAN')) {
                 // eslint-disable-next-line max-len
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing tunnels, please delete related tunnels before`);
               }
@@ -1678,7 +1679,7 @@ class DevicesService {
                   const hasTunnels = origTunnels.some(({ interfaceA, interfaceB, pathlabel }) => {
                     return (interfaceA.toString() === origIntf._id.toString() ||
                       (interfaceB && interfaceB.toString() === origIntf._id.toString())) &&
-                      remLabels.some(p => p._id.toString() === pathlabel.toString());
+                      remLabels.some(p => p._id.toString() === pathlabel?.toString());
                   });
                   if (hasTunnels) {
                   // eslint-disable-next-line max-len
