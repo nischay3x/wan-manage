@@ -8684,6 +8684,7 @@ components:
       type: object
     AppIdentification:
       example:
+        _id: _id
         name: custom:app-name
         description: app identification description
         category: internet
@@ -11221,6 +11222,7 @@ components:
       type: object
     FirewallPolicyList:
       example:
+        _id: id
         name: name
       properties:
         _id:
@@ -11456,6 +11458,7 @@ components:
           type: object
     QOSPolicy:
       example:
+        _id: id
         name: name
         description: description
         advanced: false
@@ -11484,6 +11487,7 @@ components:
       type: object
     QOSPolicyList:
       example:
+        _id: id
         name: name
       properties:
         _id:

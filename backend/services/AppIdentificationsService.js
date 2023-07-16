@@ -195,7 +195,7 @@ class AppIdentificationsService {
    * @returns
    * @memberof AppIdentificationsService
    */
-  static async appIdentificationsPOST ({ org, appIdentification }, { user, server }, response) {
+  static async appIdentificationsPOST ({ org, ...appIdentification }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       let appIdentsRes =

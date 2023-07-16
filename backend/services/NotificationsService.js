@@ -214,7 +214,7 @@ class NotificationsService {
    * notificationsPutRequest NotificationsPutRequest
    * no response value expected for this operation
    **/
-  static async notificationsPUT ({ org, notificationsPutRequest }, { user }) {
+  static async notificationsPUT ({ org, ...notificationsPutRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { org: { $in: orgList } };
@@ -242,7 +242,7 @@ class NotificationsService {
    *
    * no response value expected for this operation
    **/
-  static async notificationsDELETE ({ org, notificationsDeleteRequest }, { user }) {
+  static async notificationsDELETE ({ org, ...notificationsDeleteRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
