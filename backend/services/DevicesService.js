@@ -2233,7 +2233,7 @@ class DevicesService {
 
       const tracked = [
         ...deviceVrrp.trackInterfacesOptional,
-        ...deviceVrrp.trackInterfacesOptional
+        ...deviceVrrp.trackInterfacesMandatory
       ];
       for (const trackIfc of tracked) {
         const ifc = interfacesByDevId[trackIfc];
