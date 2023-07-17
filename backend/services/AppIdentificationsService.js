@@ -148,7 +148,7 @@ class AppIdentificationsService {
    * @returns
    * @memberof AppIdentificationsService
    */
-  static async appIdentificationsCustomIdPUT ({ id, org, appIdentification }, { user }) {
+  static async appIdentificationsCustomIdPUT ({ id, org, ...appIdentification }, { user }) {
     try {
       // Each app identification entry is stored in the organization document. Whenever
       // update is requested, need to find the organization entry in the custom app

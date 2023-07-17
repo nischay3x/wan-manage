@@ -666,7 +666,7 @@ class DevicesService {
     }
   }
 
-  static async devicesUpgdSchedPOST ({ org, devicesUpgradeRequest }, { user }) {
+  static async devicesUpgdSchedPOST ({ org, ...devicesUpgradeRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { _id: { $in: devicesUpgradeRequest.devices }, org: { $in: orgList } };
@@ -700,7 +700,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdUpgdSchedPOST ({ id, org, deviceUpgradeRequest }, { user }) {
+  static async devicesIdUpgdSchedPOST ({ id, org, ...deviceUpgradeRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { _id: id, org: { $in: orgList } };
@@ -1251,7 +1251,7 @@ class DevicesService {
    *
    * no response value expected for this operation
    **/
-  static async devicesDELETE ({ org, devicesDeleteRequest }, { user }) {
+  static async devicesDELETE ({ org, ...devicesDeleteRequest }, { user }) {
     let orgList;
     try {
       let delDevices;
@@ -2815,7 +2815,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, { user, server }, res) {
+  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, ...dhcpRequest }, { user, server }, res) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -3053,7 +3053,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user, server }, response) {
+  static async devicesIdDhcpPOST ({ id, org, ...dhcpRequest }, { user, server }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -3138,7 +3138,7 @@ class DevicesService {
   }
 
   static async devicesIdInterfacesIdActionPOST ({
-    org, id, interfaceOperationReq, interfaceId
+    org, id, interfaceId, ...interfaceOperationReq
   }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
@@ -3384,7 +3384,7 @@ class DevicesService {
    * sendRequest Send Command Request
    * returns Command Output Result
    **/
-  static async devicesIdSendPOST ({ id, org, deviceSendRequest }, { user }, response) {
+  static async devicesIdSendPOST ({ id, org, ...deviceSendRequest }, { user }, response) {
     try {
       if (!deviceSendRequest.api || !deviceSendRequest.entity) {
         throw new Error('Request must include entity and api fields');
@@ -3464,7 +3464,7 @@ class DevicesService {
    * ospfConfigs ospfConfigs
    * returns OSPF configuration
    **/
-  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user, server }, response) {
+  static async devicesIdRoutingOSPFPUT ({ id, org, ...ospfConfigs }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -3506,7 +3506,7 @@ class DevicesService {
    * coordsConfig Coordinates Configs
    * returns coordinates configuration
    **/
-  static async devicesIdCoordsPUT ({ id, org, coordsConfigs }, { user, server }, response) {
+  static async devicesIdCoordsPUT ({ id, org, ...coordsConfigs }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 

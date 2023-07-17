@@ -243,7 +243,7 @@ class PeersService {
   /**
    * Delete peer
    **/
-  static async peersIdDelete ({ id, org, peer }, { user }) {
+  static async peersIdDelete ({ id, org, ...peer }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 

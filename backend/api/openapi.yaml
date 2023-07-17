@@ -5610,8 +5610,15 @@ paths:
             schema:
               $ref: '#/components/schemas/CouponRequest'
       responses:
-        "204":
-          description: No Content
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+          description: Success
         "400":
           content:
             application/json:

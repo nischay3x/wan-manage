@@ -506,7 +506,7 @@ class QOSPoliciesService {
    * @param {*} { user } User object
    * @returns {Object} The QOS Traffic Map object
    **/
-  static async qosTrafficMapPUT ({ org, qosTrafficMapRequest }, { user }) {
+  static async qosTrafficMapPUT ({ org, ...qosTrafficMapRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       // todo: validate qos traffic map request
