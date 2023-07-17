@@ -11701,7 +11701,7 @@ components:
           type: object
           properties:
             cellId:
-              type: string
+              type: number
             operatorName:
               type: string
             mcc:
