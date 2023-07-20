@@ -151,7 +151,11 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
         devicesTasks[deviceId].tasks.push({
           entity: 'agent',
           message: 'add-dhcp-config',
-          params: transformDHCP(updatedDhcp[dhcpInterface], deviceId, [newVrrpGroup])
+          params: transformDHCP(
+            updatedDhcp[dhcpInterface],
+            deviceId,
+            newVrrpGroup ? [newVrrpGroup] : []
+          )
         });
         continue;
       }
@@ -162,7 +166,7 @@ const queue = async (origVrrpGroup, newVrrpGroup, orgId, user) => {
       return transformDHCP(dhcp, deviceId, origVrrpGroup ? [origVrrpGroup] : null);
     });
     const updatedTransformed = Object.values(devicesTasks[deviceId].origDhcp).map(dhcp => {
-      return transformDHCP(dhcp, deviceId, newVrrpGroup ? [newVrrpGroup] : null);
+      return transformDHCP(dhcp, deviceId, newVrrpGroup ? [newVrrpGroup] : []);
     });
     const [addDhcpDevice, removeDhcpDevice] = [
       differenceWith(

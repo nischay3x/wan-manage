@@ -1661,7 +1661,7 @@ const sync = async (deviceId, org) => {
     });
   });
 
-  const vrrpGroups = await Vrrp.findOne(
+  const vrrpGroups = await Vrrp.find(
     { org: device.org, 'devices.device': _id }
   ).populate('devices.device', '_id').lean();
 
@@ -1674,7 +1674,7 @@ const sync = async (deviceId, org) => {
       return;
     }
 
-    const params = transformDHCP(entry, _id, [vrrpGroups]);
+    const params = transformDHCP(entry, _id, vrrpGroups);
 
     deviceConfRequests.push({
       entity: 'agent',

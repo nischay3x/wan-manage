@@ -27,6 +27,7 @@ const { isEqual, keyBy } = require('lodash');
 const { queue } = require('../deviceLogic/vrrp');
 const cidr = require('cidr-tools');
 const deviceStatus = require('../periodic/deviceStatus')();
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 class VrrpService {
   static selectVrrpGroupParams (vrrpGroup) {
@@ -258,26 +259,24 @@ class VrrpService {
   static async vrrpDeviceVrrpInterfacesGET ({ org, virtualIp }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
-
       const pipeline = [
-        { $match: { org: { $in: orgList.map(o => ObjectId(o)) } } },
+        {
+          $match: {
+            org: { $in: orgList.map(o => ObjectId(o)) }
+          }
+        },
         {
           $project: {
             _id: 1,
             name: 1,
+            versions: 1,
             interfaces: {
               $map: {
                 input: {
                   $filter: {
                     input: '$interfaces',
                     as: 'ifc',
-                    cond: {
-                      $and: [
-                        { $eq: ['$$ifc.isAssigned', true] }
-                        // { $ne: ['$$ifc.IPv4', ''] },
-                        // { $ne: ['$$ifc.IPv4Mask', ''] }
-                      ]
-                    }
+                    cond: { $eq: ['$$ifc.isAssigned', true] }
                   }
                 },
                 as: 'ifc',
@@ -306,14 +305,22 @@ class VrrpService {
         { $unset: ['isOverlapping'] }
       ];
 
-      const res = await devices.aggregate(pipeline).allowDiskUse(true);
+      const data = await devices.aggregate(pipeline).allowDiskUse(true);
 
-      return res.map(r => {
-        return {
-          ...r,
-          _id: r._id.toString()
-        };
-      });
+      const result = [];
+      for (const device of data) {
+        const majorVersion = getMajorVersion(device.versions.device);
+        const minorVersion = getMinorVersion(device.versions.device);
+        if (majorVersion < 6 || (majorVersion === 6 && minorVersion <= 2)) {
+          continue;
+        }
+
+        result.push({
+          ...device,
+          _id: device._id.toString()
+        });
+      }
+      return result;
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
