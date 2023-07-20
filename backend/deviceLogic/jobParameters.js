@@ -192,6 +192,7 @@ const transformBGP = async (device) => {
   const minorVersion = getMinorVersion(versions.agent);
   const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
   const sendCommunityAndBestPath = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+  const sendMultiHop = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 3);
 
   const neighbors = bgp.neighbors.map(n => {
     const neighbor = {
@@ -206,6 +207,10 @@ const transformBGP = async (device) => {
 
     if (sendCommunityAndBestPath) {
       neighbor.sendCommunity = n.sendCommunity;
+    }
+
+    if (sendMultiHop) {
+      neighbor.multiHop = n.multiHop ? n.multiHop : 1; // 1 is the BGP default
     }
 
     return neighbor;

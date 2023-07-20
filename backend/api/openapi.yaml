@@ -9243,6 +9243,7 @@ components:
             inboundFilter: routingFilterName
             outboundFilter: routingFilterName
             sendCommunity: both
+            multiHop: 1
         cpuInfo:
           powerSaving: true
           vppCores: 3
@@ -9976,6 +9977,10 @@ components:
           - ''
           type: string
           description: A BGP attribute to attach to the BGP peer
+        multiHop:
+          type: number
+          minimum: 1
+          maximum: 255
       type: object
     OspfConfigs:
       example:

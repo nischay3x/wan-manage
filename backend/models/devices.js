@@ -824,6 +824,12 @@ const BGPNeighborSchema = new Schema({
     type: String,
     enum: ['all', 'both', 'extended', 'large', 'standard', ''],
     default: 'all'
+  },
+  multiHop: {
+    type: Number,
+    default: 1,
+    min: [1, 'multiHop should be a number between 1 - 255'],
+    max: [255, 'multiHop should be a number between 1 - 255']
   }
 }, {
   timestamps: true
