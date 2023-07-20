@@ -39,6 +39,8 @@ const applicationsSyncHandler = require('./application').sync;
 const applicationsCompleteHandler = require('./application').completeSync;
 const appIdentificationSyncHandler = require('./appIdentification').sync;
 const appIdentificationCompleteHandler = require('./appIdentification').completeSync;
+const vrrpSyncHandler = require('./vrrp').sync;
+const vrrpCompleteHandler = require('./vrrp').completeSync;
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
 const stringify = require('json-stable-stringify');
 const SHA1 = require('crypto-js/sha1');
@@ -83,6 +85,10 @@ const syncHandlers = {
   applications: {
     syncHandler: applicationsSyncHandler,
     completeHandler: applicationsCompleteHandler
+  },
+  vrrp: {
+    syncHandler: vrrpSyncHandler,
+    completeHandler: vrrpCompleteHandler
   }
 };
 
