@@ -91,6 +91,20 @@ const configEnv = {
     redisTotalAttempts: 10,
     // Kue prefix
     kuePrefix: 'deviceq',
+    // devices info channel name, devices will publish statuses to this common channel
+    devInfoChannelName: 'fw-dev-info',
+    // devices channel prefix, will be used for unique channel name of every device
+    deviceChannelPrefix: 'fw-dev',
+    // host channel prefix, will be used for unique channel name of every host
+    hostChannelPrefix: 'fw-host',
+    // unique sequence key with expiration time will be set for every socket message
+    // to store the hostId which will proceed the response
+    sequencePrefix: 'fw-seq',
+    sequenceExpireTime: 300,
+    // unique device key, will be set on connect and updated on web-socket pong response
+    // the device will be considered as disconnected on expiration of this key
+    connectDevicePrefix: 'fw-conn',
+    connectExpireTime: 300,
     // HTTP port of the node server. On production we usually forward port 80 to this port using:
     // sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 80 -j REDIRECT --to-port 3000
     httpPort: 3000,

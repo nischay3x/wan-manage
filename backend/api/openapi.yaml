@@ -10020,6 +10020,7 @@ components:
             inboundFilter: routingFilterName
             outboundFilter: routingFilterName
             sendCommunity: both
+            multiHop: 1
         cpuInfo:
           powerSaving: true
           vppCores: 3
@@ -10753,6 +10754,10 @@ components:
           - ''
           type: string
           description: A BGP attribute to attach to the BGP peer
+        multiHop:
+          type: number
+          minimum: 1
+          maximum: 255
       type: object
     OspfConfigs:
       example:
@@ -11131,6 +11136,8 @@ components:
         espIntegAlg: hmac-sha2-256-128
         espDhGroup: ecp-256
         sessionLifeTime: 3600
+        ikeLifeTime: 86400
+        pfs: false
         localIpRangeStart: 0.0.0.0
         localIpRangeEnd: 255.255.255.255
         localPortRangeStart: 0
@@ -11195,6 +11202,10 @@ components:
         espIntegAlg:
           $ref: '#/components/schemas/PeerIntegAlg'
         sessionLifeTime:
+          type: string
+        pfs:
+          type: boolean
+        ikeLifeTime:
           type: string
         localIpRangeStart:
           type: string
@@ -12481,7 +12492,7 @@ components:
               type: string
             text:
               type: string
-              enum: [Marginal, Very low, Low, Good, Very Good, Excellent]
+              enum: [Marginal, Very low, Low, Good, Very Good, Excellent, N/A]
               description: Based on RSSI value (-50 -> Excellent, -60 -> Very Good, -70 -> Godd, -80 -> Low, -85 -> Very Low, -95 -> Marginal)
         connectivity:
           type: boolean
