@@ -1856,6 +1856,14 @@ class DevicesService {
         // Map dhcp config if needed
         if (Array.isArray(deviceRequest.dhcp)) {
           deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
+            // ensure useHostNameAsDhcpOption is passed with boolean value
+            d.macAssign = d.macAssign.map(m => {
+              return {
+                ...m,
+                useHostNameAsDhcpOption: !!m.useHostNameAsDhcpOption
+              };
+            });
+
             const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
             if (!ifc) return d;
 
