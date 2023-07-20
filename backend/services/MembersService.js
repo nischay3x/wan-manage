@@ -776,19 +776,18 @@ class MembersService {
       }]);
     }
 
-    let optionFiled = '';
-    if (type === 'group') optionFiled = 'group';
-    else if (type === 'organization') optionFiled = 'name';
-
-    // TBD:
-    // Show only organizations valid for user
+    let optionField = '';
+    if (type === 'group') optionField = 'group';
+    else if (type === 'organization') optionField = 'name';
 
     const account = await Accounts.find({ _id: user.defaultAccount._id }).populate('organizations');
-
+    const orgList = await getUserOrganizations(user);
     const uniques = {};
     account[0].organizations.forEach((org) => {
-      uniques[type === 'organization' ? org._id : org[optionFiled]] =
-        org[optionFiled];
+      if (Object.values(orgList).find(o => o.id === org.id)) {
+        uniques[type === 'organization' ? org._id : org[optionField]] =
+          org[optionField];
+      }
     });
     const result = Object.keys(uniques).map((key) => {
       return {
