@@ -34,6 +34,7 @@ const ApplicationsController = require('./ApplicationsController');
 const FirewallPoliciesController = require('./FirewallPoliciesController');
 const QOSPoliciesController = require('./QOSPoliciesController');
 const PeersController = require('./PeersController');
+const VrrpController = require('./VrrpController');
 
 module.exports = {
   AccessTokensController,
@@ -54,5 +55,6 @@ module.exports = {
   ApplicationsController,
   FirewallPoliciesController,
   QOSPoliciesController,
-  PeersController
+  PeersController,
+  VrrpController
 };

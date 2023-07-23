@@ -189,7 +189,7 @@ const validateMtu = (val) => val && validateIsInteger(val) && +val >= 500 && +va
 const validateOSPFArea = (val) => val !== null && (validateIPv4(val) || (validateIsInteger(val) && +val >= 0));
 const validateOSPFCost = (val) => val === null || (validateIsInteger(val) && +val >= 0 && +val < 65535);
 const validateOSPFInterval = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
-const validateFQDN = val => val && validator.isFQDN(val);
+const validateFQDN = (val, require_tld = true) => val && validator.isFQDN(val, { require_tld });
 const validateStringNoSpaces = str => { return str === '' || /^\S+$/i.test(str || ''); };
 const validateApplicationIdentifier = str => { return /[A-Za-z_.-]/i.test(str || ''); };
 const validateBGPASN = val => val && validateIsInteger(val) && +val >= 1;

@@ -1100,6 +1100,13 @@ paths:
         required: false
         schema:
           type: string
+      - description: Allow interfaces overlapping
+        explode: true
+        in: query
+        name: allowOverlapping
+        required: false
+        schema:
+          type: boolean
       requestBody:
        content:
          application/json:
@@ -8966,6 +8973,451 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
+
+
+
+  /vrrp:
+    get:
+      operationId: vrrpGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description: Device ID to be filtered by
+        explode: true
+        in: query
+        name: deviceId
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/VrrpGroupListItem'
+                type: array
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve VRRP groups
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+    post:
+      operationId: vrrpPOST
+      parameters:
+      - description: Organization to create VRRP group for
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VrrpGroup'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vrrpGroup:
+                    $ref: '#/components/schemas/VrrpGroupListItem'
+                  metadata:
+                    $ref: '#/components/schemas/VrrpGroupPutPostResponse'
+          description: VRRP has been added
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Create a new VRRP Group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+  /vrrp/status:
+    get:
+      operationId: vrrpStatusGET
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VrrpStatus'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve VRRP Status
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+  /vrrp/{id}:
+    get:
+      operationId: vrrpIdGET
+      parameters:
+      - description: VRRP Group ID to retrieve
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to get VRRP group from
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VrrpGroup'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve VRRP group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+    put:
+      operationId: vrrpIdPUT
+      parameters:
+      - description: VRRP Group ID to update
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to update the VRRP group for
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VrrpGroup'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vrrpGroup:
+                    $ref: '#/components/schemas/VrrpGroup'
+                  metadata:
+                    $ref: '#/components/schemas/VrrpGroupPutPostResponse'
+          description: VRRP has been added
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Update an existing VRRP Group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+    delete:
+      operationId: vrrpIdDELETE
+      parameters:
+      - description: VRRP Group ID to remove
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to delete VRRP group from
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Remove VRRP Group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+  /vrrp/deviceVrrpInterfaces:
+    get:
+      operationId: vrrpDeviceVrrpInterfacesGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description: Virtual IP of VRRP to check for the overlapping devices
+        explode: true
+        in: query
+        name: virtualIp
+        required: true
+        schema:
+          type: string
+          format: ipv4
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/VrrpDeviceInterfacesResponse'
+                type: array
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve devices and interface that overlapping with VRRP virtual IP
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+
 components:
   responses:
     NotFoundError:
@@ -11412,6 +11864,7 @@ components:
         host: "host1"
         mac: "08:00:27:fd:00:00"
         ipv4: "20.20.20.20"
+        useHostNameAsDhcpOption: true
       properties:
         host:
           description: Device hostname
@@ -11426,6 +11879,8 @@ components:
           description: IPv4 Address
           maxLength: 20
           type: string
+        useHostNameAsDhcpOption:
+          type: boolean
       required:
       - host
       - mac
@@ -11436,7 +11891,10 @@ components:
         rangeStart: "20.20.20.2"
         rangeEnd: "20.20.20.255"
         dns: ["8.8.8.8", "8.8.8.4"]
+        options: [{ "option": "routers", "code": "3", "value": "20.20.20.100"}]
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
+        maxLeaseTime: 7200
+        defaultLeaseTime: 600
       properties:
         interface:
           description: Interface bus Address
@@ -11456,16 +11914,39 @@ components:
             type: string
             maxLength: 20
           type: array
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DhcpOptionItem'
         macAssign:
           description: List of MAC Assignments
           items:
             $ref: '#/components/schemas/DhcpMacAssign'
           type: array
+        defaultLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+        maxLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
       required:
       - interface
       - rangeStart
       - rangeEnd
       type: object
+    DhcpOptionItem:
+      type: object
+      properties:
+        option:
+          type: string
+          enum: [routers, tftp-server-name, ntp-servers, interface-mtu, time-offset, domain-name]
+        code:
+          type: string
+          enum: ['3', '66', '42', '26', '2', '15']
+        value:
+          type: string
     Dhcp:
       example:
         _id: "5e5f662f1b0eba50742b6223"
@@ -11474,7 +11955,10 @@ components:
         rangeEnd: "20.20.20.255"
         dns: ["8.8.8.8", "8.8.8.4"]
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
+        options: [{ "option": "routers", "code": "3", "value": "20.20.20.100"}]
         status: "completed"
+        maxLeaseTime: 7200
+        defaultLeaseTime: 600
       properties:
         _id:
           maxLength: 24
@@ -11498,6 +11982,10 @@ components:
             type: string
             maxLength: 20
           type: array
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DhcpOptionItem'
         macAssign:
           description: List of MAC Assignments
           items:
@@ -11506,6 +11994,16 @@ components:
         status:
           description: Route status
           type: string
+        defaultLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+          nullable: true
+        maxLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+          nullable: true
       type: object
     ResetPasswordRequest:
       example:
@@ -12700,6 +13198,153 @@ components:
       - key
       - op
       - val
+      type: object
+    VrrpDeviceInterfacesResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        _id:
+          type: string
+        interfaces:
+          type: array
+          items:
+            type: object
+            properties:
+              _id:
+                type: string
+              name:
+                type: string
+              IPv4:
+                type: string
+              dhcp:
+                type: string
+      example:
+        id: deviceId
+        name: Berlin
+        interfaces:
+        - _id: interfaceId
+          name: eth1
+          IPv4: 172.16.1.1/24
+    VrrpGroupPutPostResponse:
+      type: object
+      properties:
+        jobs:
+          type: number
+        reasons:
+          type: array
+          items:
+            type: string
+    VrrpStatus:
+      type: array
+      items:
+        type: object
+        properties:
+          _id:
+            type: string
+          name:
+            type: string
+          virtualIp:
+            type: string
+            format: ipv4
+          virtualRouterId:
+            type: string
+          devices:
+            type: array
+            items:
+              type: object
+              properties:
+                _id:
+                  type: string
+                name:
+                  type: string
+                priority:
+                  type: string
+                status:
+                  type: object
+                  properties:
+                    state:
+                      type: string
+                      enum:
+                      - Master
+                      - Backup
+                      - Initialize
+                      - Interface Down
+                    time:
+                      type: number
+                    adjusted_priority:
+                      type: number
+    VrrpGroup:
+      type: object
+      properties:
+        name:
+          type: string
+        virtualRouterId:
+          type: string
+          minimum: 1
+          maximum: 255
+        virtualIp:
+          type: string
+          format: ipv4
+        preemption:
+          type: boolean
+        acceptMode:
+          type: boolean
+        devices:
+          type: array
+          items:
+            type: object
+            properties:
+              device:
+                type: string
+              interface:
+                type: string
+              priority:
+                type: string
+                minimum: 1
+                maximum: 255
+              trackInterfacesMandatory:
+                type: array
+                items:
+                  type: string
+              trackInterfacesOptional:
+                type: array
+                items:
+                  type: string
+    VrrpGroupListItem:
+      example:
+        name: VRRP group for Site 1
+        virtualRouterId: 1
+        virtualIp: 172.16.1.100
+        devices:
+        - name: Paris-1
+          _id: deviceId
+        - name: Paris-2
+          _id: deviceId
+      properties:
+        name:
+          type: string
+        virtualRouterId:
+          type: string
+          minimum: 1
+          maximum: 255
+        virtualIp:
+          type: string
+        devices:
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              _id:
+                type: string
+              jobStatus:
+                type: string
+              status:
+                type: object
+              interface:
+                type: string
+          type: array
       type: object
   securitySchemes:
     apiKey:

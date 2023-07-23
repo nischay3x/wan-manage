@@ -39,7 +39,10 @@ const { buildInterfaces } = require('./interfaces');
  */
 const apply = async (devices, user, data) => {
   const { username } = user;
-  const { org: orgId } = data;
+  const { org: orgId, meta = {} } = data;
+  // Note! on start, the "allowOverlapping" is true by default.
+  // User should allowed it on the configuration time.
+  const { allowOverlapping = true } = meta;
   const opDevices = await Promise.all(devices.map(d => d
     .populate('policies.firewall.policy', '_id name rules')
     .populate('interfaces.pathlabels', '_id name description color type')
@@ -48,6 +51,7 @@ const apply = async (devices, user, data) => {
   ));
 
   const errors = [];
+  const errorCodes = [];
   let orgSubnets = [];
   if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
     orgSubnets = await getAllOrganizationSubnets(mongoose.Types.ObjectId(orgId));
@@ -57,11 +61,16 @@ const apply = async (devices, user, data) => {
     const { machineId } = device;
     logger.info('Starting device:', { params: { machineId, user, data } });
 
-    const { valid, err } = validateDevice(device.toObject(), device.org, true, orgSubnets);
+    const { valid, err, errCode = null } = validateDevice(
+      device.toObject(), device.org, true, orgSubnets, [], allowOverlapping
+    );
     if (!valid) {
       logger.warn('Start command validation failed', { params: { device, err } });
       if (!errors.includes(err)) {
         errors.push(err);
+        if (errCode) {
+          errorCodes.push(errCode);
+        }
       }
       continue;
     }
@@ -123,7 +132,7 @@ const apply = async (devices, user, data) => {
     ? `Warning: ${fulfilled.length} of ${opDevices.length} start device jobs added.` +
       ` Some devices have following errors: ${reasons.join('. ')}`
     : `Start device job${opDevices.length > 1 ? 's' : ''} added successfully`;
-  return { ids: fulfilled, status, message };
+  return { ids: fulfilled, status, message, errorCodes };
 };
 
 /**
