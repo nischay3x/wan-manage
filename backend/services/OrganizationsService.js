@@ -49,6 +49,7 @@ const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
 const { validateFirewallRules } = require('../deviceLogic/validators');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+const NotificationsService = require('./NotificationsService');
 
 class OrganizationsService {
   /**
@@ -585,21 +586,28 @@ class OrganizationsService {
       if (!qosPolicy) throw new Error('Error default QoS policy adding');
 
       // Add default notifications settings
-      const notificationsSettings = await NotificationsConf.findOne({
-        account: updUser.defaultAccount
-      });
-      const ownerMembership = await membership.findOne({
+      const notificationsSettings = await NotificationsService.notificationsDefaultConfGET(
+        { account: updUser.defaultAccount._id }, { user: updUser });
+      const ownerMembership = await membership.find({
         account: updUser.defaultAccount,
         to: 'account',
         role: 'owner'
       });
-      const accountOwner = ownerMembership.user;
+      let accountOwners = [];
+      if (ownerMembership.length > 1) {
+        ownerMembership.forEach(owner => {
+          accountOwners.push(owner.user);
+        });
+      } else {
+        accountOwners = [ownerMembership[0].user];
+      }
       const setNotificationsConf = await NotificationsConf.create({
         org: org._id,
-        rules: notificationsSettings.rules,
+        rules: notificationsSettings.payload,
         signedToCritical: [],
         signedToWarning: [],
-        signedToDaily: [accountOwner]
+        signedToDaily: accountOwners,
+        webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
       });
       if (!setNotificationsConf) {
         throw new Error('Error adding default notifications settings');

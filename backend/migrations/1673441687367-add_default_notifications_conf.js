@@ -17,168 +17,201 @@
 
 const notificationConfModel = require('../models/notificationsConf');
 const logger = require('../logging/logging')({ module: module.filename, type: 'migration' });
+const Organizations = require('../models/organizations');
+const { membership } = require('../models/membership');
+
+const systemNotificationsConf = {
+  'Device connection': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'device'
+  },
+  'Running router': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'device'
+  },
+  'Link/Tunnel round trip time': {
+    warningThreshold: 300,
+    criticalThreshold: 600,
+    thresholdUnit: 'ms',
+    severity: null,
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'tunnel'
+  },
+  'Link/Tunnel default drop rate': {
+    warningThreshold: 5,
+    criticalThreshold: 20,
+    thresholdUnit: '%',
+    severity: null,
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'tunnel'
+  },
+  'Device memory usage': {
+    warningThreshold: 85,
+    criticalThreshold: 95,
+    thresholdUnit: '%',
+    severity: null,
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'device'
+  },
+  'Hard drive usage': {
+    warningThreshold: 85,
+    criticalThreshold: 95,
+    thresholdUnit: '%',
+    severity: null,
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'device'
+  },
+  Temperature: {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: 'C°',
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'device'
+  },
+  'Policy change': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'warning',
+    immediateEmail: false,
+    resolvedAlert: null,
+    type: 'policy'
+  },
+  'Software update': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'warning',
+    immediateEmail: false,
+    resolvedAlert: null,
+    type: 'device'
+  },
+  'Internet connection': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'interface'
+  },
+  'Link status': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'interface'
+  },
+  'Missing interface ip': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'interface'
+  },
+  'Pending tunnel': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'tunnel'
+  },
+  'Tunnel connection': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'tunnel'
+  },
+  'Failed self-healing': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: null,
+    type: 'device'
+  },
+  'Static route state': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: null,
+    type: 'device'
+  },
+  'Synced device': {
+    warningThreshold: null,
+    criticalThreshold: null,
+    thresholdUnit: null,
+    severity: 'critical',
+    immediateEmail: false,
+    resolvedAlert: false,
+    type: 'device'
+  }
+};
 
 async function up () {
   try {
-    // Create default Notifications settings (factory default)
+    // Create default Notifications settings (system default)
     await notificationConfModel.create([{
       name: 'Default notifications settings',
-      rules: {
-        'Device connection': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'device'
-        },
-        'Running router': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'device'
-        },
-        'Link/Tunnel round trip time': {
-          warningThreshold: 300,
-          criticalThreshold: 600,
-          thresholdUnit: 'ms',
-          severity: null,
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'tunnel'
-        },
-        'Link/Tunnel default drop rate': {
-          warningThreshold: 5,
-          criticalThreshold: 20,
-          thresholdUnit: '%',
-          severity: null,
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'tunnel'
-        },
-        'Device memory usage': {
-          warningThreshold: 85,
-          criticalThreshold: 95,
-          thresholdUnit: '%',
-          severity: null,
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'device'
-        },
-        'Hard drive usage': {
-          warningThreshold: 85,
-          criticalThreshold: 95,
-          thresholdUnit: '%',
-          severity: null,
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'device'
-        },
-        Temperature: {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: 'C°',
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'device'
-        },
-        'Policy change': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'warning',
-          immediateEmail: false,
-          resolvedAlert: null,
-          type: 'policy'
-        },
-        'Software update': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'warning',
-          immediateEmail: false,
-          resolvedAlert: null,
-          type: 'device'
-        },
-        'Internet connection': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'interface'
-        },
-        'Link status': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'interface'
-        },
-        'Missing interface ip': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'interface'
-        },
-        'Pending tunnel': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'tunnel'
-        },
-        'Tunnel connection': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'tunnel'
-        },
-        'Failed self-healing': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: null,
-          type: 'device'
-        },
-        'Static route state': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: null,
-          type: 'device'
-        },
-        'Synced device': {
-          warningThreshold: null,
-          criticalThreshold: null,
-          thresholdUnit: null,
-          severity: 'critical',
-          immediateEmail: false,
-          resolvedAlert: false,
-          type: 'device'
-        }
-      }
+      rules: systemNotificationsConf
     }]);
+
+    // Create default notification settings to any existing organization
+    const organizations = await Organizations.find();
+    console.log('orgs: ', organizations);
+    for (const organization in organizations) {
+      const ownerMembership = await membership.find({
+        account: organization.account,
+        to: 'account',
+        role: 'owner'
+      });
+      let accountOwners = [];
+      if (ownerMembership.length > 1) {
+        ownerMembership.forEach(owner => {
+          accountOwners.push(owner.user);
+        });
+      } else {
+        accountOwners = [ownerMembership[0].user];
+      }
+      await notificationConfModel.create([{
+        account: null,
+        name: '',
+        org: organization._id,
+        rules: systemNotificationsConf,
+        signedToCritical: [],
+        signedToWarning: [],
+        signedToDaily: accountOwners,
+        webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
+      }]);
+    }
   } catch (err) {
     logger.error('Database migration failed', {
       params: { collections: ['notifications'], operation: 'up', err: err.message }
