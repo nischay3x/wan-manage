@@ -34,6 +34,7 @@ const ApplicationsService = require('./ApplicationsService');
 const FirewallPoliciesService = require('./FirewallPoliciesService');
 const QOSPoliciesService = require('./QOSPoliciesService');
 const PeersService = require('./PeersService');
+const VrrpService = require('./VrrpService');
 
 module.exports = {
   AccessTokensService,
@@ -54,5 +55,6 @@ module.exports = {
   ApplicationsService,
   FirewallPoliciesService,
   QOSPoliciesService,
-  PeersService
+  PeersService,
+  VrrpService
 };

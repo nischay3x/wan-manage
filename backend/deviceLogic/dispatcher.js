@@ -34,6 +34,7 @@ const appIdentification = require('./appIdentification');
 const sync = require('./sync');
 const IKEv2 = require('./IKEv2');
 const replace = require('./replace');
+const vrrp = require('./vrrp');
 const modifyHardware = require('./modifyHardware');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
@@ -168,6 +169,11 @@ const methods = {
     apply: replace.apply,
     complete: errorNOOP,
     error: errorNOOP
+  },
+  vrrp: {
+    complete: vrrp.complete,
+    error: vrrp.error,
+    remove: vrrp.remove
   }
 };
 

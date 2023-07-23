@@ -145,7 +145,11 @@ class DeviceStatus {
         rx_pkts: Joi.number().required(),
         tx_bytes: Joi.number().required(),
         tx_pkts: Joi.number().required()
-      }))
+      })),
+      vrrp: Joi.object().pattern(Joi.number().min(1).max(255), Joi.object({
+        state: Joi.string().valid('Master', 'Backup', 'Initialize', 'Interface Down'),
+        adjusted_priority: Joi.number().min(0).max(255).optional()
+      })).allow({}).optional()
     });
 
     for (const updateEntry of msg) {
@@ -742,6 +746,45 @@ class DeviceStatus {
   }
 
   /**
+    * Store Vrrp status in memory
+    * @param  {string} machineId  device machine id
+    * @param  {string} vrid VRID
+    * @param  {Object} status VRRP status
+    * @return {void}
+    */
+  setDeviceVrrpStatus (machineId, vrid, status) {
+    if (!this.status[machineId]) {
+      this.status[machineId] = {};
+    }
+    if (!this.status[machineId].vrrp) {
+      this.status[machineId].vrrp = {};
+    }
+    if (!this.status[machineId].vrrp[vrid]) {
+      this.status[machineId].vrrp[vrid] = {};
+    }
+    const time = new Date().getTime();
+    Object.assign(this.status[machineId].vrrp[vrid], { ...status, time });
+  }
+
+  /**
+    * Get the Vrrp status from memory
+    * @param  {string} machineId  device machine id
+    * @return {void}
+    */
+  getDeviceVrrpStatus (machineId, vrid) {
+    return this?.status?.[machineId]?.vrrp?.[vrid] ?? {};
+  }
+
+  /**
+    * Clear the Vrrp status from memory
+    * @param  {string} machineId  device machine id
+    * @return {void}
+    */
+  clearDeviceVrrpStatus (machineId) {
+    delete this?.status?.[machineId]?.vrrp;
+  }
+
+  /**
      * @param  {string} machineId  device machine id
      * @param  {Object} deviceInfo device info entry
      * @param  {Object} rawStats   device stats supplied by the device
@@ -807,6 +850,11 @@ class DeviceStatus {
         this.setDeviceWifiStatus(machineId, devId, mapWifiNames(wifiStatus[devId]));
       }
     };
+
+    // Set VRRP status in memory for now
+    for (const vrId in rawStats?.vrrp ?? {}) {
+      this.setDeviceVrrpStatus(machineId, vrId, rawStats.vrrp[vrId]);
+    }
 
     // Set tunnel status in memory for now
     const tunnelStatus = rawStats.tunnel_stats;

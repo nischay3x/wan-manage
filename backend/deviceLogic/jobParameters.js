@@ -280,21 +280,69 @@ const transformBGP = async (device) => {
 /**
  * Transform add-dhcp params
  * @param  {object} dhcp DHCP config
+ * @param  {string} deviceId device ID
+ * @param  {[object]} vrrpGroups list of vrrp group
  * @return {object} DHCP config
  */
-const transformDHCP = dhcp => {
+const transformDHCP = (dhcp, deviceId, vrrpGroups = []) => {
   const { rangeStart, rangeEnd, dns, macAssign } = dhcp;
-  return {
+  const options = dhcp.options ?? [];
+
+  let isRouterOptionConfigured = false;
+
+  const res = {
     interface: dhcp.interface,
     range_start: rangeStart,
     range_end: rangeEnd,
     dns: dns,
+    options: options.map(opt => {
+      const fields = pick(opt, [
+        'option', 'value'
+      ]);
+      // isc-dhcp requires this option to be a string.
+      // in case of first letter is number (value can be IP address)
+      // we adding and encoding the double quotes.
+      if (fields.option === 'tftp-server-name' && !Number.isNaN(fields.value[0])) {
+        fields.value = `\\"${fields.value}\\"`;
+      }
+
+      if (fields.option === 'routers') {
+        isRouterOptionConfigured = true;
+      }
+      return fields;
+    }),
     mac_assign: macAssign.map(mac => {
       return pick(mac, [
-        'host', 'mac', 'ipv4'
+        'host', 'mac', 'ipv4', 'useHostNameAsDhcpOption'
       ]);
     })
   };
+
+  if (dhcp?.defaultLeaseTime) {
+    res.defaultLeaseTime = dhcp.defaultLeaseTime;
+  }
+
+  if (dhcp?.maxLeaseTime) {
+    res.maxLeaseTime = dhcp.maxLeaseTime;
+  }
+
+  if (!isRouterOptionConfigured) {
+    const routers = new Set();
+    for (const vrrpGroup of vrrpGroups ?? []) {
+      for (const dev of vrrpGroup.devices) {
+        if (dev.device._id.toString() !== deviceId.toString()) {
+          continue;
+        }
+        routers.add(vrrpGroup.virtualIp);
+      }
+    }
+
+    if (routers.size > 0) {
+      res.options.push({ option: 'routers', value: Array.from(routers).join(',') });
+    }
+  }
+
+  return res;
 };
 
 const transformLte = lteInterface => {
@@ -305,6 +353,31 @@ const transformLte = lteInterface => {
   };
 };
 
+const transformVrrp = (device, vrrpGroup) => {
+  const params = {
+    virtualRouterId: vrrpGroup.virtualRouterId,
+    virtualIp: vrrpGroup.virtualIp,
+    preemption: vrrpGroup.preemption,
+    acceptMode: vrrpGroup.acceptMode
+  };
+
+  params.priority = device.priority;
+
+  // use it as objects and not strings of devId only since we
+  // may want to add "priority" field in the future.
+  params.trackInterfaces = [
+    ...(device.trackInterfacesOptional ?? []).map(t => {
+      return { devId: t, isMandatory: false };
+    }),
+    ...(device.trackInterfacesMandatory ?? []).map(t => {
+      return { devId: t, isMandatory: true };
+    })
+  ];
+  params.devId = device.interface;
+
+  return params;
+};
+
 module.exports = {
   transformInterfaces,
   transformRoutingFilters,
@@ -312,5 +385,6 @@ module.exports = {
   transformBGP,
   transformDHCP,
   transformVxlanConfig,
-  transformLte
+  transformLte,
+  transformVrrp
 };
