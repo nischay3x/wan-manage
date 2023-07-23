@@ -186,32 +186,28 @@ async function up () {
 
     // Create default notification settings to any existing organization
     const organizations = await Organizations.find();
-    console.log('orgs: ', organizations);
-    for (const organization in organizations) {
-      const ownerMembership = await membership.find({
-        account: organization.account,
-        to: 'account',
-        role: 'owner'
-      });
-      let accountOwners = [];
-      if (ownerMembership.length > 1) {
-        ownerMembership.forEach(owner => {
-          accountOwners.push(owner.user);
+    organizations.forEach(async organization => {
+      const orgExists = await notificationConfModel.findOne({ org: organization._id });
+      if (!orgExists) {
+        const ownerMembership = await membership.find({
+          account: organization.account,
+          to: 'account',
+          role: 'owner'
         });
-      } else {
-        accountOwners = [ownerMembership[0].user];
+        const accountOwners = [];
+        if (ownerMembership) {
+          ownerMembership.forEach(owner => {
+            accountOwners.push(owner.user);
+          });
+        }
+        await notificationConfModel.create({
+          org: organization._id,
+          rules: systemNotificationsConf,
+          signedToDaily: accountOwners,
+          webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
+        });
       }
-      await notificationConfModel.create([{
-        account: null,
-        name: '',
-        org: organization._id,
-        rules: systemNotificationsConf,
-        signedToCritical: [],
-        signedToWarning: [],
-        signedToDaily: accountOwners,
-        webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
-      }]);
-    }
+    });
   } catch (err) {
     logger.error('Database migration failed', {
       params: { collections: ['notifications'], operation: 'up', err: err.message }
