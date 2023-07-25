@@ -22,7 +22,6 @@ const notificationsDb = require('../models/notifications');
 const { devices } = require('../models/devices');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getUserOrganizations } = require('../utils/membershipUtils');
-const { checkMemberLevel } = require('./MembersService');
 const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const { getMatchFilters } = require('../utils/filterUtils');
@@ -274,7 +273,7 @@ class NotificationsService {
   }
 
   // Validate request params and return the list of organizations according to the param
-  static async validateParams (org, account, group, user, setAsDefault = null) {
+  static async validateParams (org, account, group, user, setAsDefault = null, get = false) {
     if (setAsDefault) {
       if (!account) {
         return Service.rejectResponse('Please specify the account id', 400);
@@ -302,9 +301,26 @@ class NotificationsService {
         }
         orgIds = [org];
       } else {
-        orgIds = Object.values(orgList)
-          .filter(org => org.account.toString() === account && (!group || org.group === group))
-          .map(org => org.id);
+        // If this is not a GET request
+        if (!get) {
+          orgIds = Object.values(orgList)
+            .filter(org => org.account.toString() === account && (!group || org.group === group))
+            .map(org => org.id);
+        } else {
+          const membersOfAccountOrGroup = await membership.find({
+            account: account,
+            to: group || account
+          });
+          const membersIds = Object.values(membersOfAccountOrGroup).map(membership => membership.user.toString());
+          if (user.defaultAccount._id.toString() === account || membersIds.includes(user._id.toString())) {
+            const filter = { account };
+            if (group) filter.group = group;
+            const orgs = await Organizations.find(filter).lean();
+            orgIds = orgs.map(org => org._id.toString());
+          } else {
+            return Service.rejectResponse('You do not have permission to access the information', 403);
+          }
+        }
       }
       if (!orgIds.length) {
         return Service.rejectResponse('No organizations found', 404);
@@ -318,7 +334,7 @@ class NotificationsService {
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
       if (orgIds.error) {
         return orgIds;
       }
@@ -330,20 +346,17 @@ class NotificationsService {
         return Service.successResponse(sortedRules);
       } else {
         const mergedRules = {};
-        const keysOfInterest = ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'severity', 'immediateEmail', 'resolvedAlert', 'type', 'sendWebHook'];
         response.forEach(org => {
           Object.keys(org.rules).forEach(ruleName => {
             if (!mergedRules[ruleName]) {
               mergedRules[ruleName] = {};
-              keysOfInterest.forEach(key => {
-                if (org.rules[ruleName].hasOwnProperty(key)) {
-                  mergedRules[ruleName][key] = org.rules[ruleName][key];
-                }
+              Object.keys(org.rules[ruleName]).forEach(settingName => {
+                mergedRules[ruleName][settingName] = org.rules[ruleName][settingName];
               });
             } else {
-              keysOfInterest.forEach(key => {
-                if (mergedRules[ruleName][key] !== org.rules[ruleName][key]) {
-                  mergedRules[ruleName][key] = 'varies';
+              Object.keys(org.rules[ruleName]).forEach(settingName => {
+                if (mergedRules[ruleName][settingName] !== org.rules[ruleName][settingName]) {
+                  mergedRules[ruleName][settingName] = 'varies';
                 }
               });
             }
@@ -452,90 +465,62 @@ class NotificationsService {
 
   static async emailNotificationsGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user);
-      if (orgIds.error) {
-        return orgIds;
-      }
-      // a function to retrieve users details
-      const createCurrentUser = async (userId, orgId) => {
-        const currentUser = {};
-        const userData = await users.find({ _id: userId });
-        const notificationsData = await notificationsConf.find({ org: orgId });
-        currentUser._id = userId;
-        currentUser.email = userData[0].email;
-        currentUser.name = userData[0].name;
-        currentUser.lastName = userData[0].lastName;
-        currentUser.signedToCritical = notificationsData[0].signedToCritical.includes(userId);
-        currentUser.signedToWarning = notificationsData[0].signedToWarning.includes(userId);
-        currentUser.signedToDaily = notificationsData[0].signedToDaily.includes(userId);
-        return currentUser;
-      };
-
+      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
+      if (orgIds.error) return orgIds;
       let response = [];
-      let membersIds;
-      if (org) {
-        const uniqueUsers = new Set();
-        const orgData = await Organizations.find({ _id: org });
-        const orgAccount = orgData[0].account;
-        const orgGroup = orgData[0].group;
-        membersIds = await membership.find({
+      const uniqueUsers = new Set();
+      const processOrganization = async (orgId) => {
+        const orgData = await Organizations.find({ _id: orgId });
+        const members = await membership.find({
           $or: [
-            { to: 'organization', organization: org },
-            { to: 'account', account: orgAccount },
-            { to: 'group', account: orgAccount, group: orgGroup }
+            { to: 'organization', organization: orgId },
+            { to: 'account', account: orgData[0].account },
+            { to: 'group', account: orgData[0].account, group: orgData[0].group }
           ]
         });
-        for (const member of membersIds) {
+
+        for (const member of members) {
           if (!uniqueUsers.has(member.user.toString())) {
             uniqueUsers.add(member.user.toString());
-            const isPermitted = await checkMemberLevel(member.to, member.role, member.to === 'organization' ? member.organization : member.to === 'account' ? member.account : member.group
-              , user._id, user.defaultAccount._id, member);
-            if (isPermitted) {
-              response.push(await createCurrentUser(member.user, org));
-            }
+            const [userData, notificationsData] = await Promise.all([users.find({ _id: member.user }), notificationsConf.find({ org: orgId })]);
+            const currentUser = {
+              _id: member.user,
+              email: userData[0].email,
+              name: userData[0].name,
+              lastName: userData[0].lastName,
+              signedToCritical: notificationsData[0].signedToCritical.includes(member.user),
+              signedToWarning: notificationsData[0].signedToWarning.includes(member.user),
+              signedToDaily: notificationsData[0].signedToDaily.includes(member.user)
+            };
+            if (org) response.push(currentUser);
+            else response.push({ ...currentUser, count: 1 });
+          } else if (!org) {
+            const [userData, notificationsData] = await Promise.all([users.find({ _id: member.user }), notificationsConf.find({ org: orgId })]);
+            const currentUser = {
+              _id: member.user,
+              email: userData[0].email,
+              name: userData[0].name,
+              lastName: userData[0].lastName,
+              signedToCritical: notificationsData[0].signedToCritical.includes(member.user),
+              signedToWarning: notificationsData[0].signedToWarning.includes(member.user),
+              signedToDaily: notificationsData[0].signedToDaily.includes(member.user)
+            };
+            const userIndex = response.findIndex(user => user._id.toString() === member.user.toString());
+            const existingUser = response[userIndex];
+            existingUser.signedToCritical = existingUser.signedToCritical !== currentUser.signedToCritical ? null : existingUser.signedToCritical;
+            existingUser.signedToWarning = existingUser.signedToWarning !== currentUser.signedToWarning ? null : existingUser.signedToWarning;
+            existingUser.signedToDaily = existingUser.signedToDaily !== currentUser.signedToDaily ? null : existingUser.signedToDaily;
+            existingUser.count++;
           }
         }
+      };
+      if (org) {
+        await processOrganization(org);
       } else {
-        const uniqueUsers = new Set();
-        for (let i = 0; i < orgIds.length; i++) {
-          const orgData = await Organizations.find({ _id: orgIds[i] });
-          const orgAccount = orgData[0].account;
-          const orgGroup = orgData[0].group;
-          const orgMembers = await membership.find({
-            $or: [
-              { to: 'organization', organization: orgIds[i] },
-              { to: 'account', account: orgAccount },
-              { to: 'group', account: orgAccount, group: orgGroup }
-            ]
-          });
-          for (const member of orgMembers) {
-            if (!uniqueUsers.has(member.user.toString())) {
-              uniqueUsers.add(member.user.toString());
-              const isPermitted = await checkMemberLevel(member.to, member.role, member.to === 'organization' ? member.organization : member.to === 'account' ? member.account : member.group
-                , user._id, user.defaultAccount._id, member);
-              if (isPermitted) {
-                const currentUser = await createCurrentUser(member.user, orgIds[i]);
-                response.push({ ...currentUser, count: 1 });
-              }
-            } else {
-              const index = response.findIndex(x => x._id.toString() === member.user.toString());
-              const currentUser = await createCurrentUser(member.user, orgIds[i]);
-              if (index !== -1) {
-                const existingUser = response[index];
-                existingUser.signedToCritical = existingUser.signedToCritical !== currentUser.signedToCritical ? null : existingUser.signedToCritical;
-                existingUser.signedToWarning = existingUser.signedToWarning !== currentUser.signedToWarning ? null : existingUser.signedToWarning;
-                existingUser.signedToDaily = existingUser.signedToDaily !== currentUser.signedToDaily ? null : existingUser.signedToDaily;
-                existingUser.count++;
-              }
-            }
-          }
+        for (const orgId of orgIds) {
+          await processOrganization(orgId);
         }
-        response = response
-          .filter(user => user.count >= orgIds.length)
-          .map(user => {
-            const { count, ...rest } = user;
-            return rest;
-          });
+        response = response.filter(user => user.count >= orgIds.length).map(({ count, ...user }) => user);
       }
       return Service.successResponse(response);
     } catch (e) {
@@ -632,7 +617,7 @@ class NotificationsService {
 
   static async webhookSettingsGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
       if (orgIds.error) {
         return orgIds;
       }
