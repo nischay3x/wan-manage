@@ -316,6 +316,24 @@ class NotificationsManager {
             if (foundParentNotification) {
               continue; // Ignore since there is a parent event
             }
+            // Since the RTT and the drop rate remains high for a few mins after the parent alert
+            // Has been resolved, we would like to ignore these alerts
+            if (!resolved && ['Link/Tunnel round trip time',
+              'Link/Tunnel default drop rate'].includes(eventType)) {
+              const fiveMinutesAgo = new Date(new Date() - 5 * 60 * 1000);
+              const resolvedResults = await Promise.all(parentsQuery.map(query =>
+                notificationsDb.findOne({
+                  resolved: true,
+                  updatedAt: { $gte: fiveMinutesAgo },
+                  org,
+                  ...query
+                })
+              ));
+              const foundResolvedParentNotification = resolvedResults.some(result => result);
+              if (foundResolvedParentNotification) {
+                continue; // Ignore since there is a recently resolved parent event
+              }
+            }
           }
         }
         const rules = orgNotificationsConf.rules;
