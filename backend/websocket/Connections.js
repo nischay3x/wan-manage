@@ -1113,7 +1113,10 @@ class Connections {
         details: 'Device disconnected from management'
       }
     ]);
-    this.devices.removeDeviceInfo(device);
+    // keep deviceInfo in memory, only remove the socket object
+    // the device can be reconnected to another instance
+    // deviceInfo will be removed when connectDeviceKey expires
+    delete deviceInfo.socket;
     this.callRegisteredCallbacks(this.closeCallbacks, device);
     logger.info('Device connection closed', { params: { deviceId: device } });
   }
