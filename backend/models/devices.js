@@ -430,6 +430,25 @@ const staticroutesSchema = new Schema({
   timestamps: true
 });
 
+const OptionSchema = new Schema({
+  option: {
+    type: String,
+    required: true,
+    enum: [
+      'routers', 'tftp-server-name', 'ntp-servers', 'interface-mtu', 'time-offset', 'domain-name'
+    ]
+  },
+  code: {
+    type: String,
+    required: true,
+    enum: ['3', '66', '42', '26', '2', '15']
+  },
+  value: {
+    type: String,
+    require: true
+  }
+});
+
 const MACAssignmentSchema = new Schema({
   host: {
     type: String,
@@ -460,6 +479,11 @@ const MACAssignmentSchema = new Schema({
       message: 'IPv4 should be a valid ip address'
     },
     default: ''
+  },
+  useHostNameAsDhcpOption: {
+    type: Boolean,
+    required: false,
+    default: false
   }
 });
 
@@ -492,6 +516,27 @@ const DHCPSchema = new Schema({
   },
   dns: [String],
   macAssign: [MACAssignmentSchema],
+  options: [OptionSchema],
+  defaultLeaseTime: {
+    type: Number,
+    required: false,
+    min: [-1, 'defaultLeaseTime should be a number between -1 - 31536000'],
+    max: [31536000, 'defaultLeaseTime should be a number between -1 - 31536000'],
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'Default lease time should be a number'
+    }
+  },
+  maxLeaseTime: {
+    type: Number,
+    required: false,
+    min: [-1, 'maxLeaseTime should be a number between -1 - 31536000'],
+    max: [31536000, 'maxLeaseTime should be a number between -1 - 31536000'],
+    validate: {
+      validator: validators.validateIsNumber,
+      message: 'Max lease time should be a number'
+    }
+  },
   status: {
     type: String,
     default: 'failed'
@@ -824,6 +869,12 @@ const BGPNeighborSchema = new Schema({
     type: String,
     enum: ['all', 'both', 'extended', 'large', 'standard', ''],
     default: 'all'
+  },
+  multiHop: {
+    type: Number,
+    default: 1,
+    min: [1, 'multiHop should be a number between 1 - 255'],
+    max: [255, 'multiHop should be a number between 1 - 255']
   }
 }, {
   timestamps: true

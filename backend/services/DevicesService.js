@@ -19,6 +19,7 @@ const Service = require('./Service');
 const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
+const vrrp = require('../models/vrrp');
 const pathLabelsModel = require('../models/pathlabels');
 const Tokens = require('../models/tokens');
 const notificationsModel = require('../models/notifications');
@@ -44,6 +45,7 @@ const {
   validateStaticRoute,
   validateQOSPolicy
 } = require('../deviceLogic/validators');
+const { validateFQDN } = require('../models/validators');
 const {
   mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
 } = require('../utils/deviceUtils');
@@ -65,11 +67,13 @@ const {
 } = require('../deviceLogic/events');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const applications = require('../models/applications');
+const Vrrp = require('../models/vrrp');
 const applicationStore = require('../models/applicationStore');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
 const url = require('url');
+const Joi = require('joi');
 
 class DevicesService {
   /**
@@ -122,10 +126,12 @@ class DevicesService {
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
 
-      const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
+      const {
+        ids, status, message, errorCodes = []
+      } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
       DevicesService.setLocationHeader(server, response, ids, orgList[0]);
-      return Service.successResponse({ ids, status, message }, 202);
+      return Service.successResponse({ ids, status, message, errorCodes }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -264,14 +270,17 @@ class DevicesService {
           'dns',
           'status',
           'isPending',
-          'pendingReason'
+          'pendingReason',
+          'options',
+          'defaultLeaseTime',
+          'maxLeaseTime'
         ]);
 
         let macAssignList;
         if (d.macAssign) {
           macAssignList = d.macAssign.map(m => {
             return pick(m, [
-              'host', 'mac', 'ipv4'
+              'host', 'mac', 'ipv4', 'useHostNameAsDhcpOption'
             ]);
           });
         } else macAssignList = [];
@@ -1378,6 +1387,12 @@ class DevicesService {
           throw createError(400, 'All device tunnels must be deleted before deleting a device');
         }
 
+        // remove vrrp that configured on this device
+        await vrrp.updateMany(
+          { org: { $in: orgList } },
+          { $pull: { devices: { device: mongoose.Types.ObjectId(id) } } }
+        ).session(session);
+
         const deviceCount = await devices.countDocuments({
           account: delDevice.account
         }).session(session);
@@ -1429,8 +1444,11 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, ...deviceRequest }, { user, server }, response) {
+  static async devicesIdPUT (request, { user, server }, response) {
+    const { id, org, allowOverlapping, ...deviceRequest } = request;
+
     let sessionCopy;
+    let errorData = null;
 
     try {
       let orgList;
@@ -1482,7 +1500,7 @@ class DevicesService {
         const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
         let orgSubnets = [];
-        if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
+        if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
           orgSubnets = await getAllOrganizationSubnets(orgId);
         }
         const orgBgp = await getAllOrganizationBGPDevices(orgId);
@@ -1821,6 +1839,8 @@ class DevicesService {
             }
             return updIntf;
           });
+
+          await DevicesService.validateVrrp(orgId, origDevice._id, interfacesByDevId);
         };
 
         // add device id to device request
@@ -1836,6 +1856,14 @@ class DevicesService {
         // Map dhcp config if needed
         if (Array.isArray(deviceRequest.dhcp)) {
           deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
+            // ensure useHostNameAsDhcpOption is passed with boolean value
+            d.macAssign = d.macAssign.map(m => {
+              return {
+                ...m,
+                useHostNameAsDhcpOption: !!m.useHostNameAsDhcpOption
+              };
+            });
+
             const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
             if (!ifc) return d;
 
@@ -2063,12 +2091,14 @@ class DevicesService {
         deviceToValidate.distro = origDevice.distro;
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
-        const { valid, err } = validateDevice(
+        const { valid, err, errCode = null } = validateDevice(
           deviceToValidate,
           origDevice.org,
           isRunning,
           orgSubnets,
-          orgBgp
+          orgBgp,
+          allowOverlapping,
+          origDevice
         );
 
         if (!valid) {
@@ -2076,6 +2106,9 @@ class DevicesService {
             {
               params: { device: deviceRequest, devStatus, err }
             });
+          if (errCode) {
+            errorData = { errorCodes: [errCode] };
+          }
           throw createError(400, err);
         }
 
@@ -2140,10 +2173,94 @@ class DevicesService {
       logger.error('update device failed', { params: { message: e.message, stack: e.stack } });
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
-        e.status || 500
+        e.status || 500,
+        errorData
       );
     } finally {
       if (sessionCopy) sessionCopy.endSession();
+    }
+  }
+
+  static async validateVrrp (orgId, deviceId, interfacesByDevId) {
+    const deviceVrrps = await Vrrp.aggregate([
+      [
+        { $match: { org: orgId, 'devices.device': deviceId } },
+        { $unwind: { path: '$devices' } },
+        { $match: { 'devices.device': deviceId } },
+        {
+          $project: {
+            virtualIp: 1,
+            interface: '$devices.interface',
+            trackInterfacesMandatory: '$devices.trackInterfacesMandatory',
+            trackInterfacesOptional: '$devices.trackInterfacesOptional'
+          }
+        }
+      ]
+    ]).allowDiskUse(true);
+
+    for (const deviceVrrp of deviceVrrps) {
+      const ifc = interfacesByDevId[deviceVrrp.interface];
+      if (!ifc) {
+        throw createError(
+          400,
+          'There is VRRP configured on this device. ' +
+          'Please remove it first before changing interfaces'
+        );
+      }
+
+      if (ifc.type !== 'LAN') {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. Interface must be LAN`
+        );
+      }
+
+      if (!ifc.IPv4 || !ifc.IPv4Mask) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. IP must be configured on the interface`
+        );
+      }
+
+      if (!ifc.isAssigned) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. Interface must be assigned`
+        );
+      }
+
+      const ip = `${ifc.IPv4}/${ifc.IPv4Mask}`;
+      if (!cidr.overlap(ip, `${deviceVrrp.virtualIp}/32`)) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. ` +
+          `The IP ${ip} must ` +
+          `overlap with the VRRP virtual IP ${deviceVrrp.virtualIp}`
+        );
+      }
+
+      const tracked = [
+        ...deviceVrrp.trackInterfacesOptional,
+        ...deviceVrrp.trackInterfacesMandatory
+      ];
+      for (const trackIfc of tracked) {
+        const ifc = interfacesByDevId[trackIfc];
+        if (!ifc) {
+          throw createError(
+            400,
+            'There is VRRP track interface configured on this device. ' +
+            'Please remove it first before changing interfaces'
+          );
+        }
+
+        if (!ifc.isAssigned) {
+          throw createError(
+            400,
+            `The interface ${ifc.name} has configured as tracked interface in VRRP group. ` +
+            'Interface must be assigned'
+          );
+        }
+      }
     }
   }
 
@@ -2985,6 +3102,80 @@ class DevicesService {
     }
   }
 
+  static dhcpValidationSchema (dhcpRequest) {
+    const _ipListValidation = (option) => {
+      return Joi.string().required().custom((val, helpers) => {
+        const gateways = val.split(/\s*,\s*/);
+        const ipSchema = Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' });
+
+        const valid = gateways.every(d => {
+          const res = ipSchema.validate(d);
+          return res.error === undefined;
+        });
+
+        if (valid) {
+          return val;
+        } else {
+          return helpers.message(
+            `the value "${val}" is not a valid DHCP option for "${option}"`);
+        }
+      });
+    };
+
+    const _domainName = (option) => {
+      return Joi.string().required().custom((val, helpers) => {
+        const valid = validateFQDN(val, false);
+        if (!valid) {
+          return helpers.message(`Invalid value for DHCP option "${option}"`);
+        };
+      });
+    };
+
+    const _number = (min = Number.MIN_VALUE, max = Number.MAX_VALUE, option = '') => {
+      return Joi.number().integer().required().min(min).max(max).error(errors => {
+        errors.forEach(err => {
+          switch (err.code) {
+            case 'number.base':
+              err.message = `Value for DHCP Option "${option}" must be a number`;
+              break;
+            case 'number.min':
+              err.message = `Value for DHCP Option "${option}"  \
+              have to be greater than ${err.local.limit}`;
+              break;
+            case 'number.max':
+              err.message = `Value for DHCP Option "${option}"  \
+              have to be smaller than ${err.local.limit}`;
+              break;
+            default:
+              break;
+          }
+        });
+        return errors;
+      });
+    };
+
+    const option = Joi.object({
+      _id: Joi.string().optional(),
+      option: Joi.string().required().valid(
+        'routers', 'tftp-server-name', 'ntp-servers',
+        'interface-mtu', 'time-offset', 'domain-name'),
+      code: Joi.string().valid('3', '66', '42', '26', '2', '15').required(),
+      value: Joi.when('option', {
+        switch: [
+          { is: 'routers', then: _ipListValidation('routers') },
+          { is: 'domain-name', then: _domainName('domain-name') },
+          { is: 'tftp-server-name', then: Joi.string().required() },
+          { is: 'ntp-servers', then: _ipListValidation('ntp-servers') },
+          { is: 'interface-mtu', then: _number(500, 9999, 'interface-mtu') },
+          { is: 'time-offset', then: _number(-2147483648, 2147483647, 'interface-mtu') } // int32
+        ]
+      })
+    });
+
+    const schema = Joi.array().items(option);
+    return schema.validate(dhcpRequest.options);
+  }
+
   /**
    * Validate that the dhcp request
    * @param {Object} device - the device object
@@ -3042,6 +3233,12 @@ class DevicesService {
     }
     if (uniqIPs.length !== macLen) {
       throw new Error('DHCP Server MAC bindings IPs are not unique');
+    }
+
+    // validate DHCP options values.
+    const result = this.dhcpValidationSchema(dhcpRequest);
+    if (result.error) {
+      throw new Error(`${result.error.details[0].message}`);
     }
   }
 
