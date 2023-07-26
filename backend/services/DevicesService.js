@@ -437,6 +437,14 @@ class DevicesService {
           }
         },
         {
+          $lookup: {
+            from: 'vrrps',
+            localField: '_id',
+            foreignField: 'devices.device',
+            as: 'vrrp'
+          }
+        },
+        {
           $addFields: {
             _id: { $toString: '$_id' },
             'deviceStatus.state': {
