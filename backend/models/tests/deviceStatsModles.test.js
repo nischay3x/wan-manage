@@ -56,8 +56,8 @@ describe('Token schema', () => {
     deviceStatsFullSchema.org = 'invalid-org';
 
     deviceStatsFullSchema.validate((err) => {
-      expect(err.message).toBe('deviceStats validation failed: org: Cast to ObjectID failed ' +
-            'for value "invalid-org" at path "org"');
+      expect(err.message).toBe('deviceStats validation failed: org: Cast to ObjectId failed ' +
+            'for value "invalid-org" (type string) at path "org"');
     });
   });
 });

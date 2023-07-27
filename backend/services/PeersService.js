@@ -102,7 +102,7 @@ class PeersService {
    * peer
    * returns The new peer
    **/
-  static async peersPOST ({ org, peer }, { user }) {
+  static async peersPOST ({ org, ...peer }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -129,7 +129,7 @@ class PeersService {
   /**
    * Update peer and reconstruct tunnels if needed
    **/
-  static async peersIdPUT ({ id, org, peer }, { user, server }, response) {
+  static async peersIdPUT ({ id, org, ...peer }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -243,7 +243,7 @@ class PeersService {
   /**
    * Delete peer
    **/
-  static async peersIdDelete ({ id, org, peer }, { user }) {
+  static async peersIdDelete ({ id, org, ...peer }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 

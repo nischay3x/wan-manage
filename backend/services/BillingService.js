@@ -88,7 +88,7 @@ class BillingService {
    *
    * no response value expected for this operation
    **/
-  static async couponsPOST ({ couponRequest }, { user }) {
+  static async couponsPOST ({ ...couponRequest }, { user }) {
     try {
       const customerId = user.defaultAccount.billingCustomerId;
       const code = couponRequest.name;

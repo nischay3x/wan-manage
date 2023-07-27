@@ -5617,8 +5617,15 @@ paths:
             schema:
               $ref: '#/components/schemas/CouponRequest'
       responses:
-        "204":
-          description: No Content
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+          description: Success
         "400":
           content:
             application/json:
@@ -9080,7 +9087,7 @@ components:
         creator:
           type: string
         cost:
-          type: string
+          type: number
         description:
           type: string
         identifier:
@@ -9137,7 +9144,6 @@ components:
     AppIdentification:
       example:
         _id: _id
-        id: _id
         name: custom:app-name
         description: app identification description
         category: internet
@@ -9266,8 +9272,10 @@ components:
           type: string
         companyType:
           type: string
+          nullable: true
         companyDesc:
           type: string
+          nullable: true
         enableNotifications:
           default: true
           type: boolean
@@ -9276,6 +9284,7 @@ components:
           type: boolean
         trial_end:
           type: integer
+          nullable: true
         forceMfa:
           default: false
           type: boolean
@@ -10121,6 +10130,8 @@ components:
               type: string
             area:
               oneOf:
+              - type: string
+                pattern: "^[0-9]*$"
               - type: integer
               - type: string
                 format: ipv4
@@ -11354,7 +11365,6 @@ components:
           type: array
         summary:
           $ref: '#/components/schemas/BillingSummary'
-          nullable: true
         subscription:
           type: string
     CouponRequest:
@@ -11709,6 +11719,7 @@ components:
           type: string
         isDefault:
           type: boolean
+          nullable: true
         rules:
           items:
             $ref: '#/components/schemas/FirewallRule'
@@ -11721,7 +11732,7 @@ components:
       type: object
     FirewallPolicyList:
       example:
-        id: id
+        _id: id
         name: name
       properties:
         _id:
@@ -11986,7 +11997,7 @@ components:
       type: object
     QOSPolicyList:
       example:
-        id: id
+        _id: id
         name: name
       properties:
         _id:
@@ -12066,13 +12077,10 @@ components:
       type: string
     Error:
       properties:
-        code:
-          type: string
-        message:
+        error:
           type: string
       required:
-      - code
-      - message
+      - error
       type: object
     BadRequestError:
       properties:
@@ -12203,7 +12211,7 @@ components:
           type: object
           properties:
             cellId:
-              type: string
+              type: number
             operatorName:
               type: string
             mcc:

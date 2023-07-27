@@ -229,7 +229,7 @@ class QOSPoliciesService {
    * @param {*} { user } the user object
    * @returns {Object} a QOS policy object
    **/
-  static async qosPoliciesIdPUT ({ qosPolicyRequest, id, org }, { user }) {
+  static async qosPoliciesIdPUT ({ id, org, ...qosPolicyRequest }, { user }) {
     try {
       const { name, description, advanced, outbound, inbound } = qosPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -340,7 +340,7 @@ class QOSPoliciesService {
    * @param {*} { user } the user object
    * @returns {Object} a QOS policy object
    **/
-  static async qosPoliciesPOST ({ qosPolicyRequest, org }, { user }) {
+  static async qosPoliciesPOST ({ org, ...qosPolicyRequest }, { user }) {
     try {
       const { name, description, advanced, outbound, inbound } = qosPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -506,7 +506,7 @@ class QOSPoliciesService {
    * @param {*} { user } User object
    * @returns {Object} The QOS Traffic Map object
    **/
-  static async qosTrafficMapPUT ({ org, qosTrafficMapRequest }, { user }) {
+  static async qosTrafficMapPUT ({ org, ...qosTrafficMapRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       // todo: validate qos traffic map request

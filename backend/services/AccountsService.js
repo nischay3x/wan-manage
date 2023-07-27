@@ -134,7 +134,7 @@ class AccountsService {
    * accountRequest AccountRequest  (optional)
    * returns Account
    **/
-  static async accountsIdPUT ({ id, accountRequest }, { user }, response) {
+  static async accountsIdPUT ({ id, ...accountRequest }, { user }, response) {
     try {
       if (user.defaultAccount._id.toString() !== id) {
         return Service.rejectResponse(
@@ -172,7 +172,7 @@ class AccountsService {
    *
    * Important Note: This API bypass account permission check, return only necessary info
    **/
-  static async accountsSelectPOST ({ accountSelectRequest }, req, res) {
+  static async accountsSelectPOST ({ ...accountSelectRequest }, req, res) {
     const user = req.user;
     const { account } = accountSelectRequest;
 

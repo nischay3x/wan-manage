@@ -27,7 +27,7 @@ const express = require('express');
 const cors = require('./routes/cors');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
-const { OpenApiValidator } = require('express-openapi-validator');
+const OpenApiValidator = require('express-openapi-validator');
 const openapiRouter = require('./utils/openapiRouter');
 const createError = require('http-errors');
 // const session = require('express-session');
@@ -256,19 +256,17 @@ class ExpressServer {
     //   res.json(req.query);
     // });
 
-    const validator = new OpenApiValidator({
-      apiSpec: this.openApiPath,
-      validateRequests: configs.get('validateOpenAPIRequest', 'boolean'),
-      validateResponses: configs.get('validateOpenAPIResponse', 'boolean')
-    });
+    this.app.use(
+      OpenApiValidator.middleware({
+        apiSpec: this.openApiPath,
+        validateRequests: configs.get('validateOpenAPIRequest', 'boolean'),
+        validateResponses: configs.get('validateOpenAPIResponse', 'boolean')
+      })
+    );
 
-    validator
-      .install(this.app)
-      .then(async () => {
-        await this.app.use(openapiRouter(this.schema.components.schemas));
-        await this.launch();
-        logger.info('Express server running');
-      });
+    this.app.use(openapiRouter(this.schema.components.schemas));
+
+    await this.launch();
   }
 
   sendIndexFile (req, res) {
