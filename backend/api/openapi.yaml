@@ -12185,10 +12185,6 @@ components:
               type: string
             snr:
               type: string
-            text:
-              type: string
-              enum: [Marginal, Very low, Low, Good, Very Good, Excellent, N/A]
-              description: Based on RSSI value (-50 -> Excellent, -60 -> Very Good, -70 -> Godd, -80 -> Low, -85 -> Very Low, -95 -> Marginal)
         connectivity:
           type: boolean
         packetServiceState:
