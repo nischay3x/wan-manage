@@ -125,7 +125,9 @@ const configEnv = {
     // sudo ln -s /etc/letsencrypt/live/app.flexiwan.com/fullchain.pem ~/FlexiWanSite/bin/cert.app.flexiwan.com/certificate.pem
     httpsCert: '/cert.local.flexiwan.com/certificate.pem',
     // Default agent broker the device tries to create connection for
-    // The agent is sent to the device when it registers
+    // The broker is sent to the device when it registers.
+    // It's possible to use multiple brokers in case of multiple domains, in that case
+    // the system will use the last broker that matches the domain used in the token or the first broker if not found
     agentBroker: ['local.flexiwan.com:3443'],
     // Whitelist of allowed domains for CORS checks
     corsWhiteList: ['http://local.flexiwan.com:3000', 'https://local.flexiwan.com:3000', 'https://local.flexiwan.com:3443', 'https://127.0.0.1:3000'],
