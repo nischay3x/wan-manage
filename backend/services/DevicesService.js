@@ -72,7 +72,7 @@ const applicationStore = require('../models/applicationStore');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
-const url = require('url');
+const { getAgentBroker } = require('../utils/httpUtils');
 const Joi = require('joi');
 
 class DevicesService {
@@ -923,7 +923,7 @@ class DevicesService {
         return Service.rejectResponse('Device not found', 404);
       };
 
-      let server = configs.get('agentBroker');
+      let decodedToken;
       // Get device token
       if (deviceObject?.fromToken) {
         // Try to find the token from name,
@@ -934,13 +934,10 @@ class DevicesService {
         }, 'token').lean();
         if (token?.token) {
           // Try to get the server from the token
-          const decodedToken = jwt.decode(token.token);
-          if (decodedToken?.server) {
-            const urlSchema = new url.URL(decodedToken.server);
-            server = `${urlSchema.hostname}:${urlSchema.port}`;
-          }
+          decodedToken = jwt.decode(token.token);
         }
       }
+      const server = getAgentBroker(decodedToken?.server);
 
       // Generate response
       return Service.successResponse({
