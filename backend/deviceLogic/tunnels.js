@@ -751,10 +751,10 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
     } else {
       try {
         const idResp = await tunnelIDsModel.findOneAndUpdate(
-          // Query, allow only 15000 tunnels per organization
+          // Query, allow only 32000 tunnels per organization
           {
             org: org,
-            nextAvailID: { $gte: 0, $lt: 15000 }
+            nextAvailID: { $gte: 0, $lt: 32000 }
           },
           // Update
           { $inc: { nextAvailID: 1 } },
@@ -776,10 +776,10 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
         if (err.code === 11000) {
           logger.debug('2nd try to find tunnel ID', { params: {} });
           const idResp = tunnelIDsModel.findOneAndUpdate(
-            // Query, allow only 15000 tunnels per organization
+            // Query, allow only 32000 tunnels per organization
             {
               org: org,
-              nextAvailID: { $gte: 0, $lt: 15000 }
+              nextAvailID: { $gte: 0, $lt: 32000 }
             },
             // Update
             { $inc: { nextAvailID: 1 } },
@@ -1289,14 +1289,18 @@ const addTunnel = async (
     },
     // Options
     { upsert: true, new: true }
-  );
+  )
+    .populate('deviceA')
+    .populate('deviceB')
+    .populate('peer')
+    .populate('org');
 
   // don't send jobs for pending tunnels
   if (isPending) {
     throw new Error(`Tunnel #${tunnelnum} set as pending - ${pendingReason}`);
   }
 
-  return await sendAddTunnelsJobs([tunnel._id], user);
+  return await sendAddTunnelsJobs([tunnel], user);
 };
 
 /**
@@ -1369,8 +1373,8 @@ const applyTunnelDel = async (devices, user, data) => {
     tunnelsArray = await tunnelsModel.find(
       { _id: { $in: tunnelIds }, isActive: true, org: data.org }
     )
-      .populate('deviceA', '_id name staticroutes')
-      .populate('deviceB', '_id name staticroutes')
+      .populate('deviceA', '_id machineId name hostname sync staticroutes interfaces')
+      .populate('deviceB', '_id machineId name hostname sync staticroutes interfaces')
       .populate('peer');
 
     if (tunnelsArray.length !== tunnelIds.length) {
@@ -1386,7 +1390,7 @@ const applyTunnelDel = async (devices, user, data) => {
       await statusesInDb.updateDevicesStatuses([data.org]);
       await statusesInDb.updateTunnelsStatuses([data.org]);
     }
-    const pipeline = await getTunnelsPipeline([data.org], filters, updateStatusInDb);
+    const pipeline = getTunnelsPipeline([data.org], filters);
     tunnelsArray = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
   }
 
@@ -1505,7 +1509,7 @@ const delTunnel = async (tunnel, user, org, updateOps) => {
 
   // don't send remove jobs for pending tunnels
   if (!isPending) {
-    tunnelJobs = await sendRemoveTunnelsJobs([_id], user);
+    tunnelJobs = await sendRemoveTunnelsJobs([tunnel], user);
   }
 
   // remove the tunnel status from memory
@@ -1949,21 +1953,17 @@ const prepareTunnelParams = (
  * @return {Array}             array of add-tunnel jobs
  */
 const sendRemoveTunnelsJobs = async (
-  tunnelIds, username = 'system', includeDeviceConfigDependencies = false
+  tunnels, username = 'system', includeDeviceConfigDependencies = false
 ) => {
   let tunnelsJobs = [];
-
-  const tunnels = await tunnelsModel.find(
-    { _id: { $in: tunnelIds } }
-  ).populate('deviceA').populate('deviceB').populate('peer');
 
   for (const tunnel of tunnels) {
     const { org, deviceA, deviceB, interfaceA, interfaceB, pathlabel, peer } = tunnel;
 
-    const ifcA = deviceA.interfaces.find(ifc => {
+    const ifcA = tunnel.interfaceADetails ?? deviceA.interfaces.find(ifc => {
       return ifc._id.toString() === interfaceA.toString();
     });
-    const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
+    const ifcB = peer ? null : tunnel.interfaceBDetails ?? deviceB.interfaces.find(ifc => {
       return ifc._id.toString() === interfaceB.toString();
     });
 
@@ -2045,21 +2045,10 @@ const sendRemoveTunnelsJobs = async (
  * @param  {string}  username  the name of the user that requested the device change
  * @return {Array}             array of add-tunnel jobs
  */
-const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDependencies = false) => {
+const sendAddTunnelsJobs = async (tunnels, username, includeDeviceConfigDependencies = false) => {
   let jobs = [];
   let orgId = null;
   try {
-    const tunnels = await tunnelsModel
-      .find({
-        _id: { $in: tunnelIds },
-        isActive: true,
-        isPending: { $ne: true }
-      })
-      .populate('deviceA')
-      .populate('deviceB')
-      .populate('org')
-      .populate('peer');
-
     for (const tunnel of tunnels) {
       orgId = tunnel.org._id;
 
@@ -2132,7 +2121,7 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
     }
   } catch (err) {
     logger.error('Failed to queue Add tunnel jobs', {
-      params: { err: err.message, tunnelIds }
+      params: { err: err.message }
     });
   };
   return jobs;
