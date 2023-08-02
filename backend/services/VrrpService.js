@@ -33,7 +33,6 @@ class VrrpService {
   static selectVrrpGroupParams (vrrpGroup) {
     vrrpGroup._id = vrrpGroup._id.toString();
     vrrpGroup.org = vrrpGroup.org.toString();
-    vrrpGroup.virtualRouterId = vrrpGroup.virtualRouterId.toString();
     vrrpGroup.devices = vrrpGroup.devices.map(d => {
       return {
         _id: d._id.toString(),
@@ -100,7 +99,7 @@ class VrrpService {
    * VrrpGroup VrrpGroup
    * returns VRRP Group
    **/
-  static async vrrpPOST ({ org, vrrpGroup }, { user }) {
+  static async vrrpPOST ({ org, ...vrrpGroup }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -138,7 +137,7 @@ class VrrpService {
   /**
   * Update a VRRP Group
   **/
-  static async vrrpIdPUT ({ id, org, vrrpGroup }, { user }) {
+  static async vrrpIdPUT ({ id, org, ...vrrpGroup }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 

@@ -12445,7 +12445,7 @@ components:
             type: string
             format: ipv4
           virtualRouterId:
-            type: string
+            type: number
           devices:
             type: array
             items:
@@ -12456,7 +12456,7 @@ components:
                 name:
                   type: string
                 priority:
-                  type: string
+                  type: number
                 status:
                   type: object
                   properties:
@@ -12477,7 +12477,7 @@ components:
         name:
           type: string
         virtualRouterId:
-          type: string
+          type: number
           minimum: 1
           maximum: 255
         virtualIp:
@@ -12497,7 +12497,7 @@ components:
               interface:
                 type: string
               priority:
-                type: string
+                type: number
                 minimum: 1
                 maximum: 255
               trackInterfacesMandatory:
@@ -12522,7 +12522,7 @@ components:
         name:
           type: string
         virtualRouterId:
-          type: string
+          type: number
           minimum: 1
           maximum: 255
         virtualIp:
