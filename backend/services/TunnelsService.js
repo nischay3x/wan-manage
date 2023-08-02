@@ -29,6 +29,9 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const { getMajorVersion, getMinorVersion } = require('../versioning');
+const { devices } = require('../models/devices');
+
 class TunnelsService {
   /**
    * Extends mongo results with tunnel status info
@@ -191,7 +194,7 @@ class TunnelsService {
     try {
       const { org: orgId, tunnelsIdList, notifications } = tunnelsNotificationsPut;
       const userOrgList = await getUserOrganizations(user);
-      if (!orgId || !tunnelsIdList || !notifications) {
+      if (!orgId || !tunnelsIdList || !notifications || tunnelsIdList.length === 0) {
         return Service.rejectResponse(
           'Missing parameter: org, tunnels list or notifications settings',
           400
@@ -214,7 +217,7 @@ class TunnelsService {
         );
       }
       const jobs = [];
-      for (const tunnel of tunnels) {
+      const tunnelPromises = tunnels.map(async (tunnel) => {
         let currentSettingsDict;
         if (tunnel.notificationsSettings) {
           currentSettingsDict = tunnel.notificationsSettings;
@@ -226,22 +229,24 @@ class TunnelsService {
           currentSettingsDict = TunnelsService.getOnlyTunnelsEvents(orgNotifications[0].rules);
         }
         const notificationsDict = {};
-        for (const [event, { warningThreshold, criticalThreshold }] of
-          Object.entries(notifications)) {
-          let eventCriticalThreshold = currentSettingsDict[event]?.criticalThreshold;
-          let eventWarningThreshold = currentSettingsDict[event]?.warningThreshold;
+        for (const [event, { warningThreshold, criticalThreshold }]
+          of Object.entries(notifications)) {
+          let eventCriticalThreshold = currentSettingsDict[event].criticalThreshold;
+          let eventWarningThreshold = currentSettingsDict[event].warningThreshold;
 
-          if (criticalThreshold != null) {
+          if (criticalThreshold !== 'varies') {
             eventCriticalThreshold = criticalThreshold;
           }
-          if (warningThreshold != null) {
+          if (warningThreshold !== 'varies') {
             eventWarningThreshold = warningThreshold;
           }
 
-          if (eventCriticalThreshold != null || eventWarningThreshold != null) {
+          if (eventCriticalThreshold !== 'varies' || eventWarningThreshold !== 'varies') {
             notificationsDict[event] = {
-              ...(eventWarningThreshold != null && { warningThreshold: eventWarningThreshold }),
-              ...(eventCriticalThreshold != null && { criticalThreshold: eventCriticalThreshold })
+              ...(eventWarningThreshold !== 'varies' &&
+              { warningThreshold: eventWarningThreshold }),
+              ...(eventCriticalThreshold !== 'varies' &&
+              { criticalThreshold: eventCriticalThreshold })
             };
           }
         }
@@ -251,56 +256,81 @@ class TunnelsService {
           {
             $set: {
               notificationsSettings: notificationsDict
-
             }
           }
         );
-        const task = {
-          entity: 'agent',
-          message: 'modify-tunnel',
-          params: {
-            notificationsSettings: notificationsDict
+
+        // check device version - less than 6.3 don't send the job
+        const deviceA = await devices.find({ _id: tunnel.deviceA });
+        const deviceB = await devices.find({ _id: tunnel.deviceB });
+        const majorVersionA = getMajorVersion(deviceA[0].versions.agent);
+        const majorVersionB = getMajorVersion(deviceB[0].versions.agent);
+        const minorVersionA = getMinorVersion(deviceA[0].versions.agent);
+        const minorVersionB = getMinorVersion(deviceB[0].versions.agent);
+
+        const isCustomNotificationsSupported = (majorVersionA > 6 && majorVersionB > 6) ||
+        ((majorVersionA === 6 && minorVersionA >= 3) &&
+         (majorVersionB === 6 && minorVersionB >= 3));
+        if (isCustomNotificationsSupported) {
+          const task = {
+            entity: 'agent',
+            message: 'modify-tunnel',
+            params: {
+              notificationsSettings: notificationsDict
+            }
+          };
+          task.params['tunnel-id'] = tunnel.num;
+          const data = {
+            method: 'notifications',
+            data: {
+              device: tunnel.deviceA._id,
+              org: orgId,
+              action: 'update-tunnel-notifications'
+            }
+          };
+          const jobA = await deviceQueues.addJob(
+            tunnel.deviceA.machineId.toString(),
+            user.username,
+            orgId,
+            {
+              title: `Modify tunnel notifications settings on device ${tunnel.deviceA.name}`,
+              tasks: [task]
+            },
+            data,
+            { priority: 'normal', attempts: 1, removeOnComplete: false },
+            null
+          );
+          jobs.push(jobA);
+          if (!tunnel.peer) {
+            const jobB = await deviceQueues.addJob(
+              tunnel.deviceB.machineId.toString(),
+              user.username,
+              orgId,
+              {
+                title: `Modify tunnel notifications settings on device ${tunnel.deviceB.name}`,
+                tasks: [task]
+              },
+              data,
+              { priority: 'normal', attempts: 1, removeOnComplete: false },
+              null
+            );
+            jobs.push(jobB);
           }
-        };
-        task.params['tunnel-id'] = tunnel.num;
-        const data = {
-          method: 'notifications',
-          data: {
-            device: tunnel.deviceA._id,
-            org: orgId,
-            action: 'update-tunnel-notifications'
-          }
-        };
-        const jobA = await deviceQueues.addJob(
-          tunnel.deviceA.machineId.toString(),
-          user.username,
-          orgId,
-          {
-            title: `Modify tunnel notifications settings on device ${tunnel.deviceA.name}`,
-            tasks: [task]
-          },
-          data,
-          { priority: 'normal', attempts: 1, removeOnComplete: false },
-          null
-        );
-        jobs.push(jobA);
-        if (tunnel.peer) {
-          continue;
         }
-        const jobB = await deviceQueues.addJob(
-          tunnel.deviceB.machineId.toString(),
-          user.username,
-          orgId,
-          {
-            title: `Modify tunnel notifications settings on device ${tunnel.deviceB.name}`,
-            tasks: [task]
-          },
-          data,
-          { priority: 'normal', attempts: 1, removeOnComplete: false },
-          null
-        );
-        jobs.push(jobB);
+      });
+
+      await Promise.all(tunnelPromises);
+
+      // If no jobs were added, respond accordingly
+      if (jobs.length === 0) {
+        return Service.successResponse({
+          code: 200,
+          message: 'The data in the database was updated, but no jobs were added.',
+          data: 'The data in the database was updated, but no jobs were added.'
+        });
       }
+
+      // If jobs were added, respond accordingly
       return Service.successResponse({
         code: 200,
         message: 'Modify-tunnel job was added successfully',
