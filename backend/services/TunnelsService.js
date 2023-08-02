@@ -111,7 +111,8 @@ class TunnelsService {
         await statusesInDb.updateDevicesStatuses(orgList);
         await statusesInDb.updateTunnelsStatuses(orgList);
       }
-      const pipeline = getTunnelsPipeline(orgList, filters);
+      const detailed = requestParams?.response !== 'summary';
+      const pipeline = getTunnelsPipeline(orgList, filters, detailed);
       if (sortField) {
         const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
         pipeline.push({

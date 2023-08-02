@@ -73,7 +73,7 @@ const generateRandomKeys = () => {
  * Generates a pipeline for mongoose aggregate query to get filtered tunnels
  * @return {Array} an array of query stages
  */
-const getTunnelsPipeline = (orgList, filters) => {
+const getTunnelsPipeline = (orgList, filters, detailed = true) => {
   const pipeline = [{
     $match: {
       org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) },
@@ -172,8 +172,8 @@ const getTunnelsPipeline = (orgList, filters) => {
     $unwind: {
       path: '$org'
     }
-  },
-  {
+  }];
+  const project = {
     $project: {
       num: 1,
       isActive: 1,
@@ -197,25 +197,13 @@ const getTunnelsPipeline = (orgList, filters) => {
       'deviceA._id': 1,
       'deviceA.isConnected': 1,
       'deviceA.status': 1,
-      'deviceA.versions': 1,
-      'deviceA.staticroutes': 1,
       'deviceB.name': 1,
       'deviceB.machineId': 1,
       'deviceB._id': 1,
       'deviceB.isConnected': 1,
       'deviceB.status': 1,
-      'deviceB.versions': 1,
-      'deviceB.staticroutes': 1,
-      deviceAconf: 1,
-      deviceBconf: 1,
-      encryptionMethod: 1,
-      advancedOptions: 1,
-      'pathlabel.name': 1,
-      'pathlabel.color': 1,
       isPending: 1,
       pendingReason: 1,
-      'org._id': 1,
-      'org.vxlanPort': 1,
       tunnelStatus: {
         $switch: {
           branches: [
@@ -254,7 +242,31 @@ const getTunnelsPipeline = (orgList, filters) => {
         }
       }
     }
-  }];
+  };
+  if (detailed) {
+    project.$project['deviceA.hostname'] = 1;
+    project.$project['deviceA.versions'] = 1;
+    project.$project['deviceA.sync'] = 1;
+    project.$project['deviceA.staticroutes'] = 1;
+
+    project.$project['deviceB.hostname'] = 1;
+    project.$project['deviceB.versions'] = 1;
+    project.$project['deviceB.sync'] = 1;
+    project.$project['deviceB.staticroutes'] = 1;
+
+    project.$project.deviceAconf = 1;
+    project.$project.deviceBconf = 1;
+    project.$project.encryptionMethod = 1;
+    project.$project.advancedOptions = 1;
+
+    project.$project['pathlabel.name'] = 1;
+    project.$project['pathlabel.color'] = 1;
+
+    project.$project['org._id'] = 1;
+    project.$project['org.vxlanPort'] = 1;
+  }
+  pipeline.push(project);
+
   if (filters) {
     const parsedFilters = typeof filters === 'string' ? JSON.parse(filters) : filters;
     const matchFilters = getMatchFilters(parsedFilters);
