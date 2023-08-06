@@ -10516,7 +10516,7 @@ components:
         gateway: gateway
       properties:
         metric:
-          type: string
+          type: number
         destination:
           type: string
         protocol:
@@ -10525,6 +10525,7 @@ components:
           type: string
         gateway:
           type: string
+          nullable: true
       type: object
     DeviceRouteVpp:
       example:
