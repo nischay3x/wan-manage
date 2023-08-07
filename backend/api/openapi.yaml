@@ -9429,6 +9429,7 @@ components:
           enum:
           - completed
           - partially completed
+          - unknown
           type: string
         message:
           type: string
