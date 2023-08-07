@@ -177,31 +177,15 @@ const getTunnelsPipeline = (orgList, filters, detailed = true) => {
     $project: {
       num: 1,
       isActive: 1,
-      interfaceA: 1,
-      interfaceB: 1,
-      'interfaceADetails.name': 1,
-      'interfaceBDetails.name': 1,
-      'interfaceADetails.devId': 1,
-      'interfaceBDetails.devId': 1,
       peer: 1,
-      'interfaceADetails.PublicPort': 1,
-      'interfaceADetails.useFixedPublicPort': 1,
-      'interfaceBDetails.PublicPort': 1,
-      'interfaceBDetails.useFixedPublicPort': 1,
-      'interfaceADetails.PublicIP': 1,
-      'interfaceBDetails.PublicIP': 1,
-      'interfaceADetails.IPv4': 1,
-      'interfaceBDetails.IPv4': 1,
-      'deviceA.name': 1,
-      'deviceA.machineId': 1,
       'deviceA._id': 1,
       'deviceA.isConnected': 1,
       'deviceA.status': 1,
-      'deviceB.name': 1,
-      'deviceB.machineId': 1,
       'deviceB._id': 1,
       'deviceB.isConnected': 1,
       'deviceB.status': 1,
+      deviceAconf: 1,
+      deviceBconf: 1,
       isPending: 1,
       pendingReason: 1,
       tunnelStatus: {
@@ -244,18 +228,37 @@ const getTunnelsPipeline = (orgList, filters, detailed = true) => {
     }
   };
   if (detailed) {
+    project.$project['deviceA.name'] = 1;
+    project.$project['deviceA.machineId'] = 1;
     project.$project['deviceA.hostname'] = 1;
     project.$project['deviceA.versions'] = 1;
     project.$project['deviceA.sync'] = 1;
     project.$project['deviceA.staticroutes'] = 1;
 
+    project.$project['deviceB.name'] = 1;
+    project.$project['deviceB.machineId'] = 1;
     project.$project['deviceB.hostname'] = 1;
     project.$project['deviceB.versions'] = 1;
     project.$project['deviceB.sync'] = 1;
     project.$project['deviceB.staticroutes'] = 1;
 
-    project.$project.deviceAconf = 1;
-    project.$project.deviceBconf = 1;
+    project.$project.interfaceA = 1;
+    project.$project.interfaceB = 1;
+
+    project.$project['interfaceADetails.name'] = 1;
+    project.$project['interfaceADetails.devId'] = 1;
+    project.$project['interfaceADetails.PublicPort'] = 1;
+    project.$project['interfaceADetails.useFixedPublicPort'] = 1;
+    project.$project['interfaceADetails.PublicIP'] = 1;
+    project.$project['interfaceADetails.IPv4'] = 1;
+
+    project.$project['interfaceBDetails.name'] = 1;
+    project.$project['interfaceBDetails.devId'] = 1;
+    project.$project['interfaceBDetails.PublicPort'] = 1;
+    project.$project['interfaceBDetails.useFixedPublicPort'] = 1;
+    project.$project['interfaceBDetails.PublicIP'] = 1;
+    project.$project['interfaceBDetails.IPv4'] = 1;
+
     project.$project.encryptionMethod = 1;
     project.$project.advancedOptions = 1;
 
