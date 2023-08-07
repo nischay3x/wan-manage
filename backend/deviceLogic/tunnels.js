@@ -232,10 +232,10 @@ const handleTunnels = async (
                 if (tunnelExists[tunnelKey]) {
                   logger.debug('Found tunnel', { params: { tunnelKey } });
                   reasons.add('Some tunnels exist already.');
-                } else if (tunnelsPerDevice[deviceA._id] + 1 > MAX_TUNNELS_PER_DEVICE) {
+                } else if ((tunnelsPerDevice[deviceA._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
                   logger.warn('Exceeded limit of tunnels on device', { params: { deviceA } });
                   reasons.add(`Exceeded limit of ${MAX_TUNNELS_PER_DEVICE} tunnels per device.`);
-                } else if (tunnelsPerDevice[deviceB._id] + 1 > MAX_TUNNELS_PER_DEVICE) {
+                } else if ((tunnelsPerDevice[deviceB._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
                   logger.warn('Exceeded limit of tunnels on device', { params: { deviceB } });
                   reasons.add(`Exceeded limit of ${MAX_TUNNELS_PER_DEVICE} tunnels per device.`);
                 } else {
@@ -268,11 +268,11 @@ const handleTunnels = async (
                   logger.debug('Found tunnel', { params: { tunnelKey } });
                   reasons.add('Some tunnels exist already.');
                   continue;
-                } else if (tunnelsPerDevice[deviceA._id] + 1 > MAX_TUNNELS_PER_DEVICE) {
+                } else if ((tunnelsPerDevice[deviceA._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
                   logger.warn('Exceeded limit of tunnels on device', { params: { deviceA } });
                   reasons.add(`Exceeded limit of ${MAX_TUNNELS_PER_DEVICE} tunnels per device.`);
                   continue;
-                } else if (tunnelsPerDevice[deviceB._id] + 1 > MAX_TUNNELS_PER_DEVICE) {
+                } else if ((tunnelsPerDevice[deviceB._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
                   logger.warn('Exceeded limit of tunnels on device', { params: { deviceB } });
                   reasons.add(`Exceeded limit of ${MAX_TUNNELS_PER_DEVICE} tunnels per device.`);
                   continue;
