@@ -1416,7 +1416,7 @@ const bulkUpdate = async (updateOps) => {
       });
     }
   };
-}
+};
 
 /**
  * This function is called when deleting a tunnel

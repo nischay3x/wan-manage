@@ -119,25 +119,31 @@ class TunnelsService {
           $sort: { [sortField]: order }
         });
       };
-      const paginationParams = [{
-        $skip: offset > 0 ? +offset : 0
-      }];
+      const paginationParams = [];
+      if (offset !== undefined) {
+        paginationParams.push({ $skip: offset > 0 ? +offset : 0 });
+      };
       if (limit !== undefined) {
         paginationParams.push({ $limit: +limit });
       };
-      pipeline.push({
-        $facet: {
-          records: paginationParams,
-          meta: [{ $count: 'total' }]
-        }
-      });
-
-      const paginated = await Tunnels.aggregate(pipeline).allowDiskUse(true);
-      if (paginated[0].meta.length > 0) {
-        response.setHeader('records-total', paginated[0].meta[0].total);
-      };
-
-      const tunnelsMap = paginated[0].records.map((d) => {
+      let dbRecords;
+      if (paginationParams.length > 0) {
+        pipeline.push({
+          $facet: {
+            records: paginationParams,
+            meta: [{ $count: 'total' }]
+          }
+        });
+        const paginated = await Tunnels.aggregate(pipeline).allowDiskUse(true);
+        if (paginated[0].meta.length > 0) {
+          response.setHeader('records-total', paginated[0].meta[0].total);
+        };
+        dbRecords = paginated[0].records;
+      } else {
+        dbRecords = await Tunnels.aggregate(pipeline).allowDiskUse(true);
+        response.setHeader('records-total', dbRecords.length);
+      }
+      const tunnelsMap = dbRecords.map((d) => {
         const tunnelStatusInDb = d.tunnelStatus;
         const retTunnel = TunnelsService.selectTunnelParams(d);
         // get the status from db if it was updated
