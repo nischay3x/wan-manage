@@ -6103,8 +6103,15 @@ paths:
             schema:
               $ref: '#/components/schemas/CouponRequest'
       responses:
-        "204":
-          description: No Content
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+          description: Success
         "400":
           content:
             application/json:
@@ -9566,7 +9573,7 @@ components:
         creator:
           type: string
         cost:
-          type: string
+          type: number
         description:
           type: string
         identifier:
@@ -9623,7 +9630,6 @@ components:
     AppIdentification:
       example:
         _id: _id
-        id: _id
         name: custom:app-name
         description: app identification description
         category: internet
@@ -9751,13 +9757,16 @@ components:
           type: string
         companyType:
           type: string
+          nullable: true
         companyDesc:
           type: string
+          nullable: true
         isSubscriptionValid:
           default: true
           type: boolean
         trial_end:
           type: integer
+          nullable: true
         forceMfa:
           default: false
           type: boolean
@@ -10898,6 +10907,8 @@ components:
               type: string
             area:
               oneOf:
+              - type: string
+                pattern: "^[0-9]*$"
               - type: integer
               - type: string
                 format: ipv4
@@ -11282,7 +11293,7 @@ components:
         gateway: gateway
       properties:
         metric:
-          type: string
+          type: number
         destination:
           type: string
         protocol:
@@ -11291,6 +11302,7 @@ components:
           type: string
         gateway:
           type: string
+          nullable: true
       type: object
     DeviceRouteVpp:
       example:
@@ -12140,13 +12152,13 @@ components:
         payment_method:
           type: string
         amount:
-          type: string
+          type: number
         base_currency_code:
           type: string
         status:
           type: string
         date:
-          type: string
+          type: number
     BillingSummary:
       properties:
         _id:
@@ -12165,7 +12177,6 @@ components:
           type: array
         summary:
           $ref: '#/components/schemas/BillingSummary'
-          nullable: true
         subscription:
           type: string
     CouponRequest:
@@ -12520,6 +12531,7 @@ components:
           type: string
         isDefault:
           type: boolean
+          nullable: true
         rules:
           items:
             $ref: '#/components/schemas/FirewallRule'
@@ -12532,7 +12544,7 @@ components:
       type: object
     FirewallPolicyList:
       example:
-        id: id
+        _id: id
         name: name
       properties:
         _id:
@@ -12797,7 +12809,7 @@ components:
       type: object
     QOSPolicyList:
       example:
-        id: id
+        _id: id
         name: name
       properties:
         _id:
@@ -12877,13 +12889,10 @@ components:
       type: string
     Error:
       properties:
-        code:
-          type: string
-        message:
+        error:
           type: string
       required:
-      - code
-      - message
+      - error
       type: object
     BadRequestError:
       properties:
@@ -12988,10 +12997,6 @@ components:
               type: string
             snr:
               type: string
-            text:
-              type: string
-              enum: [Marginal, Very low, Low, Good, Very Good, Excellent, N/A]
-              description: Based on RSSI value (-50 -> Excellent, -60 -> Very Good, -70 -> Godd, -80 -> Low, -85 -> Very Low, -95 -> Marginal)
         connectivity:
           type: boolean
         packetServiceState:
@@ -13014,7 +13019,7 @@ components:
           type: object
           properties:
             cellId:
-              type: string
+              type: number
             operatorName:
               type: string
             mcc:
@@ -13248,7 +13253,7 @@ components:
             type: string
             format: ipv4
           virtualRouterId:
-            type: string
+            type: number
           devices:
             type: array
             items:
@@ -13259,7 +13264,7 @@ components:
                 name:
                   type: string
                 priority:
-                  type: string
+                  type: number
                 status:
                   type: object
                   properties:
@@ -13280,7 +13285,7 @@ components:
         name:
           type: string
         virtualRouterId:
-          type: string
+          type: number
           minimum: 1
           maximum: 255
         virtualIp:
@@ -13300,7 +13305,7 @@ components:
               interface:
                 type: string
               priority:
-                type: string
+                type: number
                 minimum: 1
                 maximum: 255
               trackInterfacesMandatory:
@@ -13325,7 +13330,7 @@ components:
         name:
           type: string
         virtualRouterId:
-          type: string
+          type: number
           minimum: 1
           maximum: 255
         virtualIp:

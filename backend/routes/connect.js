@@ -28,7 +28,7 @@ const { verifyAgentVersion } = require('../versioning');
 const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const webHooks = require('../utils/webhooks')();
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
-const url = require('url');
+const { getAgentBroker } = require('../utils/httpUtils');
 // billing support
 const flexibilling = require('../flexibilling');
 const { mapLteNames, getCpuInfo } = require('../utils/deviceUtils');
@@ -104,7 +104,7 @@ function getCoordinates (interfaces, sourceIp) {
         })
         // Try to find first location
         .some((i) => {
-        // Try to match public IP first
+          // Try to match public IP first
           if (i.PublicIP) return lookupIp(i.PublicIP);
           if (i.IPv4) return lookupIp(i.IPv4);
         });
@@ -346,13 +346,7 @@ connectRouter.route('/register')
                         });
                       res.statusCode = 200;
                       res.setHeader('Content-Type', 'application/json');
-
-                      let server = configs.get('agentBroker');
-                      if (decoded.server) {
-                        const urlSchema = new url.URL(decoded.server);
-                        server = `${urlSchema.hostname}:${urlSchema.port}`;
-                      }
-
+                      const server = getAgentBroker(decoded.server);
                       res.json({ deviceToken: deviceToken, server: server });
                     }, async (err) => {
                       // abort transaction on error

@@ -182,6 +182,9 @@ class Connections {
         } else if (action === 'status' && info?.constructor === Object) {
           // status message from the get-device-stats request received
           this.statusCallback(machineId, info);
+        } else if (action === 'disconnected') {
+          // the device is disconnected, deviceInfo should be removed
+          this.devices.removeDeviceInfo(machineId);
         }
       }
     } else if (channel.startsWith(deviceChannelPrefix + ':')) {
@@ -291,7 +294,7 @@ class Connections {
           if (!remoteHostId) {
             // connection state expired that means it is not connected to any host
             // the device info data should be removed
-            this.devices.removeDeviceInfo(deviceID, false);
+            this.devices.removeDeviceInfo(deviceID);
             logger.debug('The device connection state expired in redis', {
               params: { deviceId: deviceID }
             });
@@ -1211,17 +1214,42 @@ class Connections {
    * @param  {string} device device machine id
    * @return {void}
    */
-  closeConnection (device) {
-    const currentTime = new Date().getTime();
-    const deviceInfo = this.devices.getDeviceInfo(device);
+  closeConnection (machineId) {
+    const deviceInfo = this.devices.getDeviceInfo(machineId);
     if (!deviceInfo) return;
-    if (!this.unresponsiveDevices.hasOwnProperty(device)) {
-      deviceInfo.timeFirstUnresponsive = currentTime;
-      this.unresponsiveDevices[device] = deviceInfo;
-    }
-    this.devices.removeDeviceInfo(device);
-    this.callRegisteredCallbacks(this.closeCallbacks, device);
-    logger.info('Device connection closed', { params: { deviceId: device } });
+    // keep deviceInfo in memory, only remove the socket object
+    // the device can be reconnected to another instance
+    // deviceInfo will be removed when connectDeviceKey expires
+    const connectDeviceKey = `${connectDevicePrefix}:${machineId}`;
+    this.redisClient.get(connectDeviceKey, (error, remoteHostId) => {
+      if (error) {
+        logger.warn('Failed to get device connection state in redis', {
+          params: { machineId }
+        });
+        return;
+      }
+      if (remoteHostId && remoteHostId !== hostId) {
+        // the device is reconnected to another instance
+        // keep deviceInfo in memory, only remove the socket object
+        delete deviceInfo.socket;
+      // the device is disconnected
+      } else {
+        // save the disconnection time
+        const currentTime = new Date().getTime();
+        const deviceInfo = this.devices.getDeviceInfo(machineId);
+        if (!deviceInfo) return;
+        if (!this.unresponsiveDevices.hasOwnProperty(machineId)) {
+          deviceInfo.timeFirstUnresponsive = currentTime;
+          this.unresponsiveDevices[machineId] = deviceInfo;
+        }
+        // deviceInfo should be removed and published to others
+        this.devices.removeDeviceInfo(machineId);
+        const message = { hostId, machineId, action: 'disconnected' };
+        this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
+      }
+    });
+    this.callRegisteredCallbacks(this.closeCallbacks, machineId);
+    logger.info('Device connection closed', { params: { deviceId: machineId } });
   }
 
   /**

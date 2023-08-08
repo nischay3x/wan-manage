@@ -261,7 +261,7 @@ class MultiLinkPoliciesService {
    * mLPolicyRequest MLPolicyRequest  (optional)
    * returns MLPolicy
    **/
-  static async mlpoliciesIdPUT ({ id, org, mLPolicyRequest }, { user }) {
+  static async mlpoliciesIdPUT ({ id, org, ...mLPolicyRequest }, { user }) {
     try {
       const { name, description, applyOnWan, overrideDefaultRoute, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -387,7 +387,7 @@ class MultiLinkPoliciesService {
    * org String Organization to be filtered by (optional)
    * returns MLPolicy
    **/
-  static async mlpoliciesPOST ({ mLPolicyRequest, org }, { user }) {
+  static async mlpoliciesPOST ({ org, ...mLPolicyRequest }, { user }) {
     try {
       const { name, description, applyOnWan, overrideDefaultRoute, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);

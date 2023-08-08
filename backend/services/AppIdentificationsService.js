@@ -148,7 +148,7 @@ class AppIdentificationsService {
    * @returns
    * @memberof AppIdentificationsService
    */
-  static async appIdentificationsCustomIdPUT ({ id, org, appIdentification }, { user }) {
+  static async appIdentificationsCustomIdPUT ({ id, org, ...appIdentification }, { user }) {
     try {
       // Each app identification entry is stored in the organization document. Whenever
       // update is requested, need to find the organization entry in the custom app
@@ -195,7 +195,7 @@ class AppIdentificationsService {
    * @returns
    * @memberof AppIdentificationsService
    */
-  static async appIdentificationsPOST ({ org, appIdentification }, { user, server }, response) {
+  static async appIdentificationsPOST ({ org, ...appIdentification }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       let appIdentsRes =
@@ -290,7 +290,7 @@ class AppIdentificationsService {
    * @returns
    * @memberof AppIdentificationsService
    */
-  static async appIdentificationsIdPUT ({ id, org, appIdentImpCustReq }, { user }) {
+  static async appIdentificationsIdPUT ({ id, org, ...appIdentImpCustReq }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const result =

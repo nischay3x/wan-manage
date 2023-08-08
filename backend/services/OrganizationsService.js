@@ -95,7 +95,7 @@ class OrganizationsService {
     }
   }
 
-  static async organizationsSelectPOST ({ organizationSelectRequest }, { user }, res) {
+  static async organizationsSelectPOST (organizationSelectRequest, { user }, res) {
     try {
       if (!user._id || !user.defaultAccount) {
         return Service.rejectResponse('Error in selecting organization', 500);
@@ -255,8 +255,9 @@ class OrganizationsService {
    * organizationRequest OrganizationRequest  (optional)
    * returns Organization
    **/
-  static async organizationsIdPUT ({ id, organizationRequest }, { user }, response) {
+  static async organizationsIdPUT (organizationRequest, { user }, response) {
     try {
+      const { id } = organizationRequest;
       // Only allow to update current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
       const orgList = await getAccessTokenOrgList(user, undefined, false);
@@ -521,7 +522,7 @@ class OrganizationsService {
    * organizationRequest OrganizationRequest  (optional)
    * returns Organization
    **/
-  static async organizationsPOST ({ organizationRequest }, { user }, response) {
+  static async organizationsPOST (organizationRequest, { user }, response) {
     try {
       const session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();

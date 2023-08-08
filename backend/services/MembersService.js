@@ -291,14 +291,14 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static async membersIdPUT ({ id, memberRequest }, { user }) {
+  static async membersIdPUT ({ id, ...memberRequest }, { user }) {
     try {
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
       if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
       const targetUserMembership = await membership.findOne({
-        _id: memberRequest._id,
+        _id: id,
         account: user.defaultAccount._id
       });
 
@@ -552,7 +552,7 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static async membersPOST ({ memberRequest }, { user, restUiUrl }) {
+  static async membersPOST (memberRequest, { user, restUiUrl }) {
     let session;
     try {
       // Check that input parameters are OK

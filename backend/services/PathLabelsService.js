@@ -168,7 +168,7 @@ class PathLabelsService {
    * pathLabelRequest PathLabelRequest
    * returns PathLabel
    **/
-  static async pathlabelsIdPUT ({ id, org, pathLabelRequest }, { user }) {
+  static async pathlabelsIdPUT ({ id, org, ...pathLabelRequest }, { user }) {
     let newPathLabel;
     try {
       const { name, description, color, type } = pathLabelRequest;
@@ -251,7 +251,7 @@ class PathLabelsService {
    * pathLabelRequest PathLabelRequest
    * returns PathLabel
    **/
-  static async pathlabelsPOST ({ org, pathLabelRequest }, { user }) {
+  static async pathlabelsPOST ({ org, ...pathLabelRequest }, { user }) {
     try {
       const { name, description, color, type } = pathLabelRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);

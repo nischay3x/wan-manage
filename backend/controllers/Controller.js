@@ -55,7 +55,7 @@ class Controller {
             request.body[name] = request.files.find(file => file.fieldname === name);
           }
         });
-      } else if (request.openapi.schema.requestBody.content[contentType] !== undefined &&
+      } else if (request.openapi.schema.requestBody?.content[contentType] !== undefined &&
         request.files !== undefined) {
         [request.body] = request.files;
       }
@@ -64,35 +64,27 @@ class Controller {
 
   static collectRequestParams (request) {
     this.collectFiles(request);
-    const requestParams = {};
-    if (request.openapi.schema.requestBody !== undefined) {
-      // small hack to match arguments
-      const lower = (s) => {
-        if (typeof s !== 'string') return '';
-        return s.charAt(0).toLowerCase() + s.slice(1);
-      };
-
+    let requestParams = {};
+    if (request.openapi.schema.requestBody) {
       const [contentType] = request.headers['content-type'].split(';');
-      const ref = request.openapi.schema.requestBody.content[contentType].schema.$ref;
-      if (ref) {
-        const refName = ref.substr(ref.lastIndexOf('/') + 1);
-        const refComponent = request.openapi.refs[refName];
-        const requestName = lower(refName);
-        if (refComponent && refComponent.properties &&
-          configs.get('validateOpenAPIRequest', 'boolean')) {
+      const properties = request.openapi.schema.requestBody?.content[contentType].schema.properties;
+      if (properties) {
+        if (configs.get('validateOpenAPIRequest', 'boolean')) {
           // continue only with described in schema parameters
-          requestParams[requestName] = {};
-          for (const param in refComponent.properties) {
-            requestParams[requestName][param] = request.body[param];
+          for (const param in properties) {
+            requestParams[param] = request.body[param];
           }
         } else {
           // if request is not described in schema then skip unknown parameters validation
-          requestParams[requestName] = request.body;
+          requestParams = request.body;
         }
+      } else {
+        // if request is not described in schema then skip unknown parameters validation
+        requestParams = request.body;
       }
     }
 
-    request.openapi.schema.parameters.forEach((param) => {
+    (request.openapi.schema.parameters ?? []).forEach((param) => {
       if (param.in === 'path') {
         requestParams[param.name] = request.openapi.pathParams[param.name];
       } else if (param.in === 'query') {
