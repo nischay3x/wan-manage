@@ -169,14 +169,15 @@ class PeersService {
 
       let reconstructedTunnels = 0;
       if (isNeedToReconstructTunnels || isNeedToModifyTunnels) {
-        const tunnels = await Tunnels.find({ peer: id, isActive: true }).populate('deviceA').lean();
+        const tunnels = await Tunnels.find({ peer: id, isActive: true })
+          .populate('deviceA')
+          .populate('org')
+          .populate('peer').lean();
         if (tunnels.length) {
-          const ids = tunnels.map(t => t._id);
-
           let jobs = [];
           if (isNeedToReconstructTunnels) {
-            const removeJobs = await sendRemoveTunnelsJobs(ids, user.username, true);
-            const addJobs = await sendAddTunnelsJobs(ids, user.username, true);
+            const removeJobs = await sendRemoveTunnelsJobs(tunnels, user.username, true);
+            const addJobs = await sendAddTunnelsJobs(tunnels, user.username, true);
             jobs = jobs.concat([...removeJobs, ...addJobs]);
             reconstructedTunnels += addJobs.length;
           } else {

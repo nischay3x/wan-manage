@@ -1753,6 +1753,17 @@ paths:
           type: string
         style: form
         example: '[{"key":"peer.name","op":"contains","val":"my"}]'
+      - description: Response format of returned data
+        explode: true
+        in: query
+        name: response
+        required: false
+        schema:
+          enum:
+          - detailed
+          - summary
+          type: string
+        example: summary
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -9427,6 +9438,7 @@ components:
           enum:
           - completed
           - partially completed
+          - unknown
           type: string
         message:
           type: string
