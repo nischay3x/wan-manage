@@ -362,8 +362,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Token'
           description: Created
-        "400":
-          description: Bad Request
         "401":
           content:
             application/json:
@@ -5457,8 +5455,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Organization'
           description: Successful operation
-        "400":
-          description: Bad Request
         "401":
           content:
             application/json:
@@ -5894,8 +5890,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PathLabel'
           description: Path label was modified
-        "400":
-          description: Bad Request
         "401":
           content:
             application/json:
