@@ -11341,13 +11341,13 @@ components:
         payment_method:
           type: string
         amount:
-          type: string
+          type: number
         base_currency_code:
           type: string
         status:
           type: string
         date:
-          type: string
+          type: number
     BillingSummary:
       properties:
         _id:
