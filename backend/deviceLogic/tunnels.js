@@ -1018,7 +1018,14 @@ const prepareTunnelAddJob = async (
     if (peer) {
       let localDeviceId = peer.localId;
       if (localDeviceId === 'Automatic' && peer.idType === 'ip4-addr') {
-        localDeviceId = deviceAIntf.PublicIP;
+        if (deviceAIntf.PublicIP) {
+          localDeviceId = deviceAIntf.PublicIP;
+        } else if (deviceAIntf.IPv4) {
+          localDeviceId = deviceAIntf.IPv4;
+        } else {
+          // this error should not be raised as tunnel should be pending if no IPv4 address.
+          throw new Error('There is no IP on interface to use as peer local ID');
+        }
       }
 
       // construct IKEv2 tunnel
@@ -1031,6 +1038,8 @@ const prepareTunnelAddJob = async (
         'remote-device-id-type': peer.remoteIdType === 'email' ? 'rfc822' : peer.remoteIdType,
         'remote-device-id': peer.remoteId,
         lifetime: parseInt(peer.sessionLifeTime),
+        ike_lifetime: parseInt(peer.ikeLifeTime),
+        pfs: peer.pfs ?? false,
         ike: {
           'crypto-alg': peer.ikeCryptoAlg,
           'integ-alg': peer.ikeIntegAlg,
@@ -1398,6 +1407,8 @@ const applyTunnelDel = async (devices, user, data) => {
       }
     });
 
+    const promiseStatus = await Promise.allSettled(delPromises);
+
     if (updateOps.length) {
       try {
         const { matchedCount, modifiedCount } = await tunnelsModel.bulkWrite(updateOps);
@@ -1412,8 +1423,6 @@ const applyTunnelDel = async (devices, user, data) => {
         });
       }
     };
-
-    const promiseStatus = await Promise.allSettled(delPromises);
 
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
@@ -1894,14 +1903,14 @@ const prepareTunnelParams = (
     };
     if (majorVersionA >= 6) {
       paramsDeviceA.remoteBandwidthMbps = {
-        tx: +deviceBIntf.bandwidthMbps.tx,
-        rx: +deviceBIntf.bandwidthMbps.rx
+        tx: +(deviceBIntf.bandwidthMbps?.tx ?? 100),
+        rx: +(deviceBIntf.bandwidthMbps?.rx ?? 100)
       };
     };
     if (majorVersionB >= 6) {
       paramsDeviceB.remoteBandwidthMbps = {
-        tx: +deviceAIntf.bandwidthMbps.tx,
-        rx: +deviceAIntf.bandwidthMbps.rx
+        tx: +(deviceAIntf.bandwidthMbps?.tx ?? 100),
+        rx: +(deviceAIntf.bandwidthMbps?.rx ?? 100)
       };
     };
     if (mssClamp !== 'no') {
@@ -2205,8 +2214,13 @@ const getTunnelConfigDependencies = async (tunnel, isPending) => {
     });
   }
 
+  // // tunnel.org sometimes populated and sometimes does not.
+  // // since the "aggregate" below requires using mongoose object ID,
+  // // here is a safer workaround to get the always the object ID.
+  const orgId = tunnel?.org?._id?.toString() ?? tunnel.org;
+
   const devicesStaticRoutes = await devicesModel.aggregate([
-    { $match: { org: tunnel.org } }, // org match is very important here
+    { $match: { org: mongoose.Types.ObjectId(orgId) } }, // org match is very important here
     {
       $addFields: {
         staticroutes: {

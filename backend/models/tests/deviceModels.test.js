@@ -119,8 +119,8 @@ describe('Device schema', () => {
     deviceModel.account = 'invalid-account';
 
     deviceModel.validate((err) => {
-      expect(err.message).toBe('devices validation failed: account: Cast to ObjectID failed for ' +
-            'value "invalid-account" at path "account"');
+      expect(err.message).toBe('devices validation failed: account: Cast to ObjectId failed for ' +
+            'value "invalid-account" (type string) at path "account"');
     });
   });
 
@@ -128,8 +128,8 @@ describe('Device schema', () => {
     deviceModel.org = 'invalid-org';
 
     deviceModel.validate((err) => {
-      expect(err.message).toBe('devices validation failed: org: Cast to ObjectID failed for ' +
-            'value "invalid-org" at path "org"');
+      expect(err.message).toBe('devices validation failed: org: Cast to ObjectId failed for ' +
+            'value "invalid-org" (type string) at path "org"');
     });
   });
 

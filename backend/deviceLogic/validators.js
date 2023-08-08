@@ -66,7 +66,9 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
     if (i.type !== orig.type ||
       i.dhcp !== orig.dhcp ||
       i.addr !== `${orig.IPv4}/${orig.IPv4Mask}` ||
-      i.gateway !== orig.gateway
+      // Check if both gateways are not falsy values (undefined, "", null, etc).
+      // In such case, we don't consider it as modification
+      (i.gateway && orig.gateway && i.gateway !== orig.gateway)
     ) {
       return true;
     } else {
@@ -277,9 +279,19 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
  * @param {boolean} isRunning  is the device running
  * @param {[_id: objectId, name: string, type: string, subnet: string]} orgSubnets to check overlaps
  * @param {[_id: objectId, bgp: object]} orgBgpDevices
+ * @param {boolean} allowOverlapping  if to allow interface LAN overlapping
+ * @param {object} origDevice  origDevice object. Can be different that "device"
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpDevices = []) => {
+const validateDevice = (
+  device,
+  org,
+  isRunning = false,
+  orgSubnets = [],
+  orgBgpDevices = [],
+  allowOverlapping = false,
+  origDevice = null
+) => {
   const major = getMajorVersion(device.versions.agent);
   const minor = getMinorVersion(device.versions.agent);
 
@@ -419,7 +431,8 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
         };
       }
       // prevent Public IP / WAN overlap
-      if (ifc1.PublicIP && cidr.overlap(ifc2Subnet, `${ifc1.PublicIP}/32`)) {
+      if (ifc1.type === 'WAN' && ifc1.PublicIP &&
+        cidr.overlap(ifc2Subnet, `${ifc1.PublicIP}/32`)) {
         return {
           valid: false,
           err: `IP address of [${ifc2.name}] has an overlap with Public IP of [${ifc1.name}]`
@@ -485,7 +498,7 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
     }
   }
 
-  if (isRunning && orgSubnets.length > 0) {
+  if (orgSubnets.length > 0) {
     // LAN subnet must not be overlap with other devices in this org
     for (const orgSubnet of orgSubnets) {
       for (const currentLanIfc of lanIfcs) {
@@ -505,9 +518,28 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
         };
 
         if (cidr.overlap(currentSubnet, subnet)) {
+          let errCode = null;
           let overlapsWith = 'some network in your organization';
           if (orgSubnet.type === 'interface') {
+            // don't raise error if user allowed LAN overlapping
+            if (allowOverlapping) {
+              continue;
+            }
+
+            // raise error only if interface is now configured with IP that overlaps.
+            // but if it was overlapped this change,
+            // then no need to throw error as it was saved with user approval.
+            // hence we check here if it was overlapped with "origDevice".
+            const origIfc = origDevice?.interfaces?.find(i => i.devId === currentLanIfc.devId);
+            if (origIfc?.IPv4) {
+              const origIfcSubnet = `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
+              if (cidr.overlap(origIfcSubnet, subnet)) {
+                continue;
+              }
+            }
+
             overlapsWith = `a LAN subnet (${orgSubnet.subnet}) of device ${orgSubnet.name}`;
+            errCode = 'LAN_OVERLAPPING';
           } else if (orgSubnet.type === 'tunnel') {
             overlapsWith = `a loopback network (${orgSubnet.subnet}) of tunnel #${orgSubnet.num}`;
           } else if (orgSubnet.type === 'application') {
@@ -517,7 +549,8 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
 
           return {
             valid: false,
-            err: `The LAN subnet ${currentSubnet} overlaps with ${overlapsWith}`
+            err: `The LAN subnet ${currentSubnet} overlaps with ${overlapsWith}`,
+            errCode: errCode
           };
         }
       }
@@ -804,19 +837,37 @@ const validateStaticRoute = (device, tunnels, route) => {
       };
     };
 
-    if (!isPending && !cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
-      // A pending route may not overlap with an interface
-      if (onLink !== true) {
+    // check overlapping
+    //
+    // if route is pending, don't check
+    if (!isPending) {
+      // if specified interface does not have IP throw an error.
+      //
+      // Note! this is temporarily fix. The route should be pending,
+      // but UI sends "isPending" with "false".
+      // We need to move this route to pending on DeviceService.
+      // After correct fix, the below "if" block should be removed.
+      if (!ifc.IPv4) {
         return {
           valid: false,
-          err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+          err: `The static route via interface ${ifc.name} cannot be installed. ` +
+          'The interface does not have an IP Address'
         };
+      }
+
+      if (!cidr.overlap(`${ifc.IPv4}/${ifc.IPv4Mask}`, gatewaySubnet)) {
+        if (onLink !== true) { // onlink doesn't must to overlap
+          return {
+            valid: false,
+            err: `Interface IP ${ifc.IPv4} and gateway ${gateway} are not on the same subnet`
+          };
+        }
       }
     }
 
     // Don't allow putting static route on a bridged interface
     const anotherBridgedIfc = device.interfaces.some(i => {
-      return i.devId !== ifc.devId && i.IPv4 === ifc.IPv4 && i.isAssigned;
+      return i.devId !== ifc.devId && ifc.IPv4 && i.IPv4 === ifc.IPv4 && i.isAssigned;
     });
     if (anotherBridgedIfc) {
       return {

@@ -15,63 +15,56 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const mongoConns = require('../mongoConns.js')();
-
+const { membership } = require('../models/membership');
+const { devices } = require('../models/devices');
+const { addPerms, removePerms } = require('./utils/updatePerms');
 const logger = require('../logging/logging')({
   module: module.filename,
   type: 'migration'
 });
 
-const sleep = () => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      resolve();
-    }, 1000);
-  });
-};
-
 async function up () {
+  // Add vrrp to user permission
   try {
-    let isConnected = false;
-    for (let i = 0; i < 10; i++) {
-      if (mongoConns.getMainDB().readyState === 1) {
-        isConnected = true;
-        break;
-      }
-      await sleep();
-    }
+    await addPerms(membership, 'vrrp');
 
-    if (!isConnected) {
-      throw new Error('Failed to connect to mongodb within 10 seconds');
-    }
-
-    const currentVal = await mongoConns.getMainDB().db.admin().command({
-      getParameter: 1, featureCompatibilityVersion: 1
-    });
-
-    if (currentVal.featureCompatibilityVersion.version !== '4.2') {
-      await mongoConns.getMainDB().db.admin().command({
-        setFeatureCompatibilityVersion: '4.2'
-      });
-
-      logger.info('Database migration succeeded', {
-        params: { collections: ['admin'], operation: 'up' }
-      });
-    }
+    await devices.updateMany(
+      { },
+      { $set: { 'dhcp.$[].options': [] } },
+      { upsert: false }
+    );
   } catch (err) {
     logger.error('Database migration failed', {
       params: {
-        collections: ['admin'],
+        collections: ['vrrp'],
         operation: 'up',
         err: err.message
       }
     });
-    throw new Error(err.message);
+    throw err;
   }
 }
 
 async function down () {
+  try {
+    // Remove vrrp permissions
+    await removePerms(membership, 'vrrp');
 
+    await devices.updateMany(
+      { },
+      { $unset: { 'dhcp.$[].options': '' } },
+      { upsert: false }
+    );
+  } catch (err) {
+    logger.error('Database migration failed', {
+      params: {
+        collections: ['vrrp'],
+        operation: 'down',
+        err: err.message
+      }
+    });
+    throw err;
+  }
 }
 
 module.exports = { up, down };

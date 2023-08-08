@@ -73,6 +73,10 @@ class DeviceStatus {
     this.setTunnelsStatusByOrg = this.setTunnelsStatusByOrg.bind(this);
     this.getTunnelsStatusByOrg = this.getTunnelsStatusByOrg.bind(this);
     this.clearTunnelsStatusByOrg = this.clearTunnelsStatusByOrg.bind(this);
+    this.statusCallback = this.statusCallback.bind(this);
+
+    // register a callback function to be called when a device status is received on channel
+    connections.registerStatusCallback(this.statusCallback);
 
     // Task information
     this.updateSyncStatus = async () => {};
@@ -135,7 +139,11 @@ class DeviceStatus {
         rx_pkts: Joi.number().required(),
         tx_bytes: Joi.number().required(),
         tx_pkts: Joi.number().required()
-      }))
+      })),
+      vrrp: Joi.object().pattern(Joi.number().min(1).max(255), Joi.object({
+        state: Joi.string().valid('Master', 'Backup', 'Initialize', 'Interface Down'),
+        adjusted_priority: Joi.number().min(0).max(255).optional()
+      })).allow({}).optional()
     });
 
     for (const updateEntry of msg) {
@@ -168,7 +176,9 @@ class DeviceStatus {
   periodicPollDevices () {
     const devices = connections.getAllDevices();
     devices.forEach((deviceID) => {
-      if (connections.isConnected(deviceID)) this.periodicPollOneDevice(deviceID);
+      // run periodic task if device is connected to this host
+      const { socket } = connections.getDeviceInfo(deviceID) ?? {};
+      if (connections.isSocketAlive(socket)) this.periodicPollOneDevice(deviceID);
     });
   }
 
@@ -247,6 +257,8 @@ class DeviceStatus {
                 });
               }
             }
+            // status received and updated in memory, so it can be published to other hosts
+            connections.publishStatus(deviceID, this.status[deviceID]);
           } else {
             this.setDeviceState(deviceID, 'pending');
           }
@@ -421,7 +433,7 @@ class DeviceStatus {
    * @param  {string} state       device state
    * @return {void}
    */
-  setDeviceState (machineId, newState) {
+  setDeviceState (machineId, newState, needToPublish = true) {
     // Generate an event if there was a transition in the device's status
     const deviceInfo = connections.getDeviceInfo(machineId);
     if (!deviceInfo) {
@@ -443,6 +455,10 @@ class DeviceStatus {
       this.setDevicesStatusByOrg(org, deviceObj, newState);
     }
     this.setDeviceStatsField(machineId, 'state', newState);
+    // status updated in memory, publish it to other hosts
+    if (needToPublish) {
+      connections.publishStatus(machineId, this.status[machineId]);
+    }
   }
 
   /**
@@ -492,6 +508,45 @@ class DeviceStatus {
   }
 
   /**
+    * Store Vrrp status in memory
+    * @param  {string} machineId  device machine id
+    * @param  {string} vrid VRID
+    * @param  {Object} status VRRP status
+    * @return {void}
+    */
+  setDeviceVrrpStatus (machineId, vrid, status) {
+    if (!this.status[machineId]) {
+      this.status[machineId] = {};
+    }
+    if (!this.status[machineId].vrrp) {
+      this.status[machineId].vrrp = {};
+    }
+    if (!this.status[machineId].vrrp[vrid]) {
+      this.status[machineId].vrrp[vrid] = {};
+    }
+    const time = new Date().getTime();
+    Object.assign(this.status[machineId].vrrp[vrid], { ...status, time });
+  }
+
+  /**
+    * Get the Vrrp status from memory
+    * @param  {string} machineId  device machine id
+    * @return {void}
+    */
+  getDeviceVrrpStatus (machineId, vrid) {
+    return this?.status?.[machineId]?.vrrp?.[vrid] ?? {};
+  }
+
+  /**
+    * Clear the Vrrp status from memory
+    * @param  {string} machineId  device machine id
+    * @return {void}
+    */
+  clearDeviceVrrpStatus (machineId) {
+    delete this?.status?.[machineId]?.vrrp;
+  }
+
+  /**
      * @param  {string} machineId  device machine id
      * @param  {Object} deviceInfo device info entry
      * @param  {Object} rawStats   device stats supplied by the device
@@ -506,7 +561,7 @@ class DeviceStatus {
       devStatus = rawStats.running === true ? 'running' : 'stopped';
     }
 
-    this.setDeviceState(machineId, devStatus);
+    this.setDeviceState(machineId, devStatus, false);
     const { org, deviceObj } = deviceInfo;
 
     // Interface statistics
@@ -557,6 +612,11 @@ class DeviceStatus {
         this.setDeviceWifiStatus(machineId, devId, mapWifiNames(wifiStatus[devId]));
       }
     };
+
+    // Set VRRP status in memory for now
+    for (const vrId in rawStats?.vrrp ?? {}) {
+      this.setDeviceVrrpStatus(machineId, vrId, rawStats.vrrp[vrId]);
+    }
 
     // Set tunnel status in memory for now
     const tunnelStatus = rawStats.tunnel_stats;
@@ -896,6 +956,36 @@ class DeviceStatus {
   clearTunnelsStatusByOrg (org) {
     if (org && this.tunnelsStatusByOrg.hasOwnProperty(org)) {
       delete this.tunnelsStatusByOrg[org];
+    }
+  }
+
+  /**
+   * Called when a device status is received on the hosts channel from another server
+   * @param  {string} machineId the machine id
+   * @param  {object} status    new status of the device
+   * @return {void}
+   */
+  statusCallback (machineId, status) {
+    if (this.status[machineId]?.state !== status.state) {
+      const deviceInfo = connections.getDeviceInfo(machineId);
+      if (!deviceInfo) {
+        logger.warn('Failed to get device info', {
+          params: { machineId }
+        });
+        return;
+      }
+      const { org, deviceObj } = deviceInfo;
+      this.setDevicesStatusByOrg(org, deviceObj, status.state);
+    }
+    this.status[machineId] = status;
+
+    // Update changed tunnel status in memory by org
+    if (status.tunnelStatus) {
+      const { tunnelStatus } = status;
+      const { org } = connections.getDeviceInfo(machineId) ?? {};
+      for (const tunnelID in tunnelStatus) {
+        this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelStatus.status);
+      }
     }
   }
 }

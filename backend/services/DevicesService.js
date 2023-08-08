@@ -19,13 +19,14 @@ const Service = require('./Service');
 const configs = require('../configs')();
 const { devices, staticroutes, dhcpModel } = require('../models/devices');
 const tunnelsModel = require('../models/tunnels');
+const vrrp = require('../models/vrrp');
 const pathLabelsModel = require('../models/pathlabels');
+const Tokens = require('../models/tokens');
 const notificationsModel = require('../models/notifications');
 const connections = require('../websocket/Connections')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
 const { deviceStats } = require('../models/analytics/deviceStats');
-const DevSwUpdater = require('../deviceLogic/DevSwVersionUpdateManager');
 const mongoConns = require('../mongoConns.js')();
 const mongoose = require('mongoose');
 const validator = require('validator');
@@ -44,6 +45,7 @@ const {
   validateStaticRoute,
   validateQOSPolicy
 } = require('../deviceLogic/validators');
+const { validateFQDN } = require('../models/validators');
 const {
   mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
 } = require('../utils/deviceUtils');
@@ -65,9 +67,13 @@ const {
 } = require('../deviceLogic/events');
 const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const applications = require('../models/applications');
+const Vrrp = require('../models/vrrp');
 const applicationStore = require('../models/applicationStore');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const createError = require('http-errors');
+const jwt = require('jsonwebtoken');
+const { getAgentBroker } = require('../utils/httpUtils');
+const Joi = require('joi');
 
 class DevicesService {
   /**
@@ -77,7 +83,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesApplyPOST ({ org, deviceCommand }, { user, server }, response) {
+  static async devicesApplyPOST ({ org, ...deviceCommand }, { user, server }, response) {
     try {
       // Find all devices of the organization
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -110,7 +116,7 @@ class DevicesService {
    * commandRequest CommandRequest  (optional)
    * no response value expected for this operation
    **/
-  static async devicesIdApplyPOST ({ id, org, deviceCommand }, { user, server }, response) {
+  static async devicesIdApplyPOST ({ id, org, ...deviceCommand }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const opDevice = await devices.find({
@@ -120,10 +126,12 @@ class DevicesService {
 
       if (opDevice.length !== 1) return Service.rejectResponse('Device not found', 404);
 
-      const { ids, status, message } = await dispatcher.apply(opDevice, deviceCommand.method,
+      const {
+        ids, status, message, errorCodes = []
+      } = await dispatcher.apply(opDevice, deviceCommand.method,
         user, { org: orgList[0], ...deviceCommand });
       DevicesService.setLocationHeader(server, response, ids, orgList[0]);
-      return Service.successResponse({ ids, status, message }, 202);
+      return Service.successResponse({ ids, status, message, errorCodes }, 202);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -165,7 +173,8 @@ class DevicesService {
       'coords',
       'bgp',
       'routingFilters',
-      'cpuInfo'
+      'cpuInfo',
+      'distro'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -261,14 +270,17 @@ class DevicesService {
           'dns',
           'status',
           'isPending',
-          'pendingReason'
+          'pendingReason',
+          'options',
+          'defaultLeaseTime',
+          'maxLeaseTime'
         ]);
 
         let macAssignList;
         if (d.macAssign) {
           macAssignList = d.macAssign.map(m => {
             return pick(m, [
-              'host', 'mac', 'ipv4'
+              'host', 'mac', 'ipv4', 'useHostNameAsDhcpOption'
             ]);
           });
         } else macAssignList = [];
@@ -425,6 +437,14 @@ class DevicesService {
           }
         },
         {
+          $lookup: {
+            from: 'vrrps',
+            localField: '_id',
+            foreignField: 'devices.device',
+            as: 'vrrp'
+          }
+        },
+        {
           $addFields: {
             _id: { $toString: '$_id' },
             'deviceStatus.state': {
@@ -555,7 +575,8 @@ class DevicesService {
           'isConnected',
           'deviceState',
           'cpuInfo',
-          'coords'
+          'coords',
+          'distro'
         ];
         // populate pathlabels for every interface
         pipeline.push({
@@ -662,7 +683,7 @@ class DevicesService {
     }
   }
 
-  static async devicesUpgdSchedPOST ({ org, devicesUpgradeRequest }, { user }) {
+  static async devicesUpgdSchedPOST ({ org, ...devicesUpgradeRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { _id: { $in: devicesUpgradeRequest.devices }, org: { $in: orgList } };
@@ -696,7 +717,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdUpgdSchedPOST ({ id, org, deviceUpgradeRequest }, { user }) {
+  static async devicesIdUpgdSchedPOST ({ id, org, ...deviceUpgradeRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { _id: id, org: { $in: orgList } };
@@ -730,13 +751,53 @@ class DevicesService {
    *
    * returns DeviceLatestVersion
    **/
-  static async devicesLatestVersionsGET () {
+  static async devicesLatestVersionsGET ({ org }, { user }) {
     try {
-      const swUpdater = DevSwUpdater.getSwVerUpdaterInstance();
-      const { versions, versionDeadline } = await swUpdater.getLatestSwVersions();
+      const orgList = await getAccessTokenOrgList(user, org, false);
+
+      const { versions, versionDeadline, distros } = (await devices.aggregate([
+        {
+          $facet: {
+            found: [
+              { $match: { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } } },
+              { $project: { distro: { $ifNull: ['$distro.codename', 'NA'] } } },
+              { $group: { _id: '$distro', count: { $sum: 1 } } }
+            ]
+          }
+        },
+        {
+          $project: {
+            result: {
+              $cond: {
+                if: { $eq: [{ $size: '$found' }, 0] },
+                then: [{ _id: 'NA', count: 0 }],
+                else: '$found'
+              }
+            }
+          }
+        },
+        { $unwind: '$result' },
+        { $group: { _id: null, data: { $push: { k: '$result._id', v: '$result.count' } } } },
+        {
+          $lookup: {
+            from: 'deviceswversions',
+            pipeline: [{ $project: { versions: 1, versionDeadline: 1 } }],
+            as: 'versions'
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            distros: { $arrayToObject: '$data' },
+            versions: { $first: '$versions.versions' },
+            versionDeadline: { $first: '$versions.versionDeadline' }
+          }
+        }]))[0];
+
       return Service.successResponse({
         versions,
-        versionDeadline
+        versionDeadline,
+        distros
       });
     } catch (e) {
       return Service.rejectResponse(
@@ -842,6 +903,55 @@ class DevicesService {
     }
   }
 
+  /**
+   * Retrieve device recovery info
+   *
+   * id   - String Numeric ID of the Device to retrieve recovery info from
+   * org  - String containing the organization the device belongs to
+   * Returns Device Recovery Info
+   **/
+  static async devicesIdRecoveryInfoGET ({ id, org }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, true);
+
+      // Find device for ID
+      const deviceObject = await devices.findOne({
+        _id: id,
+        org: { $in: orgList }
+      }, 'fromToken deviceToken').lean();
+      if (!deviceObject) {
+        return Service.rejectResponse('Device not found', 404);
+      };
+
+      let decodedToken;
+      // Get device token
+      if (deviceObject?.fromToken) {
+        // Try to find the token from name,
+        // it may not always kept in the system or changed, so might failed
+        const token = await Tokens.findOne({
+          name: deviceObject.fromToken,
+          org: orgList[0]
+        }, 'token').lean();
+        if (token?.token) {
+          // Try to get the server from the token
+          decodedToken = jwt.decode(token.token);
+        }
+      }
+      const server = getAgentBroker(decodedToken?.server);
+
+      // Generate response
+      return Service.successResponse({
+        deviceToken: deviceObject.deviceToken,
+        server: server
+      });
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
   static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
@@ -872,7 +982,8 @@ class DevicesService {
             defaultSettings: {},
             pinState: {},
             connectionState: null,
-            registrationNetworkState: {}
+            registrationNetworkState: {},
+            state: null
           },
           parseResponse: async response => {
             response = parseLteStatus(response);
@@ -1154,7 +1265,7 @@ class DevicesService {
    *
    * no response value expected for this operation
    **/
-  static async devicesDELETE ({ org, devicesDeleteRequest }, { user }) {
+  static async devicesDELETE ({ org, ...devicesDeleteRequest }, { user }) {
     let orgList;
     try {
       let delDevices;
@@ -1281,6 +1392,12 @@ class DevicesService {
           throw createError(400, 'All device tunnels must be deleted before deleting a device');
         }
 
+        // remove vrrp that configured on this device
+        await vrrp.updateMany(
+          { org: { $in: orgList } },
+          { $pull: { devices: { device: mongoose.Types.ObjectId(id) } } }
+        ).session(session);
+
         const deviceCount = await devices.countDocuments({
           account: delDevice.account
         }).session(session);
@@ -1332,8 +1449,11 @@ class DevicesService {
    * deviceRequest DeviceRequest  (optional)
    * returns Device
    **/
-  static async devicesIdPUT ({ id, org, deviceRequest }, { user, server }, response) {
+  static async devicesIdPUT (request, { user, server }, response) {
+    const { id, org, allowOverlapping, ...deviceRequest } = request;
+
     let sessionCopy;
+    let errorData = null;
 
     try {
       let orgList;
@@ -1385,7 +1505,7 @@ class DevicesService {
         const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
         let orgSubnets = [];
-        if (isRunning && configs.get('forbidLanSubnetOverlaps', 'boolean')) {
+        if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
           orgSubnets = await getAllOrganizationSubnets(orgId);
         }
         const orgBgp = await getAllOrganizationBGPDevices(orgId);
@@ -1456,9 +1576,10 @@ class DevicesService {
               : updIntf.isAssigned ? updIntf.type : 'Unassigned';
 
             // Check tunnels connectivity and static routes for removed or modified interfaces
-            if ((origIntf.isAssigned) &&
-              (!updIntf || !updIntf.isAssigned || updIntf.type !== 'WAN')) {
-              if (Array.isArray(deviceRequest.staticroutes) &&
+            if (origIntf.isAssigned) {
+              const interfaceRemoved = !updIntf || !updIntf.isAssigned;
+              if ((interfaceRemoved || !['LAN', 'WAN'].includes(updIntf.type)) &&
+                Array.isArray(deviceRequest.staticroutes) &&
                 (deviceRequest.staticroutes.some(r => r.ifname === origIntf.devId))) {
                 // eslint-disable-next-line max-len
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing static routes, please delete related static routes before`);
@@ -1467,7 +1588,7 @@ class DevicesService {
                 return interfaceA.toString() === origIntf._id.toString() ||
                   (interfaceB && interfaceB.toString() === origIntf._id.toString());
               });
-              if (hasTunnels) {
+              if (hasTunnels && (interfaceRemoved || updIntf.type !== 'WAN')) {
                 // eslint-disable-next-line max-len
                 throw new Error(`${ifcType} interface ${origIntf.name} used by existing tunnels, please delete related tunnels before`);
               }
@@ -1581,7 +1702,7 @@ class DevicesService {
                   const hasTunnels = origTunnels.some(({ interfaceA, interfaceB, pathlabel }) => {
                     return (interfaceA.toString() === origIntf._id.toString() ||
                       (interfaceB && interfaceB.toString() === origIntf._id.toString())) &&
-                      remLabels.some(p => p._id.toString() === pathlabel.toString());
+                      remLabels.some(p => p._id.toString() === pathlabel?.toString());
                   });
                   if (hasTunnels) {
                   // eslint-disable-next-line max-len
@@ -1723,6 +1844,8 @@ class DevicesService {
             }
             return updIntf;
           });
+
+          await DevicesService.validateVrrp(orgId, origDevice._id, interfacesByDevId);
         };
 
         // add device id to device request
@@ -1738,6 +1861,14 @@ class DevicesService {
         // Map dhcp config if needed
         if (Array.isArray(deviceRequest.dhcp)) {
           deviceRequest.dhcp = deviceRequest.dhcp.map(d => {
+            // ensure useHostNameAsDhcpOption is passed with boolean value
+            d.macAssign = d.macAssign.map(m => {
+              return {
+                ...m,
+                useHostNameAsDhcpOption: !!m.useHostNameAsDhcpOption
+              };
+            });
+
             const ifc = deviceRequest.interfaces.find(i => i.devId === d.interface);
             if (!ifc) return d;
 
@@ -1959,17 +2090,20 @@ class DevicesService {
           };
         }
 
-        // don't  allow to change "versions" and "cpuInfo"
+        // don't  allow to change "versions", "cpuInfo" or "distro"
         deviceToValidate.versions = origDevice.versions;
         deviceToValidate.cpuInfo = getCpuInfo(origDevice.cpuInfo);
+        deviceToValidate.distro = origDevice.distro;
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
-        const { valid, err } = validateDevice(
+        const { valid, err, errCode = null } = validateDevice(
           deviceToValidate,
           origDevice.org,
           isRunning,
           orgSubnets,
-          orgBgp
+          orgBgp,
+          allowOverlapping,
+          origDevice
         );
 
         if (!valid) {
@@ -1977,6 +2111,9 @@ class DevicesService {
             {
               params: { device: deviceRequest, devStatus, err }
             });
+          if (errCode) {
+            errorData = { errorCodes: [errCode] };
+          }
           throw createError(400, err);
         }
 
@@ -2041,10 +2178,94 @@ class DevicesService {
       logger.error('update device failed', { params: { message: e.message, stack: e.stack } });
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
-        e.status || 500
+        e.status || 500,
+        errorData
       );
     } finally {
       if (sessionCopy) sessionCopy.endSession();
+    }
+  }
+
+  static async validateVrrp (orgId, deviceId, interfacesByDevId) {
+    const deviceVrrps = await Vrrp.aggregate([
+      [
+        { $match: { org: orgId, 'devices.device': deviceId } },
+        { $unwind: { path: '$devices' } },
+        { $match: { 'devices.device': deviceId } },
+        {
+          $project: {
+            virtualIp: 1,
+            interface: '$devices.interface',
+            trackInterfacesMandatory: '$devices.trackInterfacesMandatory',
+            trackInterfacesOptional: '$devices.trackInterfacesOptional'
+          }
+        }
+      ]
+    ]).allowDiskUse(true);
+
+    for (const deviceVrrp of deviceVrrps) {
+      const ifc = interfacesByDevId[deviceVrrp.interface];
+      if (!ifc) {
+        throw createError(
+          400,
+          'There is VRRP configured on this device. ' +
+          'Please remove it first before changing interfaces'
+        );
+      }
+
+      if (ifc.type !== 'LAN') {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. Interface must be LAN`
+        );
+      }
+
+      if (!ifc.IPv4 || !ifc.IPv4Mask) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. IP must be configured on the interface`
+        );
+      }
+
+      if (!ifc.isAssigned) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. Interface must be assigned`
+        );
+      }
+
+      const ip = `${ifc.IPv4}/${ifc.IPv4Mask}`;
+      if (!cidr.overlap(ip, `${deviceVrrp.virtualIp}/32`)) {
+        throw createError(
+          400,
+          `The interface ${ifc.name} has VRRP on it. ` +
+          `The IP ${ip} must ` +
+          `overlap with the VRRP virtual IP ${deviceVrrp.virtualIp}`
+        );
+      }
+
+      const tracked = [
+        ...deviceVrrp.trackInterfacesOptional,
+        ...deviceVrrp.trackInterfacesMandatory
+      ];
+      for (const trackIfc of tracked) {
+        const ifc = interfacesByDevId[trackIfc];
+        if (!ifc) {
+          throw createError(
+            400,
+            'There is VRRP track interface configured on this device. ' +
+            'Please remove it first before changing interfaces'
+          );
+        }
+
+        if (!ifc.isAssigned) {
+          throw createError(
+            400,
+            `The interface ${ifc.name} has configured as tracked interface in VRRP group. ` +
+            'Interface must be assigned'
+          );
+        }
+      }
     }
   }
 
@@ -2716,7 +2937,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, dhcpRequest }, { user, server }, res) {
+  static async devicesIdDhcpDhcpIdPUT ({ id, dhcpId, org, ...dhcpRequest }, { user, server }, res) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -2886,6 +3107,80 @@ class DevicesService {
     }
   }
 
+  static dhcpValidationSchema (dhcpRequest) {
+    const _ipListValidation = (option) => {
+      return Joi.string().required().custom((val, helpers) => {
+        const gateways = val.split(/\s*,\s*/);
+        const ipSchema = Joi.string().ip({ version: ['ipv4'], cidr: 'forbidden' });
+
+        const valid = gateways.every(d => {
+          const res = ipSchema.validate(d);
+          return res.error === undefined;
+        });
+
+        if (valid) {
+          return val;
+        } else {
+          return helpers.message(
+            `the value "${val}" is not a valid DHCP option for "${option}"`);
+        }
+      });
+    };
+
+    const _domainName = (option) => {
+      return Joi.string().required().custom((val, helpers) => {
+        const valid = validateFQDN(val, false);
+        if (!valid) {
+          return helpers.message(`Invalid value for DHCP option "${option}"`);
+        };
+      });
+    };
+
+    const _number = (min = Number.MIN_VALUE, max = Number.MAX_VALUE, option = '') => {
+      return Joi.number().integer().required().min(min).max(max).error(errors => {
+        errors.forEach(err => {
+          switch (err.code) {
+            case 'number.base':
+              err.message = `Value for DHCP Option "${option}" must be a number`;
+              break;
+            case 'number.min':
+              err.message = `Value for DHCP Option "${option}"  \
+              have to be greater than ${err.local.limit}`;
+              break;
+            case 'number.max':
+              err.message = `Value for DHCP Option "${option}"  \
+              have to be smaller than ${err.local.limit}`;
+              break;
+            default:
+              break;
+          }
+        });
+        return errors;
+      });
+    };
+
+    const option = Joi.object({
+      _id: Joi.string().optional(),
+      option: Joi.string().required().valid(
+        'routers', 'tftp-server-name', 'ntp-servers',
+        'interface-mtu', 'time-offset', 'domain-name'),
+      code: Joi.string().valid('3', '66', '42', '26', '2', '15').required(),
+      value: Joi.when('option', {
+        switch: [
+          { is: 'routers', then: _ipListValidation('routers') },
+          { is: 'domain-name', then: _domainName('domain-name') },
+          { is: 'tftp-server-name', then: Joi.string().required() },
+          { is: 'ntp-servers', then: _ipListValidation('ntp-servers') },
+          { is: 'interface-mtu', then: _number(500, 9999, 'interface-mtu') },
+          { is: 'time-offset', then: _number(-2147483648, 2147483647, 'interface-mtu') } // int32
+        ]
+      })
+    });
+
+    const schema = Joi.array().items(option);
+    return schema.validate(dhcpRequest.options);
+  }
+
   /**
    * Validate that the dhcp request
    * @param {Object} device - the device object
@@ -2944,6 +3239,12 @@ class DevicesService {
     if (uniqIPs.length !== macLen) {
       throw new Error('DHCP Server MAC bindings IPs are not unique');
     }
+
+    // validate DHCP options values.
+    const result = this.dhcpValidationSchema(dhcpRequest);
+    if (result.error) {
+      throw new Error(`${result.error.details[0].message}`);
+    }
   }
 
   /**
@@ -2954,7 +3255,7 @@ class DevicesService {
    * dhcpRequest DhcpRequest  (optional)
    * returns Dhcp
    **/
-  static async devicesIdDhcpPOST ({ id, org, dhcpRequest }, { user, server }, response) {
+  static async devicesIdDhcpPOST ({ id, org, ...dhcpRequest }, { user, server }, response) {
     let session;
     try {
       session = await mongoConns.getMainDB().startSession();
@@ -3039,7 +3340,7 @@ class DevicesService {
   }
 
   static async devicesIdInterfacesIdActionPOST ({
-    org, id, interfaceOperationReq, interfaceId
+    org, id, interfaceId, ...interfaceOperationReq
   }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
@@ -3285,7 +3586,7 @@ class DevicesService {
    * sendRequest Send Command Request
    * returns Command Output Result
    **/
-  static async devicesIdSendPOST ({ id, org, deviceSendRequest }, { user }, response) {
+  static async devicesIdSendPOST ({ id, org, ...deviceSendRequest }, { user }, response) {
     try {
       if (!deviceSendRequest.api || !deviceSendRequest.entity) {
         throw new Error('Request must include entity and api fields');
@@ -3365,7 +3666,7 @@ class DevicesService {
    * ospfConfigs ospfConfigs
    * returns OSPF configuration
    **/
-  static async devicesIdRoutingOSPFPUT ({ id, org, ospfConfigs }, { user, server }, response) {
+  static async devicesIdRoutingOSPFPUT ({ id, org, ...ospfConfigs }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const deviceObject = await devices.findOne({
@@ -3407,7 +3708,7 @@ class DevicesService {
    * coordsConfig Coordinates Configs
    * returns coordinates configuration
    **/
-  static async devicesIdCoordsPUT ({ id, org, coordsConfigs }, { user, server }, response) {
+  static async devicesIdCoordsPUT ({ id, org, ...coordsConfigs }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 

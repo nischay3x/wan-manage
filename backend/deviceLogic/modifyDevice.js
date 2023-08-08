@@ -27,6 +27,7 @@ const {
 const { validateModifyDeviceMsg, validateDhcpConfig } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
+const Vrrp = require('../models/vrrp');
 const {
   complete: firewallPolicyComplete,
   error: firewallPolicyError,
@@ -53,6 +54,7 @@ const isObject = require('lodash/isObject');
 const { buildInterfaces } = require('./interfaces');
 const { getBridges } = require('../utils/deviceUtils');
 const uniqWith = require('lodash/uniqWith');
+const cloneDeep = require('lodash/cloneDeep');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const {
   transformInterfaces,
@@ -74,7 +76,7 @@ const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
 const prepareIfcParams = (interfaces, newDevice) => {
   const bridges = getBridges(newDevice.interfaces);
   return interfaces.map(ifc => {
-    const newIfc = omit(ifc, ['_id', 'isAssigned', 'pathlabels']);
+    const newIfc = cloneDeep(omit(ifc, ['_id', 'isAssigned', 'pathlabels']));
 
     newIfc.dev_id = newIfc.devId;
     delete newIfc.devId;
@@ -127,6 +129,22 @@ const prepareIfcParams = (interfaces, newDevice) => {
       if (newIfc.ospf) {
         // remove empty values since they are optional
         newIfc.ospf = omitBy(newIfc.ospf, val => val === '');
+      }
+
+      // Currently, when sending modify-x device the agent does smart replacement in a way
+      // that if only one field exists in a sub-object, it adds this field
+      // to the sub-object but it keeps the other existing fields.
+      // So, in WiFi we need to send both keys (2.4GHz, and 5GHz) always.
+      // Otherwise, if we will send only the enabled one, ans user changed the enabled band,
+      // in some case, at the agent both can be enabled which is not supported.
+      // Hence, we send both always.
+      if (newIfc.deviceType === 'wifi') {
+        if (!('2.4GHz' in newIfc.configuration)) {
+          newIfc.configuration['2.4GHz'] = { enable: false };
+        }
+        if (!('5GHz' in newIfc.configuration)) {
+          newIfc.configuration['5GHz'] = { enable: false };
+        }
       }
     }
     return newIfc;
@@ -1028,15 +1046,19 @@ const prepareModifyOSPF = (origDevice, newDevice) => {
  * @param  {Object} newDevice  device object after changes in the database
  * @return {Object}            an object containing an array of routes
  */
-const prepareModifyDHCP = (origDevice, newDevice) => {
+const prepareModifyDHCP = async (origDevice, newDevice) => {
+  const vrrpGroups = await Vrrp.find(
+    { org: origDevice.org, 'devices.device': origDevice._id }
+  ).populate('devices.device').lean();
+
   // Extract only relevant fields from dhcp database entries
   const [newDHCP, origDHCP] = [
     newDevice.dhcp.filter(d => !d.isPending).map(dhcp => {
-      return transformDHCP(dhcp);
+      return transformDHCP(dhcp, newDevice._id, vrrpGroups);
     }),
 
     origDevice.dhcp.filter(d => !d.isPending).map(dhcp => {
-      return transformDHCP(dhcp);
+      return transformDHCP(dhcp, origDevice._id, vrrpGroups);
     })
   ];
 
@@ -1144,7 +1166,7 @@ const apply = async (device, user, data) => {
   if (modifyRoutes.routes.length > 0) modifyParams.modify_routes = modifyRoutes;
 
   // Create DHCP modification parameters
-  const modifyDHCP = prepareModifyDHCP(device[0], data.newDevice);
+  const modifyDHCP = await prepareModifyDHCP(device[0], data.newDevice);
   if (modifyDHCP.dhcpRemove.length > 0 ||
       modifyDHCP.dhcpAdd.length > 0) {
     modifyParams.modify_dhcp_config = modifyDHCP;
@@ -1525,7 +1547,7 @@ const sync = async (deviceId, org) => {
     .populate('org');
 
   const {
-    interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions
+    interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions, _id
   } = device;
 
   const majorVersion = getMajorVersion(versions.agent);
@@ -1639,6 +1661,10 @@ const sync = async (deviceId, org) => {
     });
   });
 
+  const vrrpGroups = await Vrrp.find(
+    { org: device.org, 'devices.device': _id }
+  ).populate('devices.device', '_id').lean();
+
   // Prepare add-dhcp-config message
   Array.isArray(dhcp) && dhcp.forEach(entry => {
     const { isPending } = entry;
@@ -1648,7 +1674,7 @@ const sync = async (deviceId, org) => {
       return;
     }
 
-    const params = transformDHCP(entry);
+    const params = transformDHCP(entry, _id, vrrpGroups);
 
     deviceConfRequests.push({
       entity: 'agent',

@@ -102,7 +102,7 @@ class PeersService {
    * peer
    * returns The new peer
    **/
-  static async peersPOST ({ org, peer }, { user }) {
+  static async peersPOST ({ org, ...peer }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -129,7 +129,7 @@ class PeersService {
   /**
    * Update peer and reconstruct tunnels if needed
    **/
-  static async peersIdPUT ({ id, org, peer }, { user, server }, response) {
+  static async peersIdPUT ({ id, org, ...peer }, { user, server }, response) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 
@@ -178,6 +178,7 @@ class PeersService {
             const removeJobs = await sendRemoveTunnelsJobs(ids, user.username, true);
             const addJobs = await sendAddTunnelsJobs(ids, user.username, true);
             jobs = jobs.concat([...removeJobs, ...addJobs]);
+            reconstructedTunnels += addJobs.length;
           } else {
             for (const tunnel of tunnels) {
               const tasks = [{
@@ -216,9 +217,9 @@ class PeersService {
               );
 
               jobs.push(job);
+              reconstructedTunnels++;
             }
           }
-          reconstructedTunnels = jobs.length;
 
           const jobsIds = jobs.flat().map(job => job.id);
           DevicesService.setLocationHeader(server, response, jobsIds, orgList[0]);
@@ -242,7 +243,7 @@ class PeersService {
   /**
    * Delete peer
    **/
-  static async peersIdDelete ({ id, org, peer }, { user }) {
+  static async peersIdDelete ({ id, org, ...peer }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 

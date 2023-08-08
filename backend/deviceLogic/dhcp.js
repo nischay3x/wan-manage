@@ -67,7 +67,7 @@ const apply = async (device, user, data) => {
         message = 'add-dhcp-config';
 
         titlePrefix = 'Add';
-        params = transformDHCP(data);
+        params = transformDHCP(data, device._id);
         break;
       case 'del':
         titlePrefix = 'Delete';
@@ -81,7 +81,7 @@ const apply = async (device, user, data) => {
         message = 'modify-device';
         params = {
           modify_dhcp_config: {
-            dhcp_configs: [transformDHCP(data)]
+            dhcp_configs: [transformDHCP(data, device._id)]
           }
         };
         break;

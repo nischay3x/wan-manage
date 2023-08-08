@@ -81,6 +81,10 @@ const validateParentDevId = (devId) => {
     validateUsbAddress(devId)
   );
 };
+
+// specific validator for interfaces used in firewall rules
+const validateFirewallDevId = (devId) => validateDevId(devId) || devId.startsWith('app_');
+
 const validatePciAddress = pci => {
   return (
     pci === '' ||
@@ -146,6 +150,7 @@ const isPort = (val) => {
   return !isEmpty(val) && !(val === '') && validateIsInteger(+val) && val >= 0 && val <= 65535;
 };
 const validatePort = port => port === '' || isPort(port);
+const validateVxlanPort = port => validatePort(port) && port !== '500' && port !== '4500';
 const validatePortRange = (range) => {
   if (range === '') return true;
   if (!(range || '').includes('-')) return isPort(range);
@@ -184,7 +189,7 @@ const validateMtu = (val) => val && validateIsInteger(val) && +val >= 500 && +va
 const validateOSPFArea = (val) => val !== null && (validateIPv4(val) || (validateIsInteger(val) && +val >= 0));
 const validateOSPFCost = (val) => val === null || (validateIsInteger(val) && +val >= 0 && +val < 65535);
 const validateOSPFInterval = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
-const validateFQDN = val => val && validator.isFQDN(val);
+const validateFQDN = (val, require_tld = true) => val && validator.isFQDN(val, { require_tld });
 const validateStringNoSpaces = str => { return str === '' || /^\S+$/i.test(str || ''); };
 const validateApplicationIdentifier = str => { return /[A-Za-z_.-]/i.test(str || ''); };
 const validateBGPASN = val => val && validateIsInteger(val) && +val >= 1;
@@ -201,6 +206,7 @@ module.exports = {
   validatePciAddress,
   validateDevId,
   validateParentDevId,
+  validateFirewallDevId,
   validateVlanTag,
   validateIfcName,
   validateIPv4Mask,
@@ -241,5 +247,6 @@ module.exports = {
   validateBGPASN,
   validateBGPInterval,
   validateIsNumber,
-  validateCpuCoresNumber
+  validateCpuCoresNumber,
+  validateVxlanPort
 };

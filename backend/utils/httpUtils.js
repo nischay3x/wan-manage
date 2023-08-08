@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 const configs = require('../configs')();
+const url = require('url');
 
 const getUiServerUrl = req => {
   let uiServerUrl = null;
@@ -34,6 +35,33 @@ const getUiServerUrl = req => {
   return uiServerUrl;
 };
 
+const getAgentBroker = tokenServer => {
+  const brokerServers = configs.get('agentBroker', 'list');
+  let broker = brokerServers[0];
+  if (tokenServer) {
+    // Try to find broker with the same domain as the token
+    // If not found return the first agent broker
+    const urlSchema = new url.URL(tokenServer);
+    const tokenDomain = urlSchema.hostname.replace(/^[^.]+\./g, '');
+    brokerServers.forEach(s => {
+      const sUrlSchema = new url.URL('http://' + s);
+      const sDomain = sUrlSchema.hostname.replace(/^[^.]+\./g, '');
+      if (sDomain === tokenDomain) broker = s;
+    });
+  }
+  return broker;
+};
+
+const getRedisAuthUrl = redisUrl => {
+  const urlInfo = new URL(redisUrl);
+  const redisAuth = urlInfo.username;
+  urlInfo.username = '';
+  const redisUrlNoAuth = urlInfo.href;
+  return { redisAuth, redisUrlNoAuth };
+};
+
 module.exports = {
-  getUiServerUrl
+  getUiServerUrl,
+  getAgentBroker,
+  getRedisAuthUrl
 };

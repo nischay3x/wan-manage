@@ -44,23 +44,30 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       addr6: ifc.IPv6 && ifc.IPv6Mask ? `${ifc.IPv6}/${ifc.IPv6Mask}` : '',
       PublicIP: ifc.PublicIP,
       PublicPort: ifc.PublicPort,
-      useStun: ifc.useStun,
       useFixedPublicPort: ifc.useFixedPublicPort,
-      monitorInternet: ifc.monitorInternet,
-      gateway: ifc.gateway,
-      metric: ifc.metric,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
       pathlabels: ifc.pathlabels,
       configuration: ifc.configuration,
-      deviceType: ifc.deviceType,
-      dnsServers: ifc.dnsServers,
-      dnsDomains: ifc.dnsDomains,
-      useDhcpDnsServers: ifc.useDhcpDnsServers
+      deviceType: ifc.deviceType
     };
 
-    if (majorVersion >= 6) {
-      ifcObg.bandwidthMbps = ifc.bandwidthMbps;
+    if (ifc.type === 'WAN') {
+      ifcObg.gateway = ifc.gateway;
+      ifcObg.metric = ifc.metric;
+      ifcObg.useStun = ifc.useStun;
+      ifcObg.monitorInternet = ifc.monitorInternet;
+      ifcObg.dnsServers = ifc.dnsServers;
+      ifcObg.dnsDomains = ifc.dnsDomains;
+
+      // if useDhcpDnsServers is true, we set empty array to the agent
+      if (ifc.dhcp === 'yes' && ifc.useDhcpDnsServers === true) {
+        ifcObg.dnsServers = [];
+      }
+
+      if (majorVersion >= 6) {
+        ifcObg.bandwidthMbps = ifc.bandwidthMbps;
+      }
     }
 
     if (majorVersion > 5 || (majorVersion === 5 && minorVersion >= 3)) {
@@ -184,7 +191,8 @@ const transformBGP = async (device) => {
   const majorVersion = getMajorVersion(versions.agent);
   const minorVersion = getMinorVersion(versions.agent);
   const includeTunnelNeighbors = majorVersion === 5 && minorVersion === 3;
-  const sendCommunity = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+  const sendCommunityAndBestPath = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
+  const sendMultiHop = majorVersion > 6 || (majorVersion === 6 && minorVersion >= 3);
 
   const neighbors = bgp.neighbors.map(n => {
     const neighbor = {
@@ -197,8 +205,12 @@ const transformBGP = async (device) => {
       keepaliveInterval: bgp.keepaliveInterval
     };
 
-    if (sendCommunity) {
+    if (sendCommunityAndBestPath) {
       neighbor.sendCommunity = n.sendCommunity;
+    }
+
+    if (sendMultiHop) {
+      neighbor.multiHop = n.multiHop ? n.multiHop : 1; // 1 is the BGP default
     }
 
     return neighbor;
@@ -250,33 +262,87 @@ const transformBGP = async (device) => {
     });
   });
 
-  return {
+  const bgpConfig = {
     routerId: bgp.routerId,
     localAsn: bgp.localASN,
     neighbors: neighbors,
     redistributeOspf: bgp.redistributeOspf,
     networks: networks
   };
+
+  if (sendCommunityAndBestPath) {
+    bgpConfig.bestPathMultipathRelax = true;
+  }
+
+  return bgpConfig;
 };
 
 /**
  * Transform add-dhcp params
  * @param  {object} dhcp DHCP config
+ * @param  {string} deviceId device ID
+ * @param  {[object]} vrrpGroups list of vrrp group
  * @return {object} DHCP config
  */
-const transformDHCP = dhcp => {
+const transformDHCP = (dhcp, deviceId, vrrpGroups = []) => {
   const { rangeStart, rangeEnd, dns, macAssign } = dhcp;
-  return {
+  const options = dhcp.options ?? [];
+
+  let isRouterOptionConfigured = false;
+
+  const res = {
     interface: dhcp.interface,
     range_start: rangeStart,
     range_end: rangeEnd,
     dns: dns,
+    options: options.map(opt => {
+      const fields = pick(opt, [
+        'option', 'value'
+      ]);
+      // isc-dhcp requires this option to be a string.
+      // in case of first letter is number (value can be IP address)
+      // we adding and encoding the double quotes.
+      if (fields.option === 'tftp-server-name' && !Number.isNaN(fields.value[0])) {
+        fields.value = `\\"${fields.value}\\"`;
+      }
+
+      if (fields.option === 'routers') {
+        isRouterOptionConfigured = true;
+      }
+      return fields;
+    }),
     mac_assign: macAssign.map(mac => {
       return pick(mac, [
-        'host', 'mac', 'ipv4'
+        'host', 'mac', 'ipv4', 'useHostNameAsDhcpOption'
       ]);
     })
   };
+
+  if (dhcp?.defaultLeaseTime) {
+    res.defaultLeaseTime = dhcp.defaultLeaseTime;
+  }
+
+  if (dhcp?.maxLeaseTime) {
+    res.maxLeaseTime = dhcp.maxLeaseTime;
+  }
+
+  if (!isRouterOptionConfigured) {
+    const routers = new Set();
+    for (const vrrpGroup of vrrpGroups ?? []) {
+      for (const dev of vrrpGroup.devices) {
+        if (dev.device._id.toString() !== deviceId.toString()) {
+          continue;
+        }
+        routers.add(vrrpGroup.virtualIp);
+      }
+    }
+
+    if (routers.size > 0) {
+      res.options.push({ option: 'routers', value: Array.from(routers).join(',') });
+    }
+  }
+
+  return res;
 };
 
 const transformLte = lteInterface => {
@@ -287,6 +353,31 @@ const transformLte = lteInterface => {
   };
 };
 
+const transformVrrp = (device, vrrpGroup) => {
+  const params = {
+    virtualRouterId: vrrpGroup.virtualRouterId,
+    virtualIp: vrrpGroup.virtualIp,
+    preemption: vrrpGroup.preemption,
+    acceptMode: vrrpGroup.acceptMode
+  };
+
+  params.priority = device.priority;
+
+  // use it as objects and not strings of devId only since we
+  // may want to add "priority" field in the future.
+  params.trackInterfaces = [
+    ...(device.trackInterfacesOptional ?? []).map(t => {
+      return { devId: t, isMandatory: false };
+    }),
+    ...(device.trackInterfacesMandatory ?? []).map(t => {
+      return { devId: t, isMandatory: true };
+    })
+  ];
+  params.devId = device.interface;
+
+  return params;
+};
+
 module.exports = {
   transformInterfaces,
   transformRoutingFilters,
@@ -294,5 +385,6 @@ module.exports = {
   transformBGP,
   transformDHCP,
   transformVxlanConfig,
-  transformLte
+  transformLte,
+  transformVrrp
 };
