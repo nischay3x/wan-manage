@@ -30,7 +30,6 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('redisUrl')
 );
 const { getMajorVersion, getMinorVersion } = require('../versioning');
-const { devices } = require('../models/devices');
 
 class TunnelsService {
   /**
@@ -207,8 +206,8 @@ class TunnelsService {
         );
       }
       const tunnels = await Tunnels.find({ _id: { $in: tunnelsIdList }, org: orgId })
-        .populate('deviceA', '_id name machineId')
-        .populate('deviceB', '_id name machineId')
+        .populate('deviceA', '_id name machineId versions')
+        .populate('deviceB', '_id name machineId versions')
         .lean();
       if (tunnels.length !== tunnelsIdList.length) {
         return Service.rejectResponse(
@@ -260,62 +259,72 @@ class TunnelsService {
           }
         );
 
-        // check device version - less than 6.3 don't send the job
-        const deviceA = await devices.find({ _id: tunnel.deviceA });
-        const deviceB = await devices.find({ _id: tunnel.deviceB });
-        const majorVersionA = getMajorVersion(deviceA[0].versions.agent);
-        const majorVersionB = getMajorVersion(deviceB[0].versions.agent);
-        const minorVersionA = getMinorVersion(deviceA[0].versions.agent);
-        const minorVersionB = getMinorVersion(deviceB[0].versions.agent);
+        const majorVersionA = getMajorVersion(tunnel.deviceA.versions.agent);
+        const majorVersionB = getMajorVersion(tunnel.deviceB.versions.agent);
+        const minorVersionA = getMinorVersion(tunnel.deviceA.versions.agent);
+        const minorVersionB = getMinorVersion(tunnel.deviceB.versions.agent);
 
-        const isCustomNotificationsSupported = (majorVersionA > 6 && majorVersionB > 6) ||
-        ((majorVersionA === 6 && minorVersionA >= 3) &&
-         (majorVersionB === 6 && minorVersionB >= 3));
-        if (isCustomNotificationsSupported) {
-          const task = {
-            entity: 'agent',
-            message: 'modify-tunnel',
-            params: {
-              notificationsSettings: notificationsDict
-            }
-          };
-          task.params['tunnel-id'] = tunnel.num;
-          const data = {
-            method: 'notifications',
-            data: {
-              device: tunnel.deviceA._id,
-              org: orgId,
-              action: 'update-tunnel-notifications'
-            }
-          };
+        // TODO -  change to 6.3
+        const isDeviceAVersionSupported =
+        (majorVersionA > 6 || (majorVersionA === 6 && minorVersionA >= 2));
+        const isDeviceBVersionSupported =
+        (majorVersionB > 6 || (majorVersionB === 6 && minorVersionB >= 2));
+
+        if (isDeviceAVersionSupported) {
+          // Job logic for deviceA
           const jobA = await deviceQueues.addJob(
             tunnel.deviceA.machineId.toString(),
             user.username,
             orgId,
             {
               title: `Modify tunnel notifications settings on device ${tunnel.deviceA.name}`,
-              tasks: [task]
+              tasks: [{
+                entity: 'agent',
+                message: 'modify-tunnel',
+                params:
+              { notificationsSettings: notificationsDict, 'tunnel-id': tunnel.num }
+              }]
             },
-            data,
+            {
+              method: 'notifications',
+              data: {
+                device: tunnel.deviceA._id,
+                org: orgId,
+                action: 'update-tunnel-notifications'
+              }
+            },
             { priority: 'normal', attempts: 1, removeOnComplete: false },
             null
           );
           jobs.push(jobA);
-          if (!tunnel.peer) {
-            const jobB = await deviceQueues.addJob(
-              tunnel.deviceB.machineId.toString(),
-              user.username,
-              orgId,
-              {
-                title: `Modify tunnel notifications settings on device ${tunnel.deviceB.name}`,
-                tasks: [task]
-              },
-              data,
-              { priority: 'normal', attempts: 1, removeOnComplete: false },
-              null
-            );
-            jobs.push(jobB);
-          }
+        }
+
+        if (!tunnel.peer && isDeviceBVersionSupported) {
+          // Job logic for deviceB
+          const jobB = await deviceQueues.addJob(
+            tunnel.deviceB.machineId.toString(),
+            user.username,
+            orgId,
+            {
+              title: `Modify tunnel notifications settings on device ${tunnel.deviceB.name}`,
+              tasks: [{
+                entity: 'agent',
+                message: 'modify-tunnel',
+                params: { notificationsSettings: notificationsDict, 'tunnel-id': tunnel.num }
+              }]
+            },
+            {
+              method: 'notifications',
+              data: {
+                device: tunnel.deviceB._id,
+                org: orgId,
+                action: 'update-tunnel-notifications'
+              }
+            },
+            { priority: 'normal', attempts: 1, removeOnComplete: false },
+            null
+          );
+          jobs.push(jobB);
         }
       });
 
