@@ -485,7 +485,7 @@ class ApplicationsService {
      */
   static async appstorePurchasedIdActionPOST (request, { user }) {
     try {
-      const { id, applicationOperationReq, org } = request;
+      const { id, org, ...applicationOperationReq } = request;
       const { action, params } = applicationOperationReq;
 
       const orgList = await getAccessTokenOrgList(user, org, true);

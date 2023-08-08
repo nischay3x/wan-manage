@@ -521,9 +521,11 @@ class RemoteVpn extends IApplication {
   };
 
   async selectConfigurationParams (configuration) {
-    const keysExists = configuration.keys && 1; // "&& 1" to return a boolean, not the keys object.
+    const keysExist = configuration.keys && 1; // "&& 1" to return a boolean, not the keys object.
     const res = omit(configuration, secretFields);
-    res.keysExists = keysExists;
+    if (Object.keys(res).length > 0) { // do not return this field if configuration is empty
+      res.keysExist = keysExist;
+    }
     return res;
   };
 
