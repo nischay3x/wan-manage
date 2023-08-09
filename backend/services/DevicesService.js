@@ -983,7 +983,8 @@ class DevicesService {
             pinState: {},
             connectionState: null,
             registrationNetworkState: {},
-            state: null
+            state: null,
+            sim: {}
           },
           parseResponse: async response => {
             response = parseLteStatus(response);
