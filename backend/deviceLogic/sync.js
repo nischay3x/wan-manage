@@ -224,7 +224,7 @@ const setAutoSyncOff = (deviceId) => {
 
 const incAutoSyncTrials = (deviceId) => {
   return devices.updateOne(
-    { _id: deviceId, 'sync.trials': { $lt: 3 } },
+    { _id: deviceId, 'sync.trials': { $lt: 2 } },
     { $inc: { 'sync.trials': 1 } },
     { upsert: false }
   );

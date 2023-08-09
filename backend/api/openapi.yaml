@@ -12214,7 +12214,9 @@ components:
           type: object
           properties:
             cellId:
-              type: number
+              oneOf:
+              - type: string
+              - type: number
             operatorName:
               type: string
             mcc:
@@ -12253,6 +12255,13 @@ components:
             registerState:
               type: string
             networkError:
+              type: string
+        sim:
+          type: object
+          properties:
+            iccid:
+              type: string
+            imsi:
               type: string
     LteConfiguration:
       required:
