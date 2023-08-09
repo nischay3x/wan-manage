@@ -319,7 +319,7 @@ const interfacesSchema = new Schema({
     keyId: {
       type: String,
       validate: {
-        validator: validators.validateIsInteger,
+        validator: val => val === '' || validators.validateIsInteger(val),
         message: 'keyId should be an integer'
       }
     },
