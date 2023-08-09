@@ -801,7 +801,7 @@ const isIPv4Address = (ip, mask) => {
   if (!net.isIPv4(ip)) {
     return false;
   };
-  if (mask < 32) {
+  if (mask < 31) {
     const ipCidr = new IPCidr(`${ip}/${mask}`);
     if (ipCidr.start() === ip || ipCidr.end() === ip) {
       return false;
