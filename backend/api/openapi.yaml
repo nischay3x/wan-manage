@@ -10124,7 +10124,7 @@ components:
           type: object
           properties:
             keyId:
-              type: integer
+              type: string
               nullable: true
             key:
               type: string
