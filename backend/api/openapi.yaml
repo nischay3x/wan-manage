@@ -8499,9 +8499,76 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
-
-
-
+  /appstore/purchased/{id}/action:
+    post:
+      operationId: appstorePurchasedIdActionPOST
+      parameters:
+      - description: Purchased application id to operate on
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationOperationReq'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasedApplication'
+          x-content-type: application/json
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Perform application Operation
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
   /vrrp:
     get:
       operationId: vrrpGET
@@ -12408,6 +12475,16 @@ components:
       - op
       - val
       type: object
+    ApplicationOperationReq:
+      type: object
+      required:
+      - action
+      - params
+      properties:
+        action:
+          type: string
+        params:
+          type: object
     VrrpDeviceInterfacesResponse:
       type: object
       properties:
