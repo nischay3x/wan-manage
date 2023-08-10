@@ -21,6 +21,7 @@ const mongoose = require('mongoose');
 const Accounts = require('../models/accounts');
 const Devices = require('../models/devices');
 const Users = require('../models/users');
+const Vrrp = require('../models/vrrp');
 const Organizations = require('../models/organizations');
 const Tunnels = require('../models/tunnels');
 const TunnelIds = require('../models/tunnelids');
@@ -205,6 +206,7 @@ class OrganizationsService {
         await AccessTokens.deleteMany({ organization: id }, { session: session });
         await MultiLinkPolicies.deleteMany({ org: id }, { session: session });
         await PathLabels.deleteMany({ org: id }, { session: session });
+        await Vrrp.deleteMany({ org: id }, { session: session });
 
         // Find all devices for organization
         orgDevices = await Devices.devices.find({ org: id },
