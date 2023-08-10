@@ -1311,6 +1311,12 @@ class DevicesService {
           throw createError(400, 'All devices tunnels must be deleted before deleting devices');
         }
 
+        // remove vrrp that configured on these devices
+        await vrrp.updateMany(
+          { org: { $in: orgList } },
+          { $pull: { devices: { device: { $in: devIds } } } }
+        ).session(session);
+
         const deviceCount = await devices.countDocuments({
           account: delDevices[0].account
         }).session(session);
