@@ -335,13 +335,11 @@ const validateDevice = (
       };
     }
 
-    if (!isIPv4Address(ifc.IPv4, ifc.IPv4Mask) && ifc.dhcp !== 'yes' && ifc.type !== 'TRUNK') {
+    const validationResult = validateIPv4Address(ifc.IPv4, ifc.IPv4Mask);
+    if (!validationResult.valid && ifc.dhcp !== 'yes' && ifc.type !== 'TRUNK') {
       return {
         valid: false,
-        err: ifc.IPv4 && ifc.IPv4Mask
-          ? `Invalid IP address for ${ifc.name}: ${ifc.IPv4}/${ifc.IPv4Mask}`
-          : `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
-                      ? 'IPv4 mask' : 'IP address'}`
+        err: `[${ifc.name}]: ${validationResult.err}`
       };
     }
 
@@ -411,7 +409,7 @@ const validateDevice = (
   }
 
   // Assigned interfaces must not be on the same subnet
-  const assignedNotEmptyIfs = assignedIfs.filter(i => isIPv4Address(i.IPv4, i.IPv4Mask));
+  const assignedNotEmptyIfs = assignedIfs.filter(i => i.IPv4);
   for (const ifc1 of assignedNotEmptyIfs) {
     for (const ifc2 of assignedNotEmptyIfs.filter(i => i.devId !== ifc1.devId)) {
       const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
@@ -784,30 +782,54 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
     }
 
     const [ip, mask] = (ifc.addr || '/').split('/');
-    if (!isIPv4Address(ip, mask)) {
+    const validationResult = validateIPv4Address(ip, mask);
+    if (!validationResult.valid) {
       return {
         valid: false,
-        err: `Bad request: Invalid IP address ${ifc.addr}`
+        err: `Bad request: ${validationResult.err}`
       };
     }
   }
   return { valid: true, err: '' };
 };
 
-const isIPv4Address = (ip, mask) => {
-  if (!validateIPv4Mask(mask)) {
-    return false;
-  };
+const validateIPv4Address = (ip, mask) => {
+  if (!ip) {
+    return {
+      valid: false,
+      err: 'Interface does not have an IPv4 address'
+    };
+  }
+  if (!mask) {
+    return {
+      valid: false,
+      err: 'Interface does not have an IPv4 mask'
+    };
+  }
   if (!net.isIPv4(ip)) {
-    return false;
+    return {
+      valid: false,
+      err: `IPv4 address ${ip}/${mask} is not valid`
+    };
   };
-  if (mask < 32) {
+  if (!validateIPv4Mask(mask)) {
+    return {
+      valid: false,
+      err: `IPv4 mask ${ip}/${mask} is not valid`
+    };
+  };
+  if (mask < 31) {
+    // Based on RFC-3021, /31 point-to-point network doesn't use local and broadcast addresses
     const ipCidr = new IPCidr(`${ip}/${mask}`);
     if (ipCidr.start() === ip || ipCidr.end() === ip) {
-      return false;
+      return {
+        valid: false,
+        // eslint-disable-next-line max-len
+        err: `Local ${ipCidr.start()}/${mask} and Broadcast ${ipCidr.end()}/${mask} are invalid IPv4 addresses`
+      };
     }
   }
-  return true;
+  return { valid: true, err: '' };
 };
 
 /**
@@ -945,7 +967,7 @@ const validateQOSPolicy = (devices) => {
 };
 
 module.exports = {
-  isIPv4Address,
+  validateIPv4Address,
   validateDevice,
   validateDhcpConfig,
   validateStaticRoute,
