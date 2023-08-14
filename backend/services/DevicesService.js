@@ -1028,7 +1028,7 @@ class DevicesService {
 
       const message = supportedMessages[ifc.deviceType];
       if (!message) {
-        throw new Error('Unsupported request');
+        throw new Error('Interface is not LTE or WiFi');
       }
 
       if (!connections.isConnected(deviceObject.machineId)) {
