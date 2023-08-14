@@ -973,15 +973,15 @@ class DevicesService {
           message: 'get-lte-info',
           defaultResponse: {
             connectivity: false,
-            simStatus: null,
+            simStatus: '',
             signals: {},
             hardwareInfo: {},
             packetServiceState: {},
-            phoneNumber: null,
+            phoneNumber: '',
             systemInfo: {},
             defaultSettings: {},
             pinState: {},
-            connectionState: null,
+            connectionState: '',
             registrationNetworkState: {},
             state: null,
             sim: {}
@@ -1028,7 +1028,7 @@ class DevicesService {
 
       const message = supportedMessages[ifc.deviceType];
       if (!message) {
-        throw new Error('Interface is not LTE or WiFi');
+        throw new Error('Status request is supported for WiFi or LTE interfaces');
       }
 
       if (!connections.isConnected(deviceObject.machineId)) {
