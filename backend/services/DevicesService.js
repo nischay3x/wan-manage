@@ -952,7 +952,7 @@ class DevicesService {
     }
   }
 
-  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org }, { user }) {
+  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org, getCachedData }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
@@ -1011,7 +1011,8 @@ class DevicesService {
             deviceStatus.setDeviceLteStatus(deviceObject.machineId, ifc.devId, response);
             response = deviceStatus.getDeviceLteStatus(deviceObject.machineId, ifc.devId);
             return response;
-          }
+          },
+          getCached: () => deviceStatus.getDeviceLteStatus(deviceObject.machineId, ifc.devId)
         },
         wifi: {
           message: 'get-wifi-info',
@@ -1022,13 +1023,22 @@ class DevicesService {
           parseResponse: async response => {
             response = mapWifiNames(response);
             return response;
-          }
+          },
+          getCached: () => deviceStatus.getDeviceWifiStatus(deviceObject.machineId, ifc.devId)
         }
       };
 
       const message = supportedMessages[ifc.deviceType];
       if (!message) {
         throw new Error('Status request is supported for WiFi or LTE interfaces');
+      }
+
+      if (getCachedData === 'true' && message.getCached) {
+        return Service.successResponse({
+          error: null,
+          deviceStatus: 'unknown',
+          status: message.getCached()
+        });
       }
 
       if (!connections.isConnected(deviceObject.machineId)) {

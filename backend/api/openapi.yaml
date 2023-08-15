@@ -3467,6 +3467,12 @@ paths:
         required: false
         schema:
           type: string
+      - description: Indicator if need to take data from the device
+        in: query
+        name: getCachedData
+        required: false
+        schema:
+          type: boolean
       responses:
         "200":
           content:
