@@ -1391,21 +1391,17 @@ const apply = async (device, user, data) => {
 
   // Send QoS policy job only when interfaces specific policy modified
   // as installing a default QoS will set policy on every WAN interface
-  const affectingParameters = ['devId', 'isAssigned', 'type', 'qosPolicy'];
+  const qosAffectingParameters = ({ devId, isAssigned, type, qosPolicy }) => ({
+    devId, isAssigned, type, qosPolicyId: qosPolicy._id
+  });
   const qosApplied = i => i.isAssigned && i.type === 'WAN' && i.qosPolicy;
 
-  const qosDiff = xorWith(
-    data.newDevice.interfaces.filter(qosApplied),
-    device[0].interfaces.filter(qosApplied),
-    (origIfc, newIfc) => {
-      return isEqual(
-        pick(origIfc, affectingParameters),
-        pick(newIfc, affectingParameters)
-      );
-    }
+  const qosModified = !isEqual(
+    data.newDevice.interfaces.filter(qosApplied).map(qosAffectingParameters),
+    device[0].interfaces.filter(qosApplied).map(qosAffectingParameters)
   );
 
-  if (qosDiff.length > 0) {
+  if (qosModified) {
     modifyParams.modify_qos = await getDevicesQOSJobInfo(updDevice.toObject());
   }
 
