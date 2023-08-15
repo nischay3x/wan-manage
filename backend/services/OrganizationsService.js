@@ -22,6 +22,10 @@ const Accounts = require('../models/accounts');
 const Devices = require('../models/devices');
 const Users = require('../models/users');
 const Vrrp = require('../models/vrrp');
+const Peers = require('../models/peers');
+const FirewallPolicies = require('../models/firewallPolicies');
+const { appIdentifications, importedAppIdentifications } = require('../models/appIdentifications');
+const Applications = require('../models/applications');
 const Organizations = require('../models/organizations');
 const Tunnels = require('../models/tunnels');
 const TunnelIds = require('../models/tunnelids');
@@ -207,6 +211,12 @@ class OrganizationsService {
         await MultiLinkPolicies.deleteMany({ org: id }, { session: session });
         await PathLabels.deleteMany({ org: id }, { session: session });
         await Vrrp.deleteMany({ org: id }, { session: session });
+        await Peers.deleteMany({ org: id }, { session: session });
+        await Applications.deleteMany({ org: id }, { session: session });
+        await QosPolicies.deleteMany({ org: id }, { session: session });
+        await FirewallPolicies.deleteMany({ org: id }, { session: session });
+        await appIdentifications.deleteMany({ 'meta.org': id }, { session: session });
+        await importedAppIdentifications.deleteMany({ 'meta.org': id }, { session: session });
 
         // Find all devices for organization
         orgDevices = await Devices.devices.find({ org: id },
