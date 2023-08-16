@@ -44,7 +44,6 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const has = require('lodash/has');
 const omit = require('lodash/omit');
 const differenceWith = require('lodash/differenceWith');
-const xorWith = require('lodash/xorWith');
 const pullAllWith = require('lodash/pullAllWith');
 const omitBy = require('lodash/omitBy');
 const isEqual = require('lodash/isEqual');
