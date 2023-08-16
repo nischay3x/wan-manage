@@ -179,9 +179,11 @@ const getTunnelsPipeline = (orgList, filters, detailed = true) => {
       isActive: 1,
       peer: 1,
       'deviceA._id': 1,
+      'deviceA.machineId': 1,
       'deviceA.isConnected': 1,
       'deviceA.status': 1,
       'deviceB._id': 1,
+      'deviceB.machineId': 1,
       'deviceB.isConnected': 1,
       'deviceB.status': 1,
       deviceAconf: 1,
@@ -229,14 +231,12 @@ const getTunnelsPipeline = (orgList, filters, detailed = true) => {
   };
   if (detailed) {
     project.$project['deviceA.name'] = 1;
-    project.$project['deviceA.machineId'] = 1;
     project.$project['deviceA.hostname'] = 1;
     project.$project['deviceA.versions'] = 1;
     project.$project['deviceA.sync'] = 1;
     project.$project['deviceA.staticroutes'] = 1;
 
     project.$project['deviceB.name'] = 1;
-    project.$project['deviceB.machineId'] = 1;
     project.$project['deviceB.hostname'] = 1;
     project.$project['deviceB.versions'] = 1;
     project.$project['deviceB.sync'] = 1;

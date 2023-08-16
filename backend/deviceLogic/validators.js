@@ -381,7 +381,7 @@ const validateDevice = (
       }
 
       // DHCP client is not allowed on LAN interface
-      if (ifc.dhcp === 'yes' && device.dhcp.find(d => d.interface === ifc.devId)) {
+      if (ifc.dhcp === 'yes' && device.dhcp?.find(d => d.interface === ifc.devId)) {
         return {
           valid: false,
           err: `Configure DHCP server on interface ${ifc.name} is not allowed \
