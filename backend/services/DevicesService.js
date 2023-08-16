@@ -74,6 +74,7 @@ const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
 const { getAgentBroker } = require('../utils/httpUtils');
 const Joi = require('joi');
+const { getStartEndIp } = require('../utils/networks');
 
 class DevicesService {
   /**
@@ -3220,6 +3221,18 @@ class DevicesService {
       // eslint-disable-next-line max-len
       throw new Error('DHCP Server Range End IP address is not on the same subnet with interface IP');
     }
+
+    const [start, end] = getStartEndIp(interfaceObj.IPv4, interfaceObj.IPv4Mask);
+    if (dhcpRequest.rangeStart === start || dhcpRequest.rangeStart === end) {
+      // eslint-disable-next-line max-len
+      throw new Error('DHCP Server Range Start IP address cannot be Network or Broadcast IP');
+    }
+
+    if (dhcpRequest.rangeEnd === start || dhcpRequest.rangeEnd === end) {
+      // eslint-disable-next-line max-len
+      throw new Error('DHCP Server Range End IP address cannot be Network or Broadcast IP');
+    }
+
     // check that DHCP range End address IP is greater than Start IP address
     const ip2int = IP => IP.split('.')
       .reduce((res, val, idx) => res + (+val) * 256 ** (3 - idx), 0);

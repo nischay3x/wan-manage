@@ -26,7 +26,7 @@ const { devices } = require('../../models/devices');
 const diffieHellmans = require('../../models/diffieHellmans');
 const { validateFQDN } = require('../../models/validators');
 const configs = require('../../configs')();
-const { getRangeAndMask, getStartIp } = require('../../utils/networks');
+const { getRangeAndMask, getStartEndIp } = require('../../utils/networks');
 const { getMajorVersion, getMinorVersion } = require('../../versioning');
 
 const {
@@ -124,7 +124,7 @@ class RemoteVpn extends IApplication {
     // vpn requires minimum of 8
     const num = Math.max(deviceConfiguration.connectionsNumber, 8);
     const { range, mask } = getRangeAndMask(num);
-    const deviceStartIp = getStartIp(startIp, mask, range * idx);
+    const [deviceStartIp] = getStartEndIp(startIp, mask, range * idx);
     const subnet = `${deviceStartIp}/${mask}`;
 
     return { subnet, connections: deviceConfiguration.connectionsNumber };
@@ -199,7 +199,7 @@ class RemoteVpn extends IApplication {
     const num = Math.max(deviceConfiguration.connectionsNumber, 8);
     const { range, mask } = getRangeAndMask(num);
     const vpnServerNetworks = deviceList.map((dev, idx) => {
-      const deviceStartIp = getStartIp(startIp, mask, range * idx);
+      const [deviceStartIp] = getStartEndIp(startIp, mask, range * idx);
       return `${deviceStartIp}/${mask}`;
     });
 
