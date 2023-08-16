@@ -1960,7 +1960,7 @@ class DevicesService {
             }
 
             for (const t of incompleteTunnels) {
-              const { ip1, ip2 } = generateTunnelParams(t.num);
+              const { ip1, ip2 } = generateTunnelParams(t.num, origDevice.org.tunnelRange);
               if (ip1 === s.gateway || ip2 === s.gateway) {
                 s.isPending = true;
                 s.pendingType = pendingTypes.tunnelIsPending;
@@ -2754,6 +2754,7 @@ class DevicesService {
         .populate('deviceB', 'name interfaces machineId')
         .populate('pathlabel')
         .populate('peer')
+        .populate('org', 'tunnelRange')
         .lean();
 
       const tunnelMap = tunnels.map((d) => {

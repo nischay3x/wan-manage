@@ -23,6 +23,7 @@ const { getBridges, getCpuInfo } = require('../utils/deviceUtils');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const keyBy = require('lodash/keyBy');
 const { isEqual } = require('lodash');
+const configs = require('../configs')();
 const maxMetric = 2 * 10 ** 9;
 
 /**
@@ -565,11 +566,12 @@ const validateDevice = (
         continue;
       }
 
-      if (cidr.overlap(subnet, '10.100.0.0/16')) {
+      if (cidr.overlap(subnet, `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`)) {
         return {
           valid: false,
           err:
-          `The subnet ${subnet} overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)`
+          `The subnet ${subnet} overlaps with the flexiWAN tunnel loopback range ` +
+          `(${org.tunnelRange}/${configs.get('tunnelRangeMask')})`
         };
       }
     }
@@ -704,11 +706,13 @@ const validateDevice = (
     }
 
     const neighborIp = bgpNeighbor.ip + '/32';
-    if (cidr.overlap(neighborIp, '10.100.0.0/16')) {
+    if (cidr.overlap(neighborIp, `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`)) {
       return {
         valid: false,
-        err: `The BGP Neighbor ${bgpNeighbor.ip} ` +
-        'overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)'
+        err:
+          `The BGP Neighbor ${bgpNeighbor.ip} ` +
+          'overlaps with the flexiWAN tunnel loopback range ' +
+          `(${org.tunnelRange}/${configs.get('tunnelRangeMask')})`
       };
     }
 
@@ -817,7 +821,7 @@ const isIPv4Address = (ip, mask) => {
  * @param {Object} route - the added/modified route
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateStaticRoute = (device, tunnels, route) => {
+const validateStaticRoute = async (device, tunnels, route) => {
   const { ifname, gateway, isPending, redistributeViaBGP, onLink } = route;
   const gatewaySubnet = `${gateway}/32`;
 
@@ -866,6 +870,7 @@ const validateStaticRoute = (device, tunnels, route) => {
     }
 
     // Don't allow putting static route on a bridged interface
+    await device.populate('org', 'tunnelRange');
     const anotherBridgedIfc = device.interfaces.some(i => {
       return i.devId !== ifc.devId && ifc.IPv4 && i.IPv4 === ifc.IPv4 && i.isAssigned;
     });
@@ -881,7 +886,7 @@ const validateStaticRoute = (device, tunnels, route) => {
     );
     if (!valid) {
       valid = tunnels.some(tunnel => {
-        const { ip1 } = generateTunnelParams(tunnel.num);
+        const { ip1 } = generateTunnelParams(tunnel.num, device.org.tunnelRange);
         return cidr.overlap(`${ip1}/31`, gatewaySubnet);
       });
     }

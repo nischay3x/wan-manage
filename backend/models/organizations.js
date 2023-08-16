@@ -71,6 +71,15 @@ const OrgSchema = new Schema({
       validator: validators.validateVxlanPort,
       message: 'vxlanPort should be a valid Port value'
     }
+  },
+  tunnelRange: {
+    type: String,
+    default: '10.100.0.0',
+    required: true,
+    validate: {
+      validator: validators.validateIPaddr,
+      message: 'tunnelRange must be a valid IP address'
+    }
   }
 });
 

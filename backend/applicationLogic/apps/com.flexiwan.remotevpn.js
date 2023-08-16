@@ -232,13 +232,14 @@ class RemoteVpn extends IApplication {
     }
 
     // Prevent setting LAN network that overlaps the network we are using for tunnels.
+    const org = await organizations.findOne({ _id: app.org }).lean();
     for (const vpnServerNetwork of vpnServerNetworks) {
-      if (cidr.overlap(vpnServerNetwork, '10.100.0.0/16')) {
+      if (cidr.overlap(vpnServerNetwork, `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`)) {
         return {
           valid: false,
-          err:
-          `The subnet ${vpnServerNetwork} overlaps
-          with the flexiWAN tunnel loopback range (10.100.0.0/16)`
+          err: `The subnet ${vpnServerNetwork} overlaps
+          with the flexiWAN tunnel loopback range ` +
+          `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`
         };
       }
     }

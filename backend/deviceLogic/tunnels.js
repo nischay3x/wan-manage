@@ -42,6 +42,7 @@ const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
 const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
 const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
 const { transformBGP } = require('./jobParameters');
+const organizations = require('../models/organizations');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -1473,7 +1474,8 @@ const delTunnel = async (tunnel, user, org, updateOps) => {
   const { _id, isPending, num, deviceA, deviceB, peer } = tunnel;
 
   // Check is tunnel used by any static route
-  const { ip1, ip2 } = generateTunnelParams(num);
+  const organization = await organizations.findOne({ _id: org }).lean();
+  const { ip1, ip2 } = generateTunnelParams(num, organization.tunnelRange);
   const tunnelUsedByStaticRoute =
     (Array.isArray(deviceA.staticroutes) &&
     deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
@@ -1808,7 +1810,7 @@ const prepareTunnelParams = (
   const minorVersionB = peer ? null : getMinorVersion(deviceB?.versions.agent);
 
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
-  const tunnelParams = generateTunnelParams(tunnel.num);
+  const tunnelParams = generateTunnelParams(tunnel.num, org.tunnelRange);
 
   // no additional header for not encrypted tunnels
   const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
@@ -2197,7 +2199,8 @@ const getInterfacesWithPathLabels = device => {
  * @return {[{object}]} array of devices with config
 */
 const getTunnelConfigDependencies = async (tunnel, isPending) => {
-  const { ip1, ip2 } = generateTunnelParams(tunnel.num);
+  const org = await organizations.findOne({ _id: tunnel.org }).lean();
+  const { ip1, ip2 } = generateTunnelParams(tunnel.num, org.tunnelRange);
 
   const staticRouteArrayFilters = {
     $and: [{

@@ -215,6 +215,8 @@ const configEnv = {
     ticketingSystemUrl: '',
     // Ticketing system account ID to view
     ticketingSystemAccountId: '',
+    // IP mask for tunnel Range
+    tunnelRangeMask: '16',
     /****************************************************/
     /*         Client Fields                            */
     /****************************************************/

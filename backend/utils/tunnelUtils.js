@@ -24,6 +24,7 @@ const { getMatchFilters } = require('../utils/filterUtils');
  * Generates various tunnel parameters that will
  * be used for creating the tunnel.
  * @param  {number} tunnelNum tunnel id
+ * @param  {string} tunnelRange organization tunnel range
  * @return
  * {{
         ip1: string,
@@ -34,13 +35,17 @@ const { getMatchFilters } = require('../utils/filterUtils');
         sa2: number
     }}
  */
-const generateTunnelParams = (tunnelNum) => {
+const generateTunnelParams = (tunnelNum, tunnelRange) => {
   const d2h = (d) => (('00' + (+d).toString(16)).substr(-2));
 
   const h = (tunnelNum % 127 + 1) * 2;
   const l = Math.floor(tunnelNum / 127);
-  const ip1 = '10.100.' + (+l).toString(10) + '.' + (+h).toString(10);
-  const ip2 = '10.100.' + (+l).toString(10) + '.' + (+(h + 1)).toString(10);
+
+  const splitIp = tunnelRange.split('.');
+  const ipStart = `${splitIp[0]}.${splitIp[1]}.`;
+
+  const ip1 = ipStart + (+l).toString(10) + '.' + (+h).toString(10);
+  const ip2 = ipStart + (+l).toString(10) + '.' + (+(h + 1)).toString(10);
   const mac1 = '02:00:27:fd:' + d2h(l) + ':' + d2h(h);
   const mac2 = '02:00:27:fd:' + d2h(l) + ':' + d2h(h + 1);
   const sa1 = (l * 256 + h);
@@ -216,6 +221,7 @@ const getTunnelsPipeline = (orgList, filters) => {
       pendingReason: 1,
       'org._id': 1,
       'org.vxlanPort': 1,
+      'org.tunnelRange': 1,
       tunnelStatus: {
         $switch: {
           branches: [
