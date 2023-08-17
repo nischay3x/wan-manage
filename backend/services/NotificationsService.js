@@ -31,6 +31,7 @@ const Organizations = require('../models/organizations');
 const users = require('../models/users');
 const { ObjectId } = require('mongodb');
 const { apply } = require('../deviceLogic/deviceNotifications');
+const keyBy = require('lodash/keyBy');
 
 class NotificationsService {
   /**
@@ -60,11 +61,13 @@ class NotificationsService {
             title: 1,
             details: 1,
             targets: 1,
+            agentAlertsInfo: 1,
             status: 1,
             severity: 1,
             count: 1,
             emailSent: 1,
-            resolved: 1
+            resolved: 1,
+            org: 1
           }
         }
       ] : [];
@@ -76,9 +79,10 @@ class NotificationsService {
           // if there is a 'device.*' filter we need another query, $lookup will not work
           // because 'devices' and 'notifications' are in different databases
           const [deviceFilters, notificationFilters] = matchFilters.reduce((res, filter) => {
+            // TODO handle filter by interface name
             for (const key in filter) {
-              if (key.startsWith('device.')) {
-                res[0].push({ [key.replace('device.', '')]: filter[key] });
+              if (key.startsWith('targets.deviceId')) {
+                res[0].push({ [key.replace('targets.deviceId.', '')]: filter[key] });
               } else {
                 res[1].push(filter);
               }
@@ -91,7 +95,9 @@ class NotificationsService {
                 org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
               }]
             }, { name: 1 });
-            notificationFilters.push({ device: { $in: devicesArray.map(d => d._id) } });
+            notificationFilters.push({
+              'targets.deviceId': { $in: devicesArray.map(d => d._id) }
+            });
           };
           if (notificationFilters.length > 0) {
             pipeline.push({
@@ -137,10 +143,11 @@ class NotificationsService {
         if (!devicesArray) {
           // there was no 'device.*' filter
           devicesArray = await devices.find({
-            _id: { $in: notifications[0].records.map(n => n.device) }
+            _id: { $in: notifications[0].records.map(n => n.targets.deviceId) }
           }, { name: 1 });
         }
       };
+      const devicesByDeviceId = keyBy(devicesArray, '_id');
       const result = (op === 'count')
         ? notifications.map(element => {
           return {
@@ -149,10 +156,24 @@ class NotificationsService {
           };
         })
         : notifications[0].records.map(element => {
+          const device = devicesByDeviceId[element.targets.deviceId];
+          let interfaceObj = null;
+          if (element.targets.interfaceId) {
+            const ifc = device?.interfaces?.find(ifc => String(ifc._id) === String(element.targets.interfaceId));
+            interfaceObj = {
+              _id: element.targets.interfaceId,
+              name: ifc?.name
+            };
+          }
+          const deviceObj = {
+            _id: element.targets.deviceId,
+            name: device?.name
+          };
           return {
             ...element,
             _id: element._id.toString(),
-            time: element.time.toISOString()
+            time: element.time.toISOString(),
+            targets: { ...element.targets, deviceId: deviceObj, interfaceId: interfaceObj }
           };
         });
 
@@ -376,9 +397,9 @@ class NotificationsService {
   /**
    * Modify the notifications settings of a given organization/account/group
    **/
-  static async notificationsConfPUT ({ notificationsConfPut }, { user }) {
+  // TODO add validations for the values like in the UI
+  static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules, setAsDefault = false }, { user }) {
     try {
-      const { org: orgId, account, group, rules: newRules, setAsDefault = false } = notificationsConfPut;
       const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
       if (orgIds && orgIds.error) {
         return orgIds;
@@ -421,6 +442,7 @@ class NotificationsService {
         }
       }
       return Service.successResponse({
+        error: '',
         code: 200,
         message: 'Success',
         data: 'updated successfully'
@@ -436,7 +458,7 @@ class NotificationsService {
   /**
    * Get account/system default notifications settings
    **/
-  static async notificationsDefaultConfGET ({ account = null }, { user }) {
+  static async notificationsConfDefaultGET ({ account = null }, { user }) {
     try {
       let response;
       if (account) {
@@ -463,7 +485,7 @@ class NotificationsService {
     }
   }
 
-  static async emailNotificationsGET ({ org, account, group }, { user }) {
+  static async notificationsConfEmailsGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
       if (orgIds.error) return orgIds;
@@ -531,9 +553,8 @@ class NotificationsService {
     }
   }
 
-  static async emailNotificationsPUT ({ emailNotificationsConfPut }, { user }) {
+  static async notificationsConfEmailsPUT ({ org, account, group, emailsSigning }, { user }) {
     try {
-      const { org, account, group, emailsSigning } = emailNotificationsConfPut;
       const orgIds = await NotificationsService.validateParams(org, account, group, user);
       if (orgIds.error) {
         return orgIds;
@@ -603,6 +624,7 @@ class NotificationsService {
         }
       }
       return Service.successResponse({
+        error: '',
         code: 200,
         message: 'Success',
         data: 'updated successfully'
@@ -615,7 +637,7 @@ class NotificationsService {
     }
   }
 
-  static async webhookSettingsGET ({ org, account, group }, { user }) {
+  static async notificationsConfWebhookGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
       if (orgIds.error) {
@@ -647,12 +669,40 @@ class NotificationsService {
     }
   }
 
-  static async webhookSettingsPUT ({ webhookSettingsPut }, { user }) {
+  static validateWebhookURL (webhookURL) {
+    if (!webhookURL || webhookURL.trim() === '') {
+      return Service.rejectResponse('Webhook URL cannot be empty', 400);
+    }
+
+    if (!webhookURL.startsWith('https://')) {
+      return Service.rejectResponse('Webhook URL must start with "https://', 400);
+    }
+
     try {
-      const { org: orgId, account, group, webHookSettings, setAsDefault = false } = webhookSettingsPut;
+      Boolean(new URL(webhookURL));
+    } catch (_) {
+      return Service.rejectResponse('Invalid Webhook URL', 400);
+    }
+
+    if (webhookURL.length > 100) {
+      return Service.rejectResponse('Webhook URL is too long', 400);
+    }
+
+    return null;
+  };
+
+  static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings, setAsDefault = false }, { user }) {
+    try {
       const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
       if (orgIds && orgIds.error) {
         return orgIds;
+      }
+
+      const webhookURL = webHookSettings && webHookSettings.webhookURL;
+      const webhookValidationError = NotificationsService.validateWebhookURL(webhookURL);
+
+      if (webhookValidationError) {
+        return webhookValidationError;
       }
       for (const org of orgIds) {
         const updateData = { $set: {} };

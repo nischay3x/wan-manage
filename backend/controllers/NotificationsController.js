@@ -30,16 +30,16 @@ class NotificationsController {
     await Controller.handleRequest(request, response, this.service.notificationsConfGET);
   }
 
-  async emailNotificationsGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.emailNotificationsGET);
+  async notificationsConfEmailsGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfEmailsGET);
   }
 
-  async emailNotificationsPUT (request, response) {
-    await Controller.handleRequest(request, response, this.service.emailNotificationsPUT);
+  async notificationsConfEmailsPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfEmailsPUT);
   }
 
-  async notificationsDefaultConfGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.notificationsDefaultConfGET);
+  async notificationsConfDefaultGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfDefaultGET);
   }
 
   async notificationsIdPUT (request, response) {
@@ -58,12 +58,12 @@ class NotificationsController {
     await Controller.handleRequest(request, response, this.service.notificationsDELETE);
   }
 
-  async webhookSettingsGET (request, response) {
-    await Controller.handleRequest(request, response, this.service.webhookSettingsGET);
+  async notificationsConfWebhookGET (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfWebhookGET);
   }
 
-  async webhookSettingsPUT (request, response) {
-    await Controller.handleRequest(request, response, this.service.webhookSettingsPUT);
+  async notificationsConfWebhookPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfWebhookPUT);
   }
 }
 module.exports = NotificationsController;

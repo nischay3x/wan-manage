@@ -4602,7 +4602,7 @@ paths:
       x-openapi-router-service: NotificationsService
   /notifications-conf/emails:
     get:
-      operationId: emailNotificationsGET
+      operationId: notificationsConfEmailsGET
       parameters:
       - description: Organization to be filtered by
         explode: true
@@ -4675,7 +4675,7 @@ paths:
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
     put:
-      operationId: emailNotificationsPUT
+      operationId: notificationsConfEmailsPUT
       requestBody:
         content:
           application/json:
@@ -4727,7 +4727,7 @@ paths:
       x-openapi-router-service: NotificationsService
   /notifications-conf/webhooks:
     get:
-      operationId: webhookSettingsGET
+      operationId: notificationsConfWebhookGET
       parameters:
       - description: Organization to be filtered by
         explode: true
@@ -4792,14 +4792,14 @@ paths:
       security:
       - bearerAuth: []
       - apiKey: []
-      summary: Get the Notification emails configuration
+      summary: Get the Notifications webhook configuration
       tags:
       - Notifications
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
     put:
-      operationId: webhookSettingsPUT
+      operationId: notificationsConfWebhookPUT
       requestBody:
         content:
           application/json:
@@ -4847,7 +4847,7 @@ paths:
       security:
       - bearerAuth: []
       - apiKey: []
-      summary: Get the Notification emails configuration
+      summary: Modify the Notifications webhook configuration
       tags:
       - Notifications
       x-swagger-router-controller: Notifications
@@ -4855,7 +4855,7 @@ paths:
       x-openapi-router-service: NotificationsService
   /notifications-conf/default:
     get:
-      operationId: notificationsDefaultConfGET
+      operationId: notificationsConfDefaultGET
       parameters:
       - description:  Account to be filtered by
         explode: true
@@ -10108,175 +10108,25 @@ components:
           type: object
           properties:
             'Device connection':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Running router':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Link/Tunnel round trip time':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Link/Tunnel default drop rate':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Device memory usage':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Hard drive usage':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Temperature':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Policy change':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Software update':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Internet connection':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
-                thresholdUnit:
-                  type: string
-                severity:
-                  type: string
-                immediateEmail:
-                  type: boolean
-                resolvedAlert:
-                  type: boolean
-                type:
-                  type: string
+              $ref: '#/components/schemas/notificationSettingsSchema'
       type: object
     NotificationsDeleteRequest:
       properties:
@@ -11791,19 +11641,9 @@ components:
           type: object
           properties:
             'Link/Tunnel round trip time':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
+              $ref: '#/components/schemas/tunnelNotificationsSchema'
             'Link/Tunnel default drop rate':
-              type: object
-              properties:
-                warningThreshold:
-                  type: number
-                criticalThreshold:
-                  type: number
+              $ref: '#/components/schemas/tunnelNotificationsSchema'
       type: object
     StaticRouteRequest:
       example:
@@ -13351,6 +13191,30 @@ components:
                 type: string
           type: array
       type: object
+    notificationSettingsSchema:
+      type: object
+      properties:
+        warningThreshold:
+          type: number
+        criticalThreshold:
+          type: number
+        thresholdUnit:
+          type: string
+        severity:
+          type: string
+        immediateEmail:
+          type: boolean
+        resolvedAlert:
+          type: boolean
+        type:
+          type: string
+    tunnelNotificationsSchema:
+      type: object
+      properties:
+        warningThreshold:
+          type: number
+        criticalThreshold:
+          type: number
   securitySchemes:
     apiKey:
       in: header
