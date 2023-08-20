@@ -116,7 +116,9 @@ class ApplicationsUpdateManager {
                 interfaceId: null,
                 policyId: null
               },
-              resolved: true
+              eventType: 'Software update',
+              resolved: true,
+              isAlwaysResolved: true
             });
           });
 
@@ -156,7 +158,7 @@ class ApplicationsUpdateManager {
         }
       }
 
-      notificationsMgr.sendNotifications(notifications);
+      await notificationsMgr.sendNotifications(notifications);
     }
   }
 

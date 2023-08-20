@@ -29,7 +29,6 @@ const mailer = require('../utils/mailer')(
   configs.get('mailerPort'),
   configs.get('mailerBypassCert', 'boolean')
 );
-const notificationsConf = require('../models/notificationsConf');
 
 const dummyVersionObject = {
   versions: {
@@ -90,7 +89,7 @@ class SwVersionUpdateManager {
     try {
       // Generate notification for each organization.
       // Group all devices not running the latest version
-      // by the organizations the belong to.
+      // by the organizations they belong to.
       const orgDevicesList = await devices.aggregate([
         { $match: { 'versions.device': { $ne: versions.device } } },
         {
@@ -103,9 +102,8 @@ class SwVersionUpdateManager {
         }
       ]);
 
-      orgDevicesList.forEach(async orgDevices => {
-        const orgNotificationsConf = await notificationsConf.findOne({ org: orgDevices.id });
-        orgDevices.devices.forEach(device => {
+      for (const orgDevices of orgDevicesList) {
+        for (const device of orgDevices.devices) {
           const deviceInfo = connections.getDeviceInfo(device._id);
           notifications.push({
             org: orgDevices._id,
@@ -118,12 +116,12 @@ class SwVersionUpdateManager {
               policyId: null
             },
             eventType: 'Software update',
-            orgNotificationsConf,
-            resolved: true
+            resolved: true,
+            isAlwaysResolved: true
           });
-        });
-      });
-      notificationsMgr.sendNotifications(notifications);
+        }
+      }
+      await notificationsMgr.sendNotifications(notifications);
     } catch (err) {
       logger.error('Failed to send upgrade notifications', {
         params: { notifications: notifications },
