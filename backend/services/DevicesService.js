@@ -632,14 +632,21 @@ class DevicesService {
         // add pending notifications count for the summary request
         const pendingNotificationsArr = await notificationsModel.aggregate([
           {
+            $unwind: '$targets'
+          },
+          {
             $match: {
               status: 'unread',
-              device: { $in: paginated[0].records.map(d => mongoose.Types.ObjectId(d._id)) }
+              'targets.deviceId': {
+                $in: paginated[0].records.map(d => mongoose.Types.ObjectId(d._id)),
+                $exists: true,
+                $ne: null
+              }
             }
           },
           {
             $group: {
-              _id: '$device',
+              _id: '$targets.deviceId',
               count: { $sum: 1 }
             }
           },

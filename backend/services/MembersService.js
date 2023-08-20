@@ -35,6 +35,7 @@ const Organizations = require('../models/organizations');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
 const NotificationsConf = require('../models/notificationsConf');
+const users = require('../models/users');
 
 class MembersService {
   /**
@@ -451,8 +452,9 @@ class MembersService {
           "Couldn't find membership data in your account", 400);
       }
 
+      const userToDeleteId = membershipData.user;
       // Don't allow to delete self
-      if (user._id.toString() === membershipData.user.toString()) {
+      if (user._id.toString() === userToDeleteId.toString()) {
         return Service.rejectResponse('User cannot delete itself', 400);
       }
 
@@ -483,7 +485,7 @@ class MembersService {
       // Otherwise, set both the account and org to null,
       //   this will not allow the user to make operations or login
       const userAccountPipeline = [
-        { $match: { user: membershipData.user } },
+        { $match: { user: userToDeleteId } },
         {
           $group: {
             _id: '$account',
@@ -498,15 +500,15 @@ class MembersService {
       if (curAccountUserCount.count > 1) {
         // user has other permissions for this account, keep it and set org to null
         // This will find another organization on next request
-        await Users.updateOne({ _id: membershipData.user }, { defaultOrg: null });
+        await Users.updateOne({ _id: userToDeleteId }, { defaultOrg: null });
       } else if (userAccounts.length > 1) {
         // user has permission ot other account, switch to it
         const otherUserAccount = userAccounts.find((m) => !m._id.equals(membershipData.account));
-        await Users.updateOne({ _id: membershipData.user },
+        await Users.updateOne({ _id: userToDeleteId },
           { defaultAccount: otherUserAccount._id, defaultOrg: null });
       } else {
         // No account found for the user, reset both account and organization
-        await Users.updateOne({ _id: membershipData.user },
+        await Users.updateOne({ _id: userToDeleteId },
           { defaultAccount: null, defaultOrg: null });
       }
 
@@ -516,27 +518,28 @@ class MembersService {
         account: user.defaultAccount._id
       });
 
-      const userId = membershipData.user;
-      const userOrgList = await getUserOrganizations(membershipData.user);
-      const userOrgsIds = Object.values(userOrgList).map(org => org.id);
+      const userToDelete = await users.findOne({ _id: userToDeleteId });
+      const userOrgList = await getUserOrganizations(userToDelete);
+      const userOrgsIds = Object.keys(userOrgList);
       // Stop receiving email notifications from previous organizations
       await NotificationsConf.updateMany(
         {
           $or: [
-            { signedToCritical: userId },
-            { signedToWarning: userId },
-            { signedToDaily: userId }
+            { signedToCritical: userToDeleteId },
+            { signedToWarning: userToDeleteId },
+            { signedToDaily: userToDeleteId }
           ],
           org: { $nin: userOrgsIds }
         },
         {
           $pull: {
-            signedToCritical: userId,
-            signedToWarning: userId,
-            signedToDaily: userId
+            signedToCritical: userToDeleteId,
+            signedToWarning: userToDeleteId,
+            signedToDaily: userToDeleteId
           }
         }
       );
+
       return Service.successResponse(null, 204);
     } catch (e) {
       return Service.rejectResponse(
@@ -782,13 +785,16 @@ class MembersService {
 
     const account = await Accounts.find({ _id: user.defaultAccount._id }).populate('organizations');
     const orgList = await getUserOrganizations(user);
+    const orgListValues = Object.values(orgList);
+    const orgIds = new Set(orgListValues.map(org => org.id));
     const uniques = {};
+
     account[0].organizations.forEach((org) => {
-      if (Object.values(orgList).find(o => o.id === org.id)) {
-        uniques[type === 'organization' ? org._id : org[optionField]] =
-          org[optionField];
+      if (orgIds.has(org.id)) {
+        uniques[type === 'organization' ? org._id : org[optionField]] = org[optionField];
       }
     });
+
     const result = Object.keys(uniques).map((key) => {
       return {
         id: key,
