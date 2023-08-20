@@ -1,4 +1,3 @@
-/* eslint-disable max-len */
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
 // Copyright (C) 2019-2021  flexiWAN Ltd.
@@ -17,18 +16,22 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const configs = require('../configs')();
-const { validateDevice } = require('./validators');
-const { getAllOrganizationSubnets } = require('../utils/orgUtils');
 const notificationsConf = require('../models/notificationsConf');
 const { devices } = require('../models/devices');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
-const mongoose = require('mongoose');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
-const deviceNotificationTypes = ['Device memory usage', 'Hard drive usage', 'Link/Tunnel round trip time', 'Link/Tunnel default drop rate', 'Temperature'];
+const deviceNotificationTypes = new Set([
+  'Device memory usage',
+  'Hard drive usage',
+  'Link/Tunnel round trip time',
+  'Link/Tunnel default drop rate',
+  'Temperature'
+]);
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+const { transformNotificationsSettings } = require('../deviceLogic/jobParameters');
 
 /**
  * Creates and queues the set-notifications-config job.
@@ -37,36 +40,32 @@ const { getMajorVersion, getMinorVersion } = require('../versioning');
  * @param  {Object}   user      User object
  * @param  {Object}   data      Additional data used by caller includes the orgId and the rules
  * @param  {Object}   org       The organization Id
- * @param  {Object}   rules     object in which: keys= notification event name, values = notification settings
+ * @param  {Object}   rules     object in which: keys= notification name, values = settings
  * @return {None}
  */
 
-// TODO change to 6.3
 const isCustomNotificationsSupported = (device) => {
   const majorVersion = getMajorVersion(device.versions.agent);
   const minorVersion = getMinorVersion(device.versions.agent);
-  return (majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2));
+  return (majorVersion > 6 || (majorVersion === 6 && minorVersion >= 3));
 };
 
 const apply = async (devicesList, user, data) => {
   const { org: orgId, rules } = data;
-  const filteredRules = Object.keys(rules)
-    .filter(event => deviceNotificationTypes.includes(event))
-    .reduce((obj, key) => {
-      obj[key] = rules[key];
-      return obj;
-    }, {});
-  const opDevices = await Promise.all(devicesList.map(d => d.populate('policies.firewall.policy', '_id name rules')
-    .populate('interfaces.pathlabels', '_id name description color type')
-    .execPopulate()
-  ));
+  const filteredRules = transformNotificationsSettings(rules, deviceNotificationTypes);
+
+  const opDevices = await Promise.all(
+    devicesList.map(d => d.populate('policies.firewall.policy', '_id name rules')
+      .populate('interfaces.pathlabels', '_id name description color type')
+      .execPopulate()
+    ));
   const errors = [];
-  let orgSubnets = [];
-  if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-    orgSubnets = await getAllOrganizationSubnets(mongoose.Types.ObjectId(orgId));
-  }
   const applyPromises = [];
-  const tasks = [{ entity: 'agent', message: 'add-notifications-config', params: { org: orgId, rules: filteredRules } }];
+  const tasks = [{
+    entity: 'agent',
+    message: 'add-notifications-config',
+    params: { org: orgId, rules: filteredRules }
+  }];
   for (const device of opDevices) {
     const supportNotifications = isCustomNotificationsSupported(device);
     if (!supportNotifications) {
@@ -78,15 +77,6 @@ const apply = async (devicesList, user, data) => {
       const { machineId } = device;
       logger.info('Set device notifications:', { params: { machineId, user, data } });
 
-      const { valid, err } = validateDevice(device.toObject(), true, orgSubnets);
-      if (!valid) {
-        logger.warn("Set device notifications command's validation failed",
-          { params: { device, err } });
-        if (!errors.includes(err)) {
-          errors.push(err);
-        }
-        continue;
-      }
       applyPromises.push(deviceQueues
         .addJob(
           machineId,
@@ -148,15 +138,17 @@ const sync = async (deviceId) => {
     const supportNotifications = isCustomNotificationsSupported(device);
     if (supportNotifications) {
       const orgId = device.org;
-      const getDeviceNotificationsConf = await notificationsConf.findOne({ org: orgId.toString() });
-      const deviceNotificationsConf = getDeviceNotificationsConf.rules;
-      const filteredRules = Object.keys(deviceNotificationsConf)
-        .filter(event => deviceNotificationTypes.includes(event))
-        .reduce((obj, key) => {
-          obj[key] = deviceNotificationsConf[key];
-          return obj;
-        }, {});
-      request.push({ entity: 'agent', message: 'add-notifications-config', params: { org: orgId, rules: filteredRules } });
+      const getOrgNotificationsConfig = await notificationsConf.findOne({ org: orgId.toString() });
+      const orgNotificationsConfig = getOrgNotificationsConfig.rules;
+      const filteredRules = transformNotificationsSettings(
+        orgNotificationsConfig,
+        deviceNotificationTypes
+      );
+      request.push({
+        entity: 'agent',
+        message: 'add-notifications-config',
+        params: { org: orgId, rules: filteredRules }
+      });
       completeCbData.push({ orgId, deviceId, op: 'notifications' });
       callComplete = true;
     }
