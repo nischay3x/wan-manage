@@ -84,15 +84,6 @@ const systemNotificationsConf = {
     resolvedAlert: false,
     type: 'device'
   },
-  'Policy change': {
-    warningThreshold: null,
-    criticalThreshold: null,
-    thresholdUnit: null,
-    severity: 'warning',
-    immediateEmail: false,
-    resolvedAlert: null,
-    type: 'policy'
-  },
   'Software update': {
     warningThreshold: null,
     criticalThreshold: null,
@@ -164,29 +155,26 @@ const systemNotificationsConf = {
     immediateEmail: false,
     resolvedAlert: null,
     type: 'device'
-  },
-  'Synced device': {
-    warningThreshold: null,
-    criticalThreshold: null,
-    thresholdUnit: null,
-    severity: 'critical',
-    immediateEmail: false,
-    resolvedAlert: false,
-    type: 'device'
   }
 };
 
 async function up () {
   try {
     // Create default Notifications settings (system default)
-    await notificationConfModel.create([{
-      name: 'Default notifications settings',
-      rules: systemNotificationsConf
-    }]);
+    await notificationConfModel.updateOne(
+      { name: 'Default notifications settings' },
+      {
+        $set: {
+          name: 'Default notifications settings',
+          rules: systemNotificationsConf
+        }
+      },
+      { upsert: true }
+    );
 
     // Create default notification settings to any existing organization
     const organizations = await Organizations.find();
-    organizations.forEach(async organization => {
+    for (const organization of organizations) {
       const orgExists = await notificationConfModel.findOne({ org: organization._id });
       if (!orgExists) {
         const ownerMembership = await membership.find({
@@ -207,7 +195,7 @@ async function up () {
           webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
         });
       }
-    });
+    }
   } catch (err) {
     logger.error('Database migration failed', {
       params: { collections: ['notifications'], operation: 'up', err: err.message }
