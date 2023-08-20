@@ -52,8 +52,6 @@ const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const deviceNotificationsSync = require('./deviceNotifications').sync;
 const AsyncLock = require('async-lock');
 const lock = new AsyncLock({ maxOccupationTime: 60000 });
-const notificationsMgr = require('../notifications/notifications')();
-const notificationsConf = require('../models/notificationsConf');
 
 // Create an object of all sync handlers
 const syncHandlers = {
@@ -192,7 +190,7 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
   });
 };
 
-const updateSyncState = (org, deviceId, state) => {
+const updateSyncState = async (org, deviceId, state) => {
   // When moving to "synced" state we have to
   // also reset auto sync state and trials
   const set =
@@ -429,8 +427,9 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       params: { state, newState, hash, deviceHash, autoSync, trials }
     });
 
+    const isStateChanged = state !== newState;
     // Update the device sync state if it has changed
-    if (state !== newState) {
+    if (isStateChanged) {
       await updateSyncState(org, deviceId, newState);
       logger.info('Device sync state updated', {
         params: {
@@ -442,39 +441,10 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
         }
       });
     }
-
-    // If the device is synced, we have nothing to do anyway.
-    // If the device is not-synced, we need to notify the user and he has to first resync
+    // TODO Notify the user about the new state of the device
+    // If the device is not-synced, the user has to first resync
     // the device manually
     if (['synced', 'not-synced'].includes(newState)) {
-      const orgNotificationsConf = await notificationsConf.findOne({ org });
-      const sendResolvedAlert = orgNotificationsConf.rules['Synced device'].resolvedAlert;
-      if (newState === 'not-synced' && trials < 3) {
-        return;
-      } else {
-        const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
-          eventType: 'Synced device',
-          deviceId: deviceId,
-          markAsResolved: newState === 'synced'
-        });
-        if ((existingAlert && newState === 'synced' && sendResolvedAlert) ||
-        (!existingAlert && newState === 'not-synced')) {
-          notificationsMgr.sendNotifications({
-            org: org,
-            title: 'Device sync state change',
-            details: `The device ${hostname} is now ${newState}`,
-            eventType: 'Synced device',
-            targets: {
-              deviceId,
-              tunnelId: null,
-              interfaceId: null,
-              policyId: null
-            },
-            orgNotificationsConf: orgNotificationsConf,
-            resolved: newState === 'synced'
-          });
-        }
-      }
       return;
     }
 

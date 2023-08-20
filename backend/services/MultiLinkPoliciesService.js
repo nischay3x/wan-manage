@@ -327,23 +327,23 @@ class MultiLinkPoliciesService {
 
       const converted = JSON.parse(JSON.stringify(populated));
       // send a notification
-      const orgNotificationsConf = await notificationsConf.findOne({ org: orgList[0] });
-      notificationsMgr.sendNotifications([
-        {
-          org: orgList[0],
-          title: 'Multi link policy change',
-          details: `The policy ${name} has been changed`,
-          eventType: 'Policy change',
-          targets: {
-            deviceId: null,
-            tunnelId: null,
-            interfaceId: null,
-            policyId: id
-          },
-          orgNotificationsConf: orgNotificationsConf,
-          resolved: true
-        }
-      ]);
+      // TODO - uncomment after handling the policies ref issue
+      // await notificationsMgr.sendNotifications([
+      //   {
+      //     org: orgList[0],
+      //     title: 'Multi link policy change',
+      //     details: `The policy ${name} has been changed`,
+      //     eventType: 'Policy change',
+      //     targets: {
+      //       deviceId: null,
+      //       tunnelId: null,
+      //       interfaceId: null,
+      //       policyId: id
+      //     },
+      //     resolved: true,
+      //     isAlwaysResolved: true
+      //   }
+      // ]);
       return Service.successResponse({ ...converted, ...applied });
     } catch (e) {
       return Service.rejectResponse(

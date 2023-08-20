@@ -31,14 +31,13 @@ const targetsSchema = new Schema({
   },
   interfaceId: {
     type: Schema.Types.ObjectId,
-    ref: 'interfaces',
-    required: false
-  },
-  policyId: {
-    type: Schema.Types.ObjectId,
-    ref: 'policies',
+    ref: 'devices',
     required: false
   }
+  // policyId: {
+  //   type: Schema.Types.ObjectId,
+  //   required: false
+  // }
 });
 
 const alertInfoSchema = new Schema({
@@ -106,7 +105,6 @@ const notificationsSchema = new Schema({
       'Device memory usage',
       'Hard drive usage',
       'Temperature',
-      'Policy change',
       'Software update',
       'Internet connection',
       'Link status',
@@ -114,8 +112,7 @@ const notificationsSchema = new Schema({
       'Pending tunnel',
       'Tunnel connection',
       'Failed self-healing',
-      'Static route state',
-      'Synced device'
+      'Static route state'
     ]
   },
   resolved:

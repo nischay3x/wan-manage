@@ -24,8 +24,6 @@ const { devices } = require('../models/devices');
 const { ObjectId } = require('mongoose').Types;
 const { applyPolicy } = require('../deviceLogic/qosPolicy');
 const { getFullTrafficMap, apply: applyTrafficMap } = require('../deviceLogic/qosTrafficMap');
-const notificationsConf = require('../models/notificationsConf');
-const notificationsMgr = require('../notifications/notifications')();
 
 class QOSPoliciesService {
   static async verifyRequestSchema (qosPolicyRequest, org) {
@@ -298,23 +296,23 @@ class QOSPoliciesService {
       qosPolicy._id = qosPolicy._id.toString();
       const applied = await applyPolicy(opDevices, qosPolicy, 'install', user, orgList[0], true);
       // send a notification
-      const orgNotificationsConf = await notificationsConf.findOne({ org: orgList[0] });
-      notificationsMgr.sendNotifications([
-        {
-          org: orgList[0],
-          title: 'QOS policy change',
-          details: `The policy ${name} has been changed`,
-          eventType: 'Policy change',
-          targets: {
-            deviceId: null,
-            tunnelId: null,
-            interfaceId: null,
-            policyId: id
-          },
-          orgNotificationsConf: orgNotificationsConf,
-          resolved: true
-        }
-      ]);
+      // TODO - uncomment after handling the policies ref issue
+      // await notificationsMgr.sendNotifications([
+      //   {
+      //     org: orgList[0],
+      //     title: 'QOS policy change',
+      //     details: `The policy ${name} has been changed`,
+      //     eventType: 'Policy change',
+      //     targets: {
+      //       deviceId: null,
+      //       tunnelId: null,
+      //       interfaceId: null,
+      //       policyId: id
+      //     },
+      //     resolved: true,
+      //     isAlwaysResolved: true
+      //   }
+      // ]);
       return Service.successResponse({ ...qosPolicy, ...applied });
     } catch (e) {
       return Service.rejectResponse(
