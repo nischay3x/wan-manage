@@ -1,6 +1,6 @@
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
-// Copyright (C) 2019  flexiWAN Ltd.
+// Copyright (C) 2023  flexiWAN Ltd.
 
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as
@@ -63,7 +63,6 @@ const notificationsConfSchema = new Schema({
     'Device memory usage': ruleSchema,
     'Hard drive usage': ruleSchema,
     Temperature: ruleSchema,
-    'Policy change': ruleSchema,
     'Software update': ruleSchema,
     'Internet connection': ruleSchema,
     'Link status': ruleSchema,
@@ -71,8 +70,7 @@ const notificationsConfSchema = new Schema({
     'Tunnel connection': ruleSchema,
     'Pending tunnel': ruleSchema,
     'Failed self-healing': ruleSchema,
-    'Static route state': ruleSchema,
-    'Synced device': ruleSchema
+    'Static route state': ruleSchema
   },
   signedToCritical:
   [
@@ -86,7 +84,11 @@ const notificationsConfSchema = new Schema({
   [
     { type: mongoose.Schema.Types.ObjectId, ref: 'users' }
   ],
-  webHookSettings: webHookSchema
+  webHookSettings: webHookSchema,
+  isEnabled: {
+    type: Boolean,
+    default: true
+  }
 });
 
 notificationsConfSchema.index({ org: 1 }, { unique: true, sparse: true });
