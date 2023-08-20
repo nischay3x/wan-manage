@@ -31,6 +31,7 @@ const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 const AsyncLock = require('async-lock');
 const lock = new AsyncLock({ maxOccupationTime: 30000, timeout: 20000 });
+const tunnels = require('../models/tunnels');
 
 /***
  * This class gets periodic status from all connected devices
@@ -189,50 +190,51 @@ class DeviceStatus {
   }
 
   async handleAlert (
-    deviceID, deviceInfo, alertKey, orgNotificationsConf, lastUpdateEntry, tunnelNum = null) {
+    deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelNum = null) {
     let { severity, value, unit, threshold } = tunnelNum
       ? lastUpdateEntry.alerts[alertKey][tunnelNum]
       : lastUpdateEntry.alerts[alertKey];
     try {
       const { org, name, deviceObj: deviceId } = deviceInfo;
-      const condition = {
-        org: org,
-        eventType: alertKey,
-        severity: severity,
-        markAsResolved: false
-      };
-      if (tunnelNum) {
-        condition.tunnelId = tunnelNum;
-      } else {
-        condition.deviceId = deviceId;
-      }
-      const existingAlert = await notificationsMgr.resolveOrIncreaseCount(condition);
-      if (!existingAlert) {
-        // create a new alert
-        value = value.toFixed(2);
-        this.events.push({
-          org,
-          title: alertKey + ' change',
-          details: `The value of the ${alertKey} in ${tunnelNum ? `tunnel ${tunnelNum}`
+      // create a new alert
+      value = value.toFixed(2);
+      this.events.push({
+        org,
+        title: alertKey,
+        details: `The value of the ${alertKey} in ${tunnelNum ? `tunnel ${tunnelNum}`
               : `device ${name}`} has increased to ${value}${unit}`,
-          eventType: alertKey,
-          targets: {
-            deviceId: deviceId,
-            tunnelId: tunnelNum || null,
-            interfaceId: null,
-            policyId: null
-          },
-          severity: severity,
-          orgNotificationsConf: orgNotificationsConf,
-          agentAlertsInfo: { value: value, threshold: threshold, unit: unit }
-        });
-      }
+        eventType: alertKey,
+        targets: {
+          deviceId: deviceId,
+          tunnelId: tunnelNum || null,
+          interfaceId: null,
+          policyId: null
+        },
+        severity: severity,
+        agentAlertsInfo: { value: value, threshold: threshold, unit: unit }
+      });
     } catch (err) {
-      logger.warn('Failed to handle device alert', {
+      logger.error(`Failed to add the "${alertKey}" alert for
+       ${tunnelNum ? 'tunnel ' + tunnelNum : 'device ' + deviceInfo.name}`
+      , {
         params: { deviceID: deviceID, err: err.message },
         periodic: { task: this.taskInfo }
       });
     }
+  }
+
+  getThresholdInfo (alerts, alertKey, notificationsConfRules, org, tunnelId = null) {
+    const thresholdType = alerts[alertKey].severity === 'warning'
+      ? 'warningThreshold' : 'criticalThreshold';
+    const thresholdValue = tunnelId
+      ? (tunnels.findOne(
+        { num: tunnelId, org }, { fields: { notificationsSettings: 1 } }
+      )?.notificationsSettings?.[thresholdType] ?? notificationsConfRules[alertKey][thresholdType])
+      : notificationsConfRules[alertKey][thresholdType];
+
+    const thresholdUnit = notificationsConfRules[alertKey].thresholdUnit;
+
+    return { thresholdValue, thresholdUnit };
   }
 
   async handleResolvedAlerts (
@@ -254,71 +256,53 @@ class DeviceStatus {
           for (const tunnelId in alerts[alertKey]) {
             if (!(lastUpdateEntry.alerts[alertKey]) ||
              !(tunnelId in lastUpdateEntry.alerts[alertKey])) {
-              let resolvedAlertDeviceId;
-              const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
-                eventType: alertKey,
-                tunnelId,
-                severity: alerts[alertKey][tunnelId].severity,
+              const { thresholdValue, thresholdUnit } =
+              this.getThresholdInfo(alerts, alertKey, notificationsConfRules, org, tunnelId);
+
+              this.events.push({
                 org,
-                markAsResolved: true
+                title: `[resolved] ${alertKey}`,
+                details: `The value of the ${alertKey} in tunnel ${tunnelId}
+                 has returned to normal (under ${thresholdValue}${thresholdUnit})`,
+                eventType: alertKey,
+                targets: {
+                  deviceId,
+                  tunnelId,
+                  interfaceId: null,
+                  policyId: null
+                },
+                severity: alerts[alertKey][tunnelId].severity,
+                resolved: true,
+                agentAlertsInfo: { threshold: thresholdValue, unit: thresholdUnit }
               });
-              if (existingAlert) {
-                resolvedAlertDeviceId = existingAlert.targets.deviceId;
-              }
-              if (existingAlert && resolvedAlertDeviceId !== deviceId &&
-              notificationsConfRules[alertKey].resolvedAlert) {
-                this.events.push({
-                  org,
-                  title: `${alertKey} change`,
-                  details: `The value of the ${alertKey} in tunnel ${tunnelId} has returned 
-                    to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
-                      notificationsConfRules[alertKey].thresholdUnit})`,
-                  eventType: alertKey,
-                  targets: {
-                    deviceId,
-                    tunnelId,
-                    interfaceId: null,
-                    policyId: null
-                  },
-                  severity: alerts[alertKey][tunnelId].severity,
-                  orgNotificationsConf: orgNotificationsConf,
-                  resolved: true
-                });
-              }
             }
           }
         // a device kind of alert
         } else {
-          const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
-            deviceId,
-            eventType: alertKey,
-            severity: alerts[alertKey].severity,
-            markAsResolved: true
-          });
-          if (existingAlert && notificationsConfRules[alertKey].resolvedAlert) {
-            this.events.push({
-              org,
-              title: `${alertKey} change`,
-              details: `The value of the ${alertKey} in device 
+          const { thresholdValue, thresholdUnit } =
+          this.getThresholdInfo(alerts, alertKey, notificationsConfRules, org);
+          this.events.push({
+            org,
+            title: `[resolved] ${alertKey}`,
+            details: `The value of the ${alertKey} in device
                 ${name} has returned
                 to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
                   deviceInfo.alerts[alertKey].unit})`,
-              eventType: alertKey,
-              targets: {
-                deviceId,
-                tunnelId: null,
-                interfaceId: null,
-                policyId: null
-              },
-              severity: alerts[alertKey].severity,
-              orgNotificationsConf: orgNotificationsConf,
-              resolved: true
-            });
-          }
+            eventType: alertKey,
+            targets: {
+              deviceId,
+              tunnelId: null,
+              interfaceId: null,
+              policyId: null
+            },
+            severity: alerts[alertKey].severity,
+            resolved: true,
+            agentAlertsInfo: { threshold: thresholdValue, unit: thresholdUnit }
+          });
         }
       }
     } catch (error) {
-      logger.warn('Failed to resolve alert', {
+      logger.error(`Failed to resolve alert for device ${deviceInfo.name}`, {
         params: { deviceID: deviceID, err: error.message },
         periodic: { task: this.taskInfo }
       });
@@ -331,11 +315,11 @@ class DeviceStatus {
       if (alertKey.toLowerCase().includes('tunnel')) {
         for (const tunnelId in lastUpdateEntry.alerts[alertKey]) {
           await this.handleAlert(
-            deviceID, deviceInfo, alertKey, orgNotificationsConf, lastUpdateEntry, tunnelId);
+            deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelId);
         }
       } else {
         await this.handleAlert(
-          deviceID, deviceInfo, alertKey, orgNotificationsConf, lastUpdateEntry);
+          deviceID, deviceInfo, alertKey, lastUpdateEntry);
       }
     }
     // handle resolved alerts if needed (exist in the memory but not in the current alerts)
@@ -403,6 +387,7 @@ class DeviceStatus {
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
+            // Use lock to prevent duplicated alerts for the same tunnel from different devices
             lock.acquire(
               'notifications',
               async () => {
@@ -662,34 +647,22 @@ class DeviceStatus {
       });
       return;
     }
-    const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
     const { org, deviceObj: deviceId, name } = deviceInfo;
-    const sendResolvedAlert = orgNotificationsConf.rules['Running router'].resolvedAlert;
     if (!this.status[machineId] || newState !== this.status[machineId].state) {
-      const existingNotification = await notificationsMgr.resolveOrIncreaseCount({
-        eventType: 'Running router',
-        deviceId: deviceId,
+      this.events.push({
         org: org,
-        markAsResolved: newState === 'running'
-      });
-      if ((newState === 'running' && existingNotification && sendResolvedAlert) ||
-        (newState === 'not running' && !existingNotification)) {
-        this.events.push({
-          org: org,
-          title: 'Router state change',
-          details: `Router state changed to running
+        title: '[resolved] Router state change',
+        details: `Router state changed to running
                  in the device ${name}`,
-          eventType: 'Running router',
-          targets: {
-            deviceId: deviceId,
-            tunnelId: null,
-            interfaceId: null,
-            policyId: null
-          },
-          orgNotificationsConf: orgNotificationsConf,
-          resolved: newState === 'running'
-        });
-      }
+        eventType: 'Running router',
+        targets: {
+          deviceId: deviceId,
+          tunnelId: null,
+          interfaceId: null,
+          policyId: null
+        },
+        resolved: newState === 'running'
+      });
       this.setDevicesStatusByOrg(org, deviceId, newState);
     }
     this.setDeviceStatsField(machineId, 'state', newState);
@@ -881,33 +854,21 @@ class DeviceStatus {
             tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
         ) {
           notificationsConf.find({ org: org }).then(async (res) => {
-            const orgNotificationsConf = res[0];
-            const sendResolvedAlert = orgNotificationsConf.rules['Tunnel connection'].resolvedAlert;
-            const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
-              eventType: 'Tunnel connection',
-              tunnelId: tunnelID,
-              deviceId,
+            this.events.push({
               org: org,
-              markAsResolved: tunnelState.status === 'up'
-            });
-            if ((tunnelState.status === 'down' && !existingAlert) ||
-            (tunnelState.status === 'up' && existingAlert && sendResolvedAlert)) {
-              this.events.push({
-                org: org,
-                title: 'Tunnel state change',
-                details: `Tunnel ${tunnelID} state changed to 
+              title: tunnelState.status === 'up' ? '[resolved] Tunnel state change'
+                : 'Tunnel state change',
+              details: `Tunnel ${tunnelID} state changed to 
                 ${tunnelState.status === 'down' ? 'Not connected' : 'Connected'}`,
-                targets: {
-                  deviceId,
-                  tunnelId: tunnelID,
-                  interfaceId: null,
-                  policyId: null
-                },
-                eventType: 'Tunnel connection',
-                orgNotificationsConf,
-                resolved: tunnelState.status === 'up'
-              });
-            }
+              targets: {
+                deviceId,
+                tunnelId: tunnelID,
+                interfaceId: null,
+                policyId: null
+              },
+              eventType: 'Tunnel connection',
+              resolved: tunnelState.status === 'up'
+            });
           });
         }
       });

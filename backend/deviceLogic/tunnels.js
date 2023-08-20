@@ -63,7 +63,7 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {String}   topology topology of created tunnels (hubAndSpoke|fullMesh)
  * @param  {Number}   hubIdx index of the hub in 'Hub and Spoke' topology
  * @param  {set}      reasons reference to Set of reasons
- * @param  {Dictionary}   notificationsSettings a dictionary of notification settings
+ * @param  {Dictionary}   notificationsSettings an object of notification settings
  * @return {array}    A promises array of tunnels creations
  */
 const handleTunnels = async (
@@ -1852,7 +1852,7 @@ const prepareTunnelParams = (
   const paramsDeviceB = {};
 
   // add tunnel notifications settings for both devices
-  if (tunnel.notificationsSettings) {
+  if (tunnel?.notificationsSettings && Object.keys(tunnel.notificationsSettings).length > 0) {
     paramsDeviceA.notificationsSettings = tunnel.notificationsSettings;
     paramsDeviceB.notificationsSettings = tunnel.notificationsSettings;
   }

@@ -162,7 +162,6 @@ const tunnelSchema = new Schema({
     type: tunnelAdvancedOptionsSchema,
     default: null
   },
-  // notificationsSettings: [notificationsSchema],
   notificationsSettings: {
     type: Map,
     of: notificationsSchema,

@@ -67,7 +67,6 @@ const sequenceExpireTime = configs.get('sequenceExpireTime') ?? 300; // seconds
 // the device will be considered as disconnected on expiration of this key
 const connectDevicePrefix = configs.get('connectDevicePrefix') ?? 'fw-conn';
 const connectExpireTime = configs.get('connectExpireTime') ?? 300; // seconds
-const notificationsConf = require('../models/notificationsConf');
 
 class Connections {
   constructor () {
@@ -122,7 +121,7 @@ class Connections {
       this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
     };
     this.devices = new Devices({ publishInfoHandler });
-    this.unresponsiveDevices = {};
+    this.disconnectedDevices = {};
     // Ping each client every 30 sec, with two retries
     this.ping_interval = setInterval(this.pingCheck, 20000);
     // Check every 1 min if a device disconnection alert is needed
@@ -580,42 +579,25 @@ class Connections {
     // Only after getting the device's response and updating
     // the information, the device can be considered ready.
     this.sendDeviceInfoMsg(machineId, deviceInfo.deviceObj, deviceInfo.org, true);
-    let resolvedAlert;
     (async () => {
+      delete this.disconnectedDevices[machineId];
       const { org, name, deviceObj } = deviceInfo;
-      const orgNotificationsConf = await notificationsConf.findOne({ org: org });
-      resolvedAlert = orgNotificationsConf.rules['Device connection'].resolvedAlert;
-      const existingDisconnectionAlert = await notificationsMgr.resolveOrIncreaseCount({
-        eventType: 'Device connection',
-        deviceId: deviceObj,
-        markAsResolved: true
-      });
-      delete this.unresponsiveDevices[machineId];
-      if (existingDisconnectionAlert && resolvedAlert) {
-        await notificationsMgr.sendNotifications([
-          {
-            org: deviceInfo.org,
-            title: 'Device connection change',
-            details: `Device ${name} reconnected to management`,
-            eventType: 'Device connection',
-            targets: {
-              deviceId: deviceObj,
-              tunnelId: null,
-              interfaceId: null,
-              policyId: null
-            },
-            orgNotificationsConf,
-            resolved: true
-          }
-        ]);
-      }
-    })().catch(error => {
-      logger.error('Error during the DB operations', {
-        params: {
-          err: error.message
+      await notificationsMgr.sendNotifications([
+        {
+          org: org,
+          title: '[resolved] Device connection',
+          details: `Device ${name} reconnected to management`,
+          eventType: 'Device connection',
+          targets: {
+            deviceId: deviceObj,
+            tunnelId: null,
+            interfaceId: null,
+            policyId: null
+          },
+          resolved: true
         }
-      });
-    });
+      ]);
+    })();
   }
 
   /**
@@ -725,35 +707,22 @@ class Connections {
             (updatedConfig.link === 'down' && i.linkStatus !== 'down');
             // send a notification if the link's status has been changed
             if (linkStatusChanged) {
-              const orgNotificationsConf = await notificationsConf.findOne({ org: org });
-              const sendResolvedAlert = orgNotificationsConf?.rules['Link status']?.resolvedAlert;
               const resolved = updatedConfig.link === 'up' && i.linkStatus !== 'up';
-              const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+              logger.info(`Link status changed to ${updatedConfig.link}`,
+                { params: { interface: i } });
+              await notificationsMgr.sendNotifications([{
+                org: org,
+                title: resolved ? '[resolved] Link status change' : 'Link status change',
+                details: `Link ${i.name} ${i.IPv4} is ${(updatedConfig.link).toUpperCase()}`,
                 eventType: 'Link status',
-                deviceId: deviceId,
-                interfaceId: i._id,
-                markAsResolved: resolved
-              });
-              const alertCondition = (existingAlert && resolved && sendResolvedAlert) ||
-              (!existingAlert && !resolved);
-              if (alertCondition) {
-                logger.info(`Link status changed to ${updatedConfig.link}`,
-                  { params: { interface: i } });
-                await notificationsMgr.sendNotifications([{
-                  org: org,
-                  title: 'Link status changed',
-                  details: `Link ${i.name} ${i.IPv4} is ${(updatedConfig.link).toUpperCase()}`,
-                  eventType: 'Link status',
-                  targets: {
-                    deviceId: deviceId,
-                    tunnelId: null,
-                    interfaceId: i._id,
-                    policyId: null
-                  },
-                  orgNotificationsConf,
-                  resolved
-                }]);
-              }
+                targets: {
+                  deviceId: deviceId,
+                  tunnelId: null,
+                  interfaceId: i._id,
+                  policyId: null
+                },
+                resolved
+              }]);
             }
           }
 
@@ -900,7 +869,6 @@ class Connections {
           const { allowed, blockedNow } = await reconfigErrorsLimiter.use(deviceId);
           if (!allowed && blockedNow) {
             logger.error('Reconfig errors rate-limit exceeded', { params: { deviceId } });
-            const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
             await notificationsMgr.sendNotifications([{
               org: origDevice.org,
               title: 'Unsuccessful self-healing operations',
@@ -911,8 +879,7 @@ class Connections {
                 interfaceId: null,
                 policyId: null
               },
-              details: 'Unsuccessful updating device data. Please contact flexiWAN support',
-              orgNotificationsConf
+              details: 'Unsuccessful updating device data. Please contact flexiWAN support'
             }]);
           }
 
@@ -1170,43 +1137,32 @@ class Connections {
    * This function periodically checks and alerts if a device has remained disconnected for
    * a specified duration.
   */
-  triggerAlertWhenNeeded () {
-    if (!Object.keys(this.unresponsiveDevices).length) {
+  async triggerAlertWhenNeeded () {
+    if (!Object.keys(this.disconnectedDevices).length) {
       return;
     }
     const currentTime = new Date().getTime();
-    Object.entries(this.unresponsiveDevices).forEach(([device, deviceInfo]) => {
-      if (currentTime - deviceInfo.timeFirstUnresponsive >= configs.get('timeoutDuration')) {
-        let orgNotificationsConf;
-        notificationsConf.findOne({ org: deviceInfo.org }).then(async (res) => {
-          orgNotificationsConf = res;
-          const { org, deviceObj, name } = deviceInfo;
-          const existingAlert = await notificationsMgr.resolveOrIncreaseCount({
+    for (const [device, deviceInfo] of Object.entries(this.disconnectedDevices)) {
+      if (currentTime - deviceInfo.timeFirstUnresponsive >=
+        configs.get('deviceDisconnectionAlertTimeout')) {
+        const { org, deviceObj, name } = deviceInfo;
+        await notificationsMgr.sendNotifications([
+          {
+            org: org,
+            title: 'Device disconnection',
+            details: `Device ${name} disconnected from management`,
             eventType: 'Device connection',
-            deviceId: deviceObj,
-            markAsResolved: false
-          });
-          if (!existingAlert) {
-            notificationsMgr.sendNotifications([
-              {
-                org: org,
-                title: 'Device connection change',
-                details: `Device ${name} disconnected from management`,
-                eventType: 'Device connection',
-                targets: {
-                  deviceId: deviceObj,
-                  tunnelId: null,
-                  interfaceId: null,
-                  policyId: null
-                },
-                orgNotificationsConf
-              }
-            ]);
+            targets: {
+              deviceId: deviceObj,
+              tunnelId: null,
+              interfaceId: null,
+              policyId: null
+            }
           }
-          delete this.unresponsiveDevices[device];
-        });
+        ]);
+        delete this.disconnectedDevices[device];
       }
-    });
+    }
   }
 
   /**
@@ -1238,9 +1194,9 @@ class Connections {
         const currentTime = new Date().getTime();
         const deviceInfo = this.devices.getDeviceInfo(machineId);
         if (!deviceInfo) return;
-        if (!this.unresponsiveDevices.hasOwnProperty(machineId)) {
+        if (!this.disconnectedDevices.hasOwnProperty(machineId)) {
           deviceInfo.timeFirstUnresponsive = currentTime;
-          this.unresponsiveDevices[machineId] = deviceInfo;
+          this.disconnectedDevices[machineId] = deviceInfo;
         }
         // deviceInfo should be removed and published to others
         this.devices.removeDeviceInfo(machineId);
