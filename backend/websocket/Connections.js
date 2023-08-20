@@ -701,29 +701,27 @@ class Connections {
             interfaces.push(i.toObject());
             return;
           }
-          if (prevDeviceInfo) {
-            const { org, deviceObj: deviceId } = prevDeviceInfo;
-            const linkStatusChanged = (updatedConfig.link === 'up' && i.linkStatus !== 'up') ||
+          const { org, deviceObj: deviceId } = origDevice;
+          const linkStatusChanged = (updatedConfig.link === 'up' && i.linkStatus !== 'up') ||
             (updatedConfig.link === 'down' && i.linkStatus !== 'down');
             // send a notification if the link's status has been changed
-            if (linkStatusChanged) {
-              const resolved = updatedConfig.link === 'up' && i.linkStatus !== 'up';
-              logger.info(`Link status changed to ${updatedConfig.link}`,
-                { params: { interface: i } });
-              await notificationsMgr.sendNotifications([{
-                org: org,
-                title: resolved ? '[resolved] Link status change' : 'Link status change',
-                details: `Link ${i.name} ${i.IPv4} is ${(updatedConfig.link).toUpperCase()}`,
-                eventType: 'Link status',
-                targets: {
-                  deviceId: deviceId,
-                  tunnelId: null,
-                  interfaceId: i._id,
-                  policyId: null
-                },
-                resolved
-              }]);
-            }
+          if (linkStatusChanged) {
+            const resolved = updatedConfig.link === 'up' && i.linkStatus !== 'up';
+            logger.info(`Link status changed to ${updatedConfig.link}`,
+              { params: { interface: i } });
+            await notificationsMgr.sendNotifications([{
+              org: org,
+              title: resolved ? '[resolved] Link status change' : 'Link status change',
+              details: `Link ${i.name} ${i.IPv4} is ${(updatedConfig.link).toUpperCase()}`,
+              eventType: 'Link status',
+              targets: {
+                deviceId: deviceId,
+                tunnelId: null,
+                interfaceId: i._id,
+                policyId: null
+              },
+              resolved
+            }]);
           }
 
           const updInterface = {
