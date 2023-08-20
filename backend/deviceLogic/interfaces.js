@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-const { isIPv4Address } = require('./validators');
+const { validateIPv4Address } = require('./validators');
 const wifiChannels = require('../utils/wifi-channels');
 const Joi = require('joi');
 const omitBy = require('lodash/omitBy');
@@ -74,7 +74,7 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
     // Skip interfaces with invalid IPv4 addresses.
     // Currently we allow empty IPv6 address
     if (dhcp !== 'yes' && type !== 'TRUNK' &&
-      !isIPv4Address(IPv4, IPv4Mask) && deviceType !== 'wifi') continue;
+      !validateIPv4Address(IPv4, IPv4Mask).valid && deviceType !== 'wifi') continue;
 
     const ifcInfo = {
       dev_id: devId,
