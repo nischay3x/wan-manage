@@ -49,7 +49,7 @@ const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
 const { validateFirewallRules } = require('../deviceLogic/validators');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
-const NotificationsService = require('./NotificationsService');
+const notificationsMgr = require('../notifications/notifications')();
 
 class OrganizationsService {
   /**
@@ -587,8 +587,8 @@ class OrganizationsService {
       if (!qosPolicy) throw new Error('Error default QoS policy adding');
 
       // Add default notifications settings
-      const notificationsSettings = await NotificationsService.notificationsDefaultConfGET(
-        { account: updUser.defaultAccount._id }, { user: updUser });
+      const notificationsSettings = await notificationsMgr.getDefaultNotificationsSettings(
+        updUser.defaultAccount._id);
       const ownerMembership = await membership.find({
         account: updUser.defaultAccount,
         to: 'account',

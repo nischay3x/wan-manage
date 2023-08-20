@@ -32,6 +32,7 @@ const users = require('../models/users');
 const { ObjectId } = require('mongodb');
 const { apply } = require('../deviceLogic/deviceNotifications');
 const keyBy = require('lodash/keyBy');
+const notificationsMgr = require('../notifications/notifications')();
 
 class NotificationsService {
   /**
@@ -460,23 +461,9 @@ class NotificationsService {
    **/
   static async notificationsConfDefaultGET ({ account = null }, { user }) {
     try {
-      let response;
-      if (account) {
-        response = await notificationsConf.find({ account: account }, { rules: 1, _id: 0 }).lean();
-        if (response.length > 0) {
-          const sortedRules = Object.fromEntries(
-            Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-          );
-          return Service.successResponse(sortedRules);
-        }
-      // If the account doesn't have a default or the user asked the system default - retrieve the system default
-      } if (!account || response.length === 0) {
-        response = await notificationsConf.find({ name: 'Default notifications settings' }, { rules: 1, _id: 0 }).lean();
-        const sortedRules = Object.fromEntries(
-          Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-        );
-        return Service.successResponse(sortedRules);
-      }
+      // TODO - add a validation of the user permissions
+      const defaultSettings = await notificationsMgr.getDefaultNotificationsSettings(account);
+      return Service.successResponse(defaultSettings);
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',

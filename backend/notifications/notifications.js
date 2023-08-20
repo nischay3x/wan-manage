@@ -163,6 +163,28 @@ class NotificationsManager {
      * @return {void}
      */
 
+  async getDefaultNotificationsSettings (account) {
+    let response;
+    if (account) {
+      response = await notificationsConf.find({ account: account }, { rules: 1, _id: 0 }).lean();
+      if (response.length > 0) {
+        const sortedRules = Object.fromEntries(
+          Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+        );
+        return sortedRules;
+      }
+    // If the account doesn't have a default or the user asked the system default
+    // retrieve the system default
+    } if (!account || response.length === 0) {
+      response = await notificationsConf.find({ name: 'Default notifications settings' },
+        { rules: 1, _id: 0 }).lean();
+      const sortedRules = Object.fromEntries(
+        Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+      );
+      return sortedRules;
+    }
+  }
+
   async getUserEmail (userIds) {
     const userEmails = [];
     for (const userId of userIds) {
@@ -193,37 +215,29 @@ class NotificationsManager {
     return null;
   }
 
-  async resolveOrIncreaseCount (queryParams) {
+  async resolveOrIncreaseCount (eventType, targets, markAsResolved, severity = null, org) {
     try {
-      const {
-        eventType, deviceId, interfaceId,
-        tunnelId, policyId, markAsResolved, severity = null, org = null
-      } = queryParams;
-      const targetsMap = {
-        interfaceId: interfaceId,
-        tunnelId: tunnelId,
-        policyId: policyId,
-        deviceId: deviceId
-      };
-      const targetKeys = Object.keys(targetsMap).filter(key => targetsMap[key] !== undefined);
-      if (!targetKeys.length) {
-        throw new Error(
-          'At least one of deviceId, interfaceId, tunnelId, policyId should be provided');
+      // Different devices can trigger an alert for the same tunnel
+      // So we don't want to include the deviceId when searching for tunnel alerts
+      if (targets.tunnelId && targets.deviceId) {
+        targets.deviceId = null;
       }
+      const targetKeys = Object.keys(targets).filter(key => targets[key] !== null);
       const { target, targetId } = targetKeys.reduce((acc, key) => {
-        return { target: `targets.${key}`, targetId: targetsMap[key] };
+        return { target: `targets.${key}`, targetId: targets[key] };
       }, {});
+
       const query = {
         eventType: { $regex: eventType, $options: 'i' },
         resolved: false,
+        org: org,
         [target]: targetId
       };
+
       if (severity) {
         query.severity = severity;
       }
-      if (org) {
-        query.org = org;
-      }
+
       let updatedAlert;
       if (markAsResolved) {
         updatedAlert = await notifications.findOneAndUpdate(
@@ -240,7 +254,7 @@ class NotificationsManager {
       }
       return updatedAlert;
     } catch (err) {
-      logger.warn(`Failed to ${queryParams.markAsResolved ? 'resolve the notification'
+      logger.warn(`Failed to ${markAsResolved ? 'resolve the notification'
        : 'increase count of the notification'}  in database`, {
         params: { notifications: notifications, err: err.message }
       });
@@ -257,12 +271,10 @@ class NotificationsManager {
     orgNotificationsConf.webHookSettings;
     if ((severity === 'warning' && sendWarningAlerts) ||
     (severity === 'critical' && sendCriticalAlerts)) {
-      if (!await webHooks.sendToWebHook(webhookURL,
+      await webHooks.sendToWebHook(webhookURL,
         webHookMessage,
         ''
-      )) {
-        logger.error('Web hook call failed', { params: { message: webHookMessage } });
-      }
+      );
     }
   }
 
@@ -271,133 +283,155 @@ class NotificationsManager {
       const orgsMap = new Map();
       for (const notification of notifications) {
         const {
-          org, details, eventType, orgNotificationsConf = null, title, severity = null,
-          targets, resolved = false
+          org, details, eventType, title, severity = null,
+          targets, resolved = false, isAlwaysResolved = false
         } = notification;
-        const event = hierarchyMap[eventType];
-        // If the event exists in the hierarchy check if there is already a parent event in the db
-        if (event) {
-          let interfaceId, deviceId;
-          if (targets.tunnelId) {
-            const tunnel = await tunnels.findOne({
-              num: targets.tunnelId,
-              $or: [
-                { deviceA: targets.deviceId },
-                { deviceB: targets.deviceId }
-              ],
-              isActive: true
-            });
-            if (tunnel) {
-              const interfaces = [tunnel.interfaceA];
-              if (!tunnel.peer) {
-                interfaces.push(tunnel.interfaceB);
-              }
-              interfaceId = {
-                $in: interfaces
-              };
-              const devices = [tunnel.deviceA, tunnel.deviceB];
-              deviceId = {
-                $in: devices
-              };
-            }
+        const orgNotificationsConf = await notificationsConf.findOne({ org: org });
+        const rules = orgNotificationsConf.rules;
+        const sendResolvedAlert = rules[eventType].resolvedAlert;
+        let existingAlert;
+        if (!isAlwaysResolved) {
+          existingAlert = await this.resolveOrIncreaseCount(
+            eventType,
+            targets,
+            resolved,
+            severity,
+            org
+          );
+        }
+        const condition = (!existingAlert && !resolved) ||
+        (existingAlert && resolved && sendResolvedAlert) ||
+         (isAlwaysResolved);
+        // If this is a new notification or a resolved one
+        // which we want to notify about it's resolution
+        if (condition) {
+          if (!severity) {
+            const currentSeverity = rules[eventType].severity;
+            notification.severity = currentSeverity;
           }
-          const eventParents = await event.getAllParents();
-          if (eventParents.length > 0) {
-            const parentsQuery = await event.getQuery(deviceId || targets.deviceId, interfaceId ||
-                 targets.interfaceId, targets.tunnelId);
-            const results = await Promise.all(parentsQuery.map(query =>
-              notificationsDb.findOne({
-                resolved,
-                org,
-                ...query
-              })
-            ));
-            const foundParentNotification = results.some(result => result);
-            if (foundParentNotification) {
-              continue; // Ignore since there is a parent event
+          const event = hierarchyMap[eventType];
+          // If the event exists in the hierarchy check if there is already a parent event in the db
+          if (event) {
+            let interfaceId, deviceId;
+            if (targets.tunnelId) {
+              const tunnel = await tunnels.findOne({
+                num: targets.tunnelId,
+                $or: [
+                  { deviceA: targets.deviceId },
+                  { deviceB: targets.deviceId }
+                ],
+                isActive: true
+              });
+              if (tunnel) {
+                const interfaces = [tunnel.interfaceA];
+                if (!tunnel.peer) {
+                  interfaces.push(tunnel.interfaceB);
+                }
+                interfaceId = {
+                  $in: interfaces
+                };
+                const devices = [tunnel.deviceA, tunnel.deviceB];
+                deviceId = {
+                  $in: devices
+                };
+              }
             }
-            // Since the RTT and the drop rate remains high for a few mins after the parent alert
-            // Has been resolved, we would like to ignore these alerts
-            if (!resolved && ['Link/Tunnel round trip time',
-              'Link/Tunnel default drop rate'].includes(eventType)) {
-              const fiveMinutesAgo = new Date(new Date() - 5 * 60 * 1000);
-              const resolvedResults = await Promise.all(parentsQuery.map(query =>
+            const eventParents = await event.getAllParents();
+            if (eventParents.length > 0) {
+              const parentsQuery = await event.getQuery(deviceId || targets.deviceId, interfaceId ||
+                   targets.interfaceId, targets.tunnelId);
+              const results = await Promise.all(parentsQuery.map(query =>
                 notificationsDb.findOne({
-                  resolved: true,
-                  updatedAt: { $gte: fiveMinutesAgo },
+                  resolved,
                   org,
                   ...query
                 })
               ));
-              const foundResolvedParentNotification = resolvedResults.some(result => result);
-              if (foundResolvedParentNotification) {
-                continue; // Ignore since there is a recently resolved parent event
+              const foundParentNotification = results.some(result => result);
+              if (foundParentNotification) {
+                continue; // Ignore since there is a parent event
+              }
+              // Since the RTT and the drop rate remains high for a few mins after the parent alert
+              // Has been resolved, we would like to ignore these alerts
+              if (!resolved && ['Link/Tunnel round trip time',
+                'Link/Tunnel default drop rate'].includes(eventType)) {
+                const fiveMinutesAgo = new Date(new Date() - 5 * 60 * 1000);
+                const resolvedResults = await Promise.all(parentsQuery.map(query =>
+                  notificationsDb.findOne({
+                    resolved: true,
+                    updatedAt: { $gte: fiveMinutesAgo },
+                    org,
+                    ...query
+                  })
+                ));
+                const foundResolvedParentNotification = resolvedResults.some(result => result);
+                if (foundResolvedParentNotification) {
+                  continue; // Ignore since there is a recently resolved parent event
+                }
               }
             }
           }
-        }
-        const rules = orgNotificationsConf.rules;
-        if (!severity) {
-          const currentSeverity = rules[eventType].severity;
-          notification.severity = currentSeverity;
-        }
-        if (rules[eventType].immediateEmail) {
-          let emailSent;
-          // Check if there is already an event like this for the same device(for device alerts)
-          const existingNotification = targets.deviceId
-            ? await notificationsDb.findOne({
-              eventType: eventType,
-              'targets.deviceId': targets.deviceId,
-              'targets.tunnelId': null,
-              'targets.interfaceId': null,
-              'targets.policyId': null,
-              'emailSent.sendingTime': { $exists: true, $ne: null }
-            })
-            : null;
+          if (rules[eventType].immediateEmail) {
+            // Check if there is already an event like this for the same device(for device alerts)
+            // TODO differentiate between resolved and unresolved alerts without using the title
+            // since the function "resolveOrIncreaseCount" resolved them
+            const emailSentForPreviousAlert = resolved || !targets.deviceId ? null
+              : await notificationsDb.findOne({
+                eventType: eventType,
+                title: title, // ensures that we will send email for resolved alerts,
+                'targets.deviceId': targets.deviceId,
+                'targets.tunnelId': null,
+                'targets.interfaceId': null,
+                'targets.policyId': null,
+                'emailSent.sendingTime': { $exists: true, $ne: null }
+              });
 
-          // Send an email for this event and device if 60 minutes have passed since the last one.
-          if (existingNotification) {
-            const emailRateLimit = configs.get('emailRateLimit');
-            const timeDiff = Math.abs(new Date() - existingNotification.emailSent.sendingTime);
-            const diffInMinutes = Math.ceil(timeDiff / (1000 * 60));
-            if (emailRateLimit < diffInMinutes) {
+            // Send an email for this event and device if 60 minutes have passed since the last one.
+            let emailSent;
+            if (emailSentForPreviousAlert) {
+              const emailRateLimit = configs.get('emailRateLimit');
+              const timeDiff = Math.abs(
+                new Date() - emailSentForPreviousAlert.emailSent.sendingTime);
+              const diffInMinutes = Math.ceil(timeDiff / (1000 * 60));
+              if (emailRateLimit < diffInMinutes) {
+                emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
+                  severity || notification.severity, details);
+              } else {
+                await notificationsDb.findOneAndUpdate(
+                  {
+                    eventType: eventType,
+                    'targets.deviceId': targets.deviceId,
+                    'targets.tunnelId': null,
+                    'targets.interfaceId': null,
+                    'targets.policyId': null,
+                    'emailSent.sendingTime': { $exists: true, $ne: null }
+                  },
+                  { $inc: { 'emailSent.rateLimitedCount': 1 } }
+                );
+              }
+            } else {
               emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
                 severity || notification.severity, details);
-            } else {
-              await notificationsDb.findOneAndUpdate(
-                {
-                  eventType: eventType,
-                  'targets.deviceId': targets.deviceId,
-                  'targets.tunnelId': null,
-                  'targets.interfaceId': null,
-                  'targets.policyId': null,
-                  'emailSent.sendingTime': { $exists: true, $ne: null }
-                },
-                { $inc: { 'emailSent.rateLimitedCount': 1 } }
-              );
             }
-          } else {
-            emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
-              severity || notification.severity, details);
-          }
-          if (emailSent) {
-            if (!notification.emailSent) {
-              notification.emailSent = {
-                sendingTime: null,
-                rateLimitedCount: 0
-              };
+            if (emailSent) {
+              if (!notification.emailSent) {
+                notification.emailSent = {
+                  sendingTime: null,
+                  rateLimitedCount: 0
+                };
+              }
+              notification.emailSent.sendingTime = emailSent;
             }
-            notification.emailSent.sendingTime = emailSent;
           }
           if (rules[eventType].sendWebHook) {
             await this.sendWebHook(title, details,
               severity || notification.severity, orgNotificationsConf);
           }
+          const key = notification.org.toString();
+          const notificationList = orgsMap.get(key);
+          if (!notificationList) orgsMap.set(key, []);
+          orgsMap.get(key).push(notification);
         }
-        const key = notification.org.toString();
-        const notificationList = orgsMap.get(key);
-        if (!notificationList) orgsMap.set(key, []);
-        orgsMap.get(key).push(notification);
       }
       // Get the accounts of the notifications by the organization
       // Since we can have notification with different organization IDs

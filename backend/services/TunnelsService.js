@@ -189,16 +189,15 @@ class TunnelsService {
    * @param {Array} notifications - list of notifications (objects) to update
    **/
 
-  static async tunnelsNotificationsPUT ({ tunnelsNotificationsPut }, { user }) {
+  static async tunnelsNotificationsPUT ({ org: orgId, tunnelsIdList, notifications }, { user }) {
     try {
-      const { org: orgId, tunnelsIdList, notifications } = tunnelsNotificationsPut;
-      const userOrgList = await getUserOrganizations(user);
       if (!orgId || !tunnelsIdList || !notifications || tunnelsIdList.length === 0) {
         return Service.rejectResponse(
           'Missing parameter: org, tunnels list or notifications settings',
           400
         );
       }
+      const userOrgList = await getUserOrganizations(user);
       if (!Object.values(userOrgList).find((o) => o.id === orgId)) {
         return Service.rejectResponse(
           'You do not have permission to access this organization',
@@ -216,37 +215,32 @@ class TunnelsService {
         );
       }
       const jobs = [];
+      const orgNotifications = await notificationsConf.find(
+        { org: orgId },
+        { rules: 1, _id: 0 }
+      );
       const tunnelPromises = tunnels.map(async (tunnel) => {
         let currentSettingsDict;
         if (tunnel.notificationsSettings) {
           currentSettingsDict = tunnel.notificationsSettings;
         } else {
-          const orgNotifications = await notificationsConf.find(
-            { org: orgId },
-            { rules: 1, _id: 0 }
-          );
           currentSettingsDict = TunnelsService.getOnlyTunnelsEvents(orgNotifications[0].rules);
         }
         const notificationsDict = {};
         for (const [event, { warningThreshold, criticalThreshold }]
           of Object.entries(notifications)) {
           let eventCriticalThreshold = currentSettingsDict[event].criticalThreshold;
-          let eventWarningThreshold = currentSettingsDict[event].warningThreshold;
-
           if (criticalThreshold !== 'varies') {
             eventCriticalThreshold = criticalThreshold;
-          }
-          if (warningThreshold !== 'varies') {
-            eventWarningThreshold = warningThreshold;
+            notificationsDict[event] = notificationsDict[event] || {};
+            notificationsDict[event].criticalThreshold = eventCriticalThreshold;
           }
 
-          if (eventCriticalThreshold !== 'varies' || eventWarningThreshold !== 'varies') {
-            notificationsDict[event] = {
-              ...(eventWarningThreshold !== 'varies' &&
-              { warningThreshold: eventWarningThreshold }),
-              ...(eventCriticalThreshold !== 'varies' &&
-              { criticalThreshold: eventCriticalThreshold })
-            };
+          let eventWarningThreshold = currentSettingsDict[event].warningThreshold;
+          if (warningThreshold !== 'varies') {
+            eventWarningThreshold = warningThreshold;
+            notificationsDict[event] = notificationsDict[event] || {};
+            notificationsDict[event].warningThreshold = eventWarningThreshold;
           }
         }
 
@@ -264,11 +258,10 @@ class TunnelsService {
         const minorVersionA = getMinorVersion(tunnel.deviceA.versions.agent);
         const minorVersionB = getMinorVersion(tunnel.deviceB.versions.agent);
 
-        // TODO -  change to 6.3
         const isDeviceAVersionSupported =
-        (majorVersionA > 6 || (majorVersionA === 6 && minorVersionA >= 2));
+        (majorVersionA > 6 || (majorVersionA === 6 && minorVersionA >= 3));
         const isDeviceBVersionSupported =
-        (majorVersionB > 6 || (majorVersionB === 6 && minorVersionB >= 2));
+        (majorVersionB > 6 || (majorVersionB === 6 && minorVersionB >= 3));
 
         if (isDeviceAVersionSupported) {
           // Job logic for deviceA
@@ -281,8 +274,10 @@ class TunnelsService {
               tasks: [{
                 entity: 'agent',
                 message: 'modify-tunnel',
-                params:
-              { notificationsSettings: notificationsDict, 'tunnel-id': tunnel.num }
+                params: {
+                  notificationsSettings: notificationsDict,
+                  'tunnel-id': tunnel.num
+                }
               }]
             },
             {
@@ -310,7 +305,10 @@ class TunnelsService {
               tasks: [{
                 entity: 'agent',
                 message: 'modify-tunnel',
-                params: { notificationsSettings: notificationsDict, 'tunnel-id': tunnel.num }
+                params: {
+                  notificationsSettings: notificationsDict,
+                  'tunnel-id': tunnel.num
+                }
               }]
             },
             {
@@ -335,7 +333,8 @@ class TunnelsService {
         return Service.successResponse({
           code: 200,
           message: 'The data in the database was updated, but no jobs were added.',
-          data: 'The data in the database was updated, but no jobs were added.'
+          data: 'The data in the database was updated, but no jobs were added.',
+          error: ''
         });
       }
 
@@ -343,7 +342,8 @@ class TunnelsService {
       return Service.successResponse({
         code: 200,
         message: 'Modify-tunnel job was added successfully',
-        data: 'Modify-tunnel job was added successfully'
+        data: 'Modify-tunnel job was added successfully',
+        error: ''
       });
     } catch (e) {
       return Service.rejectResponse(
