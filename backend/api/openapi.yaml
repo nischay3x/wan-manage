@@ -3469,7 +3469,7 @@ paths:
           type: string
       - description: Indicator if need to take data from the device
         in: query
-        name: getCachedData
+        name: getEdgeData
         required: false
         schema:
           type: boolean

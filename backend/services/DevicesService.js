@@ -952,7 +952,8 @@ class DevicesService {
     }
   }
 
-  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org, getCachedData }, { user }) {
+  // eslint-disable-next-line max-len
+  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org, getEdgeData = 'false' }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
@@ -1033,7 +1034,8 @@ class DevicesService {
         throw new Error('Status request is supported for WiFi or LTE interfaces');
       }
 
-      if (getCachedData === 'true' && message.getCached) {
+      // default is to take cached data
+      if (getEdgeData === 'false' && message.getCached) {
         return Service.successResponse({
           error: null,
           deviceStatus: 'unknown',
