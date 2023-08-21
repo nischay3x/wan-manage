@@ -33,6 +33,15 @@ const { ObjectId } = require('mongodb');
 const { apply } = require('../deviceLogic/deviceNotifications');
 const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
+const { validateNotificationsSettings } = require('../models/validators');
+
+class CustomError extends Error {
+  constructor ({ message, status, data }) {
+    super(message);
+    this.status = status;
+    this.data = data;
+  }
+}
 
 class NotificationsService {
   /**
@@ -398,12 +407,19 @@ class NotificationsService {
   /**
    * Modify the notifications settings of a given organization/account/group
    **/
-  // TODO add validations for the values like in the UI
   static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules, setAsDefault = false }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
       if (orgIds && orgIds.error) {
         return orgIds;
+      }
+      const validNotifications = validateNotificationsSettings(newRules);
+      if (!validNotifications.valid) {
+        throw new CustomError({
+          status: 400,
+          message: 'Invalid notification settings',
+          data: validNotifications.errors
+        });
       }
       if (setAsDefault) {
         const accountOwners = await membership.find({
@@ -449,10 +465,11 @@ class NotificationsService {
         data: 'updated successfully'
       });
     } catch (e) {
-      return Service.rejectResponse({
-        code: e.status || 500,
-        message: e.message || 'Internal Server Error'
-      });
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500,
+        e.data
+      );
     }
   }
 
