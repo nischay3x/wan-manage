@@ -47,11 +47,14 @@ class Event {
   }
 
   getAllParents () {
-    const parentNames = [];
+    const parentNames = new Set();
     for (const parent of this.parents) {
-      parentNames.push(parent.eventName, ...parent.getAllParents());
+      parentNames.add(parent.eventName);
+      for (const grandParentName of parent.getAllParents()) {
+        parentNames.add(grandParentName);
+      }
     }
-    return parentNames;
+    return [...parentNames];
   }
 
   async getTarget (deviceId, interfaceId, tunnelId) {
