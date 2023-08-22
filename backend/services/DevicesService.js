@@ -633,6 +633,11 @@ class DevicesService {
         // add pending notifications count for the summary request
         const pendingNotificationsArr = await notificationsModel.aggregate([
           {
+            $match: {
+              org: org
+            }
+          },
+          {
             $unwind: '$targets'
           },
           {

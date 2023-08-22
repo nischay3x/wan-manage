@@ -89,7 +89,6 @@ class NotificationsService {
           // if there is a 'device.*' filter we need another query, $lookup will not work
           // because 'devices' and 'notifications' are in different databases
           const [deviceFilters, notificationFilters] = matchFilters.reduce((res, filter) => {
-            // TODO handle filter by interface name
             for (const key in filter) {
               if (key.startsWith('targets.deviceId')) {
                 res[0].push({ [key.replace('targets.deviceId.', '')]: filter[key] });
