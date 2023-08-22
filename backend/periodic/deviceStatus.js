@@ -191,28 +191,13 @@ class DeviceStatus {
 
   async handleAlert (
     deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelNum = null) {
-    let { severity, value, unit, threshold } = tunnelNum
+    const { value, unit, threshold, type } = tunnelNum
       ? lastUpdateEntry.alerts[alertKey][tunnelNum]
       : lastUpdateEntry.alerts[alertKey];
     try {
-      const { org, name, deviceObj: deviceId } = deviceInfo;
-      // create a new alert
-      value = value.toFixed(2);
-      this.events.push({
-        org,
-        title: alertKey,
-        details: `The value of the ${alertKey} in ${tunnelNum ? `tunnel ${tunnelNum}`
-              : `device ${name}`} has increased to ${value}${unit}`,
-        eventType: alertKey,
-        targets: {
-          deviceId: deviceId,
-          tunnelId: tunnelNum || null,
-          interfaceId: null,
-          policyId: null
-        },
-        severity: severity,
-        agentAlertsInfo: { value: value, threshold: threshold, unit: unit }
-      });
+      this.createAndPushEvent(
+        deviceInfo, lastUpdateEntry.alerts, alertKey,
+        { value, threshold, unit, type }, tunnelNum);
     } catch (err) {
       logger.error(`Failed to add the "${alertKey}" alert for
        ${tunnelNum ? 'tunnel ' + tunnelNum : 'device ' + deviceInfo.name}`
@@ -237,68 +222,26 @@ class DeviceStatus {
     return { thresholdValue, thresholdUnit };
   }
 
-  async handleResolvedAlerts (
-    alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
+  async handleResolvedAlerts (alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
     try {
-      const { org, deviceObj: deviceId, name } = deviceInfo;
-      const deviceOnlyAlerts = ['Link/Tunnel round trip time', 'Link/Tunnel default drop rate',
-        'Device memory usage', 'Hard drive usage', 'Temperature'];
+      const deviceOnlyAlerts = ['Link/Tunnel round trip time',
+        'Link/Tunnel default drop rate', 'Device memory usage', 'Hard drive usage', 'Temperature'];
       const notificationsConfRules = orgNotificationsConf.rules;
-      for (const alertKey in alerts) {
-        // if the alert is from flexiManage or from the device but
-        // already exists in the current alerts dictionary continue
-        if (!deviceOnlyAlerts.includes(alertKey) ||
-          (alertKey in lastUpdateEntry.alerts && !alertKey.toLowerCase().includes('tunnel'))) {
-          continue;
-        }
-        // a "tunnel" kind of alert
-        if (!('value' in alerts[alertKey])) {
-          for (const tunnelId in alerts[alertKey]) {
-            if (!(lastUpdateEntry.alerts[alertKey]) ||
-             !(tunnelId in lastUpdateEntry.alerts[alertKey])) {
-              const { thresholdValue, thresholdUnit } =
-              this.getThresholdInfo(alerts, alertKey, notificationsConfRules, org, tunnelId);
 
-              this.events.push({
-                org,
-                title: `[resolved] ${alertKey}`,
-                details: `The value of the ${alertKey} in tunnel ${tunnelId}
-                 has returned to normal (under ${thresholdValue}${thresholdUnit})`,
-                eventType: alertKey,
-                targets: {
-                  deviceId,
-                  tunnelId,
-                  interfaceId: null,
-                  policyId: null
-                },
-                severity: alerts[alertKey][tunnelId].severity,
-                resolved: true,
-                agentAlertsInfo: { threshold: thresholdValue, unit: thresholdUnit }
-              });
-            }
+      for (const alertKey in alerts) {
+        const isAgentAlert = deviceOnlyAlerts.includes(alertKey);
+        if (isAgentAlert) {
+          if (alerts[alertKey].type === 'device' && (!lastUpdateEntry.alerts[alertKey] ||
+           lastUpdateEntry.alerts[alertKey].severity !== alerts[alertKey].severity)) {
+            const { thresholdValue, thresholdUnit } = this.getThresholdInfo(
+              alerts, alertKey, notificationsConfRules, deviceInfo.org);
+            this.createAndPushEvent(
+              deviceInfo, alerts, alertKey,
+              { thresholdValue, thresholdUnit }, null, true);
+          } else {
+            this.resolveTunnelAlerts(
+              alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
           }
-        // a device kind of alert
-        } else {
-          const { thresholdValue, thresholdUnit } =
-          this.getThresholdInfo(alerts, alertKey, notificationsConfRules, org);
-          this.events.push({
-            org,
-            title: `[resolved] ${alertKey}`,
-            details: `The value of the ${alertKey} in device
-                ${name} has returned
-                to normal (under ${notificationsConfRules[alertKey].warningThreshold}${
-                  deviceInfo.alerts[alertKey].unit})`,
-            eventType: alertKey,
-            targets: {
-              deviceId,
-              tunnelId: null,
-              interfaceId: null,
-              policyId: null
-            },
-            severity: alerts[alertKey].severity,
-            resolved: true,
-            agentAlertsInfo: { threshold: thresholdValue, unit: thresholdUnit }
-          });
         }
       }
     } catch (error) {
@@ -307,6 +250,54 @@ class DeviceStatus {
         periodic: { task: this.taskInfo }
       });
     }
+  }
+
+  resolveTunnelAlerts (alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules) {
+    for (const tunnelId in alerts[alertKey]) {
+      const alertExistsForTunnel = lastUpdateEntry.alerts[alertKey]?.[tunnelId];
+      const severityHasChanged = alertExistsForTunnel &&
+      alertExistsForTunnel.severity !== alerts[alertKey][tunnelId].severity;
+
+      const shouldSendTunnelAlert = !lastUpdateEntry.alerts[alertKey] ||
+       !alertExistsForTunnel || severityHasChanged;
+
+      if (shouldSendTunnelAlert) {
+        const { thresholdValue, thresholdUnit } = this.getThresholdInfo(
+          alerts, alertKey, notificationsConfRules, deviceInfo.org, tunnelId);
+        this.createAndPushEvent(
+          deviceInfo, alerts, alertKey,
+          { thresholdValue, thresholdUnit }, tunnelId, true);
+      }
+    }
+  }
+
+  createAndPushEvent (
+    deviceInfo, alerts, alertKey,
+    agentAlertsInfo, tunnelId = null, isResolved = false) {
+    const { org, deviceObj: deviceId, name } = deviceInfo;
+    const title = isResolved ? `[resolved] ${alertKey}` : alertKey;
+    const details = `The value of the ${alertKey} in ${tunnelId ? `tunnel ${tunnelId}`
+     : `device ${name}`} has ${isResolved ? `returned to normal 
+     (under ${agentAlertsInfo.thresholdValue}${agentAlertsInfo.thresholdUnit})`
+     : `increased to ${agentAlertsInfo.value}${agentAlertsInfo.unit}`}`;
+
+    const severity = tunnelId ? alerts[alertKey][tunnelId].severity : alerts[alertKey].severity;
+
+    this.events.push({
+      org,
+      title,
+      details,
+      eventType: alertKey,
+      targets: {
+        deviceId,
+        tunnelId,
+        interfaceId: null,
+        policyId: null
+      },
+      severity,
+      resolved: isResolved,
+      agentAlertsInfo: agentAlertsInfo
+    });
   }
 
   async calculateNotifications (deviceID, deviceInfo, lastUpdateEntry) {
@@ -343,7 +334,8 @@ class DeviceStatus {
                 value: previousAlerts[i].agentAlertsInfo.value,
                 threshold: previousAlerts[i].agentAlertsInfo.threshold,
                 severity: previousAlerts[i].severity,
-                unit: previousAlerts[i].agentAlertsInfo.unit
+                unit: previousAlerts[i].agentAlertsInfo.unit,
+                type: previousAlerts[i].agentAlertsInfo.type
               }
             };
           } else {
@@ -351,7 +343,8 @@ class DeviceStatus {
               value: previousAlerts[i].agentAlertsInfo.value,
               threshold: previousAlerts[i].agentAlertsInfo.threshold,
               severity: previousAlerts[i].severity,
-              unit: previousAlerts[i].agentAlertsInfo.unit
+              unit: previousAlerts[i].agentAlertsInfo.unit,
+              type: previousAlerts[i].agentAlertsInfo.type
             };
           }
         }
@@ -853,22 +846,20 @@ class DeviceStatus {
           (firstTunnelUpdate ||
             tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
         ) {
-          notificationsConf.find({ org: org }).then(async (res) => {
-            this.events.push({
-              org: org,
-              title: tunnelState.status === 'up' ? '[resolved] Tunnel state change'
-                : 'Tunnel state change',
-              details: `Tunnel ${tunnelID} state changed to 
+          this.events.push({
+            org: org,
+            title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
+              : 'Tunnel connection change',
+            details: `Tunnel ${tunnelID} state changed to 
                 ${tunnelState.status === 'down' ? 'Not connected' : 'Connected'}`,
-              targets: {
-                deviceId,
-                tunnelId: tunnelID,
-                interfaceId: null,
-                policyId: null
-              },
-              eventType: 'Tunnel connection',
-              resolved: tunnelState.status === 'up'
-            });
+            targets: {
+              deviceId,
+              tunnelId: tunnelID,
+              interfaceId: null,
+              policyId: null
+            },
+            eventType: 'Tunnel connection',
+            resolved: tunnelState.status === 'up'
           });
         }
       });
