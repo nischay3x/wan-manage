@@ -50,6 +50,10 @@ const alertInfoSchema = new Schema({
   unit: {
     type: String,
     enum: ['%', 'ms', 'C°']
+  },
+  type: {
+    type: String,
+    enum: ['tunnel', 'device']
   }
 });
 

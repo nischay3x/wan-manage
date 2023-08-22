@@ -181,7 +181,6 @@ class Events {
       },
       resolved: resolved
     }]);
-    // }
   };
 
   /**
