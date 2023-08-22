@@ -504,37 +504,46 @@ class NotificationsService {
           ]
         });
 
+        const notificationsData = await notificationsConf.find({ org: orgId });
+        // A map for storing usersData
+        const usersDataMap = new Map();
+
         for (const member of members) {
-          if (!uniqueUsers.has(member.user.toString())) {
-            uniqueUsers.add(member.user.toString());
-            const [userData, notificationsData] = await Promise.all([users.find({ _id: member.user }), notificationsConf.find({ org: orgId })]);
+          const memberIdStr = member.user.toString();
+
+          if (!uniqueUsers.has(memberIdStr)) {
+            uniqueUsers.add(memberIdStr);
+
+            if (!usersDataMap.has(memberIdStr)) {
+              const userData = await users.find({ _id: member.user });
+              usersDataMap.set(memberIdStr, userData[0]);
+            }
+
             const currentUser = {
               _id: member.user,
-              email: userData[0].email,
-              name: userData[0].name,
-              lastName: userData[0].lastName,
+              email: usersDataMap.get(memberIdStr).email,
+              name: usersDataMap.get(memberIdStr).name,
+              lastName: usersDataMap.get(memberIdStr).lastName,
               signedToCritical: notificationsData[0].signedToCritical.includes(member.user),
               signedToWarning: notificationsData[0].signedToWarning.includes(member.user),
               signedToDaily: notificationsData[0].signedToDaily.includes(member.user)
             };
+
             if (org) response.push(currentUser);
             else response.push({ ...currentUser, count: 1 });
+          // An account or a group is given
           } else if (!org) {
-            const [userData, notificationsData] = await Promise.all([users.find({ _id: member.user }), notificationsConf.find({ org: orgId })]);
-            const currentUser = {
-              _id: member.user,
-              email: userData[0].email,
-              name: userData[0].name,
-              lastName: userData[0].lastName,
-              signedToCritical: notificationsData[0].signedToCritical.includes(member.user),
-              signedToWarning: notificationsData[0].signedToWarning.includes(member.user),
-              signedToDaily: notificationsData[0].signedToDaily.includes(member.user)
-            };
-            const userIndex = response.findIndex(user => user._id.toString() === member.user.toString());
+            if (!usersDataMap.has(memberIdStr)) {
+              const userData = await users.find({ _id: member.user });
+              usersDataMap.set(memberIdStr, userData[0]);
+            }
+
+            const userIndex = response.findIndex(user => user._id.toString() === memberIdStr);
             const existingUser = response[userIndex];
-            existingUser.signedToCritical = existingUser.signedToCritical !== currentUser.signedToCritical ? null : existingUser.signedToCritical;
-            existingUser.signedToWarning = existingUser.signedToWarning !== currentUser.signedToWarning ? null : existingUser.signedToWarning;
-            existingUser.signedToDaily = existingUser.signedToDaily !== currentUser.signedToDaily ? null : existingUser.signedToDaily;
+
+            existingUser.signedToCritical = !notificationsData[0].signedToCritical.includes(member.user) ? null : existingUser.signedToCritical;
+            existingUser.signedToWarning = !notificationsData[0].signedToWarning.includes(member.user) ? null : existingUser.signedToWarning;
+            existingUser.signedToDaily = !notificationsData[0].signedToDaily.includes(member.user) ? null : existingUser.signedToDaily;
             existingUser.count++;
           }
         }
@@ -673,7 +682,7 @@ class NotificationsService {
   }
 
   static validateWebhookURL (webhookURL) {
-    if (!webhookURL || webhookURL.trim() === '') {
+    if (webhookURL.trim() === '') {
       return Service.rejectResponse('Webhook URL cannot be empty', 400);
     }
 
@@ -702,20 +711,25 @@ class NotificationsService {
       }
 
       const webhookURL = webHookSettings && webHookSettings.webhookURL;
-      const webhookValidationError = NotificationsService.validateWebhookURL(webhookURL);
-
-      if (webhookValidationError) {
-        return webhookValidationError;
+      if (webhookURL !== null) {
+        const webhookValidationError = NotificationsService.validateWebhookURL(webhookURL);
+        if (webhookValidationError) {
+          return webhookValidationError;
+        }
       }
-      for (const org of orgIds) {
-        const updateData = { $set: {} };
-        Object.entries(webHookSettings).forEach(([field, value]) => {
-          if (value !== null) {
-            updateData.$set[`webHookSettings.${field}`] = value;
-          }
-        });
-        await notificationsConf.findOneAndUpdate({ org: org }, updateData);
-      };
+
+      const updateData = { $set: {} };
+      Object.entries(webHookSettings).forEach(([field, value]) => {
+        if (value !== null) {
+          updateData.$set[`webHookSettings.${field}`] = value;
+        }
+      });
+
+      // Only run the update if there are fields to update
+      if (Object.keys(updateData.$set).length > 0) {
+        await notificationsConf.updateMany({ org: { $in: orgIds } }, updateData);
+      }
+
       return Service.successResponse({
         code: 200,
         message: 'Success',
