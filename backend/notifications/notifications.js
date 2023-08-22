@@ -83,6 +83,7 @@ class DeviceConnectionEventClass extends Event {
     };
   }
 }
+
 class RunningRouterEventClass extends Event {
   async getTarget (deviceId, interfaceId, tunnelId) {
     return {
@@ -111,6 +112,7 @@ class MissingInterfaceIPEventClass extends Event {
     };
   }
 }
+
 class TunnelStateChangeEventClass extends Event {
   async getTarget (deviceId, interfaceId, tunnelId) {
     return {
@@ -178,7 +180,8 @@ class NotificationsManager {
       }
     // If the account doesn't have a default or the user asked the system default
     // retrieve the system default
-    } if (!account || response.length === 0) {
+    }
+    if (!account || response.length === 0) {
       response = await notificationsConf.find({ name: 'Default notifications settings' },
         { rules: 1, _id: 0 }).lean();
       const sortedRules = Object.fromEntries(
@@ -188,21 +191,15 @@ class NotificationsManager {
     }
   }
 
-  async getUserEmail (userIds) {
-    const userEmails = [];
-    for (const userId of userIds) {
-      const userData = await users.findOne({ _id: userId });
-      if (userData) {
-        userEmails.push(userData.email);
-      }
-    }
-    return userEmails;
-  };
+  async getUsersEmail (userIds) {
+    const usersData = await users.find({ _id: { $in: userIds } });
+    return usersData.map(u => u.email);
+  }
 
   async sendEmailNotification (title, orgNotificationsConf, severity, emailBody) {
     const userIds = severity === 'warning' ? orgNotificationsConf.signedToWarning
       : orgNotificationsConf.signedToCritical;
-    const emailAddresses = await this.getUserEmail(userIds);
+    const emailAddresses = await this.getUsersEmail(userIds);
     if (emailAddresses.length > 0) {
       await mailer.sendMailHTML(
         configs.get('mailerEnvelopeFromAddress'),
@@ -218,47 +215,65 @@ class NotificationsManager {
     return null;
   }
 
-  async resolveOrIncreaseCount (eventType, targets, markAsResolved, severity = null, org) {
+  async getQueryForExitingAlert (eventType, targets, resolved, severity, org) {
+    const query = {
+      eventType: { $regex: eventType, $options: 'i' },
+      resolved,
+      org: mongoose.Types.ObjectId(org),
+      severity
+    };
+    // Different devices can trigger an alert for the same tunnel
+    // So we want to include only the tunnelId and organization when searching for tunnel alerts
+    if (targets.tunnelId) {
+      query['targets.tunnelId'] = targets.tunnelId;
+    } else {
+      for (const targetKey in targets) {
+        if (!targets[targetKey]) {
+          continue;
+        }
+        query[`targets.${targetKey}`] = targets[targetKey];
+      }
+    }
+
+    return query;
+  }
+
+  async increaseCount (eventType, targets, org, resolved = false, severity = null) {
     try {
-      // Different devices can trigger an alert for the same tunnel
-      // So we don't want to include the deviceId when searching for tunnel alerts
-      if (targets.tunnelId && targets.deviceId) {
-        targets.deviceId = null;
-      }
-      const targetKeys = Object.keys(targets).filter(key => targets[key] !== null);
-      const { target, targetId } = targetKeys.reduce((acc, key) => {
-        return { target: `targets.${key}`, targetId: targets[key] };
-      }, {});
+      const query = await this.getQueryForExitingAlert(eventType, targets, false, severity, org);
 
-      const query = {
-        eventType: { $regex: eventType, $options: 'i' },
-        resolved: false,
-        org: org,
-        [target]: targetId
-      };
-
-      if (severity) {
-        query.severity = severity;
-      }
-
-      let updatedAlert;
-      if (markAsResolved) {
-        updatedAlert = await notifications.findOneAndUpdate(
-          query,
-          { $set: { resolved: true } },
-          { new: true }
-        );
+      if (resolved) {
+        // If resolved is true, only find the document
+        const alert = await notifications.findOne(query);
+        return alert;
       } else {
-        updatedAlert = await notifications.findOneAndUpdate(
+        // Else, find the document and increase the count
+        const updatedAlert = await notifications.findOneAndUpdate(
           query,
           { $inc: { count: 1 } },
           { new: true }
         );
+        return updatedAlert;
       }
+    } catch (err) {
+      logger.warn(`Failed to increase count of the notification ${eventType} in database`, {
+        params: { notifications: notifications, err: err.message }
+      });
+    }
+  }
+
+  async resolveAnAlert (eventType, targets, severity, org) {
+    try {
+      const query = await this.getQueryForExitingAlert(
+        eventType, targets, false, severity, org);
+      const updatedAlert = await notifications.findOneAndUpdate(
+        query,
+        { $set: { resolved: true } },
+        { new: true }
+      );
       return updatedAlert;
     } catch (err) {
-      logger.warn(`Failed to ${markAsResolved ? 'resolve the notification'
-       : 'increase count of the notification'}  in database`, {
+      logger.warn(`Failed to resolve the notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
       });
     }
@@ -284,40 +299,48 @@ class NotificationsManager {
   async sendNotifications (notifications) {
     try {
       const orgsMap = new Map();
+      const orgNotificationsMap = new Map();
       for (const notification of notifications) {
         const {
           org, details, eventType, title, severity = null,
           targets, resolved = false, isAlwaysResolved = false
         } = notification;
-        const orgNotificationsConf = await notificationsConf.findOne({ org: org });
-        const rules = orgNotificationsConf.rules;
-        const sendResolvedAlert = rules[eventType].resolvedAlert;
-        let existingAlert;
-        if (!isAlwaysResolved) {
-          existingAlert = await this.resolveOrIncreaseCount(
-            eventType,
-            targets,
-            resolved,
-            severity,
-            org
-          );
+        let orgNotificationsConf = orgNotificationsMap.get(org);
+        if (!orgNotificationsConf) {
+          orgNotificationsConf = await notificationsConf.findOne({ org: org });
+          orgNotificationsMap.set(org, orgNotificationsConf);
         }
-        const condition = (!existingAlert && !resolved) ||
-        (existingAlert && resolved && sendResolvedAlert) ||
-         (isAlwaysResolved);
+
+        const rules = orgNotificationsMap.get(org).rules;
+        const sendResolvedAlert = rules[eventType].resolvedAlert;
+        let currentSeverity;
+        if (!severity) {
+          currentSeverity = rules[eventType].severity;
+          notification.severity = currentSeverity;
+        }
+        const existingAlert = await this.increaseCount(
+          eventType,
+          targets,
+          org,
+          resolved,
+          severity || currentSeverity
+        );
+        // Send an alert only if one of the both is true:
+        // 1. This isn't a resolved alert and there is no existing alert
+        // 2. This is a resolved alert, there is unresolved alert in the db,
+        // and the user has defined to send resolved alerts
+        const conditionToSend = ((!resolved && !existingAlert) ||
+        (resolved && sendResolvedAlert && existingAlert));
         // If this is a new notification or a resolved one
         // which we want to notify about it's resolution
-        if (condition) {
-          if (!severity) {
-            const currentSeverity = rules[eventType].severity;
-            notification.severity = currentSeverity;
-          }
+        if (conditionToSend) {
           const event = hierarchyMap[eventType];
           // If the event exists in the hierarchy check if there is already a parent event in the db
           if (event) {
             let interfaceId, deviceId;
             if (targets.tunnelId) {
               const tunnel = await tunnels.findOne({
+                org,
                 num: targets.tunnelId,
                 $or: [
                   { deviceA: targets.deviceId },
@@ -343,32 +366,20 @@ class NotificationsManager {
             if (eventParents.length > 0) {
               const parentsQuery = await event.getQuery(deviceId || targets.deviceId, interfaceId ||
                    targets.interfaceId, targets.tunnelId);
-              const results = await Promise.all(parentsQuery.map(query =>
-                notificationsDb.findOne({
-                  resolved,
-                  org,
-                  ...query
-                })
-              ));
-              const foundParentNotification = results.some(result => result);
-              if (foundParentNotification) {
+              const parentNotification = await notificationsDb.find(
+                { resolved, org, $or: parentsQuery });
+              if (parentNotification.length > 0) {
                 continue; // Ignore since there is a parent event
               }
+
               // Since the RTT and the drop rate remains high for a few mins after the parent alert
               // Has been resolved, we would like to ignore these alerts
               if (!resolved && ['Link/Tunnel round trip time',
                 'Link/Tunnel default drop rate'].includes(eventType)) {
                 const fiveMinutesAgo = new Date(new Date() - 5 * 60 * 1000);
-                const resolvedResults = await Promise.all(parentsQuery.map(query =>
-                  notificationsDb.findOne({
-                    resolved: true,
-                    updatedAt: { $gte: fiveMinutesAgo },
-                    org,
-                    ...query
-                  })
-                ));
-                const foundResolvedParentNotification = resolvedResults.some(result => result);
-                if (foundResolvedParentNotification) {
+                const resolvedParentNotification = await notificationsDb.find(
+                  { resolved: true, org, updatedAt: { $gte: fiveMinutesAgo }, $or: parentsQuery });
+                if (resolvedParentNotification.length > 0) {
                   continue; // Ignore since there is a recently resolved parent event
                 }
               }
@@ -376,46 +387,55 @@ class NotificationsManager {
           }
           if (rules[eventType].immediateEmail) {
             // Check if there is already an event like this for the same device(for device alerts)
-            // TODO differentiate between resolved and unresolved alerts without using the title
-            // since the function "resolveOrIncreaseCount" resolved them
-            const emailSentForPreviousAlert = resolved || !targets.deviceId ? null
+            const emailSentForPreviousAlert = !targets.deviceId ? null
               : await notificationsDb.findOne({
                 eventType: eventType,
                 title: title, // ensures that we will send email for resolved alerts,
                 'targets.deviceId': targets.deviceId,
                 'targets.tunnelId': null,
                 'targets.interfaceId': null,
-                'targets.policyId': null,
+                // 'targets.policyId': null,
                 'emailSent.sendingTime': { $exists: true, $ne: null }
               });
 
-            // Send an email for this event and device if 60 minutes have passed since the last one.
             let emailSent;
+            let shouldSendEmail = false;
             if (emailSentForPreviousAlert) {
-              const emailRateLimit = configs.get('emailRateLimit');
-              const timeDiff = Math.abs(
-                new Date() - emailSentForPreviousAlert.emailSent.sendingTime);
-              const diffInMinutes = Math.ceil(timeDiff / (1000 * 60));
-              if (emailRateLimit < diffInMinutes) {
-                emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
-                  severity || notification.severity, details);
+              const emailRateLimitPerDevice = configs.get('emailRateLimitPerDevice');
+              const timeSinceLastEmail = new Date() -
+               emailSentForPreviousAlert.emailSent.sendingTime;
+              const timeSinceLastEmailInMinutes = Math.ceil(timeSinceLastEmail / (1000 * 60));
+              // Send an email for the event and device if 60 minutes have passed since the last one
+              if (emailRateLimitPerDevice < timeSinceLastEmailInMinutes) {
+                shouldSendEmail = true;
               } else {
+                // Increment the rate limit count if not sending an email
                 await notificationsDb.findOneAndUpdate(
                   {
                     eventType: eventType,
                     'targets.deviceId': targets.deviceId,
                     'targets.tunnelId': null,
                     'targets.interfaceId': null,
-                    'targets.policyId': null,
                     'emailSent.sendingTime': { $exists: true, $ne: null }
                   },
                   { $inc: { 'emailSent.rateLimitedCount': 1 } }
                 );
               }
             } else {
-              emailSent = await this.sendEmailNotification(title, orgNotificationsConf,
-                severity || notification.severity, details);
+              shouldSendEmail = true;
             }
+
+            // Send the email if necessary
+            if (shouldSendEmail) {
+              emailSent = await this.sendEmailNotification(
+                title,
+                orgNotificationsConf,
+                severity || notification.severity,
+                details
+              );
+            }
+
+            // Update notification details if an email was sent
             if (emailSent) {
               if (!notification.emailSent) {
                 notification.emailSent = {
@@ -435,6 +455,14 @@ class NotificationsManager {
           if (!notificationList) orgsMap.set(key, []);
           orgsMap.get(key).push(notification);
         }
+        // Now resolve the existing notification if needed
+        // (also if we didn't create a resolved alert)
+        if (resolved && !isAlwaysResolved && existingAlert) {
+          await this.resolveAnAlert(eventType,
+            targets,
+            severity,
+            org);
+        }
       }
       // Get the accounts of the notifications by the organization
       // Since we can have notification with different organization IDs
@@ -445,7 +473,7 @@ class NotificationsManager {
       const orgIDs = Array.from(orgsMap.keys()).map(key => {
         return mongoose.Types.ObjectId(key);
       });
-      const accounts = await organizations.aggregate([
+      const orgsWithAccounts = await organizations.aggregate([
         { $match: { _id: { $in: orgIDs } } },
         {
           $group: {
@@ -458,11 +486,11 @@ class NotificationsManager {
 
       // Go over all accounts and update all notifications that
       // belong to the organization to which the account belongs.
-      accounts.forEach(account => {
-        const notificationList = orgsMap.get(account._id.toString());
+      orgsWithAccounts.forEach(org => {
+        const notificationList = orgsMap.get(org._id.toString());
         const currentTime = new Date();
         notificationList.forEach(notification => {
-          notification.account = account.accountID;
+          notification.account = org.accountID;
           notification.time = currentTime;
           bulkWriteOps.push({ insertOne: { document: notification } });
         });
@@ -504,7 +532,7 @@ class NotificationsManager {
     for (const orgID of orgIDs) {
       try {
         const orgNotificationsConf = await notificationsConf.findOne({ org: orgID });
-        const emailAddresses = await this.getUserEmail(orgNotificationsConf.signedToDaily);
+        const emailAddresses = await this.getUsersEmail(orgNotificationsConf.signedToDaily);
         if (emailAddresses.length > 0) {
           const organization = await organizations.findOne({ _id: orgID }, { account: 1 });
           const messages = await notificationsDb.find(
