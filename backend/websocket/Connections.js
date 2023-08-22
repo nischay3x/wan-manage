@@ -701,7 +701,7 @@ class Connections {
             interfaces.push(i.toObject());
             return;
           }
-          const { org, deviceObj: deviceId } = origDevice;
+          const { org, _id: deviceId } = origDevice;
           const linkStatusChanged = (updatedConfig.link === 'up' && i.linkStatus !== 'up') ||
             (updatedConfig.link === 'down' && i.linkStatus !== 'down');
             // send a notification if the link's status has been changed
@@ -1190,8 +1190,6 @@ class Connections {
       } else {
         // save the disconnection time
         const currentTime = new Date().getTime();
-        const deviceInfo = this.devices.getDeviceInfo(machineId);
-        if (!deviceInfo) return;
         if (!this.disconnectedDevices.hasOwnProperty(machineId)) {
           deviceInfo.timeFirstUnresponsive = currentTime;
           this.disconnectedDevices[machineId] = deviceInfo;
