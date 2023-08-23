@@ -31,6 +31,8 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const { validateNotificationsSettings } = require('../models/validators');
+const mongoConns = require('../mongoConns.js')();
+const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 class CustomError extends Error {
   constructor ({ message, status, data }) {
@@ -233,180 +235,161 @@ class TunnelsService {
         );
       }
 
-      const results = [];
-      const jobs = [];
-
       const orgNotifications = await notificationsConf.find(
         { org: orgId },
         { rules: 1, _id: 0 }
       );
-      const tunnelPromises = tunnels.map(async (tunnel) => {
-        try {
-          let currentSettingsDict;
-          const orgRules = orgNotifications[0].rules;
-          if (tunnel.notificationsSettings) {
-            currentSettingsDict = tunnel.notificationsSettings;
-          } else {
-            currentSettingsDict = TunnelsService.getOnlyTunnelsEvents(orgRules);
-          }
-
-          const notificationsDict = {};
-          for (const [event, { warningThreshold, criticalThreshold }]
-            of Object.entries(notifications)) {
-            let eventCriticalThreshold = currentSettingsDict[event].criticalThreshold;
-            if (criticalThreshold !== 'varies') {
-              eventCriticalThreshold = criticalThreshold;
-              notificationsDict[event] = notificationsDict[event] || {};
-              notificationsDict[event].criticalThreshold = eventCriticalThreshold;
+      const jobsToSend = [];
+      const errors = [];
+      await mongoConns.mainDBwithTransaction(async (session) => {
+        for (const tunnel of tunnels) {
+          try {
+            let currentSettingsDict;
+            const orgRules = orgNotifications[0].rules;
+            if (tunnel.notificationsSettings) {
+              currentSettingsDict = tunnel.notificationsSettings;
+            } else {
+              currentSettingsDict = TunnelsService.getOnlyTunnelsEvents(orgRules);
             }
 
-            let eventWarningThreshold = currentSettingsDict[event].warningThreshold;
-            if (warningThreshold !== 'varies') {
-              eventWarningThreshold = warningThreshold;
-              notificationsDict[event] = notificationsDict[event] || {};
-              notificationsDict[event].warningThreshold = eventWarningThreshold;
-            }
-            notificationsDict[event].thresholdUnit = orgRules[event].thresholdUnit;
-          }
+            const notificationsDict = {};
+            for (const [event, { warningThreshold, criticalThreshold }]
+              of Object.entries(notifications)) {
+              let eventCriticalThreshold = currentSettingsDict[event].criticalThreshold;
+              if (criticalThreshold !== 'varies') {
+                eventCriticalThreshold = criticalThreshold;
+                notificationsDict[event] = notificationsDict[event] || {};
+                notificationsDict[event].criticalThreshold = eventCriticalThreshold;
+              }
 
-          const validNotifications = validateNotificationsSettings(notificationsDict);
-          if (!validNotifications.valid) {
-            throw new CustomError({
-              status: 400,
-              message: 'Invalid notification settings',
-              data: validNotifications.errors
+              let eventWarningThreshold = currentSettingsDict[event].warningThreshold;
+              if (warningThreshold !== 'varies') {
+                eventWarningThreshold = warningThreshold;
+                notificationsDict[event] = notificationsDict[event] || {};
+                notificationsDict[event].warningThreshold = eventWarningThreshold;
+              }
+              notificationsDict[event].thresholdUnit = orgRules[event].thresholdUnit;
+            }
+
+            const validNotifications = validateNotificationsSettings(notificationsDict);
+            if (!validNotifications.valid) {
+              throw new CustomError({
+                status: 400,
+                message: 'Invalid notification settings',
+                data: validNotifications.errors
+              });
+            }
+
+            await Tunnels.updateOne(
+              { _id: tunnel._id, org: orgId },
+              {
+                $set: {
+                  notificationsSettings: notificationsDict
+                }
+              }
+            ).session(session);
+
+            const majorVersionA = getMajorVersion(tunnel.deviceA.versions.agent);
+            const majorVersionB = getMajorVersion(tunnel.deviceB.versions.agent);
+            const minorVersionA = getMinorVersion(tunnel.deviceA.versions.agent);
+            const minorVersionB = getMinorVersion(tunnel.deviceB.versions.agent);
+
+            const isDeviceAVersionSupported =
+                    (majorVersionA > 6 || (majorVersionA === 6 && minorVersionA >= 3));
+            const isDeviceBVersionSupported =
+                    (majorVersionB > 6 || (majorVersionB === 6 && minorVersionB >= 3));
+
+            if (isDeviceAVersionSupported) {
+              jobsToSend.push({
+                machineId: tunnel.deviceA.machineId.toString(),
+                userName: user.username,
+                orgId,
+                deviceName: tunnel.deviceA.name,
+                notifications: notificationsDict,
+                tunnelNum: tunnel.num,
+                deviceId: tunnel.deviceA._id
+              });
+            }
+
+            if (!tunnel.peer && isDeviceBVersionSupported) {
+              jobsToSend.push({
+                machineId: tunnel.deviceB.machineId.toString(),
+                userName: user.username,
+                orgId,
+                deviceName: tunnel.deviceB.name,
+                notifications: notificationsDict,
+                tunnelNum: tunnel.num,
+                deviceId: tunnel.deviceB._id
+              });
+            }
+          } catch (error) {
+            errors.push({
+              tunnelId: tunnel._id,
+              status: 'error',
+              message: error.message || 'Unknown error',
+              data: error.data || {}
             });
           }
-
-          await Tunnels.updateOne(
-            { _id: tunnel._id, org: orgId },
-            {
-              $set: {
-                notificationsSettings: notificationsDict
-              }
-            }
-          );
-
-          const majorVersionA = getMajorVersion(tunnel.deviceA.versions.agent);
-          const majorVersionB = getMajorVersion(tunnel.deviceB.versions.agent);
-          const minorVersionA = getMinorVersion(tunnel.deviceA.versions.agent);
-          const minorVersionB = getMinorVersion(tunnel.deviceB.versions.agent);
-
-          const isDeviceAVersionSupported =
-                (majorVersionA > 6 || (majorVersionA === 6 && minorVersionA >= 3));
-          const isDeviceBVersionSupported =
-                (majorVersionB > 6 || (majorVersionB === 6 && minorVersionB >= 3));
-
-          if (isDeviceAVersionSupported) {
-            const jobA = await deviceQueues.addJob(
-              tunnel.deviceA.machineId.toString(),
-              user.username,
-              orgId,
-              {
-                title: `Modify tunnel notifications settings on device ${tunnel.deviceA.name}`,
-                tasks: [{
-                  entity: 'agent',
-                  message: 'modify-tunnel',
-                  params: {
-                    notificationsSettings: notificationsDict,
-                    'tunnel-id': tunnel.num
-                  }
-                }]
-              },
-              {
-                method: 'notifications',
-                data: {
-                  device: tunnel.deviceA._id,
-                  org: orgId,
-                  action: 'update-tunnel-notifications'
-                }
-              },
-              { priority: 'normal', attempts: 1, removeOnComplete: false },
-              null
-            );
-            jobs.push(jobA);
-          }
-
-          if (!tunnel.peer && isDeviceBVersionSupported) {
-            const jobB = await deviceQueues.addJob(
-              tunnel.deviceB.machineId.toString(),
-              user.username,
-              orgId,
-              {
-                title: `Modify tunnel notifications settings on device ${tunnel.deviceB.name}`,
-                tasks: [{
-                  entity: 'agent',
-                  message: 'modify-tunnel',
-                  params: {
-                    notificationsSettings: notificationsDict,
-                    'tunnel-id': tunnel.num
-                  }
-                }]
-              },
-              {
-                method: 'notifications',
-                data: {
-                  device: tunnel.deviceB._id,
-                  org: orgId,
-                  action: 'update-tunnel-notifications'
-                }
-              },
-              { priority: 'normal', attempts: 1, removeOnComplete: false },
-              null
-            );
-            jobs.push(jobB);
-          }
-
-          // If processing this tunnel was successful, add success result
-          results.push({
-            tunnelId: tunnel._id,
-            status: 'success',
-            message: 'Updated successfully'
-          });
-        } catch (error) {
-          // If processing this tunnel encountered an error, add error result
-          results.push({
-            tunnelId: tunnel._id,
-            status: 'error',
-            message: error.message || 'Unknown error',
-            data: error.data || {}
-          });
         }
       });
-
-      await Promise.all(tunnelPromises);
-
-      const failedUpdates = results.filter(result => result.status === 'error');
-
-      if (failedUpdates.length === 0) {
-        return Service.successResponse({
-          code: 200,
-          message: 'All tunnels updated successfully',
-          data: results,
-          error: ''
-        });
-      } else if (failedUpdates.length === tunnels.length) {
+      if (errors.length > 0) {
         return Service.rejectResponse(
-          'Failed to update all tunnels',
-          500,
-          { tunnels: failedUpdates }
+          'Invalid notification settings',
+          400,
+          errors
         );
-      } else {
-        return Service.successResponse({
-          code: 200,
-          message: 'Some tunnels updated successfully, some failed',
-          data: results,
-          error: 'Not all tunnels were updated'
-        });
       }
+      const jobPromises = jobsToSend.map(jobToSend => {
+        return deviceQueues.addJob(
+          jobToSend.machineId,
+          jobToSend.userName,
+          jobToSend.orgId,
+          {
+            title: `Modify tunnel notifications settings on device ${jobToSend.deviceName}`,
+            tasks: [{
+              entity: 'agent',
+              message: 'modify-tunnel',
+              params: {
+                notificationsSettings: jobToSend.notifications,
+                'tunnel-id': jobToSend.tunnelNum
+              }
+            }]
+          },
+          {
+            method: 'notifications',
+            data: {
+              device: jobToSend.deviceId,
+              org: jobToSend.orgId,
+              action: 'update-tunnel-notifications'
+            }
+          },
+          { priority: 'normal', attempts: 1, removeOnComplete: false },
+          null
+        );
+      });
+      const promiseStatus = await Promise.allSettled(jobPromises);
+
+      const fulfilled = promiseStatus.reduce((arr, elem) => {
+        if (elem.status === 'fulfilled') {
+          const job = elem.value;
+          arr.push(job);
+        } else {
+          logger.error('Modify tunnel notifications Job Queue Error', {
+            params: { message: elem.reason.message }
+          });
+        }
+        return arr;
+      }, []);
+      const status = fulfilled.length < jobsToSend.length
+        ? 'partially completed' : 'completed';
+      const message = fulfilled.length < jobsToSend.length
+        ? `${fulfilled.length} of ${jobsToSend.length} tunnel notifications jobs added`
+        : 'The notifications were updated successfully';
+      return Service.successResponse(
+        { status, message },
+        202
+      );
     } catch (e) {
-      if (e.code === 400) {
-        return Service.rejectResponse(
-          e.message || 'Invalid notification settings',
-          e.code || 500,
-          e.errors || {}
-        );
-      }
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
         e.status || 500
