@@ -78,7 +78,7 @@ const generateRandomKeys = () => {
  * Generates a pipeline for mongoose aggregate query to get filtered tunnels
  * @return {Array} an array of query stages
  */
-const getTunnelsPipeline = (orgList, filters) => {
+const getTunnelsPipeline = (orgList, filters, detailed = true) => {
   const pipeline = [{
     $match: {
       org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) },
@@ -177,46 +177,22 @@ const getTunnelsPipeline = (orgList, filters) => {
     $unwind: {
       path: '$org'
     }
-  },
-  {
+  }];
+  const project = {
     $project: {
       num: 1,
       isActive: 1,
-      interfaceA: 1,
-      interfaceB: 1,
-      'interfaceADetails.name': 1,
-      'interfaceBDetails.name': 1,
-      'interfaceADetails.devId': 1,
-      'interfaceBDetails.devId': 1,
       peer: 1,
-      'interfaceADetails.PublicPort': 1,
-      'interfaceADetails.useFixedPublicPort': 1,
-      'interfaceBDetails.PublicPort': 1,
-      'interfaceBDetails.useFixedPublicPort': 1,
-      'interfaceADetails.PublicIP': 1,
-      'interfaceBDetails.PublicIP': 1,
-      'interfaceADetails.IPv4': 1,
-      'interfaceBDetails.IPv4': 1,
-      'deviceA.name': 1,
-      'deviceA.machineId': 1,
       'deviceA._id': 1,
+      'deviceA.machineId': 1,
       'deviceA.isConnected': 1,
       'deviceA.status': 1,
-      'deviceA.versions': 1,
-      'deviceA.staticroutes': 1,
-      'deviceB.name': 1,
-      'deviceB.machineId': 1,
       'deviceB._id': 1,
+      'deviceB.machineId': 1,
       'deviceB.isConnected': 1,
       'deviceB.status': 1,
-      'deviceB.versions': 1,
-      'deviceB.staticroutes': 1,
       deviceAconf: 1,
       deviceBconf: 1,
-      encryptionMethod: 1,
-      advancedOptions: 1,
-      'pathlabel.name': 1,
-      'pathlabel.color': 1,
       isPending: 1,
       pendingReason: 1,
       'org._id': 1,
@@ -260,7 +236,48 @@ const getTunnelsPipeline = (orgList, filters) => {
         }
       }
     }
-  }];
+  };
+  if (detailed) {
+    project.$project['deviceA.name'] = 1;
+    project.$project['deviceA.hostname'] = 1;
+    project.$project['deviceA.versions'] = 1;
+    project.$project['deviceA.sync'] = 1;
+    project.$project['deviceA.staticroutes'] = 1;
+
+    project.$project['deviceB.name'] = 1;
+    project.$project['deviceB.hostname'] = 1;
+    project.$project['deviceB.versions'] = 1;
+    project.$project['deviceB.sync'] = 1;
+    project.$project['deviceB.staticroutes'] = 1;
+
+    project.$project.interfaceA = 1;
+    project.$project.interfaceB = 1;
+
+    project.$project['interfaceADetails.name'] = 1;
+    project.$project['interfaceADetails.devId'] = 1;
+    project.$project['interfaceADetails.PublicPort'] = 1;
+    project.$project['interfaceADetails.useFixedPublicPort'] = 1;
+    project.$project['interfaceADetails.PublicIP'] = 1;
+    project.$project['interfaceADetails.IPv4'] = 1;
+
+    project.$project['interfaceBDetails.name'] = 1;
+    project.$project['interfaceBDetails.devId'] = 1;
+    project.$project['interfaceBDetails.PublicPort'] = 1;
+    project.$project['interfaceBDetails.useFixedPublicPort'] = 1;
+    project.$project['interfaceBDetails.PublicIP'] = 1;
+    project.$project['interfaceBDetails.IPv4'] = 1;
+
+    project.$project.encryptionMethod = 1;
+    project.$project.advancedOptions = 1;
+
+    project.$project['pathlabel.name'] = 1;
+    project.$project['pathlabel.color'] = 1;
+
+    project.$project['org._id'] = 1;
+    project.$project['org.vxlanPort'] = 1;
+  }
+  pipeline.push(project);
+
   if (filters) {
     const parsedFilters = typeof filters === 'string' ? JSON.parse(filters) : filters;
     const matchFilters = getMatchFilters(parsedFilters);

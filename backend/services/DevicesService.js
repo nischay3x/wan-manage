@@ -74,6 +74,7 @@ const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
 const { getAgentBroker } = require('../utils/httpUtils');
 const Joi = require('joi');
+const { getStartEndIp } = require('../utils/networks');
 
 class DevicesService {
   /**
@@ -952,7 +953,8 @@ class DevicesService {
     }
   }
 
-  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org }, { user }) {
+  // eslint-disable-next-line max-len
+  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org, getEdgeData = 'false' }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
@@ -973,17 +975,18 @@ class DevicesService {
           message: 'get-lte-info',
           defaultResponse: {
             connectivity: false,
-            simStatus: null,
+            simStatus: '',
             signals: {},
             hardwareInfo: {},
             packetServiceState: {},
-            phoneNumber: null,
+            phoneNumber: '',
             systemInfo: {},
             defaultSettings: {},
             pinState: {},
-            connectionState: null,
+            connectionState: '',
             registrationNetworkState: {},
-            state: null
+            state: null,
+            sim: {}
           },
           parseResponse: async response => {
             response = parseLteStatus(response);
@@ -1010,7 +1013,8 @@ class DevicesService {
             deviceStatus.setDeviceLteStatus(deviceObject.machineId, ifc.devId, response);
             response = deviceStatus.getDeviceLteStatus(deviceObject.machineId, ifc.devId);
             return response;
-          }
+          },
+          getCached: () => deviceStatus.getDeviceLteStatus(deviceObject.machineId, ifc.devId)
         },
         wifi: {
           message: 'get-wifi-info',
@@ -1021,13 +1025,23 @@ class DevicesService {
           parseResponse: async response => {
             response = mapWifiNames(response);
             return response;
-          }
+          },
+          getCached: () => deviceStatus.getDeviceWifiStatus(deviceObject.machineId, ifc.devId)
         }
       };
 
       const message = supportedMessages[ifc.deviceType];
       if (!message) {
-        throw new Error('Unsupported request');
+        throw new Error('Status request is supported for WiFi or LTE interfaces');
+      }
+
+      // default is to take cached data
+      if (getEdgeData === 'false' && message.getCached) {
+        return Service.successResponse({
+          error: null,
+          deviceStatus: 'unknown',
+          status: message.getCached()
+        });
       }
 
       if (!connections.isConnected(deviceObject.machineId)) {
@@ -1309,6 +1323,12 @@ class DevicesService {
             { params: { filters }, user: user });
           throw createError(400, 'All devices tunnels must be deleted before deleting devices');
         }
+
+        // remove vrrp that configured on these devices
+        await vrrp.updateMany(
+          { org: { $in: orgList } },
+          { $pull: { devices: { device: { $in: devIds } } } }
+        ).session(session);
 
         const deviceCount = await devices.countDocuments({
           account: delDevices[0].account
@@ -3220,6 +3240,18 @@ class DevicesService {
       // eslint-disable-next-line max-len
       throw new Error('DHCP Server Range End IP address is not on the same subnet with interface IP');
     }
+
+    const [start, end] = getStartEndIp(interfaceObj.IPv4, interfaceObj.IPv4Mask);
+    if (dhcpRequest.rangeStart === start || dhcpRequest.rangeStart === end) {
+      // eslint-disable-next-line max-len
+      throw new Error('DHCP Server Range Start IP address cannot be Network or Broadcast IP');
+    }
+
+    if (dhcpRequest.rangeEnd === start || dhcpRequest.rangeEnd === end) {
+      // eslint-disable-next-line max-len
+      throw new Error('DHCP Server Range End IP address cannot be Network or Broadcast IP');
+    }
+
     // check that DHCP range End address IP is greater than Start IP address
     const ip2int = IP => IP.split('.')
       .reduce((res, val, idx) => res + (+val) * 256 ** (3 - idx), 0);

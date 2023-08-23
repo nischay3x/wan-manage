@@ -16,6 +16,9 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 // Logic to apply tunnels between devices
+const MAX_TUNNELS_PER_DEVICE = 8000;
+const MAX_TUNNELS_PER_ORG = 32000;
+
 const configs = require('../configs')();
 const orgModel = require('../models/organizations');
 const tunnelsModel = require('../models/tunnels');
@@ -94,11 +97,25 @@ const handleTunnels = async (
     },
     {
       num: 1,
+      deviceA: 1,
+      deviceB: 1,
       interfaceB: 1,
       interfaceA: 1,
       pathlabel: 1
     }
   );
+
+  const tunnelsPerDevice = {};
+  const tunnelExists = {};
+  existingTunnels.forEach(t => {
+    tunnelsPerDevice[t.deviceA] = (tunnelsPerDevice[t.deviceA] ?? 0) + 1;
+    if (t.deviceB) {
+      tunnelsPerDevice[t.deviceB] = (tunnelsPerDevice[t.deviceB] ?? 0) + 1;
+      // no need to search for existing tunnels with empty deviceB
+      const tunnelKey = `${t.interfaceA}:${t.interfaceB}:${t.pathlabel ?? ''}`;
+      tunnelExists[tunnelKey] = true;
+    }
+  });
 
   const isHubAndSpoke = (topology === 'hubAndSpoke');
   let aLoopStart = 0;
@@ -212,18 +229,19 @@ const handleTunnels = async (
 
               if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
                 // If a tunnel already exists, skip the configuration
-                const tunnelFound = existingTunnels.find(t => {
-                  return t.pathlabel === null && (
-                    (wanIfcA._id.equals(t.interfaceA) && wanIfcB._id.equals(t.interfaceB)) ||
-                    (wanIfcB._id.equals(t.interfaceA) && wanIfcA._id.equals(t.interfaceB))
-                  );
-                });
-                if (tunnelFound) {
-                  logger.debug('Found tunnel', {
-                    params: { tunnel: tunnelFound }
-                  });
+                const tunnelKey = `${wanIfcA._id}:${wanIfcB._id}:`;
+                if (tunnelExists[tunnelKey]) {
+                  logger.debug('Found tunnel', { params: { tunnelKey } });
                   reasons.add('Some tunnels exist already.');
+                } else if ((tunnelsPerDevice[deviceA._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
+                  logger.warn('Exceeded limit of tunnels on device', { params: { deviceA } });
+                  reasons.add(`Exceeded limit of ${MAX_TUNNELS_PER_DEVICE} tunnels per device.`);
+                } else if ((tunnelsPerDevice[deviceB._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
+                  logger.warn('Exceeded limit of tunnels on device', { params: { deviceB } });
+                  reasons.add(`Exceeded limit of ${MAX_TUNNELS_PER_DEVICE} tunnels per device.`);
                 } else {
+                  tunnelsPerDevice[deviceA._id] = (tunnelsPerDevice[deviceA._id] ?? 0) + 1;
+                  tunnelsPerDevice[deviceB._id] = (tunnelsPerDevice[deviceB._id] ?? 0) + 1;
                   tasks.push(generateTunnelPromise(userName, org, null,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
                     { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, advancedOptions));
@@ -246,19 +264,22 @@ const handleTunnels = async (
                   isFoundInterfacesWithCommonLabels = true;
                 }
                 // If a tunnel already exists, skip the configuration
-                const tunnelFound = existingTunnels.find(t => {
-                  return t.pathlabel && label === t.pathlabel.toString() && (
-                    (wanIfcA._id.equals(t.interfaceA) && wanIfcB._id.equals(t.interfaceB)) ||
-                    (wanIfcB._id.equals(t.interfaceA) && wanIfcA._id.equals(t.interfaceB))
-                  );
-                });
-                if (tunnelFound) {
-                  logger.debug('Found tunnel', {
-                    params: { tunnel: tunnelFound }
-                  });
+                const tunnelKey = `${wanIfcA._id}:${wanIfcB._id}:${label}`;
+                if (tunnelExists[tunnelKey]) {
+                  logger.debug('Found tunnel', { params: { tunnelKey } });
                   reasons.add('Some tunnels exist already.');
                   continue;
+                } else if ((tunnelsPerDevice[deviceA._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
+                  logger.warn('Exceeded limit of tunnels on device', { params: { deviceA } });
+                  reasons.add(`Exceeded limit of ${MAX_TUNNELS_PER_DEVICE} tunnels per device.`);
+                  continue;
+                } else if ((tunnelsPerDevice[deviceB._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
+                  logger.warn('Exceeded limit of tunnels on device', { params: { deviceB } });
+                  reasons.add(`Exceeded limit of ${MAX_TUNNELS_PER_DEVICE} tunnels per device.`);
+                  continue;
                 }
+                tunnelsPerDevice[deviceA._id] = (tunnelsPerDevice[deviceA._id] ?? 0) + 1;
+                tunnelsPerDevice[deviceB._id] = (tunnelsPerDevice[deviceB._id] ?? 0) + 1;
                 // Use a copy of devices objects as promise runs later
                 tasks.push(generateTunnelPromise(userName, org, label,
                   { ...deviceA.toObject() }, { ...deviceB.toObject() },
@@ -525,6 +546,7 @@ const applyTunnelAdd = async (devices, user, data) => {
      * Request body holds the list of devices ids to connect tunnel between
      */
   const selectedDevices = data.devices;
+  const startedAt = Date.now();
   logger.info('Creating tunnels between devices', {
     params: { devices: selectedDevices }
   });
@@ -614,6 +636,30 @@ const applyTunnelAdd = async (devices, user, data) => {
     const tasks = await handleTunnels(
       org, userName, opDevices, pathLabels, advancedOptions, topology, hubIdx, reasons);
     dbTasks = dbTasks.concat(tasks);
+  }
+
+  if (dbTasks.length > 1000) {
+    Promise.allSettled(dbTasks).then(promiseStatus => {
+      let failed = 0;
+      promiseStatus.forEach(elem => {
+        if (elem.status !== 'fulfilled') {
+          failed++;
+          logger.error('Add tunnel error',
+            { params: { error: elem.reason.message } }
+          );
+        };
+      });
+      const completed = dbTasks.length - failed;
+      logger.debug('Add tunnels operation finished',
+        { params: { completed, failed, durationMs: Date.now() - startedAt } }
+      );
+    });
+    logger.debug('Adding more than 1000 jobs in progress', { params: { tunnels: dbTasks.length } });
+    let message = 'Adding more than 1000 jobs in progress, check the result on the Jobs page.';
+    if (reasons.size > 0) {
+      message = `${message} ${Array.from(reasons).join(' ')}`;
+    }
+    return { ids: [], status: 'unknown', message };
   }
 
   // Execute all promises
@@ -752,10 +798,10 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
     } else {
       try {
         const idResp = await tunnelIDsModel.findOneAndUpdate(
-          // Query, allow only 15000 tunnels per organization
+          // Query, allow only MAX_TUNNELS_PER_ORG tunnels per organization
           {
             org: org,
-            nextAvailID: { $gte: 0, $lt: 15000 }
+            nextAvailID: { $gte: 0, $lt: MAX_TUNNELS_PER_ORG }
           },
           // Update
           { $inc: { nextAvailID: 1 } },
@@ -777,10 +823,10 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
         if (err.code === 11000) {
           logger.debug('2nd try to find tunnel ID', { params: {} });
           const idResp = tunnelIDsModel.findOneAndUpdate(
-            // Query, allow only 15000 tunnels per organization
+            // Query, allow only MAX_TUNNELS_PER_ORG tunnels per organization
             {
               org: org,
-              nextAvailID: { $gte: 0, $lt: 15000 }
+              nextAvailID: { $gte: 0, $lt: MAX_TUNNELS_PER_ORG }
             },
             // Update
             { $inc: { nextAvailID: 1 } },
@@ -1290,14 +1336,18 @@ const addTunnel = async (
     },
     // Options
     { upsert: true, new: true }
-  );
+  )
+    .populate('deviceA')
+    .populate('deviceB')
+    .populate('peer')
+    .populate('org');
 
   // don't send jobs for pending tunnels
   if (isPending) {
     throw new Error(`Tunnel #${tunnelnum} set as pending - ${pendingReason}`);
   }
 
-  return await sendAddTunnelsJobs([tunnel._id], user);
+  return await sendAddTunnelsJobs([tunnel], user);
 };
 
 /**
@@ -1352,6 +1402,23 @@ const updateTunnelIsConnected = (
     });
 };
 
+const bulkUpdate = async (updateOps) => {
+  if (updateOps.length) {
+    try {
+      const { matchedCount, modifiedCount } = await tunnelsModel.bulkWrite(updateOps);
+      if (modifiedCount !== updateOps.length) {
+        logger.error('Updated tunnels count does not match requested',
+          { params: { matchedCount, modifiedCount, updateOps } }
+        );
+      }
+    } catch (err) {
+      logger.warn('Failed to update tunnels in database', {
+        params: { message: err.message }
+      });
+    }
+  };
+};
+
 /**
  * This function is called when deleting a tunnel
  * @async
@@ -1363,6 +1430,7 @@ const updateTunnelIsConnected = (
 const applyTunnelDel = async (devices, user, data) => {
   const { tunnels, filters } = data;
   logger.info('Delete tunnels ', { params: { tunnels, filters } });
+  const startedAt = Date.now();
   let tunnelIds = [];
   let tunnelsArray;
   if (tunnels) {
@@ -1370,8 +1438,8 @@ const applyTunnelDel = async (devices, user, data) => {
     tunnelsArray = await tunnelsModel.find(
       { _id: { $in: tunnelIds }, isActive: true, org: data.org }
     )
-      .populate('deviceA', '_id name staticroutes')
-      .populate('deviceB', '_id name staticroutes')
+      .populate('deviceA', '_id machineId name hostname sync staticroutes interfaces')
+      .populate('deviceB', '_id machineId name hostname sync staticroutes interfaces')
       .populate('peer');
 
     if (tunnelsArray.length !== tunnelIds.length) {
@@ -1387,7 +1455,7 @@ const applyTunnelDel = async (devices, user, data) => {
       await statusesInDb.updateDevicesStatuses([data.org]);
       await statusesInDb.updateTunnelsStatuses([data.org]);
     }
-    const pipeline = await getTunnelsPipeline([data.org], filters, updateStatusInDb);
+    const pipeline = getTunnelsPipeline([data.org], filters);
     tunnelsArray = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
   }
 
@@ -1408,22 +1476,30 @@ const applyTunnelDel = async (devices, user, data) => {
       }
     });
 
-    const promiseStatus = await Promise.allSettled(delPromises);
-
-    if (updateOps.length) {
-      try {
-        const { matchedCount, modifiedCount } = await tunnelsModel.bulkWrite(updateOps);
-        if (modifiedCount !== updateOps.length) {
-          logger.error('Updated tunnels count does not match requested',
-            { params: { matchedCount, modifiedCount, updateOps } }
-          );
-        }
-      } catch (err) {
-        logger.warn('Failed to update tunnels in database', {
-          params: { message: err.message }
+    if (delPromises.length > 1000) {
+      logger.debug('More than 1000 jobs in progress', { params: { tunnels: delPromises.length } });
+      const message = 'More than 1000 jobs in progress, check the result on the Jobs page.';
+      Promise.allSettled(delPromises).then(promiseStatus => {
+        let failed = 0;
+        bulkUpdate(updateOps);
+        promiseStatus.forEach(elem => {
+          if (elem.status !== 'fulfilled') {
+            failed++;
+            logger.error('Delete tunnel error',
+              { params: { error: elem.reason.message } }
+            );
+          };
         });
-      }
-    };
+        const completed = delPromises.length - failed;
+        logger.debug('Delete tunnels operation finished',
+          { params: { completed, failed, durationMs: Date.now() - startedAt } }
+        );
+      });
+      return { ids: [], status: 'unknown', message };
+    }
+
+    const promiseStatus = await Promise.allSettled(delPromises);
+    bulkUpdate(updateOps);
 
     const { fulfilled, reasons } = promiseStatus.reduce(({ fulfilled, reasons }, elem) => {
       if (elem.status === 'fulfilled') {
@@ -1507,7 +1583,7 @@ const delTunnel = async (tunnel, user, org, updateOps) => {
 
   // don't send remove jobs for pending tunnels
   if (!isPending) {
-    tunnelJobs = await sendRemoveTunnelsJobs([_id], user);
+    tunnelJobs = await sendRemoveTunnelsJobs([tunnel], user);
   }
 
   // remove the tunnel status from memory
@@ -1951,21 +2027,17 @@ const prepareTunnelParams = (
  * @return {Array}             array of add-tunnel jobs
  */
 const sendRemoveTunnelsJobs = async (
-  tunnelIds, username = 'system', includeDeviceConfigDependencies = false
+  tunnels, username = 'system', includeDeviceConfigDependencies = false
 ) => {
   let tunnelsJobs = [];
-
-  const tunnels = await tunnelsModel.find(
-    { _id: { $in: tunnelIds } }
-  ).populate('deviceA').populate('deviceB').populate('peer');
 
   for (const tunnel of tunnels) {
     const { org, deviceA, deviceB, interfaceA, interfaceB, pathlabel, peer } = tunnel;
 
-    const ifcA = deviceA.interfaces.find(ifc => {
+    const ifcA = tunnel.interfaceADetails ?? deviceA.interfaces.find(ifc => {
       return ifc._id.toString() === interfaceA.toString();
     });
-    const ifcB = peer ? null : deviceB.interfaces.find(ifc => {
+    const ifcB = peer ? null : tunnel.interfaceBDetails ?? deviceB.interfaces.find(ifc => {
       return ifc._id.toString() === interfaceB.toString();
     });
 
@@ -2018,7 +2090,7 @@ const sendRemoveTunnelsJobs = async (
         tasksDeviceA,
         tasksDeviceB,
         username,
-        org,
+        org._id,
         deviceA.machineId,
         peer ? null : deviceB.machineId,
         deviceA._id,
@@ -2047,21 +2119,10 @@ const sendRemoveTunnelsJobs = async (
  * @param  {string}  username  the name of the user that requested the device change
  * @return {Array}             array of add-tunnel jobs
  */
-const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDependencies = false) => {
+const sendAddTunnelsJobs = async (tunnels, username, includeDeviceConfigDependencies = false) => {
   let jobs = [];
   let orgId = null;
   try {
-    const tunnels = await tunnelsModel
-      .find({
-        _id: { $in: tunnelIds },
-        isActive: true,
-        isPending: { $ne: true }
-      })
-      .populate('deviceA')
-      .populate('deviceB')
-      .populate('org')
-      .populate('peer');
-
     for (const tunnel of tunnels) {
       orgId = tunnel.org._id;
 
@@ -2134,7 +2195,7 @@ const sendAddTunnelsJobs = async (tunnelIds, username, includeDeviceConfigDepend
     }
   } catch (err) {
     logger.error('Failed to queue Add tunnel jobs', {
-      params: { err: err.message, tunnelIds }
+      params: { err: err.message }
     });
   };
   return jobs;
