@@ -1887,6 +1887,12 @@ paths:
             schema:
              $ref: '#/components/schemas/TunnelsNotificationsPut'
       responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Successful operation
         "204":
           description: Successful operation
         "400":
@@ -4566,6 +4572,12 @@ paths:
             schema:
               $ref: '#/components/schemas/NotificationsConfPut'
       responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Successful operation
         "204":
           description: Successful operation
         "400":
