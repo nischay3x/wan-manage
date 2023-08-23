@@ -3441,7 +3441,7 @@ paths:
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
   /devices/{id}/interfaces/{interfaceId}/status:
-    get: 
+    get:
       operationId: devicesIdInterfacesIdStatusGET
       parameters:
       - description: Numeric ID of the Device to fetch information about
@@ -3460,6 +3460,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       - description: Indicator if need to take data from the device
         in: query
         name: getEdgeData

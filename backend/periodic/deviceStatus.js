@@ -507,6 +507,10 @@ class DeviceStatus {
     Object.assign(this.status[machineId].wifiStatus[devId], { ...wifiStatus, time });
   }
 
+  getDeviceWifiStatus (machineId, devId) {
+    return this.status?.[machineId]?.wifiStatus?.[devId] ?? {};
+  }
+
   /**
     * Store Vrrp status in memory
     * @param  {string} machineId  device machine id

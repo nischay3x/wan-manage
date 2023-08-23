@@ -953,7 +953,8 @@ class DevicesService {
     }
   }
 
-  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org }, { user }) {
+  // eslint-disable-next-line max-len
+  static async devicesIdInterfacesIdStatusGET ({ id, interfaceId, org, getEdgeData = 'false' }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
 
@@ -974,15 +975,15 @@ class DevicesService {
           message: 'get-lte-info',
           defaultResponse: {
             connectivity: false,
-            simStatus: null,
+            simStatus: '',
             signals: {},
             hardwareInfo: {},
             packetServiceState: {},
-            phoneNumber: null,
+            phoneNumber: '',
             systemInfo: {},
             defaultSettings: {},
             pinState: {},
-            connectionState: null,
+            connectionState: '',
             registrationNetworkState: {},
             state: null,
             sim: {}
@@ -1012,7 +1013,8 @@ class DevicesService {
             deviceStatus.setDeviceLteStatus(deviceObject.machineId, ifc.devId, response);
             response = deviceStatus.getDeviceLteStatus(deviceObject.machineId, ifc.devId);
             return response;
-          }
+          },
+          getCached: () => deviceStatus.getDeviceLteStatus(deviceObject.machineId, ifc.devId)
         },
         wifi: {
           message: 'get-wifi-info',
@@ -1023,13 +1025,23 @@ class DevicesService {
           parseResponse: async response => {
             response = mapWifiNames(response);
             return response;
-          }
+          },
+          getCached: () => deviceStatus.getDeviceWifiStatus(deviceObject.machineId, ifc.devId)
         }
       };
 
       const message = supportedMessages[ifc.deviceType];
       if (!message) {
-        throw new Error('Unsupported request');
+        throw new Error('Status request is supported for WiFi or LTE interfaces');
+      }
+
+      // default is to take cached data
+      if (getEdgeData === 'false' && message.getCached) {
+        return Service.successResponse({
+          error: null,
+          deviceStatus: 'unknown',
+          status: message.getCached()
+        });
       }
 
       if (!connections.isConnected(deviceObject.machineId)) {
