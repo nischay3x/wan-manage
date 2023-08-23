@@ -34,6 +34,7 @@ const { apply } = require('../deviceLogic/deviceNotifications');
 const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
 const { validateNotificationsSettings } = require('../models/validators');
+const mongoConns = require('../mongoConns.js')();
 
 class CustomError extends Error {
   constructor ({ message, status, data }) {
@@ -434,28 +435,51 @@ class NotificationsService {
             'Only account owners can set the account default settings', 403);
         }
       } else {
-        for (const org of orgIds) {
-          const devicesList = [];
-          for (const event in newRules) {
-            const rule = newRules[event];
+        const notificationsByOrg = new Map();
+        await mongoConns.mainDBwithTransaction(async (session) => {
+          for (const org of orgIds) {
             const updateData = { $set: {} };
-            Object.entries(rule).forEach(([field, value]) => {
-              if (value !== 'varies') {
-                updateData.$set[`rules.${event}.${field}`] = value;
-              }
-            });
-            await notificationsConf.updateOne({ org: org }, updateData);
+            for (const event in newRules) {
+              const rule = newRules[event];
+              Object.entries(rule).forEach(([field, value]) => {
+                if (value !== 'varies') {
+                  updateData.$set[`rules.${event}.${field}`] = value;
+                }
+              });
+            }
+            if (Object.keys(updateData.$set).length > 0) {
+              const updatedNotifications = await notificationsConf.findOneAndUpdate({ org: org }, updateData, { new: true, session: session });
+              notificationsByOrg.set(org, updatedNotifications);
+            }
           }
-          const orgDevices = await devices.find({ org: org });
-          devicesList.push(orgDevices);
-          const getOrgNotificationsConf = await notificationsConf.findOne({ org: org });
-          const orgNotificationsConf = getOrgNotificationsConf.rules;
+        });
+        let devicesShouldReceiveJobs = 0;
+        const applyPromises = [];
+        let fulfilledJobs = 0;
+        for (const [orgId, notificationsSettings] of notificationsByOrg.entries()) {
+          const orgDevices = await devices.find({ org: orgId });
+          devicesShouldReceiveJobs += orgDevices.length;
           const data = {
-            rules: orgNotificationsConf,
-            org: org
+            rules: notificationsSettings.rules,
+            org: orgId
           };
-          await apply(devicesList[0], user, data);
+          applyPromises.push(apply(orgDevices, user, data));
         }
+        const promisesStatus = await Promise.allSettled(applyPromises);
+        for (const promiseStatus of promisesStatus) {
+          if (promiseStatus.status === 'fulfilled') {
+            const { ids } = promiseStatus.value;
+            fulfilledJobs += ids.length;
+          }
+        }
+        const status = fulfilledJobs < devicesShouldReceiveJobs.length
+          ? 'partially completed' : 'completed';
+        const message = fulfilledJobs < devicesShouldReceiveJobs.length
+          ? `Warning: ${fulfilledJobs} of ${devicesShouldReceiveJobs.length} Set device's notifications job added.`
+          : 'The notifications were updated successfully';
+        return Service.successResponse(
+          { status, message }, 202
+        );
       }
       return Service.successResponse({
         error: '',
@@ -571,70 +595,44 @@ class NotificationsService {
       if (orgIds.error) {
         return orgIds;
       }
-      if (org) {
-        for (let i = 0; i < emailsSigning.length; i++) {
-          const emailSigning = emailsSigning[i];
-          // validate that the user has permissions to the organization
-          const userData = await users.findOne({ _id: emailSigning._id }).populate('defaultAccount');
-          const userOrgList = await getUserOrganizations(userData);
-          if (!Object.values(userOrgList).find(o => o.id === org)) {
-            return Service.rejectResponse('One of the users does not have permission to access the organization');
+
+      const userIds = emailsSigning.map(e => e._id);
+      const userDataList = await users.find({ _id: { $in: userIds } }).populate('defaultAccount');
+
+      // If one of the user ids does not exist in the db
+      if (userIds.length !== userDataList.length) {
+        return Service.rejectResponse('Not all the user IDs exist in the database');
+      }
+
+      const usersOrgAccess = {};
+      for (const userData of userDataList) {
+        usersOrgAccess[userData._id] = await getUserOrganizations(userData);
+      }
+
+      const targetOrgs = org ? [org] : orgIds;
+      for (const targetOrg of targetOrgs) {
+        for (const emailSigning of emailsSigning) {
+          if (!Object.values(usersOrgAccess[emailSigning._id]).find(o => o.id === targetOrg)) {
+            const errorMsg = org ? 'One of the users does not have a permission to access the organization'
+              : `All the users must have an access permission to each one of the organizations under the ${group ? 'group' : 'account'}`;
+            return Service.rejectResponse(errorMsg, 401);
           }
-          const signedToCritical = emailSigning.signedToCritical ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
-          const signedToWarning = emailSigning.signedToWarning ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
-          const signedToDaily = emailSigning.signedToDaily ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
-          if (emailSigning.signedToCritical === false) {
-            await notificationsConf.updateOne({ org: org }, { $pull: { signedToCritical: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
-          } else if (signedToCritical !== undefined) {
-            await notificationsConf.updateOne({ org: org }, { $addToSet: { signedToCritical: signedToCritical } }, { upsert: true });
-          }
-          if (emailSigning.signedToWarning === false) {
-            await notificationsConf.updateOne({ org: org }, { $pull: { signedToWarning: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
-          } else if (signedToWarning !== undefined) {
-            await notificationsConf.updateOne({ org: org }, { $addToSet: { signedToWarning: signedToWarning } }, { upsert: true });
-          }
-          if (emailSigning.signedToDaily === false) {
-            await notificationsConf.updateOne({ org: org }, { $pull: { signedToDaily: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
-          } else if (signedToDaily !== undefined) {
-            await notificationsConf.updateOne({ org: org }, { $addToSet: { signedToDaily: signedToDaily } }, { upsert: true });
-          }
-        }
-      } else {
-        // verify that all the users have a permission to access all the organizations under the account/group
-        for (let i = 0; i < orgIds.length; i++) {
-          for (let j = 0; j < emailsSigning.length; j++) {
-            const emailSigning = emailsSigning[j];
-            const userData = await users.findOne({ _id: emailSigning._id }).populate('defaultAccount');
-            const userOrgList = await getUserOrganizations(userData);
-            if (!Object.values(userOrgList).find(o => o.id === orgIds[i])) {
-              return Service.rejectResponse('All the users must have an access permission to each one of the organizations');
+
+          const operations = [];
+          ['signedToCritical', 'signedToWarning', 'signedToDaily'].forEach(field => {
+            if (emailSigning[field] === false) {
+              operations.push({ updateOne: { filter: { org: targetOrg }, update: { $pull: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
+            } else if (emailSigning[field]) {
+              operations.push({ updateOne: { filter: { org: targetOrg }, update: { $addToSet: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
             }
-          }
-        }
-        for (let i = 0; i < orgIds.length; i++) {
-          for (let j = 0; j < emailsSigning.length; j++) {
-            const emailSigning = emailsSigning[j];
-            const signedToCritical = emailSigning.signedToCritical ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
-            const signedToWarning = emailSigning.signedToWarning ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
-            const signedToDaily = emailSigning.signedToDaily ? mongoose.Types.ObjectId(emailSigning._id) : undefined;
-            if (emailSigning.signedToCritical === false) {
-              await notificationsConf.updateOne({ org: orgIds[i] }, { $pull: { signedToCritical: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
-            } else if (signedToCritical !== undefined) {
-              await notificationsConf.updateOne({ org: orgIds[i] }, { $addToSet: { signedToCritical: signedToCritical } }, { upsert: true });
-            }
-            if (emailSigning.signedToWarning === false) {
-              await notificationsConf.updateOne({ org: orgIds[i] }, { $pull: { signedToWarning: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
-            } else if (signedToWarning !== undefined) {
-              await notificationsConf.updateOne({ org: orgIds[i] }, { $addToSet: { signedToWarning: signedToWarning } }, { upsert: true });
-            }
-            if (emailSigning.signedToDaily === false) {
-              await notificationsConf.updateOne({ org: orgIds[i] }, { $pull: { signedToDaily: mongoose.Types.ObjectId(emailSigning._id) } }, { upsert: true });
-            } else if (signedToDaily !== undefined) {
-              await notificationsConf.updateOne({ org: orgIds[i] }, { $addToSet: { signedToDaily: signedToDaily } }, { upsert: true });
-            }
+          });
+
+          if (operations.length) {
+            await notificationsConf.bulkWrite(operations);
           }
         }
       }
+
       return Service.successResponse({
         error: '',
         code: 200,
