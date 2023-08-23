@@ -1901,6 +1901,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
         "403":
           content:
             application/json:
