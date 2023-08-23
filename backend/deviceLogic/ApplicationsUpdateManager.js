@@ -113,8 +113,8 @@ class ApplicationsUpdateManager {
               targets: {
                 deviceId: device._id,
                 tunnelId: null,
-                interfaceId: null,
-                policyId: null
+                interfaceId: null
+                // policyId: null
               },
               eventType: 'Software update',
               resolved: true,

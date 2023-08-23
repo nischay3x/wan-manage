@@ -224,24 +224,25 @@ class DeviceStatus {
 
   async handleResolvedAlerts (alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
     try {
-      const deviceOnlyAlerts = ['Link/Tunnel round trip time',
+      const agentOnlyAlerts = ['Link/Tunnel round trip time',
         'Link/Tunnel default drop rate', 'Device memory usage', 'Hard drive usage', 'Temperature'];
       const notificationsConfRules = orgNotificationsConf.rules;
 
       for (const alertKey in alerts) {
-        const isAgentAlert = deviceOnlyAlerts.includes(alertKey);
-        if (isAgentAlert) {
-          if (alerts[alertKey].type === 'device' && (!lastUpdateEntry.alerts[alertKey] ||
+        const isAgentAlert = agentOnlyAlerts.includes(alertKey);
+        if (!isAgentAlert) {
+          continue;
+        }
+        if (alerts[alertKey].type === 'device' && (!lastUpdateEntry.alerts[alertKey] ||
            lastUpdateEntry.alerts[alertKey].severity !== alerts[alertKey].severity)) {
-            const { thresholdValue, thresholdUnit } = this.getThresholdInfo(
-              alerts, alertKey, notificationsConfRules, deviceInfo.org);
-            this.createAndPushEvent(
-              deviceInfo, alerts, alertKey,
-              { thresholdValue, thresholdUnit }, null, true);
-          } else {
-            this.resolveTunnelAlerts(
-              alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
-          }
+          const { thresholdValue, thresholdUnit } = this.getThresholdInfo(
+            alerts, alertKey, notificationsConfRules, deviceInfo.org);
+          this.createAndPushEvent(
+            deviceInfo, alerts, alertKey,
+            { thresholdValue, thresholdUnit }, null, true);
+        } else {
+          this.resolveTunnelAlerts(
+            alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
         }
       }
     } catch (error) {
@@ -291,8 +292,8 @@ class DeviceStatus {
       targets: {
         deviceId,
         tunnelId,
-        interfaceId: null,
-        policyId: null
+        interfaceId: null
+        // policyId: null
       },
       severity,
       resolved: isResolved,
@@ -651,8 +652,8 @@ class DeviceStatus {
         targets: {
           deviceId: deviceId,
           tunnelId: null,
-          interfaceId: null,
-          policyId: null
+          interfaceId: null
+          // policyId: null
         },
         resolved: newState === 'running'
       });
@@ -859,8 +860,8 @@ class DeviceStatus {
             targets: {
               deviceId,
               tunnelId: tunnelID,
-              interfaceId: null,
-              policyId: null
+              interfaceId: null
+              // policyId: null
             },
             eventType: 'Tunnel connection',
             resolved: tunnelState.status === 'up'

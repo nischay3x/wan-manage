@@ -70,8 +70,8 @@ class Events {
       targets: {
         deviceId: _id,
         tunnelId: null,
-        interfaceId: null,
-        policyId: null
+        interfaceId: null
+        // policyId: null
       }
     }]);
   }
@@ -176,8 +176,8 @@ class Events {
       targets: {
         deviceId: device._id,
         tunnelId: null,
-        interfaceId: origIfc._id,
-        policyId: null
+        interfaceId: origIfc._id
+        // policyId: null
       },
       resolved: resolved
     }]);
@@ -209,8 +209,8 @@ class Events {
         targets: {
           deviceId: device._id,
           tunnelId: null,
-          interfaceId: origIfc._id,
-          policyId: null
+          interfaceId: origIfc._id
+          // policyId: null
         },
         resolved: true
       }]);
@@ -287,8 +287,8 @@ class Events {
         targets: {
           deviceId: device._id,
           tunnelId: null,
-          interfaceId: origIfc._id,
-          policyId: null
+          interfaceId: origIfc._id
+          // policyId: null
         }
       }]);
     }
@@ -478,8 +478,8 @@ class Events {
         targets: {
           deviceId: device._id,
           tunnelId: tunnel.num,
-          interfaceId: null,
-          policyId: null
+          interfaceId: null
+          // policyId: null
         },
         resolved: false
       }]);
@@ -509,8 +509,8 @@ class Events {
       targets: {
         deviceId: device._id,
         tunnelId: tunnel.num,
-        interfaceId: null,
-        policyId: null
+        interfaceId: null
+        // policyId: null
       },
       resolved: true
     }]);

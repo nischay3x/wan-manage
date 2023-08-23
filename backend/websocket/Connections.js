@@ -591,8 +591,8 @@ class Connections {
           targets: {
             deviceId: deviceObj,
             tunnelId: null,
-            interfaceId: null,
-            policyId: null
+            interfaceId: null
+            // policyId: null
           },
           resolved: true
         }
@@ -717,8 +717,8 @@ class Connections {
               targets: {
                 deviceId: deviceId,
                 tunnelId: null,
-                interfaceId: i._id,
-                policyId: null
+                interfaceId: i._id
+                // policyId: null
               },
               resolved
             }]);
@@ -874,8 +874,8 @@ class Connections {
               targets: {
                 deviceId: deviceId,
                 tunnelId: null,
-                interfaceId: null,
-                policyId: null
+                interfaceId: null
+                // policyId: null
               },
               details: 'Unsuccessful updating device data. Please contact flexiWAN support'
             }]);
@@ -1153,8 +1153,8 @@ class Connections {
             targets: {
               deviceId: deviceObj,
               tunnelId: null,
-              interfaceId: null,
-              policyId: null
+              interfaceId: null
+              // policyId: null
             }
           }
         ]);
