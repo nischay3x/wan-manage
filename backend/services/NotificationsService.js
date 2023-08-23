@@ -421,7 +421,7 @@ class NotificationsService {
           data: validNotifications.errors
         });
       }
-      if (setAsDefault) {
+      if (setAsDefault === 'true') {
         const accountOwners = await membership.find({
           account: user.defaultAccount._id,
           to: 'account',
