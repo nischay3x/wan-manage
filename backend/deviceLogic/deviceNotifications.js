@@ -34,7 +34,7 @@ const { getMajorVersion, getMinorVersion } = require('../versioning');
 const { transformNotificationsSettings } = require('../deviceLogic/jobParameters');
 
 /**
- * Creates and queues the set-notifications-config job.
+ * Creates and queues the add-notifications-config job.
  * @async
  * @param  {Array}    devicesList    an array of the devices to be modified (array of ids)
  * @param  {Object}   user      User object
@@ -104,12 +104,6 @@ const apply = async (devicesList, user, data) => {
   const { fulfilled, reasons } = promisesStatus.reduce(({ fulfilled, reasons }, elem) => {
     if (elem.status === 'fulfilled') {
       const job = elem.value;
-      logger.info('Set notifications for device job queued', {
-        params: {
-          jobId: job.id,
-          machineId: job.type
-        }
-      });
       fulfilled.push(job.id);
     } else {
       if (!reasons.includes(elem.reason.message)) {
