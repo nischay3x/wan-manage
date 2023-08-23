@@ -46,7 +46,7 @@ class Controller {
 
   static collectFiles (request) {
     // 'Checking if files are expected in schema');
-    if (request.openapi.schema.requestBody !== undefined) {
+    if (request.openapi.schema.requestBody) {
       const [contentType] = request.headers['content-type'].split(';');
       if (contentType === 'multipart/form-data') {
         const contentSchema = request.openapi.schema.requestBody.content[contentType].schema;
