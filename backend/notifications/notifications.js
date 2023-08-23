@@ -398,7 +398,6 @@ class NotificationsManager {
                 'emailSent.sendingTime': { $exists: true, $ne: null }
               });
 
-            let emailSent;
             let shouldSendEmail = false;
             if (emailSentForPreviousAlert) {
               const emailRateLimitPerDevice = configs.get('emailRateLimitPerDevice');
@@ -427,22 +426,19 @@ class NotificationsManager {
 
             // Send the email if necessary
             if (shouldSendEmail) {
-              emailSent = await this.sendEmailNotification(
+              const emailSent = await this.sendEmailNotification(
                 title,
                 orgNotificationsConf,
                 severity || notification.severity,
                 details
               );
-            }
-
-            // Update notification details if an email was sent
-            if (emailSent) {
               if (!notification.emailSent) {
                 notification.emailSent = {
                   sendingTime: null,
                   rateLimitedCount: 0
                 };
               }
+              // Update notification details if an email was sent
               notification.emailSent.sendingTime = emailSent;
             }
           }
