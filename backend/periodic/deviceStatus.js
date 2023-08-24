@@ -277,11 +277,10 @@ class DeviceStatus {
     agentAlertsInfo, tunnelId = null, isResolved = false) {
     const { org, deviceObj: deviceId, name } = deviceInfo;
     const title = isResolved ? `[resolved] ${alertKey}` : alertKey;
-    const details = `The value of the ${alertKey} in ${tunnelId ? `tunnel ${tunnelId}`
-     : `device ${name}`} has ${isResolved ? `returned to normal 
-     (under ${agentAlertsInfo.thresholdValue}${agentAlertsInfo.thresholdUnit})`
-     : `increased to ${agentAlertsInfo.value}${agentAlertsInfo.unit}`}`;
-
+    const details = 'The value of the ' + alertKey + ' in ' + (tunnelId ? 'tunnel ' +
+    tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
+    agentAlertsInfo.thresholdValue + agentAlertsInfo.thresholdUnit + ')' : 'increased to ' +
+    agentAlertsInfo.value + agentAlertsInfo.unit);
     const severity = tunnelId ? alerts[alertKey][tunnelId].severity : alerts[alertKey].severity;
 
     this.events.push({
@@ -646,8 +645,7 @@ class DeviceStatus {
       this.events.push({
         org: org,
         title: '[resolved] Router state change',
-        details: `Router state changed to running
-                 in the device ${name}`,
+        details: `Router state changed to running in the device ${name}`,
         eventType: 'Running router',
         targets: {
           deviceId: deviceId,
@@ -855,8 +853,8 @@ class DeviceStatus {
             org: org,
             title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
               : 'Tunnel connection change',
-            details: `Tunnel ${tunnelID} state changed to 
-                ${tunnelState.status === 'down' ? 'Not connected' : 'Connected'}`,
+            details: 'Tunnel ' + tunnelID + ' state changed to ' +
+            (tunnelState.status === 'down' ? 'Not connected' : 'Connected'),
             targets: {
               deviceId,
               tunnelId: tunnelID,

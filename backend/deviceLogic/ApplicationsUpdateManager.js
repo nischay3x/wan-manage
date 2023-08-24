@@ -107,9 +107,8 @@ class ApplicationsUpdateManager {
             notifications.push({
               org: app.org,
               title: `Application ${appStoreApp.name} upgrade`,
-              details:
-              `This application requires upgrade from version ${oldVersion} to ${newVersion}
-               in the device ${device.name} `,
+              details: 'This application requires upgrade from version ' + oldVersion +
+              ' to ' + newVersion + ' in the device ' + device.name,
               targets: {
                 deviceId: device._id,
                 tunnelId: null,
