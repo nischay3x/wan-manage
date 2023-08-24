@@ -65,6 +65,7 @@ async function up () {
     logger.error('Database migration failed', {
       params: { collections: ['notifications'], operation: 'up', err: err.message }
     });
+    throw new Error(err.message);
   }
 }
 
@@ -109,6 +110,7 @@ async function down () {
     logger.error('Database migration failed', {
       params: { collections: ['notifications'], operation: 'down', err: err.message }
     });
+    throw new Error(err.message);
   }
 }
 
