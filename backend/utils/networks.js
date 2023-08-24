@@ -51,7 +51,47 @@ const getStartEndIp = (ipString, mask, shift = 0) => {
   return [ip(u(addr32 & maskNum) + shift), ip(u(addr32 | ~maskNum) - shift)];
 };
 
+function checkOverlapping (subnets1, subnets2) {
+  function checkSubnetIntersection (subnet1, subnet2) {
+    function u (n) { return n >>> 0; } // convert to unsigned
+    function addr32 (ip) {
+      const m = ip.split('.');
+      return m.reduce((a, o) => { return u(+a << 8) + +o; });
+    }
+    const [address1, mask1] = subnet1.split('/');
+    const [address2, mask2] = subnet2.split('/');
+
+    const binAddress1 = addr32(address1);
+    const binAddress2 = addr32(address2);
+    const binMask1 = u(~0 << (32 - +mask1));
+    const binMask2 = u(~0 << (32 - +mask2));
+
+    const [start1, end1] = [u(binAddress1 & binMask1), u(binAddress1 | ~binMask1)];
+    const [start2, end2] = [u(binAddress2 & binMask2), u(binAddress2 | ~binMask2)];
+
+    return (
+      (start1 >= start2 && start1 <= end2) ||
+      (start2 >= start1 && start2 <= end1)
+    );
+  }
+
+  const result = [];
+  for (const subnet1 of subnets1) {
+    if (subnet1 === '/') continue; // allow dhcp interface to be empty
+    for (const subnet2 of subnets2) {
+      if (subnet2 === '/') continue; // allow dhcp interface to be empty
+      const isOverlapping = checkSubnetIntersection(subnet1, subnet2);
+      if (isOverlapping) {
+        result.push(subnet2);
+      }
+    }
+  }
+
+  return result;
+}
+
 module.exports = {
   getRangeAndMask,
-  getStartEndIp
+  getStartEndIp,
+  checkOverlapping
 };

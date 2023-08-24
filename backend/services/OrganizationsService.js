@@ -51,7 +51,7 @@ const { forceDevicesSync } = require('../deviceLogic/sync');
 const { pendingTypes, getReason } = require('../deviceLogic/events/eventReasons');
 const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/tunnels');
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
-const { validateFirewallRules } = require('../deviceLogic/validators');
+const { validateFirewallRules } = require('../utils/deviceUtils');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 class OrganizationsService {

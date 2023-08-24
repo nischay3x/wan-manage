@@ -49,7 +49,6 @@ const { validateFQDN } = require('../models/validators');
 const {
   mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
 } = require('../utils/deviceUtils');
-const { getAllOrganizationSubnets, getAllOrganizationBGPDevices } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const deviceQueues = require('../utils/deviceQueue')(
@@ -1524,12 +1523,6 @@ class DevicesService {
         const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
         const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
-        let orgSubnets = [];
-        if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-          orgSubnets = await getAllOrganizationSubnets(orgId);
-        }
-        const orgBgp = await getAllOrganizationBGPDevices(orgId);
-
         const origTunnels = await tunnelsModel.find({
           isActive: true,
           $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
@@ -1871,7 +1864,8 @@ class DevicesService {
         // add device id to device request
         const deviceToValidate = {
           ...deviceRequest,
-          _id: origDevice._id
+          _id: origDevice._id,
+          org: origDevice.org
         };
         // unspecified 'interfaces' are allowed for backward compatibility of some integrations
         if (typeof deviceToValidate.interfaces === 'undefined') {
@@ -2116,12 +2110,10 @@ class DevicesService {
         deviceToValidate.distro = origDevice.distro;
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
-        const { valid, err, errCode = null } = validateDevice(
+        const { valid, err, errCode = null } = await validateDevice(
           deviceToValidate,
           origDevice.org,
           isRunning,
-          orgSubnets,
-          orgBgp,
           allowOverlapping,
           origDevice
         );

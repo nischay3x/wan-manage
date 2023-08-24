@@ -16,25 +16,30 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { devices } = require('../models/devices');
-const tunnelsModel = require('../models/tunnels');
-const { generateTunnelParams } = require('./tunnelUtils');
-const appsLogic = require('../applicationLogic/applications')();
+const { checkOverlapping } = require('./networks');
 
 /**
  * Get all LAN subnets in the organization
- * @param  {string} orgId         the id of the organization
- * @return {[_id: objectId, name: string, subnet: string]} array of LAN subnets with router name
+ * @param  {[string]}      orgIds         ids of the organizations
+ * @param  {[string]}    subnetsToCheck   array with subnets to check overlapping with
+ * @param  {[objectId]?} excludeDevices   array with devices ids to not check
+ * @return {[
+ *  {_id: objectId, name: string, interfaceName: string, subnet: string}
+ * ]} array of overlapping LAN subnets
  */
-const getAllOrganizationLanSubnets = async orgId => {
+const checkLanOverlappingWith = async (orgIds, subnetsToCheck) => {
   const subnets = await devices.aggregate([
-    { $match: { org: orgId } },
+    { $match: { org: { $in: orgIds } } },
     {
       $project: {
+        'interfaces.devId': 1,
         'interfaces.IPv4': 1,
         'interfaces.IPv4Mask': 1,
+        'interfaces.name': 1,
         'interfaces.type': 1,
         'interfaces.isAssigned': 1,
         name: 1,
+        versions: 1,
         _id: 1
       }
     },
@@ -50,39 +55,31 @@ const getAllOrganizationLanSubnets = async orgId => {
     {
       $project: {
         _id: 1,
-        name: 1,
-        type: 'interface', // type of subnet
-        subnet: {
+        versions: 1,
+        deviceName: '$name',
+        interfaceName: '$interfaces.name',
+        interfaceDevId: '$interfaces.devId',
+        interfaceSubnet: [{
           $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
+        }] // put is as array in order
+      }
+    },
+    {
+      $addFields: {
+        isOverlappingWith: {
+          $function: {
+            body: checkOverlapping.toString(),
+            args: ['$interfaceSubnet', subnetsToCheck],
+            lang: 'js'
+          }
         }
       }
-    }
+    },
+    { $match: { 'isOverlappingWith.0': { $exists: true } } },
+    { $addFields: { isOverlappingWith: { $arrayElemAt: ['$isOverlappingWith', 0] } } }
   ]);
 
   return subnets;
-};
-
-const getTunnelsSubnets = async org => {
-  const tunnels = await tunnelsModel.find({
-    isActive: true,
-    org: org
-  }).lean();
-
-  const subnets = [];
-
-  for (const tunnel of tunnels) {
-    const { ip1 } = generateTunnelParams(tunnel.num);
-    subnets.push({ _id: tunnel._id, num: tunnel.num, subnet: `${ip1}/31`, type: 'tunnel' });
-  }
-
-  return subnets;
-};
-
-const getAllOrganizationSubnets = async orgId => {
-  const lanSubnets = await getAllOrganizationLanSubnets(orgId);
-  const tunnelSubnets = await getTunnelsSubnets(orgId);
-  const applicationSubnets = await appsLogic.getApplicationSubnets(orgId);
-  return [...lanSubnets, ...tunnelSubnets, ...applicationSubnets];
 };
 
 const getAllOrganizationBGPDevices = async orgId => {
@@ -95,7 +92,6 @@ const getAllOrganizationBGPDevices = async orgId => {
 
 // Default exports
 module.exports = {
-  getAllOrganizationLanSubnets,
-  getAllOrganizationSubnets,
+  checkLanOverlappingWith,
   getAllOrganizationBGPDevices
 };
