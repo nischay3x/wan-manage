@@ -26,7 +26,7 @@ async function up () {
       {
         $addFields: {
           count: { $ifNull: ['$count', 1] },
-          resolved: { $ifNull: ['$resolved', false] },
+          resolved: { $ifNull: ['$resolved', true] },
           targets: {
             $ifNull: [
               '$targets',
