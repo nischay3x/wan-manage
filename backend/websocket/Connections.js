@@ -181,6 +181,10 @@ class Connections {
         } else if (action === 'status' && info?.constructor === Object) {
           // status message from the get-device-stats request received
           this.statusCallback(machineId, info);
+        } else if (action === 'disconnect') {
+          // deviceDisconnect method was called on the host to which device was not connected
+          // the broadcast message was published in order to disconnect the device
+          this.devices.disconnectDevice(machineId);
         } else if (action === 'disconnected') {
           // the device is disconnected, deviceInfo should be removed
           this.devices.removeDeviceInfo(machineId);
@@ -1206,11 +1210,17 @@ class Connections {
 
   /**
    * Closes a device's websocket socket.
-   * @param  {string} device device machine id
+   * @param  {string} machineId device machine id
    * @return {void}
    */
-  deviceDisconnect (device) {
-    this.devices.disconnectDevice(device);
+  deviceDisconnect (machineId) {
+    const info = this.devices.getDeviceInfo(machineId);
+    if (this.isSocketAlive(info?.socket)) {
+      this.devices.disconnectDevice(machineId);
+    } else {
+      const message = { hostId, machineId, action: 'disconnect' };
+      this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
+    }
   }
 
   /**
