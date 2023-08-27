@@ -616,7 +616,7 @@ class OrganizationsService {
       }
       const setNotificationsConf = await NotificationsConf.create({
         org: org._id,
-        rules: notificationsSettings.payload,
+        rules: notificationsSettings,
         signedToCritical: [],
         signedToWarning: [],
         signedToDaily: accountOwners,
