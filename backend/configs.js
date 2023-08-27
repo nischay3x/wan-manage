@@ -215,6 +215,10 @@ const configEnv = {
     ticketingSystemUrl: '',
     // Ticketing system account ID to view
     ticketingSystemAccountId: '',
+    // Email alerts rate limit in minutes
+    emailRateLimitPerDevice: 60,
+    // Device disconnection time before triggering an alert in milliseconds (2 minutes)
+    deviceDisconnectionAlertTimeout: 120000,
     /****************************************************/
     /*         Client Fields                            */
     /****************************************************/

@@ -89,7 +89,7 @@ class Connections {
     this.publishStatus = this.publishStatus.bind(this);
     this.processChannelMessage = this.processChannelMessage.bind(this);
     this.processDeviceMessage = this.processDeviceMessage.bind(this);
-
+    this.triggerAlertWhenNeeded = this.triggerAlertWhenNeeded.bind(this);
     this.msgSeq = 0;
     this.msgQueue = {};
     this.connectCallbacks = {}; // Callback functions to be called on connect
@@ -121,9 +121,11 @@ class Connections {
       this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
     };
     this.devices = new Devices({ publishInfoHandler });
-
+    this.disconnectedDevices = {};
     // Ping each client every 30 sec, with two retries
     this.ping_interval = setInterval(this.pingCheck, 20000);
+    // Check every 1 min if a device disconnection alert is needed
+    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 60000);
   }
 
   /**
@@ -483,11 +485,14 @@ class Connections {
 
               this.devices.setDeviceInfo(machineId, {
                 org: resp[0].org.toString(),
+                name: resp[0].name,
                 deviceObj: resp[0]._id,
                 machineId: resp[0].machineId,
                 version: resp[0].versions.agent,
                 ready: false,
-                running: devInfo ? devInfo.running : null
+                running: devInfo ? devInfo.running : null,
+                notificationsHash: devInfo ? devInfo.notificationsHash : '',
+                alerts: devInfo ? devInfo.alerts : ''
               });
 
               // set device connection state flag used by other servers
@@ -544,10 +549,10 @@ class Connections {
   createConnection (socket, req) {
     const connectionURL = new URL(`${req.headers.origin}${req.url}`);
     const machineId = connectionURL.pathname.substring(1);
-    const info = this.devices.getDeviceInfo(machineId);
+    const deviceInfo = this.devices.getDeviceInfo(machineId);
 
     // Set the received socket into the device info
-    info.socket = socket;
+    deviceInfo.socket = socket;
 
     // Initialize to alive connection, with 3 retries
     socket.isAlive = 7;
@@ -577,7 +582,26 @@ class Connections {
     // device version, network information, tunnel keys, etc.)
     // Only after getting the device's response and updating
     // the information, the device can be considered ready.
-    this.sendDeviceInfoMsg(machineId, info.deviceObj, info.org, true);
+    this.sendDeviceInfoMsg(machineId, deviceInfo.deviceObj, deviceInfo.org, true);
+    (async () => {
+      delete this.disconnectedDevices[machineId];
+      const { org, name, deviceObj } = deviceInfo;
+      await notificationsMgr.sendNotifications([
+        {
+          org: org,
+          title: '[resolved] Device connection',
+          details: `Device ${name} reconnected to management`,
+          eventType: 'Device connection',
+          targets: {
+            deviceId: deviceObj,
+            tunnelId: null,
+            interfaceId: null
+            // policyId: null
+          },
+          resolved: true
+        }
+      ]);
+    })();
   }
 
   /**
@@ -660,7 +684,7 @@ class Connections {
         const incomingInterfaces = deviceInfo.message.network.interfaces;
 
         const interfaces = [];
-        origDevice.interfaces.forEach(i => {
+        for (const i of origDevice.interfaces) {
           const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
           if (!updatedConfig) {
             if (i.devId.startsWith('vlan')) {
@@ -681,21 +705,29 @@ class Connections {
             interfaces.push(i.toObject());
             return;
           }
-
-          // send a notification if the link changed to down
-          if (updatedConfig.link === 'down' && i.linkStatus !== 'down') {
-            const { org, deviceObj } = prevDeviceInfo;
-            notificationsMgr.sendNotifications([
-              {
-                org: org,
-                title: 'Link status changed',
-                time: new Date(),
-                device: deviceObj,
-                machineId: machineId,
-                details: `Link ${i.name} ${i.IPv4} is DOWN`
-              }
-            ]);
+          const { org, _id: deviceId } = origDevice;
+          const linkStatusChanged = (updatedConfig.link === 'up' && i.linkStatus !== 'up') ||
+            (updatedConfig.link === 'down' && i.linkStatus !== 'down');
+            // send a notification if the link's status has been changed
+          if (linkStatusChanged) {
+            const resolved = updatedConfig.link === 'up' && i.linkStatus !== 'up';
+            logger.info(`Link status changed to ${updatedConfig.link}`,
+              { params: { interface: i } });
+            await notificationsMgr.sendNotifications([{
+              org: org,
+              title: resolved ? '[resolved] Link status change' : 'Link status change',
+              details: `Link ${i.name} ${i.IPv4} is ${(updatedConfig.link).toUpperCase()}`,
+              eventType: 'Link status',
+              targets: {
+                deviceId: deviceId,
+                tunnelId: null,
+                interfaceId: i._id
+                // policyId: null
+              },
+              resolved
+            }]);
           }
+
           const updInterface = {
             ...i.toJSON(),
             PublicIP: updatedConfig.public_ip && i.useStun
@@ -749,7 +781,7 @@ class Connections {
 
           updInterface.locked = i.locked;
           interfaces.push(updInterface);
-        });
+        };
 
         const deviceId = origDevice._id.toString();
 
@@ -839,13 +871,16 @@ class Connections {
           const { allowed, blockedNow } = await reconfigErrorsLimiter.use(deviceId);
           if (!allowed && blockedNow) {
             logger.error('Reconfig errors rate-limit exceeded', { params: { deviceId } });
-
             await notificationsMgr.sendNotifications([{
               org: origDevice.org,
               title: 'Unsuccessful self-healing operations',
-              time: new Date(),
-              device: deviceId,
-              machineId: machineId,
+              eventType: 'Failed self-healing',
+              targets: {
+                deviceId: deviceId,
+                tunnelId: null,
+                interfaceId: null
+                // policyId: null
+              },
               details: 'Unsuccessful updating device data. Please contact flexiWAN support'
             }]);
           }
@@ -1101,25 +1136,45 @@ class Connections {
   }
 
   /**
+   * This function periodically checks and alerts if a device has remained disconnected for
+   * a specified duration.
+  */
+  async triggerAlertWhenNeeded () {
+    if (!Object.keys(this.disconnectedDevices).length) {
+      return;
+    }
+    const currentTime = new Date().getTime();
+    for (const [device, deviceInfo] of Object.entries(this.disconnectedDevices)) {
+      if (currentTime - deviceInfo.timeFirstUnresponsive >=
+        configs.get('deviceDisconnectionAlertTimeout')) {
+        const { org, deviceObj, name } = deviceInfo;
+        await notificationsMgr.sendNotifications([
+          {
+            org: org,
+            title: 'Device disconnection',
+            details: `Device ${name} disconnected from management`,
+            eventType: 'Device connection',
+            targets: {
+              deviceId: deviceObj,
+              tunnelId: null,
+              interfaceId: null
+              // policyId: null
+            }
+          }
+        ]);
+        delete this.disconnectedDevices[device];
+      }
+    }
+  }
+
+  /**
    * Websocket close event callback, called when a connection is closed.
    * @param  {string} device device machine id
    * @return {void}
    */
-  closeConnection (device) {
-    // Device has no information, probably not connected, just return
-    const deviceInfo = this.devices.getDeviceInfo(device);
+  closeConnection (machineId) {
+    const deviceInfo = this.devices.getDeviceInfo(machineId);
     if (!deviceInfo) return;
-    const { org, deviceObj, machineId } = deviceInfo;
-    notificationsMgr.sendNotifications([
-      {
-        org: org,
-        title: 'Device connection change',
-        time: new Date(),
-        device: deviceObj,
-        machineId: machineId,
-        details: 'Device disconnected from management'
-      }
-    ]);
     // keep deviceInfo in memory, only remove the socket object
     // the device can be reconnected to another instance
     // deviceInfo will be removed when connectDeviceKey expires
@@ -1135,15 +1190,22 @@ class Connections {
         // the device is reconnected to another instance
         // keep deviceInfo in memory, only remove the socket object
         delete deviceInfo.socket;
+      // the device is disconnected
       } else {
-        // device disconnected, deviceInfo should be removed and published to others
+        // save the disconnection time
+        const currentTime = new Date().getTime();
+        if (!this.disconnectedDevices.hasOwnProperty(machineId)) {
+          deviceInfo.timeFirstUnresponsive = currentTime;
+          this.disconnectedDevices[machineId] = deviceInfo;
+        }
+        // deviceInfo should be removed and published to others
         this.devices.removeDeviceInfo(machineId);
         const message = { hostId, machineId, action: 'disconnected' };
         this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
       }
     });
-    this.callRegisteredCallbacks(this.closeCallbacks, device);
-    logger.info('Device connection closed', { params: { deviceId: device } });
+    this.callRegisteredCallbacks(this.closeCallbacks, machineId);
+    logger.info('Device connection closed', { params: { deviceId: machineId } });
   }
 
   /**

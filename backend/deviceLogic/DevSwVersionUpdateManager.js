@@ -40,6 +40,8 @@ const dummyVersionObject = {
   },
   versionDeadline: new Date(0)
 };
+const connections = require('../websocket/Connections')();
+
 /***
  * This class serves as the software update manager, responsible for
  * polling our package repository for new software versions, and take
@@ -87,7 +89,7 @@ class SwVersionUpdateManager {
     try {
       // Generate notification for each organization.
       // Group all devices not running the latest version
-      // by the organizations the belong to.
+      // by the organizations they belong to.
       const orgDevicesList = await devices.aggregate([
         { $match: { 'versions.device': { $ne: versions.device } } },
         {
@@ -100,19 +102,26 @@ class SwVersionUpdateManager {
         }
       ]);
 
-      orgDevicesList.forEach(orgDevices => {
-        orgDevices.devices.forEach(device => {
+      for (const orgDevices of orgDevicesList) {
+        for (const device of orgDevices.devices) {
+          const deviceInfo = connections.getDeviceInfo(device._id);
           notifications.push({
             org: orgDevices._id,
             title: 'Device upgrade',
-            time: new Date(),
-            device: device._id,
-            machineId: device.machineId,
-            details: `This device requires upgrade to version ${versions.device}`
+            details: `The device ${deviceInfo.name} requires upgrade to version ${versions.device}`,
+            targets: {
+              deviceId: device._id,
+              tunnelId: null,
+              interfaceId: null
+              // policyId: null
+            },
+            eventType: 'Software update',
+            resolved: true,
+            isAlwaysResolved: true
           });
-        });
-      });
-      notificationsMgr.sendNotifications(notifications);
+        }
+      }
+      await notificationsMgr.sendNotifications(notifications);
     } catch (err) {
       logger.error('Failed to send upgrade notifications', {
         params: { notifications: notifications },

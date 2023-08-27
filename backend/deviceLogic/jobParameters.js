@@ -378,6 +378,22 @@ const transformVrrp = (device, vrrpGroup) => {
   return params;
 };
 
+/**
+ * Transform relevant event types from the "rules" field in the notificationsConf collection
+ * @param  {object} notificationsSettings the notifications configuration
+ * @param  {Set} relevantEventTypes the relevant event types (event names).
+ * @return {object} An object of the filtered notifications settings
+ */
+const transformNotificationsSettings = (notificationsSettings, relevantEventTypes) => {
+  const notificationsObject = Object.keys(notificationsSettings).reduce((obj, eventName) => {
+    if (relevantEventTypes.has(eventName)) {
+      obj[eventName] = notificationsSettings[eventName];
+    }
+    return obj;
+  }, {});
+  return notificationsObject;
+};
+
 module.exports = {
   transformInterfaces,
   transformRoutingFilters,
@@ -386,5 +402,6 @@ module.exports = {
   transformDHCP,
   transformVxlanConfig,
   transformLte,
-  transformVrrp
+  transformVrrp,
+  transformNotificationsSettings
 };
