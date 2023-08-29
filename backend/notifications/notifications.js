@@ -330,7 +330,7 @@ class NotificationsManager {
         // 2. This is a resolved alert, there is unresolved alert in the db,
         // and the user has defined to send resolved alerts
         const conditionToSend = ((!resolved && !existingAlert) ||
-        (resolved && sendResolvedAlert && existingAlert));
+        (resolved && sendResolvedAlert && (Boolean(existingAlert))));
         // If this is a new notification or a resolved one
         // which we want to notify about it's resolution
         if (conditionToSend) {
