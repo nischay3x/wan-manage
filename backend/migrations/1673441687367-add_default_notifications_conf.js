@@ -193,11 +193,9 @@ async function up () {
           to: 'account',
           role: 'owner'
         });
-        if (ownerMembership) {
-          ownerMembership.forEach(owner => {
-            accountOwners.push(owner.user);
-          });
-        }
+        ownerMembership.forEach(owner => {
+          accountOwners.push(owner.user);
+        });
       }
       await notificationConfModel.create({
         org: orgAndAccount._id,
