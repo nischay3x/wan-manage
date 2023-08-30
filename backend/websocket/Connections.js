@@ -188,6 +188,11 @@ class Connections {
         } else if (action === 'disconnected') {
           // the device is disconnected, deviceInfo should be removed
           this.devices.removeDeviceInfo(machineId);
+        } else if (action === 'pong') {
+          // the device is alive, set info in memory if it does not exist
+          if (!this.isConnected(machineId)) {
+            this.devices.setDeviceInfo(machineId, info, false);
+          }
         }
       }
     } else if (channel.startsWith(deviceChannelPrefix + ':')) {
@@ -562,6 +567,12 @@ class Connections {
       // update device connection state flag used by other hosts
       const connectDeviceKey = `${connectDevicePrefix}:${machineId}`;
       this.redisClient.setex(connectDeviceKey, connectExpireTime, hostId);
+      // publish the device info to update missed connection state on other servers
+      const deviceInfo = this.devices.getDeviceInfo(machineId);
+      const message = {
+        hostId, machineId, info: { ...deviceInfo, socket: null }, action: 'pong'
+      };
+      this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
     });
 
     socket.on('message', (message) => {
