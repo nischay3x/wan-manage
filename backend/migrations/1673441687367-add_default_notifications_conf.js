@@ -213,15 +213,6 @@ async function up () {
 }
 
 async function down () {
-  try {
-    // Remove all documents from the notifications collection
-    await notificationConfModel.deleteMany({});
-  } catch (err) {
-    logger.error('Database migration rollback failed', {
-      params: { collections: ['notifications'], operation: 'down', err: err.message }
-    });
-    throw new Error(err.message);
-  }
 }
 
 module.exports = { up, down };
