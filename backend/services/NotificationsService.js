@@ -309,6 +309,7 @@ class NotificationsService {
       if (!account) {
         return Service.rejectResponse('Please specify the account id', 400);
       }
+      return [];
     } else {
     // Validate parameters
       if (!org && !account && !group) {
@@ -327,7 +328,7 @@ class NotificationsService {
       const orgList = await getUserOrganizations(user);
       let orgIds = [];
       if (org) {
-        if (!Object.values(orgList).find(o => o.id === org)) {
+        if (!orgList[org]) {
           return Service.rejectResponse('You do not have permission to access this organization', 403);
         }
         orgIds = [org];
@@ -404,6 +405,27 @@ class NotificationsService {
     }
   }
 
+  static validateThresholds (newRulesEventSettings, currentRuleEventSettings, eventName) {
+    let { warningThreshold, criticalThreshold } = newRulesEventSettings;
+    if (warningThreshold === 'varies') {
+      warningThreshold = currentRuleEventSettings.warningThreshold;
+    }
+
+    if (criticalThreshold === 'varies') {
+      criticalThreshold = currentRuleEventSettings.criticalThreshold;
+    }
+
+    const validRule = validateNotificationsSettings({ [eventName]: { warningThreshold, criticalThreshold } });
+
+    if (!validRule.valid) {
+      throw new CustomError({
+        status: 400,
+        message: 'Invalid notification settings',
+        data: validRule.errors
+      });
+    }
+  }
+
   /**
    * Modify the notifications settings of a given organization/account/group
    **/
@@ -413,15 +435,19 @@ class NotificationsService {
       if (orgIds && orgIds.error) {
         return orgIds;
       }
-      const validNotifications = validateNotificationsSettings(newRules);
-      if (!validNotifications.valid) {
-        throw new CustomError({
-          status: 400,
-          message: 'Invalid notification settings',
-          data: validNotifications.errors
-        });
+      // If we modify a single organization we can send the whole newRules object to validation as it is
+      // Since it doesn't contain "varies" values when we expect numeric values
+      if (orgIds.length === 1) {
+        const validNotifications = validateNotificationsSettings(newRules);
+        if (!validNotifications.valid) {
+          throw new CustomError({
+            status: 400,
+            message: 'Invalid notification settings',
+            data: validNotifications.errors
+          });
+        }
       }
-      if (setAsDefault === 'true') {
+      if (setAsDefault) {
         const accountOwners = await membership.find({
           account: user.defaultAccount._id,
           to: 'account',
@@ -434,25 +460,54 @@ class NotificationsService {
           return Service.rejectResponse(
             'Only account owners can set the account default settings', 403);
         }
+        return Service.successResponse(
+          { status: 'completed', message: 'The notifications were updated successfully' }, 202
+        );
       } else {
         const notificationsByOrg = new Map();
+
         await mongoConns.mainDBwithTransaction(async (session) => {
-          for (const org of orgIds) {
-            const updateData = { $set: {} };
-            for (const event in newRules) {
-              const rule = newRules[event];
-              Object.entries(rule).forEach(([field, value]) => {
-                if (value !== 'varies') {
-                  updateData.$set[`rules.${event}.${field}`] = value;
+          const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } });
+          const orgRulesMap = new Map();
+
+          allCurrentRules.forEach(orgRule => {
+            orgRulesMap.set(orgRule.org, orgRule);
+          });
+
+          let updatedNotifications;
+          if (orgIds.length === 1) {
+            updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, { $set: { rules: newRules } }, { new: true, session: session });
+            notificationsByOrg.set(orgId, updatedNotifications);
+          } else {
+            for (const orgId of orgIds) {
+              const updateData = { $set: {} };
+              const currentRules = orgRulesMap.get(orgId);
+
+              for (const event in newRules) {
+                const { warningThreshold, criticalThreshold } = newRules[event];
+                if (warningThreshold && criticalThreshold) {
+                  NotificationsService.validateThresholds(
+                    newRules[event],
+                    currentRules.rules[event],
+                    event
+                  );
                 }
-              });
-            }
-            if (Object.keys(updateData.$set).length > 0) {
-              const updatedNotifications = await notificationsConf.findOneAndUpdate({ org: org }, updateData, { new: true, session: session });
-              notificationsByOrg.set(org, updatedNotifications);
+
+                Object.entries(newRules[event]).forEach(([field, value]) => {
+                  if (value !== 'varies') {
+                    updateData.$set[`rules.${event}.${field}`] = value;
+                  }
+                });
+              }
+
+              if (Object.keys(updateData.$set).length > 0) {
+                const updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, updateData, { new: true, session: session });
+                notificationsByOrg.set(orgId, updatedNotifications);
+              }
             }
           }
         });
+
         let devicesShouldReceiveJobs = 0;
         const applyPromises = [];
         let fulfilledJobs = 0;
@@ -481,12 +536,6 @@ class NotificationsService {
           { status, message }, 202
         );
       }
-      return Service.successResponse({
-        error: '',
-        code: 200,
-        message: 'Success',
-        data: 'updated successfully'
-      });
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -564,10 +613,9 @@ class NotificationsService {
 
             const userIndex = response.findIndex(user => user._id.toString() === memberIdStr);
             const existingUser = response[userIndex];
-
-            existingUser.signedToCritical = !notificationsData[0].signedToCritical.includes(member.user) ? null : existingUser.signedToCritical;
-            existingUser.signedToWarning = !notificationsData[0].signedToWarning.includes(member.user) ? null : existingUser.signedToWarning;
-            existingUser.signedToDaily = !notificationsData[0].signedToDaily.includes(member.user) ? null : existingUser.signedToDaily;
+            existingUser.signedToCritical = notificationsData[0].signedToCritical.includes(member.user) !== existingUser.signedToCritical ? null : existingUser.signedToCritical;
+            existingUser.signedToWarning = notificationsData[0].signedToWarning.includes(member.user) !== existingUser.signedToWarning ? null : existingUser.signedToWarning;
+            existingUser.signedToDaily = notificationsData[0].signedToDaily.includes(member.user) !== existingUser.signedToDaily ? null : existingUser.signedToDaily;
             existingUser.count++;
           }
         }
@@ -597,40 +645,66 @@ class NotificationsService {
       }
 
       const userIds = emailsSigning.map(e => e._id);
-      const userDataList = await users.find({ _id: { $in: userIds } }).populate('defaultAccount');
+      const userDataList = await users.find({ _id: { $in: userIds } });
 
       // If one of the user ids does not exist in the db
       if (userIds.length !== userDataList.length) {
         return Service.rejectResponse('Not all the user IDs exist in the database');
       }
-
       const usersOrgAccess = {};
       for (const userData of userDataList) {
-        usersOrgAccess[userData._id] = await getUserOrganizations(userData);
+        usersOrgAccess[userData._id] = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
       }
 
-      const targetOrgs = org ? [org] : orgIds;
-      for (const targetOrg of targetOrgs) {
+      let groupOrgs = [];
+      if (group) {
+        groupOrgs = await Organizations.find({
+          account: user.defaultAccount._id,
+          group
+        });
+      }
+
+      const operations = [];
+
+      for (const org of orgIds) {
         for (const emailSigning of emailsSigning) {
-          if (!Object.values(usersOrgAccess[emailSigning._id]).find(o => o.id === targetOrg)) {
+          if (!usersOrgAccess?.[emailSigning._id]?.[org]) {
             const errorMsg = org ? 'One of the users does not have a permission to access the organization'
-              : `All the users must have an access permission to each one of the organizations under the ${group ? 'group' : 'account'}`;
-            return Service.rejectResponse(errorMsg, 401);
+              : `All the users must be authorized to each one of the organizations under the ${group ? 'group' : 'account'}`;
+            logger.warn('Error in email subscription', { params: { err: `user id ${emailSigning._id} is not authorized for the organization ${org}` } });
+            return Service.rejectResponse(errorMsg, 403);
           }
 
-          const operations = [];
+          // Since group is always being sent with account, we should check it first
+          if (group) {
+            const userGroupOrgs = Object.values(usersOrgAccess?.[emailSigning._id]).filter(o => o.group === group);
+            if (userGroupOrgs.length !== groupOrgs.length) {
+              const errorMsg = 'All the users must be authorized to each one of the organizations under the group';
+              logger.warn('Error in email subscription', {
+                params: {
+                  err: `user id ${emailSigning._id} is not authorized for all the organizations in the group ${group} under the account ${account}`
+                }
+              });
+              return Service.rejectResponse(errorMsg, 403);
+            }
+          } else if (account && user.defaultAccount.organizations.length !== Object.keys(usersOrgAccess[emailSigning._id]).length) {
+            const errorMsg = 'All the users must be authorized to each one of the organizations under the account';
+            logger.warn('Error in email subscription', { params: { err: `user id ${emailSigning._id} is not authorized for all the organizations in the account ${account}` } });
+            return Service.rejectResponse(errorMsg, 403);
+          }
+
           ['signedToCritical', 'signedToWarning', 'signedToDaily'].forEach(field => {
             if (emailSigning[field] === false) {
-              operations.push({ updateOne: { filter: { org: targetOrg }, update: { $pull: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
+              operations.push({ updateOne: { filter: { org }, update: { $pull: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
             } else if (emailSigning[field]) {
-              operations.push({ updateOne: { filter: { org: targetOrg }, update: { $addToSet: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
+              operations.push({ updateOne: { filter: { org }, update: { $addToSet: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
             }
           });
-
-          if (operations.length) {
-            await notificationsConf.bulkWrite(operations);
-          }
         }
+      }
+
+      if (operations.length) {
+        await notificationsConf.bulkWrite(operations);
       }
 
       return Service.successResponse({

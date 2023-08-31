@@ -330,7 +330,7 @@ class NotificationsManager {
         // 2. This is a resolved alert, there is unresolved alert in the db,
         // and the user has defined to send resolved alerts
         const conditionToSend = ((!resolved && !existingAlert) ||
-        (resolved && sendResolvedAlert && existingAlert));
+        (resolved && sendResolvedAlert && (Boolean(existingAlert))));
         // If this is a new notification or a resolved one
         // which we want to notify about it's resolution
         if (conditionToSend) {
@@ -456,7 +456,7 @@ class NotificationsManager {
         if (resolved && !isAlwaysResolved && existingAlert) {
           await this.resolveAnAlert(eventType,
             targets,
-            severity,
+            severity || notification.severity,
             org);
         }
       }
@@ -530,13 +530,15 @@ class NotificationsManager {
         const orgNotificationsConf = await notificationsConf.findOne({ org: orgID });
         const emailAddresses = await this.getUsersEmail(orgNotificationsConf.signedToDaily);
         if (emailAddresses.length > 0) {
-          const organization = await organizations.findOne({ _id: orgID }, { account: 1 });
+          const organization = await organizations.findOne({ _id: orgID }, { account: 1, name: 1 });
+
           const messages = await notificationsDb.find(
             { org: orgID, status: 'unread' },
-            'time device details machineId'
-          ).sort({ time: -1 })
+            'time targets.deviceId details'
+          )
+            .sort({ time: -1 })
             .limit(configs.get('unreadNotificationsMaxSent', 'number'))
-            .populate('device', 'name -_id', devicesModel).lean();
+            .populate('targets.deviceId', 'name -_id', devicesModel).lean();
 
           const uiServerUrl = configs.get('uiServerUrl', 'list');
           await mailer.sendMailHTML(
@@ -554,8 +556,7 @@ class NotificationsManager {
               ${messages.map(message => `
               <li>
                 ${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}
-                device ${message.device ? message.device.name : 'Deleted'}
-                (ID: ${message.machineId})
+                device ${message.targets.deviceId ? message.targets.deviceId.name : 'Deleted'}
                 - ${message.details}
               </li>
               `).join('')}

@@ -80,7 +80,7 @@ const apply = async (devicesList, user, data) => {
       applyPromises.push(deviceQueues
         .addJob(
           machineId,
-          user,
+          user.username,
           orgId,
           // Data
           { title: 'Setting notifications for device: ' + device.hostname, tasks: tasks },

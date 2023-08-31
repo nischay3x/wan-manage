@@ -219,7 +219,7 @@ class OrganizationsService {
         await FirewallPolicies.deleteMany({ org: id }, { session: session });
         await appIdentifications.deleteMany({ 'meta.org': id }, { session: session });
         await importedAppIdentifications.deleteMany({ 'meta.org': id }, { session: session });
-        await NotificationsConf.deleteOne({ org: id }, { session: session });
+        await NotificationsConf.deleteMany({ org: id }, { session: session });
 
         // Find all devices for organization
         orgDevices = await Devices.devices.find({ org: id },
@@ -616,7 +616,7 @@ class OrganizationsService {
       }
       const setNotificationsConf = await NotificationsConf.create({
         org: org._id,
-        rules: notificationsSettings.payload,
+        rules: notificationsSettings,
         signedToCritical: [],
         signedToWarning: [],
         signedToDaily: accountOwners,

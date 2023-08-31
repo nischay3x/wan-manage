@@ -191,9 +191,12 @@ class DeviceStatus {
 
   async handleAlert (
     deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelNum = null) {
-    const { value, unit, threshold, type } = tunnelNum
+    let { value, unit, threshold, type } = tunnelNum
       ? lastUpdateEntry.alerts[alertKey][tunnelNum]
       : lastUpdateEntry.alerts[alertKey];
+
+    // Ensure that 'value' has only one digit after the '.'
+    value = parseFloat(value.toFixed(1));
     try {
       this.createAndPushEvent(
         deviceInfo, lastUpdateEntry.alerts, alertKey,
@@ -219,7 +222,7 @@ class DeviceStatus {
 
     const thresholdUnit = notificationsConfRules[alertKey].thresholdUnit;
 
-    return { thresholdValue, thresholdUnit };
+    return { threshold: thresholdValue, unit: thresholdUnit };
   }
 
   async handleResolvedAlerts (alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
@@ -233,13 +236,15 @@ class DeviceStatus {
         if (!isAgentAlert) {
           continue;
         }
-        if (alerts[alertKey].type === 'device' && (!lastUpdateEntry.alerts[alertKey] ||
-           lastUpdateEntry.alerts[alertKey].severity !== alerts[alertKey].severity)) {
-          const { thresholdValue, thresholdUnit } = this.getThresholdInfo(
-            alerts, alertKey, notificationsConfRules, deviceInfo.org);
-          this.createAndPushEvent(
-            deviceInfo, alerts, alertKey,
-            { thresholdValue, thresholdUnit }, null, true);
+        if (alerts[alertKey].type === 'device') {
+          if ((!lastUpdateEntry.alerts[alertKey] ||
+            lastUpdateEntry.alerts[alertKey].severity !== alerts[alertKey].severity)) {
+            const agentAlertsInfo = this.getThresholdInfo(
+              alerts, alertKey, notificationsConfRules, deviceInfo.org);
+            this.createAndPushEvent(
+              deviceInfo, alerts, alertKey,
+              agentAlertsInfo, null, true);
+          }
         } else {
           this.resolveTunnelAlerts(
             alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
@@ -259,15 +264,15 @@ class DeviceStatus {
       const severityHasChanged = alertExistsForTunnel &&
       alertExistsForTunnel.severity !== alerts[alertKey][tunnelId].severity;
 
-      const shouldSendTunnelAlert = !lastUpdateEntry.alerts[alertKey] ||
+      const shouldResolveTunnelAlert = !lastUpdateEntry.alerts[alertKey] ||
        !alertExistsForTunnel || severityHasChanged;
 
-      if (shouldSendTunnelAlert) {
-        const { thresholdValue, thresholdUnit } = this.getThresholdInfo(
+      if (shouldResolveTunnelAlert) {
+        const agentAlertsInfo = this.getThresholdInfo(
           alerts, alertKey, notificationsConfRules, deviceInfo.org, tunnelId);
         this.createAndPushEvent(
           deviceInfo, alerts, alertKey,
-          { thresholdValue, thresholdUnit }, tunnelId, true);
+          agentAlertsInfo, tunnelId, true);
       }
     }
   }
@@ -279,7 +284,7 @@ class DeviceStatus {
     const title = isResolved ? `[resolved] ${alertKey}` : alertKey;
     const details = 'The value of the ' + alertKey + ' in ' + (tunnelId ? 'tunnel ' +
     tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
-    agentAlertsInfo.thresholdValue + agentAlertsInfo.thresholdUnit + ')' : 'increased to ' +
+    agentAlertsInfo.threshold + agentAlertsInfo.unit + ')' : 'increased to ' +
     agentAlertsInfo.value + agentAlertsInfo.unit);
     const severity = tunnelId ? alerts[alertKey][tunnelId].severity : alerts[alertKey].severity;
 
@@ -296,7 +301,7 @@ class DeviceStatus {
       },
       severity,
       resolved: isResolved,
-      agentAlertsInfo: agentAlertsInfo
+      agentAlertsInfo
     });
   }
 
