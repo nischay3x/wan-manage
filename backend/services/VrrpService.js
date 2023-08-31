@@ -395,8 +395,11 @@ class VrrpService {
     const vrrpGroups = await Vrrp.find({ _id: { $ne: vrrp._id }, org }).lean();
 
     const usedInterfaces = new Set();
+    const usedGroupIds = new Set();
     for (const vrrpGroup of vrrpGroups) {
       const groupId = vrrpGroup.virtualRouterId;
+      usedGroupIds.add(groupId);
+
       for (const vrrpGroupDevice of vrrpGroup.devices) {
         const key = `${vrrpGroupDevice.interface.toString()}-${groupId}`;
         usedInterfaces.add(key);
@@ -404,6 +407,13 @@ class VrrpService {
     }
 
     const groupId = vrrp.virtualRouterId;
+    if (usedGroupIds.has(+groupId)) {
+      return {
+        valid: false,
+        err: `Virtual Router ID ${groupId} already exists in your organization`
+      };
+    }
+
     for (const vrrpGroupDevice of vrrp.devices) {
       const key = `${vrrpGroupDevice.interface}-${groupId}`;
       if (usedInterfaces.has(key)) {
