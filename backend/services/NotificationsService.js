@@ -435,6 +435,8 @@ class NotificationsService {
       if (orgIds && orgIds.error) {
         return orgIds;
       }
+      // If we modify a single organization we can send the whole newRules object to validation as it is
+      // Since it doesn't contain "varies" values when we expect numeric values
       if (orgIds.length === 1) {
         const validNotifications = validateNotificationsSettings(newRules);
         if (!validNotifications.valid) {
