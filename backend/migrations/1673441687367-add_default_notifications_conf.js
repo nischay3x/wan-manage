@@ -197,12 +197,18 @@ async function up () {
           accountOwners.push(owner.user);
         });
       }
-      await notificationConfModel.create({
-        org: orgAndAccount._id,
-        rules: systemNotificationsConf,
-        signedToDaily: accountOwners,
-        webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
-      });
+      await notificationConfModel.updateOne(
+        { org: orgAndAccount._id },
+        {
+          $setOnInsert: {
+            org: orgAndAccount._id,
+            rules: systemNotificationsConf,
+            signedToDaily: accountOwners,
+            webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
+          }
+        },
+        { upsert: true }
+      );
     }
   } catch (err) {
     logger.error('Database migration failed', {
