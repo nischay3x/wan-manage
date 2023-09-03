@@ -318,6 +318,7 @@ class NotificationsService {
       if (org && (account || group)) {
         return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
       }
+      // since the group name is not unique it is always being sent with an account id
       if (group && !account) {
         return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
       }
@@ -332,25 +333,31 @@ class NotificationsService {
           return Service.rejectResponse('You do not have permission to access this organization', 403);
         }
         orgIds = [org];
+      // At this point, we are working with either an account or a group.
       } else {
-        // If this is not a GET request
-        if (!get) {
+        // If this is a GET request anyone in the account/group can access the data so we don't check the user's membership
+        if (get) {
           orgIds = Object.values(orgList)
             .filter(org => org.account.toString() === account && (!group || org.group === group))
             .map(org => org.id);
+        // If this is not a get request we want the user to have account/group permissions
         } else {
           const membersOfAccountOrGroup = await membership.find({
             account: account,
-            to: group || account
+            $or: [
+              { $and: [{ to: 'group' }, { group: group }] },
+              { $and: [{ to: 'account' }, { group: '' }] }
+            ],
+            role: { $ne: 'viewer' }
           });
           const membersIds = Object.values(membersOfAccountOrGroup).map(membership => membership.user.toString());
-          if (user.defaultAccount._id.toString() === account || membersIds.includes(user._id.toString())) {
+          if (membersIds.includes(user._id.toString())) {
             const filter = { account };
             if (group) filter.group = group;
             const orgs = await Organizations.find(filter).lean();
             orgIds = orgs.map(org => org._id.toString());
           } else {
-            return Service.rejectResponse('You do not have permission to access the information', 403);
+            return Service.rejectResponse("You don't have a permission to modify the settings", 403);
           }
         }
       }
@@ -461,7 +468,7 @@ class NotificationsService {
             'Only account owners can set the account default settings', 403);
         }
         return Service.successResponse(
-          { status: 'completed', message: 'The notifications were updated successfully' }, 202
+          { status: 'completed', message: 'Current settings successfully established as the default for new organizations' }, 202
         );
       } else {
         const notificationsByOrg = new Map();
