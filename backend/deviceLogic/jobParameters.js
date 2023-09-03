@@ -304,6 +304,8 @@ const transformDHCP = (dhcp, deviceId, vrrpGroups = []) => {
       // we adding and encoding the double quotes.
       if (fields.option === 'tftp-server-name' && !Number.isNaN(fields.value[0])) {
         fields.value = `\\"${fields.value}\\"`;
+      } else if (fields.option === 'domain-name') {
+        fields.value = `\\"${fields.value}\\"`;
       }
 
       if (fields.option === 'routers') {
