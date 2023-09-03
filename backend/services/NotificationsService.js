@@ -390,12 +390,16 @@ class NotificationsService {
             if (!mergedRules[ruleName]) {
               mergedRules[ruleName] = {};
               Object.keys(org.rules[ruleName]).forEach(settingName => {
-                mergedRules[ruleName][settingName] = org.rules[ruleName][settingName];
+                if (settingName !== '_id') {
+                  mergedRules[ruleName][settingName] = org.rules[ruleName][settingName];
+                }
               });
             } else {
               Object.keys(org.rules[ruleName]).forEach(settingName => {
-                if (mergedRules[ruleName][settingName] !== org.rules[ruleName][settingName]) {
-                  mergedRules[ruleName][settingName] = 'varies';
+                if (settingName !== '_id') {
+                  if (mergedRules[ruleName][settingName] !== org.rules[ruleName][settingName]) {
+                    mergedRules[ruleName][settingName] = 'varies';
+                  }
                 }
               });
             }
