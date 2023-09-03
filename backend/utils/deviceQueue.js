@@ -158,6 +158,11 @@ class DeviceQueues {
           return done(err, false);
         }
       }
+      // in case the device is reconnected the job can be missed in the kue worker memory
+      // it should be set to be completed and prevent TTL exceeded failure
+      if (!this.queue.job) {
+        this.queue.job = job;
+      }
       done(null, job.data.response);
     });
 
