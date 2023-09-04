@@ -503,6 +503,10 @@ paths:
                 type: string
               style: simple
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
         "401":
           content:
@@ -9588,8 +9592,18 @@ components:
     AccessTokenRequest:
       example:
         name: name
+        accessKeyPermissionTo: account
+        accessKeyEntity: 5deaeae628e84b2bac6a4e37
+        accessKeyRole: viewer
+        validityEntity: Default
       properties:
         name:
+          type: string
+        accessKeyPermissionTo:
+          type: string
+        accessKeyEntity:
+          type: string
+        accessKeyRole:
           type: string
         validityEntity:
           type: string

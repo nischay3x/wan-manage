@@ -19,7 +19,9 @@ const Service = require('./Service');
 
 const { getAccessKey } = require('../tokens');
 const AccessTokens = require('../models/accesstokens');
-const { getUserPermissions } = require('../models/membership');
+const Organizations = require('../models/organizations');
+const { getUserPermissions, validatePermissionCombination } = require('../models/membership');
+const ObjectId = require('mongoose').Types.ObjectId;
 
 class AccessTokensService {
   /**
@@ -87,6 +89,60 @@ class AccessTokensService {
    **/
   static async accesstokensPOST (accessTokenRequest, { user }) {
     try {
+      // Check that required fields exist
+      if (
+        !user._id ||
+        !user.defaultAccount ||
+        !accessTokenRequest.accessKeyPermissionTo ||
+        !accessTokenRequest.accessKeyRole ||
+        !accessTokenRequest.accessKeyEntity
+      ) {
+        return Service.rejectResponse('Request does not have all necessary info', 400);
+      };
+
+      // Check permission combination
+      const checkCombination = validatePermissionCombination(
+        accessTokenRequest.accessKeyRole,
+        accessTokenRequest.accessKeyPermissionTo
+      );
+      if (checkCombination.status === false) {
+        return Service.rejectResponse(checkCombination.error, 400);
+      }
+
+      // This API is allowed only for account owner, so no need to check for permissions
+      // But we need to make sure the entities are part of the account
+      let inclusionChecker = { status: true, error: '' };
+      switch (accessTokenRequest.accessKeyPermissionTo) {
+        case 'account':
+          // check that entity equals to the account id
+          if (user.defaultAccount._id.toString() !== accessTokenRequest.accessKeyEntity) {
+            inclusionChecker = { status: false, error: 'Account not found' };
+          }
+          break;
+        case 'group': {
+          // check that at least one of the account organizations belong to the group entity
+          const groupCount = await Organizations.count({
+            _id: { $in: user.defaultAccount.organizations },
+            group: accessTokenRequest.accessKeyEntity
+          });
+          if (!groupCount) {
+            inclusionChecker = { status: false, error: 'Group not found' };
+          }
+          break;
+        }
+        case 'organization':
+          // check that the entity is part of the account organizations
+          if (!user.defaultAccount.organizations.includes(
+            ObjectId(accessTokenRequest.accessKeyEntity)
+          )) {
+            inclusionChecker = { status: false, error: 'Organization not found' };
+          }
+          break;
+      }
+      if (inclusionChecker.status === false) {
+        return Service.rejectResponse(inclusionChecker.error, 400);
+      }
+
       const accessToken = new AccessTokens({
         account: user.defaultAccount._id,
         organization: null,

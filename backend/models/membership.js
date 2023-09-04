@@ -325,6 +325,28 @@ const getUserPermissions = (user) => {
   return p;
 };
 
+// Validate permission options
+const validatePermissionCombination = (role, permissionTo) => {
+  // Account permissions could be owner, manager or viewer
+  if (!['owner', 'manager', 'viewer'].includes(role)) {
+    return { status: false, error: 'Illegal role' };
+  }
+
+  // permission to could be account, group or organization
+  if (!['account', 'group', 'organization'].includes(permissionTo)) {
+    return { status: false, error: 'Invalid permission target' };
+  }
+
+  // Group and organization permissions could be manager or viewer
+  if (['group', 'organization'].includes(permissionTo) &&
+      !['manager', 'viewer'].includes(role)) {
+    return { status: false, error: 'Illegal permission combination' };
+  }
+
+  // Else, combination OK
+  return { status: true, error: '' };
+};
+
 // Default exports
 module.exports = {
   membership: membership,
@@ -333,5 +355,6 @@ module.exports = {
   permissionsSchema: Permissions,
   setPermission: setPermission,
   preDefinedPermissions: preDefinedPermissions,
-  getUserPermissions: getUserPermissions
+  getUserPermissions: getUserPermissions,
+  validatePermissionCombination: validatePermissionCombination
 };
