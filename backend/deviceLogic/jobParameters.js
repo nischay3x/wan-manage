@@ -335,6 +335,11 @@ const transformDHCP = (dhcp, deviceId, vrrpGroups = []) => {
         if (dev.device._id.toString() !== deviceId.toString()) {
           continue;
         }
+
+        if (dev.interface !== dhcp.interface) {
+          continue;
+        }
+
         routers.add(vrrpGroup.virtualIp);
       }
     }
