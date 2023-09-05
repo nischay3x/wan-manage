@@ -95,9 +95,9 @@ const parseLteStatus = lteStatus => {
   lteStatus = mapLteNames(lteStatus);
 
   // calc default apn
-  const defaultApn = lteStatus.defaultSettings ? lteStatus.defaultSettings.apn : '';
-  const mcc = lteStatus.systemInfo.mcc;
-  const mnc = lteStatus.systemInfo.mnc;
+  const defaultApn = lteStatus.defaultSettings?.apn ?? '';
+  const mcc = lteStatus.systemInfo?.mcc;
+  const mnc = lteStatus.systemInfo?.mnc;
 
   if (defaultApn === '' && mcc && mnc) {
     const key = mcc + '-' + mnc;
@@ -153,7 +153,10 @@ const getBridges = interfaces => {
     const addr = ifc.IPv4 + '/' + ifc.IPv4Mask;
 
     const needsToBridge = interfaces.some(i => {
-      return devId !== i.devId && addr === i.IPv4 + '/' + i.IPv4Mask && i.type === 'LAN';
+      return i.isAssigned &&
+        devId !== i.devId &&
+        addr === i.IPv4 + '/' + i.IPv4Mask &&
+        i.type === 'LAN';
     });
 
     if (!needsToBridge) {

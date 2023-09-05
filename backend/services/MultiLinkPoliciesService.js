@@ -25,6 +25,8 @@ const pathLabelsModel = require('../models/pathlabels');
 const { ObjectId } = require('mongoose').Types;
 const { applyPolicy } = require('../deviceLogic/mlpolicy');
 const { validateMultilinkPolicy } = require('../deviceLogic/validators');
+const notificationsConf = require('../models/notificationsConf');
+const notificationsMgr = require('../notifications/notifications')();
 
 const emptyPrefix = {
   ip: '',
@@ -259,7 +261,7 @@ class MultiLinkPoliciesService {
    * mLPolicyRequest MLPolicyRequest  (optional)
    * returns MLPolicy
    **/
-  static async mlpoliciesIdPUT ({ id, org, mLPolicyRequest }, { user }) {
+  static async mlpoliciesIdPUT ({ id, org, ...mLPolicyRequest }, { user }) {
     try {
       const { name, description, applyOnWan, overrideDefaultRoute, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -324,6 +326,24 @@ class MultiLinkPoliciesService {
       ).execPopulate();
 
       const converted = JSON.parse(JSON.stringify(populated));
+      // send a notification
+      // TODO - uncomment after handling the policies ref issue
+      // await notificationsMgr.sendNotifications([
+      //   {
+      //     org: orgList[0],
+      //     title: 'Multi link policy change',
+      //     details: `The policy ${name} has been changed`,
+      //     eventType: 'Policy change',
+      //     targets: {
+      //       deviceId: null,
+      //       tunnelId: null,
+      //       interfaceId: null,
+      //       policyId: id
+      //     },
+      //     resolved: true,
+      //     isAlwaysResolved: true
+      //   }
+      // ]);
       return Service.successResponse({ ...converted, ...applied });
     } catch (e) {
       return Service.rejectResponse(
@@ -367,7 +387,7 @@ class MultiLinkPoliciesService {
    * org String Organization to be filtered by (optional)
    * returns MLPolicy
    **/
-  static async mlpoliciesPOST ({ mLPolicyRequest, org }, { user }) {
+  static async mlpoliciesPOST ({ org, ...mLPolicyRequest }, { user }) {
     try {
       const { name, description, applyOnWan, overrideDefaultRoute, rules } = mLPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);

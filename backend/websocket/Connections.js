@@ -30,7 +30,6 @@ const notificationsMgr = require('../notifications/notifications')();
 const { verifyAgentVersion, isSemVer, isVppVersion, getMajorVersion } = require('../versioning');
 const { getRenewBeforeExpireTime, queueCreateIKEv2Jobs } = require('../deviceLogic/IKEv2');
 const { TypedError, ErrorTypes } = require('../utils/errors');
-const roleSelector = require('../utils/roleSelector')(configs.get('redisUrl'));
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const getRandom = require('../utils/random-key');
 const { getCpuInfo } = require('../utils/deviceUtils');
@@ -39,6 +38,35 @@ const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
   configs.get('redisUrl')
 );
+const { createClient } = require('redis');
+const { getRedisAuthUrl } = require('../utils/httpUtils');
+
+const uuid = require('uuid');
+const httpsPort = configs.get('httpsPort');
+const hostname = require('os').hostname();
+const hostId = `${hostname}:${httpsPort}:${uuid.v4()}`;
+
+// devices info channel name, devices will publish statuses to this common channel
+const devInfoChannelName = configs.get('devInfoChannelName') ?? 'fw-dev-info';
+
+// devices channel prefix, will be used for unique channel name of every device
+// web-socket requests will be published on this channel
+const deviceChannelPrefix = configs.get('deviceChannelPrefix') ?? 'fw-dev';
+
+// host channel prefix, will be used for unique channel name of every host
+const hostChannelPrefix = configs.get('hostChannelPrefix') ?? 'fw-host';
+// web-socket responses will be published on this channel
+const hostChannelName = `${hostChannelPrefix}:${hostId}`;
+
+// unique sequence key with expiration time will be set for every socket message
+// to store the hostId which will proceed the response
+const sequencePrefix = configs.get('sequencePrefix') ?? 'fw-seq';
+const sequenceExpireTime = configs.get('sequenceExpireTime') ?? 300; // seconds
+
+// unique device key, will be set on connect and updated on web-socket pong response
+// the device will be considered as disconnected on expiration of this key
+const connectDevicePrefix = configs.get('connectDevicePrefix') ?? 'fw-conn';
+const connectExpireTime = configs.get('connectExpireTime') ?? 300; // seconds
 
 class Connections {
   constructor () {
@@ -56,15 +84,203 @@ class Connections {
     this.callRegisteredCallbacks = this.callRegisteredCallbacks.bind(this);
     this.sendDeviceInfoMsg = this.sendDeviceInfoMsg.bind(this);
     this.pingCheck = this.pingCheck.bind(this);
-
-    this.devices = new Devices();
+    this.isSocketAlive = this.isSocketAlive.bind(this);
+    this.registerStatusCallback = this.registerStatusCallback.bind(this);
+    this.publishStatus = this.publishStatus.bind(this);
+    this.processChannelMessage = this.processChannelMessage.bind(this);
+    this.processDeviceMessage = this.processDeviceMessage.bind(this);
+    this.triggerAlertWhenNeeded = this.triggerAlertWhenNeeded.bind(this);
     this.msgSeq = 0;
     this.msgQueue = {};
     this.connectCallbacks = {}; // Callback functions to be called on connect
     this.closeCallbacks = {}; // Callback functions to be called on close
 
+    const { redisAuth, redisUrlNoAuth } = getRedisAuthUrl(configs.get('redisUrl'));
+    this.redisClient = createClient({ url: redisUrlNoAuth });
+    if (redisAuth) this.redisClient.auth(redisAuth);
+    this.subscriber = this.redisClient.duplicate();
+
+    // start listening on common device-info channel
+    this.subscriber.subscribe(devInfoChannelName);
+
+    // start listening on unique host channel
+    this.subscriber.subscribe(hostChannelName);
+
+    this.subscriber.on('message', this.processChannelMessage);
+
+    this.subscriber.on('error',
+      err => logger.error('Redis Subscription Error', { params: { message: err.message } })
+    );
+
+    this.redisClient.on('error',
+      err => logger.error('Redis Client Error', { params: { message: err.message } })
+    );
+
+    const publishInfoHandler = (machineId, info) => {
+      const message = { hostId, machineId, info, action: 'info' };
+      this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
+    };
+    this.devices = new Devices({ publishInfoHandler });
+    this.disconnectedDevices = {};
     // Ping each client every 30 sec, with two retries
     this.ping_interval = setInterval(this.pingCheck, 20000);
+    // Check every 1 min if a device disconnection alert is needed
+    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 60000);
+  }
+
+  /**
+   * Returns true if web socket is alive and can process messages
+   */
+  isSocketAlive (socket) {
+    return socket && ![socket.CLOSING, socket.CLOSED].includes(socket.readyState);
+  }
+
+  /**
+   * Register the callback for updating the stats info
+   */
+  registerStatusCallback (callback) {
+    this.statusCallback = callback;
+  }
+
+  /**
+   * Publish the status from stats-info on the devices channel
+   */
+  publishStatus (machineId, info) {
+    const action = 'status';
+    this.redisClient.publish(devInfoChannelName, JSON.stringify({
+      hostId, machineId, action, info
+    }));
+  }
+
+  /**
+   * Process a message received on channel from a different host
+   * @param  {string} channel the channel where the message is published
+   * @param  {string} message the message to process
+   * @return {void}
+   */
+  processChannelMessage (channel, message) {
+    if (channel === hostChannelName) {
+      // websocket response was received on a different host and published on the channel
+      logger.debug('Response received on the hosts channel', {
+        params: { channel, hostId }
+      });
+      this.processDeviceMessage(message);
+    } else if (channel === devInfoChannelName) {
+      // all devices will publish their state on this common channel
+      const { hostId: remoteHostId, machineId, action, info } = JSON.parse(message);
+      if (remoteHostId && hostId !== remoteHostId && machineId && action) {
+        if (action === 'info' && info?.constructor === Object) {
+          const fields = Object.keys(info);
+          if (fields.length === 1) {
+            // only update one parameter
+            this.devices.updateDeviceInfo(machineId, fields[0], info[fields[0]], false);
+          } else {
+            // set the new device info
+            this.devices.setDeviceInfo(machineId, info, false);
+          }
+        } else if (action === 'status' && info?.constructor === Object) {
+          // status message from the get-device-stats request received
+          this.statusCallback(machineId, info);
+        } else if (action === 'disconnect') {
+          // deviceDisconnect method was called on the host to which device was not connected
+          // the broadcast message was published in order to disconnect the device
+          this.devices.disconnectDevice(machineId);
+        } else if (action === 'disconnected') {
+          // the device is disconnected, deviceInfo should be removed
+          this.devices.removeDeviceInfo(machineId);
+        } else if (action === 'pong') {
+          // the device is alive, set info in memory if it does not exist
+          if (!this.isConnected(machineId)) {
+            this.devices.setDeviceInfo(machineId, info, false);
+            if (this.disconnectedDevices.hasOwnProperty(machineId)) {
+              delete this.disconnectedDevices[machineId];
+            }
+          }
+        }
+      }
+    } else if (channel.startsWith(deviceChannelPrefix + ':')) {
+      // a message for the device websocket is received from another host
+      const machineId = channel.replace(deviceChannelPrefix + ':', '');
+      // check if device is connected and send the message on socket
+      const { socket } = this.devices.getDeviceInfo(machineId) ?? {};
+      if (this.isSocketAlive(socket)) {
+        // the sequence key is already injected into the message
+        socket.send(message);
+      } else {
+        logger.warn('Websocket message received on Redis channel but device is disconnected',
+          { params: { channel, machineId, message } }
+        );
+        // the socket is disconnected hence unsubscribing from the channel
+        this.subscriber.unsubscribe(channel);
+      }
+    } else {
+      logger.warn('Message received on unknown channel', { params: { channel, message } });
+    }
+  }
+
+  /**
+   * Process the response message from device
+   * It can be received directly from websocket
+   * or from different server to which the device is connected
+   * @param  {string} message the message to process
+   * @return {void}
+   */
+  processDeviceMessage (message) {
+    const parsed = JSON.parse(message);
+    const { seq, msg } = parsed;
+    if (!seq) return;
+    const { resolver, rejecter, validator, tohandle } = this.msgQueue[seq] ?? {};
+    if (typeof resolver === 'function') {
+      // Only validate device's response if the device processed the message
+      // successfully, to prevent validation errors due to the mismatch
+      // between the message schema and the error returned by the device
+      const { valid, err } = msg.ok
+        ? validator(msg.message)
+        : { valid: true, err: '' };
+
+      if (!valid) {
+        const validatorName = validator.name;
+        const content = JSON.stringify(msg.message);
+        rejecter(
+          new Error(
+            `message validation failed: ${err}. validator=${validatorName}, msg=${content}`
+          )
+        );
+      } else {
+        resolver(msg);
+      }
+      // Remove timeout and Delete message queue entry for this seq
+      clearTimeout(tohandle);
+      delete this.msgQueue[seq];
+      return;
+    }
+
+    // if resolver is not set that means another server is responsible for processing
+    // websocket response will be forwarded to hostId which was set while sending the message
+    const sequenceKey = `${sequencePrefix}:${seq}`;
+    this.redisClient.get(sequenceKey, (error, remoteHostId) => {
+      if (error) {
+        logger.warn('Failed to get socket sequence data in redis', {
+          params: { sequenceKey, error }
+        });
+        return;
+      }
+      if (remoteHostId) {
+        if (remoteHostId && remoteHostId !== hostId) {
+          // publish the response message for the remote host
+          this.redisClient.publish(`${hostChannelPrefix}:${remoteHostId}`, message);
+          logger.debug('Response published on the hosts channel', {
+            params: { remoteHostId, sequenceKey, hostId }
+          });
+        };
+      } else {
+        // the response will not be delivered to the remote host
+        // maybe sequenceExpireTime should be increased
+        logger.warn('Sequence key expired in redis', {
+          params: { sequenceKey, sequenceExpireTime }
+        });
+      }
+    });
   }
 
   /**
@@ -76,8 +292,28 @@ class Connections {
   pingCheck () {
     this.getAllDevices().forEach(deviceID => {
       const { socket } = this.devices.getDeviceInfo(deviceID);
+      if (!socket) {
+        // check if connection status set in redis is expired
+        const connectDeviceKey = `${connectDevicePrefix}:${deviceID}`;
+        this.redisClient.get(connectDeviceKey, (error, remoteHostId) => {
+          if (error) {
+            logger.warn('Failed to get device connection state in redis', {
+              params: { deviceId: deviceID }
+            });
+            return;
+          }
+          if (!remoteHostId) {
+            // connection state expired that means it is not connected to any host
+            // the device info data should be removed
+            this.devices.removeDeviceInfo(deviceID);
+            logger.debug('The device connection state expired in redis', {
+              params: { deviceId: deviceID }
+            });
+          }
+        });
+        return;
+      };
       // Don't try to ping a closing, or already closed socket
-      if (!socket) return;
       if ([socket.CLOSING, socket.CLOSED].includes(socket.readyState)) {
         this.closeConnection(deviceID);
         return;
@@ -219,11 +455,11 @@ class Connections {
       return done(false, 400);
     }
 
-    const device = connectionURL.pathname.substr(1);
+    const machineId = connectionURL.pathname.substring(1);
 
     devices
       .find({
-        machineId: device,
+        machineId: machineId,
         deviceToken: connectionURL.searchParams.get('token')
       })
       .then(
@@ -238,10 +474,10 @@ class Connections {
               // This might happen if the device opens a new connection before the
               // MGMT had the chance to close the current one (for example, when a
               // device changes the IP address of the interface connected to the MGMT).
-              const devInfo = this.devices.getDeviceInfo(device);
+              const devInfo = this.devices.getDeviceInfo(machineId);
               if (devInfo && devInfo.ready === true && devInfo.socket) {
                 logger.info('Closing device old connection', {
-                  params: { device: device }
+                  params: { machineId: machineId }
                 });
                 devInfo.socket.removeAllListeners('close');
                 devInfo.socket.terminate();
@@ -255,14 +491,25 @@ class Connections {
                 throw createError(402, 'Your subscription is canceled');
               }
 
-              this.devices.setDeviceInfo(device, {
+              this.devices.setDeviceInfo(machineId, {
                 org: resp[0].org.toString(),
+                name: resp[0].name,
                 deviceObj: resp[0]._id,
                 machineId: resp[0].machineId,
                 version: resp[0].versions.agent,
                 ready: false,
-                running: devInfo ? devInfo.running : null
+                running: devInfo ? devInfo.running : null,
+                notificationsHash: devInfo ? devInfo.notificationsHash : '',
+                alerts: devInfo ? devInfo.alerts : ''
               });
+
+              // set device connection state flag used by other servers
+              const connectDeviceKey = `${connectDevicePrefix}:${machineId}`;
+              this.redisClient.setex(connectDeviceKey, connectExpireTime, hostId);
+
+              // device is connected to websocket, now listen to messages on redis channel
+              this.subscriber.subscribe(`${deviceChannelPrefix}:${machineId}`);
+
               return done(true);
             } else {
               throw createError(403, 'Device found but not approved yet');
@@ -309,54 +556,31 @@ class Connections {
    */
   createConnection (socket, req) {
     const connectionURL = new URL(`${req.headers.origin}${req.url}`);
-    const device = connectionURL.pathname.substr(1);
-    const info = this.devices.getDeviceInfo(device);
+    const machineId = connectionURL.pathname.substring(1);
+    const deviceInfo = this.devices.getDeviceInfo(machineId);
 
     // Set the received socket into the device info
-    info.socket = socket;
-    const msgQ = this.msgQueue;
+    deviceInfo.socket = socket;
 
     // Initialize to alive connection, with 3 retries
     socket.isAlive = 7;
-    socket.on('pong', function heartbeat () {
+    socket.on('pong', () => {
       // Pong received, reset retries
       socket.isAlive = 7;
+      // update device connection state flag used by other hosts
+      const connectDeviceKey = `${connectDevicePrefix}:${machineId}`;
+      this.redisClient.setex(connectDeviceKey, connectExpireTime, hostId);
+      // publish the device info to update missed connection state on other servers
+      const deviceInfo = this.devices.getDeviceInfo(machineId);
+      const message = {
+        hostId, machineId, info: { ...deviceInfo, socket: null }, action: 'pong'
+      };
+      this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
     });
 
-    socket.on('message', function incoming (message) {
-      // Extract the seq from the message
-      const jsonmsg = JSON.parse(message);
-      const seq = jsonmsg.seq;
-      const msg = jsonmsg.msg;
-
-      if (
-        seq !== undefined &&
-        msgQ[seq] !== undefined &&
-        typeof msgQ[seq].resolver === 'function'
-      ) {
-        // Only validate device's response if the device processed the message
-        // successfully, to prevent validation errors due to the mismatch
-        // between the message schema and the error returned by the device
-        const { valid, err } = msg.ok
-          ? msgQ[seq].validator(msg.message)
-          : { valid: true, err: '' };
-
-        if (!valid) {
-          const validatorName = msgQ[seq].validator.name;
-          const content = JSON.stringify(msg.message);
-          msgQ[seq].rejecter(
-            new Error(
-              `message validation failed: ${err}. validator=${validatorName}, msg=${content}`
-            )
-          );
-        } else {
-          msgQ[seq].resolver(msg);
-        }
-
-        // Remove timeout and Delete message queue entry for this seq
-        clearTimeout(msgQ[seq].tohandle);
-        delete msgQ[seq];
-      }
+    socket.on('message', (message) => {
+      // response from the device received
+      this.processDeviceMessage(message);
     });
 
     socket.on('error', err => {
@@ -366,13 +590,32 @@ class Connections {
         }
       });
     });
-    socket.on('close', () => this.closeConnection(device));
+    socket.on('close', () => this.closeConnection(machineId));
 
     // Query device for additional required information (such as
     // device version, network information, tunnel keys, etc.)
     // Only after getting the device's response and updating
     // the information, the device can be considered ready.
-    this.sendDeviceInfoMsg(device, info.deviceObj, info.org, true);
+    this.sendDeviceInfoMsg(machineId, deviceInfo.deviceObj, deviceInfo.org, true);
+    (async () => {
+      delete this.disconnectedDevices[machineId];
+      const { org, name, deviceObj } = deviceInfo;
+      await notificationsMgr.sendNotifications([
+        {
+          org: org,
+          title: '[resolved] Device connection',
+          details: `Device ${name} reconnected to management`,
+          eventType: 'Device connection',
+          targets: {
+            deviceId: deviceObj,
+            tunnelId: null,
+            interfaceId: null
+            // policyId: null
+          },
+          resolved: true
+        }
+      ]);
+    })();
   }
 
   /**
@@ -455,7 +698,7 @@ class Connections {
         const incomingInterfaces = deviceInfo.message.network.interfaces;
 
         const interfaces = [];
-        origDevice.interfaces.forEach(i => {
+        for (const i of origDevice.interfaces) {
           const updatedConfig = incomingInterfaces.find(u => u.devId === i.devId);
           if (!updatedConfig) {
             if (i.devId.startsWith('vlan')) {
@@ -476,21 +719,29 @@ class Connections {
             interfaces.push(i.toObject());
             return;
           }
-
-          // send a notification if the link changed to down
-          if (updatedConfig.link === 'down' && i.linkStatus !== 'down') {
-            const { org, deviceObj } = prevDeviceInfo;
-            notificationsMgr.sendNotifications([
-              {
-                org: org,
-                title: 'Link status changed',
-                time: new Date(),
-                device: deviceObj,
-                machineId: machineId,
-                details: `Link ${i.name} ${i.IPv4} is DOWN`
-              }
-            ]);
+          const { org, _id: deviceId } = origDevice;
+          const linkStatusChanged = (updatedConfig.link === 'up' && i.linkStatus !== 'up') ||
+            (updatedConfig.link === 'down' && i.linkStatus !== 'down');
+            // send a notification if the link's status has been changed
+          if (linkStatusChanged) {
+            const resolved = updatedConfig.link === 'up' && i.linkStatus !== 'up';
+            logger.info(`Link status changed to ${updatedConfig.link}`,
+              { params: { interface: i } });
+            await notificationsMgr.sendNotifications([{
+              org: org,
+              title: resolved ? '[resolved] Link status change' : 'Link status change',
+              details: `Link ${i.name} ${i.IPv4} is ${(updatedConfig.link).toUpperCase()}`,
+              eventType: 'Link status',
+              targets: {
+                deviceId: deviceId,
+                tunnelId: null,
+                interfaceId: i._id
+                // policyId: null
+              },
+              resolved
+            }]);
           }
+
           const updInterface = {
             ...i.toJSON(),
             PublicIP: updatedConfig.public_ip && i.useStun
@@ -544,7 +795,7 @@ class Connections {
 
           updInterface.locked = i.locked;
           interfaces.push(updInterface);
-        });
+        };
 
         const deviceId = origDevice._id.toString();
 
@@ -634,13 +885,16 @@ class Connections {
           const { allowed, blockedNow } = await reconfigErrorsLimiter.use(deviceId);
           if (!allowed && blockedNow) {
             logger.error('Reconfig errors rate-limit exceeded', { params: { deviceId } });
-
             await notificationsMgr.sendNotifications([{
               org: origDevice.org,
               title: 'Unsuccessful self-healing operations',
-              time: new Date(),
-              device: deviceId,
-              machineId: machineId,
+              eventType: 'Failed self-healing',
+              targets: {
+                deviceId: deviceId,
+                tunnelId: null,
+                interfaceId: null
+                // policyId: null
+              },
               details: 'Unsuccessful updating device data. Please contact flexiWAN support'
             }]);
           }
@@ -875,8 +1129,6 @@ class Connections {
         // This part should only be done on a new connection
         this.devices.updateDeviceInfo(machineId, 'ready', true);
         this.callRegisteredCallbacks(this.connectCallbacks, machineId);
-        // Set websocket traffic handler role for this instance
-        roleSelector.selectorSetActive('websocketHandler');
       }
     } catch (err) {
       logger.error('Failed to receive info from device', {
@@ -898,37 +1150,91 @@ class Connections {
   }
 
   /**
+   * This function periodically checks and alerts if a device has remained disconnected for
+   * a specified duration.
+  */
+  async triggerAlertWhenNeeded () {
+    if (!Object.keys(this.disconnectedDevices).length) {
+      return;
+    }
+    const currentTime = new Date().getTime();
+    for (const [device, deviceInfo] of Object.entries(this.disconnectedDevices)) {
+      if (currentTime - deviceInfo.timeFirstUnresponsive >=
+        configs.get('deviceDisconnectionAlertTimeout')) {
+        const { org, deviceObj, name } = deviceInfo;
+        await notificationsMgr.sendNotifications([
+          {
+            org: org,
+            title: 'Device disconnection',
+            details: `Device ${name} disconnected from management`,
+            eventType: 'Device connection',
+            targets: {
+              deviceId: deviceObj,
+              tunnelId: null,
+              interfaceId: null
+              // policyId: null
+            }
+          }
+        ]);
+        delete this.disconnectedDevices[device];
+      }
+    }
+  }
+
+  /**
    * Websocket close event callback, called when a connection is closed.
    * @param  {string} device device machine id
    * @return {void}
    */
-  closeConnection (device) {
-    // Device has no information, probably not connected, just return
-    const deviceInfo = this.devices.getDeviceInfo(device);
+  closeConnection (machineId) {
+    const deviceInfo = this.devices.getDeviceInfo(machineId);
     if (!deviceInfo) return;
-    const { org, deviceObj, machineId } = deviceInfo;
-    notificationsMgr.sendNotifications([
-      {
-        org: org,
-        title: 'Device connection change',
-        time: new Date(),
-        device: deviceObj,
-        machineId: machineId,
-        details: 'Device disconnected from management'
+    // keep deviceInfo in memory, only remove the socket object
+    // the device can be reconnected to another instance
+    // deviceInfo will be removed when connectDeviceKey expires
+    const connectDeviceKey = `${connectDevicePrefix}:${machineId}`;
+    this.redisClient.get(connectDeviceKey, (error, remoteHostId) => {
+      if (error) {
+        logger.warn('Failed to get device connection state in redis', {
+          params: { machineId }
+        });
+        return;
       }
-    ]);
-    this.devices.removeDeviceInfo(device);
-    this.callRegisteredCallbacks(this.closeCallbacks, device);
-    logger.info('Device connection closed', { params: { deviceId: device } });
+      if (remoteHostId && remoteHostId !== hostId) {
+        // the device is reconnected to another instance
+        // keep deviceInfo in memory, only remove the socket object
+        delete deviceInfo.socket;
+      // the device is disconnected
+      } else {
+        // save the disconnection time
+        const currentTime = new Date().getTime();
+        if (!this.disconnectedDevices.hasOwnProperty(machineId)) {
+          deviceInfo.timeFirstUnresponsive = currentTime;
+          this.disconnectedDevices[machineId] = deviceInfo;
+        }
+        // deviceInfo should be removed and published to others
+        this.devices.removeDeviceInfo(machineId);
+        const message = { hostId, machineId, action: 'disconnected' };
+        this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
+      }
+    });
+    this.callRegisteredCallbacks(this.closeCallbacks, machineId);
+    logger.info('Device connection closed', { params: { deviceId: machineId } });
   }
 
   /**
    * Closes a device's websocket socket.
-   * @param  {string} device device machine id
+   * @param  {string} machineId device machine id
    * @return {void}
    */
-  deviceDisconnect (device) {
-    this.devices.disconnectDevice(device);
+  deviceDisconnect (machineId) {
+    const info = this.devices.getDeviceInfo(machineId);
+    if (this.isSocketAlive(info?.socket)) {
+      this.devices.disconnectDevice(machineId);
+    } else {
+      const message = { hostId, machineId, action: 'disconnect' };
+      this.redisClient.publish(devInfoChannelName, JSON.stringify(message));
+    }
   }
 
   /**
@@ -1010,11 +1316,12 @@ class Connections {
     const info = this.devices.getDeviceInfo(device);
     const seq = this.msgSeq++;
 
+    // this sequence key will be used for both websocket and redis messages
     const key = `${seq}:${getRandom(8)}`;
 
     const msgQ = this.msgQueue;
-    const p = new Promise(function (resolve, reject) {
-      if (info.socket && (org == null || info.org === org)) {
+    const p = new Promise((resolve, reject) => {
+      if (org == null || info.org === org) {
         // Increment seq and update queue with resolve function for this promise,
         // set timeout to clear when no response received
         const tohandle = setTimeout(() => {
@@ -1028,7 +1335,31 @@ class Connections {
           tohandle: tohandle,
           validator: responseValidator
         };
-        info.socket.send(JSON.stringify({ seq: key, msg: msg, jobid: jobid }));
+
+        const messageToDevice = JSON.stringify({ seq: key, hostId, msg, jobid });
+
+        // set the current host responsible for this websocket message
+        // if the device will be reconnected to another host before receiving the socket response
+        // it will be redirected to this host by sequenceKey
+        const sequenceKey = `${sequencePrefix}:${key}`;
+        this.redisClient.setex(sequenceKey, sequenceExpireTime, hostId, (error, result) => {
+          if (error || !result) {
+            reject(new Error('Failed to set redis sequence key'));
+            return;
+          }
+          if (this.isSocketAlive(info?.socket)) {
+            // the device is connected to this server directly
+            info.socket.send(messageToDevice);
+          } else {
+            // publish the message on the `dev:{machineId}` channel
+            // another host starts listening to this channel when device is connected
+            // the message will be sent to the device socket connection on that server
+            this.redisClient.publish(`${deviceChannelPrefix}:${device}`, messageToDevice);
+            logger.debug('Message published on devices channel', {
+              params: { deviceID: device, sequenceKey, hostId }
+            });
+          }
+        });
       } else reject(new Error('Send General Error'));
     });
     return p;

@@ -149,21 +149,21 @@ describe('validateDevice', () => {
 
   it('Should be an invalid device if LAN IPv4 address is null', () => {
     device.interfaces[0].IPv4 = null;
-    failureObject.err = `Interface ${device.interfaces[0].name} does not have an IP address`;
+    failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid device if LAN IPv4 address is empty', () => {
     device.interfaces[0].IPv4 = '';
-    failureObject.err = `Interface ${device.interfaces[0].name} does not have an IP address`;
+    failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid device if LAN IPv4 mask is empty', () => {
     device.interfaces[0].IPv4Mask = '';
-    failureObject.err = `Interface ${device.interfaces[0].name} does not have an IPv4 mask`;
+    failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 mask`;
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -171,7 +171,7 @@ describe('validateDevice', () => {
   it('Should be an invalid device if both LAN IPv4 address and mask are empty', () => {
     device.interfaces[0].IPv4 = '';
     device.interfaces[0].IPv4Mask = '';
-    failureObject.err = `Interface ${device.interfaces[0].name} does not have an IPv4 mask`;
+    failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -179,8 +179,8 @@ describe('validateDevice', () => {
   it('Should be an invalid device if LAN IPv4 address ends with .0', () => {
     device.interfaces[0].IPv4 = '192.168.111.0';
     device.interfaces[0].IPv4Mask = '24';
-    failureObject.err = `Invalid IP address for ${device.interfaces[0].name}: ` +
-      `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
+    failureObject.err = `[${device.interfaces[0].name}]: ` +
+      'Local 192.168.111.0/24 and Broadcast 192.168.111.255/24 are invalid IPv4 addresses';
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -188,8 +188,8 @@ describe('validateDevice', () => {
   it('Should be an invalid device if LAN IPv4 address ends with .255', () => {
     device.interfaces[0].IPv4 = '192.168.111.255';
     device.interfaces[0].IPv4Mask = '24';
-    failureObject.err = `Invalid IP address for ${device.interfaces[0].name}: ` +
-      `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
+    failureObject.err = `[${device.interfaces[0].name}]: ` +
+      'Local 192.168.111.0/24 and Broadcast 192.168.111.255/24 are invalid IPv4 addresses';
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -204,8 +204,8 @@ describe('validateDevice', () => {
   it('Should be an invalid device if broadcast address is set on interface', () => {
     device.interfaces[1].IPv4 = '95.217.255.255';
     device.interfaces[1].IPv4Mask = '15';
-    failureObject.err = `Invalid IP address for ${device.interfaces[1].name}: ` +
-      `${device.interfaces[1].IPv4}/${device.interfaces[1].IPv4Mask}`;
+    failureObject.err = `[${device.interfaces[1].name}]: ` +
+      'Local 95.216.0.0/15 and Broadcast 95.217.255.255/15 are invalid IPv4 addresses';
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -213,16 +213,28 @@ describe('validateDevice', () => {
   it('Should be an invalid device if network address is set on interface', () => {
     device.interfaces[1].IPv4 = '95.216.0.0';
     device.interfaces[1].IPv4Mask = '15';
-    failureObject.err = `Invalid IP address for ${device.interfaces[1].name}: ` +
-      `${device.interfaces[1].IPv4}/${device.interfaces[1].IPv4Mask}`;
+    failureObject.err = `[${device.interfaces[1].name}]: ` +
+      'Local 95.216.0.0/15 and Broadcast 95.217.255.255/15 are invalid IPv4 addresses';
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid device if network/broadcast with /31 mask is set on interface', () => {
+    device.interfaces[0].IPv4 = '197.234.116.204';
+    device.interfaces[0].IPv4Mask = '31';
+    device.interfaces[1].IPv4 = '197.234.117.205';
+    device.interfaces[1].IPv4Mask = '31';
+    const result = validateDevice(device, org);
+    expect(result).toMatchObject(successObject);
   });
 
   it('Should be an invalid device if Public IP has an overlap with another WAN interface', () => {
     device.interfaces[0].IPv4 = '192.168.1.1';
     device.interfaces[0].IPv4Mask = '24';
     device.interfaces[0].PublicIP = '1.1.1.1';
+    device.interfaces[0].gateway = '192.168.1.2';
+    device.interfaces[0].routing = '';
+    device.interfaces[0].type = 'WAN';
     device.interfaces[1].IPv4 = '1.1.1.1';
     device.interfaces[1].IPv4Mask = '32';
     failureObject.err = `IP address of [${device.interfaces[1].name}]` +
@@ -233,21 +245,21 @@ describe('validateDevice', () => {
 
   it('Should be an invalid device if WAN IPv4 address is null', () => {
     device.interfaces[0].IPv4 = null;
-    failureObject.err = `Interface ${device.interfaces[0].name} does not have an IP address`;
+    failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid device if WAN IPv4 address is empty', () => {
     device.interfaces[0].IPv4 = '';
-    failureObject.err = `Interface ${device.interfaces[0].name} does not have an IP address`;
+    failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid device if WAN IPv4 mask is empty', () => {
     device.interfaces[0].IPv4Mask = '';
-    failureObject.err = `Interface ${device.interfaces[0].name} does not have an IPv4 mask`;
+    failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 mask`;
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -255,7 +267,7 @@ describe('validateDevice', () => {
   it('Should be an invalid device if both WAN IPv4 address and mask are empty', () => {
     device.interfaces[0].IPv4 = '';
     device.interfaces[0].IPv4Mask = '';
-    failureObject.err = `Interface ${device.interfaces[0].name} does not have an IPv4 mask`;
+    failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -482,56 +494,56 @@ describe('validateModifyDeviceMsg', () => {
 
   it('Should be an invalid message if IPv4 address contains double /', () => {
     modifyDevMsg[0].addr = '10.0.0.1//24';
-    failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[0].addr}`;
+    failureObject.err = 'Bad request: Interface does not have an IPv4 mask';
     const result = validateModifyDeviceMsg(modifyDevMsg);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid message if IPv4 address is missing', () => {
     modifyDevMsg[0].addr = '/24';
-    failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[0].addr}`;
+    failureObject.err = 'Bad request: Interface does not have an IPv4 address';
     const result = validateModifyDeviceMsg(modifyDevMsg);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid message if IPv4 mask is missing', () => {
     modifyDevMsg[0].addr = '10.0.0.1';
-    failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[0].addr}`;
+    failureObject.err = 'Bad request: Interface does not have an IPv4 mask';
     const result = validateModifyDeviceMsg(modifyDevMsg);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid message if both IPv4 address and mask are missing', () => {
     modifyDevMsg[0].addr = null;
-    failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[0].addr}`;
+    failureObject.err = 'Bad request: Interface does not have an IPv4 address';
     const result = validateModifyDeviceMsg(modifyDevMsg);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid message if IPv4 address is invalid', () => {
     modifyDevMsg[0].addr = '10.0.0./24';
-    failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[0].addr}`;
+    failureObject.err = `Bad request: IPv4 address ${modifyDevMsg[0].addr} is not valid`;
     const result = validateModifyDeviceMsg(modifyDevMsg);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid message if IPv4 mask is invalid', () => {
     modifyDevMsg[0].addr = '10.0.0.1/123';
-    failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[0].addr}`;
+    failureObject.err = `Bad request: IPv4 mask ${modifyDevMsg[0].addr} is not valid`;
     const result = validateModifyDeviceMsg(modifyDevMsg);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid message if both IPv4 address and mask are invalid', () => {
     modifyDevMsg[0].addr = '10.0.0./345';
-    failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[0].addr}`;
+    failureObject.err = `Bad request: IPv4 address ${modifyDevMsg[0].addr} is not valid`;
     const result = validateModifyDeviceMsg(modifyDevMsg);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid message if one of the interfaces is invalid', () => {
     modifyDevMsg[1].addr = '';
-    failureObject.err = `Bad request: Invalid IP address ${modifyDevMsg[1].addr}`;
+    failureObject.err = 'Bad request: Interface does not have an IPv4 address';
     const result = validateModifyDeviceMsg(modifyDevMsg);
     expect(result).toMatchObject(failureObject);
   });

@@ -64,8 +64,8 @@ describe('TunnelIDs schema', () => {
     tunnelIdsFullSchema.org = 'invalid-org';
 
     tunnelIdsFullSchema.validate((err) => {
-      expect(err.message).toBe('tunnelID validation failed: org: Cast to ObjectID failed ' +
-            'for value "invalid-org" at path "org"');
+      expect(err.message).toBe('tunnelID validation failed: org: Cast to ObjectId failed ' +
+            'for value "invalid-org" (type string) at path "org"');
     });
   });
 
@@ -74,7 +74,7 @@ describe('TunnelIDs schema', () => {
 
     tunnelIdsFullSchema.validate((err) => {
       expect(err.message).toBe('tunnelID validation failed: nextAvailID: Cast to Number failed ' +
-                               'for value "not a number" at path "nextAvailID"');
+                               'for value "not a number" (type string) at path "nextAvailID"');
     });
   });
 });

@@ -158,6 +158,11 @@ class DeviceQueues {
           return done(err, false);
         }
       }
+      // in case the device is reconnected the job can be missed in the kue worker memory
+      // it should be set to be completed and prevent TTL exceeded failure
+      if (!this.queue.job) {
+        this.queue.job = job;
+      }
       done(null, job.data.response);
     });
 
@@ -422,10 +427,11 @@ class DeviceQueues {
      * @param  {array}    filters  an array of filters objects [{ key, op, val}]
      *                             example [{key:'state',op:'!=',val:'failed'}, ...]
      * @param  {boolean}  isDelete jobs will be deleted in the callback
+     * @param  {object}   devicesByMachineId an object of devices by machineId
      * @return {void}
      */
   iterateJobsByOrg (org, state, callback, from = 0, to = -1, dir = 'asc',
-    skip = 0, limit = -1, filters, isDelete = false) {
+    skip = 0, limit = -1, filters, isDelete = false, devicesByMachineId = { }) {
     return new Promise((resolve, reject) => {
       let skipped = 0;
       let deviceId = null;
@@ -453,6 +459,9 @@ class DeviceQueues {
       const orgCallback = (orgJob) => {
         // need to prepare the job the same way it is returned in the service
         const jobObj = { ...orgJob, _id: orgJob.id, state: orgJob._state };
+        if (devicesByMachineId[orgJob.type] !== undefined) {
+          jobObj.device = devicesByMachineId[orgJob.type];
+        }
         if (orgJob.data.metadata.org === org && (!filters || passFilters(jobObj, filters))) {
           if (skipped < skip) skipped += 1;
           else {
@@ -539,8 +548,9 @@ class DeviceQueues {
    * to an organizations id.
    * @param  {string} org     organization id
    * @param  {Array}  filters an array of filters matching the jobs to be removed
+   * @param  {Object} devicesByMachineId an object of devices by machineId
    */
-  async removeJobsByOrgAndFilters (org, filters) {
+  async removeJobsByOrgAndFilters (org, filters, devicesByMachineId) {
     try {
       const isDelete = true;
       await this.iterateJobsByOrg(org, 'all', async (job) => {
@@ -548,7 +558,7 @@ class DeviceQueues {
         const { method } = removedJob.data.response;
         this.callRemoveRegisteredCallback(method, removedJob);
         return true;
-      }, 0, -1, 'asc', 0, -1, filters, isDelete);
+      }, 0, -1, 'asc', 0, -1, filters, isDelete, devicesByMachineId);
     } catch (err) {
       logger.warn('Encountered an error while removing jobs', {
         params: { org: org, filters: filters, err: err.message }

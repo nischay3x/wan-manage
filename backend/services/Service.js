@@ -1,6 +1,6 @@
 class Service {
-  static rejectResponse (error, code = 500) {
-    return { error, code };
+  static rejectResponse (error, code = 500, data = {}) {
+    return { error, code, data };
   }
 
   static successResponse (payload, code = 200) {

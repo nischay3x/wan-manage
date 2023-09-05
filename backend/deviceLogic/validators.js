@@ -66,7 +66,9 @@ const validateDhcpConfig = (device, modifiedInterfaces) => {
     if (i.type !== orig.type ||
       i.dhcp !== orig.dhcp ||
       i.addr !== `${orig.IPv4}/${orig.IPv4Mask}` ||
-      i.gateway !== orig.gateway
+      // Check if both gateways are not falsy values (undefined, "", null, etc).
+      // In such case, we don't consider it as modification
+      (i.gateway && orig.gateway && i.gateway !== orig.gateway)
     ) {
       return true;
     } else {
@@ -277,9 +279,19 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
  * @param {boolean} isRunning  is the device running
  * @param {[_id: objectId, name: string, type: string, subnet: string]} orgSubnets to check overlaps
  * @param {[_id: objectId, bgp: object]} orgBgpDevices
+ * @param {boolean} allowOverlapping  if to allow interface LAN overlapping
+ * @param {object} origDevice  origDevice object. Can be different that "device"
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpDevices = []) => {
+const validateDevice = (
+  device,
+  org,
+  isRunning = false,
+  orgSubnets = [],
+  orgBgpDevices = [],
+  allowOverlapping = false,
+  origDevice = null
+) => {
   const major = getMajorVersion(device.versions.agent);
   const minor = getMinorVersion(device.versions.agent);
 
@@ -323,13 +335,11 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
       };
     }
 
-    if (!isIPv4Address(ifc.IPv4, ifc.IPv4Mask) && ifc.dhcp !== 'yes' && ifc.type !== 'TRUNK') {
+    const validationResult = validateIPv4Address(ifc.IPv4, ifc.IPv4Mask);
+    if (!validationResult.valid && ifc.dhcp !== 'yes' && ifc.type !== 'TRUNK') {
       return {
         valid: false,
-        err: ifc.IPv4 && ifc.IPv4Mask
-          ? `Invalid IP address for ${ifc.name}: ${ifc.IPv4}/${ifc.IPv4Mask}`
-          : `Interface ${ifc.name} does not have an ${ifc.IPv4Mask === ''
-                      ? 'IPv4 mask' : 'IP address'}`
+        err: `[${ifc.name}]: ${validationResult.err}`
       };
     }
 
@@ -371,7 +381,7 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
       }
 
       // DHCP client is not allowed on LAN interface
-      if (ifc.dhcp === 'yes' && device.dhcp.find(d => d.interface === ifc.devId)) {
+      if (ifc.dhcp === 'yes' && device.dhcp?.find(d => d.interface === ifc.devId)) {
         return {
           valid: false,
           err: `Configure DHCP server on interface ${ifc.name} is not allowed \
@@ -399,7 +409,7 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
   }
 
   // Assigned interfaces must not be on the same subnet
-  const assignedNotEmptyIfs = assignedIfs.filter(i => isIPv4Address(i.IPv4, i.IPv4Mask));
+  const assignedNotEmptyIfs = assignedIfs.filter(i => i.IPv4);
   for (const ifc1 of assignedNotEmptyIfs) {
     for (const ifc2 of assignedNotEmptyIfs.filter(i => i.devId !== ifc1.devId)) {
       const ifc1Subnet = `${ifc1.IPv4}/${ifc1.IPv4Mask}`;
@@ -419,7 +429,8 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
         };
       }
       // prevent Public IP / WAN overlap
-      if (ifc1.PublicIP && cidr.overlap(ifc2Subnet, `${ifc1.PublicIP}/32`)) {
+      if (ifc1.type === 'WAN' && ifc1.PublicIP &&
+        cidr.overlap(ifc2Subnet, `${ifc1.PublicIP}/32`)) {
         return {
           valid: false,
           err: `IP address of [${ifc2.name}] has an overlap with Public IP of [${ifc1.name}]`
@@ -485,7 +496,7 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
     }
   }
 
-  if (isRunning && orgSubnets.length > 0) {
+  if (orgSubnets.length > 0) {
     // LAN subnet must not be overlap with other devices in this org
     for (const orgSubnet of orgSubnets) {
       for (const currentLanIfc of lanIfcs) {
@@ -505,9 +516,28 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
         };
 
         if (cidr.overlap(currentSubnet, subnet)) {
+          let errCode = null;
           let overlapsWith = 'some network in your organization';
           if (orgSubnet.type === 'interface') {
+            // don't raise error if user allowed LAN overlapping
+            if (allowOverlapping) {
+              continue;
+            }
+
+            // raise error only if interface is now configured with IP that overlaps.
+            // but if it was overlapped this change,
+            // then no need to throw error as it was saved with user approval.
+            // hence we check here if it was overlapped with "origDevice".
+            const origIfc = origDevice?.interfaces?.find(i => i.devId === currentLanIfc.devId);
+            if (origIfc?.IPv4) {
+              const origIfcSubnet = `${origIfc.IPv4}/${origIfc.IPv4Mask}`;
+              if (cidr.overlap(origIfcSubnet, subnet)) {
+                continue;
+              }
+            }
+
             overlapsWith = `a LAN subnet (${orgSubnet.subnet}) of device ${orgSubnet.name}`;
+            errCode = 'LAN_OVERLAPPING';
           } else if (orgSubnet.type === 'tunnel') {
             overlapsWith = `a loopback network (${orgSubnet.subnet}) of tunnel #${orgSubnet.num}`;
           } else if (orgSubnet.type === 'application') {
@@ -517,7 +547,8 @@ const validateDevice = (device, org, isRunning = false, orgSubnets = [], orgBgpD
 
           return {
             valid: false,
-            err: `The LAN subnet ${currentSubnet} overlaps with ${overlapsWith}`
+            err: `The LAN subnet ${currentSubnet} overlaps with ${overlapsWith}`,
+            errCode: errCode
           };
         }
       }
@@ -751,30 +782,54 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
     }
 
     const [ip, mask] = (ifc.addr || '/').split('/');
-    if (!isIPv4Address(ip, mask)) {
+    const validationResult = validateIPv4Address(ip, mask);
+    if (!validationResult.valid) {
       return {
         valid: false,
-        err: `Bad request: Invalid IP address ${ifc.addr}`
+        err: `Bad request: ${validationResult.err}`
       };
     }
   }
   return { valid: true, err: '' };
 };
 
-const isIPv4Address = (ip, mask) => {
-  if (!validateIPv4Mask(mask)) {
-    return false;
-  };
+const validateIPv4Address = (ip, mask) => {
+  if (!ip) {
+    return {
+      valid: false,
+      err: 'Interface does not have an IPv4 address'
+    };
+  }
+  if (!mask) {
+    return {
+      valid: false,
+      err: 'Interface does not have an IPv4 mask'
+    };
+  }
   if (!net.isIPv4(ip)) {
-    return false;
+    return {
+      valid: false,
+      err: `IPv4 address ${ip}/${mask} is not valid`
+    };
   };
-  if (mask < 32) {
+  if (!validateIPv4Mask(mask)) {
+    return {
+      valid: false,
+      err: `IPv4 mask ${ip}/${mask} is not valid`
+    };
+  };
+  if (mask < 31) {
+    // Based on RFC-3021, /31 point-to-point network doesn't use local and broadcast addresses
     const ipCidr = new IPCidr(`${ip}/${mask}`);
     if (ipCidr.start() === ip || ipCidr.end() === ip) {
-      return false;
+      return {
+        valid: false,
+        // eslint-disable-next-line max-len
+        err: `Local ${ipCidr.start()}/${mask} and Broadcast ${ipCidr.end()}/${mask} are invalid IPv4 addresses`
+      };
     }
   }
-  return true;
+  return { valid: true, err: '' };
 };
 
 /**
@@ -912,7 +967,7 @@ const validateQOSPolicy = (devices) => {
 };
 
 module.exports = {
-  isIPv4Address,
+  validateIPv4Address,
   validateDevice,
   validateDhcpConfig,
   validateStaticRoute,

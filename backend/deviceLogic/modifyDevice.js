@@ -27,6 +27,7 @@ const {
 const { validateModifyDeviceMsg, validateDhcpConfig } = require('./validators');
 const tunnelsModel = require('../models/tunnels');
 const { devices } = require('../models/devices');
+const Vrrp = require('../models/vrrp');
 const {
   complete: firewallPolicyComplete,
   error: firewallPolicyError,
@@ -43,7 +44,6 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
 const has = require('lodash/has');
 const omit = require('lodash/omit');
 const differenceWith = require('lodash/differenceWith');
-const xorWith = require('lodash/xorWith');
 const pullAllWith = require('lodash/pullAllWith');
 const omitBy = require('lodash/omitBy');
 const isEqual = require('lodash/isEqual');
@@ -1045,15 +1045,19 @@ const prepareModifyOSPF = (origDevice, newDevice) => {
  * @param  {Object} newDevice  device object after changes in the database
  * @return {Object}            an object containing an array of routes
  */
-const prepareModifyDHCP = (origDevice, newDevice) => {
+const prepareModifyDHCP = async (origDevice, newDevice) => {
+  const vrrpGroups = await Vrrp.find(
+    { org: origDevice.org, 'devices.device': origDevice._id }
+  ).populate('devices.device').lean();
+
   // Extract only relevant fields from dhcp database entries
   const [newDHCP, origDHCP] = [
     newDevice.dhcp.filter(d => !d.isPending).map(dhcp => {
-      return transformDHCP(dhcp);
+      return transformDHCP(dhcp, newDevice._id, vrrpGroups);
     }),
 
     origDevice.dhcp.filter(d => !d.isPending).map(dhcp => {
-      return transformDHCP(dhcp);
+      return transformDHCP(dhcp, origDevice._id, vrrpGroups);
     })
   ];
 
@@ -1161,7 +1165,7 @@ const apply = async (device, user, data) => {
   if (modifyRoutes.routes.length > 0) modifyParams.modify_routes = modifyRoutes;
 
   // Create DHCP modification parameters
-  const modifyDHCP = prepareModifyDHCP(device[0], data.newDevice);
+  const modifyDHCP = await prepareModifyDHCP(device[0], data.newDevice);
   if (modifyDHCP.dhcpRemove.length > 0 ||
       modifyDHCP.dhcpAdd.length > 0) {
     modifyParams.modify_dhcp_config = modifyDHCP;
@@ -1386,21 +1390,17 @@ const apply = async (device, user, data) => {
 
   // Send QoS policy job only when interfaces specific policy modified
   // as installing a default QoS will set policy on every WAN interface
-  const affectingParameters = ['devId', 'isAssigned', 'type', 'qosPolicy'];
+  const qosAffectingParameters = ({ devId, isAssigned, type, qosPolicy }) => ({
+    devId, isAssigned, type, qosPolicyId: qosPolicy._id
+  });
   const qosApplied = i => i.isAssigned && i.type === 'WAN' && i.qosPolicy;
 
-  const qosDiff = xorWith(
-    data.newDevice.interfaces.filter(qosApplied),
-    device[0].interfaces.filter(qosApplied),
-    (origIfc, newIfc) => {
-      return isEqual(
-        pick(origIfc, affectingParameters),
-        pick(newIfc, affectingParameters)
-      );
-    }
+  const qosModified = !isEqual(
+    data.newDevice.interfaces.filter(qosApplied).map(qosAffectingParameters),
+    device[0].interfaces.filter(qosApplied).map(qosAffectingParameters)
   );
 
-  if (qosDiff.length > 0) {
+  if (qosModified) {
     modifyParams.modify_qos = await getDevicesQOSJobInfo(updDevice.toObject());
   }
 
@@ -1522,7 +1522,8 @@ const completeSync = async (jobId, jobsData) => {
  * Firewall rules skipped here, sync from firewallPolicy will handle them
  * @return Array
  */
-const sync = async (deviceId, org) => {
+
+const sync = async (deviceId, orgId) => {
   const device = await devices.findOne(
     { _id: deviceId },
     {
@@ -1542,7 +1543,7 @@ const sync = async (deviceId, org) => {
     .populate('org');
 
   const {
-    interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions
+    interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions, _id
   } = device;
 
   const majorVersion = getMajorVersion(versions.agent);
@@ -1656,6 +1657,10 @@ const sync = async (deviceId, org) => {
     });
   });
 
+  const vrrpGroups = await Vrrp.find(
+    { org: device.org, 'devices.device': _id }
+  ).populate('devices.device', '_id').lean();
+
   // Prepare add-dhcp-config message
   Array.isArray(dhcp) && dhcp.forEach(entry => {
     const { isPending } = entry;
@@ -1665,7 +1670,7 @@ const sync = async (deviceId, org) => {
       return;
     }
 
-    const params = transformDHCP(entry);
+    const params = transformDHCP(entry, _id, vrrpGroups);
 
     deviceConfRequests.push({
       entity: 'agent',

@@ -23,12 +23,13 @@ const { getToken } = require('../tokens');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 /**
- * Get all organizations available for a user
+ * Fetch all organizations accessible by a user.
+ * The accountId should be provided when the user isn't the one currently logged in.
  * @param {Object} user - user DB object
  * @param {Integer} offset The number of items to skip (optional)
  * @param {Integer} limit The numbers of items to return (optional)
  */
-const getUserOrganizations = async (user, offset = 0, limit = 0) => {
+const getUserOrganizations = async (user, offset = 0, limit = 0, accountId = null) => {
   if (!user.defaultAccount || !user.defaultAccount._id || !user._id) return [];
 
   /* Organizations permitted are:
@@ -43,23 +44,24 @@ const getUserOrganizations = async (user, offset = 0, limit = 0) => {
     // If user has account permissions, get all account organizations
     const account = await membership.findOne({
       user: user._id,
-      account: user.defaultAccount._id,
+      account: accountId || user.defaultAccount._id,
       to: 'account'
     });
     if (account) {
-      await user.defaultAccount.populate('organizations').execPopulate();
-      user.defaultAccount.organizations.forEach((org) => { resultSet[org._id] = org; });
-      return resultSet;
+      const accountOrgs = await organizations.find({
+        account: accountId || user.defaultAccount._id
+      }).skip(offset).limit(limit);
+      accountOrgs.forEach((entry) => { resultSet[entry._id] = entry; });
     }
 
     // If user has group permissions, get all accounts for this group
     const groups = await membership.distinct('group', {
       user: user._id,
-      account: user.defaultAccount._id,
+      account: accountId || user.defaultAccount._id,
       to: 'group'
     });
     const groupOrgs = await organizations.find({
-      account: user.defaultAccount._id,
+      account: accountId || user.defaultAccount._id,
       group: { $in: groups }
     }).skip(offset).limit(limit);
     groupOrgs.forEach((entry) => { resultSet[entry._id] = entry; });
@@ -67,7 +69,7 @@ const getUserOrganizations = async (user, offset = 0, limit = 0) => {
     // Add all organizations permitted for user
     const orgs = await membership.find({
       user: user._id,
-      account: user.defaultAccount._id,
+      account: accountId || user.defaultAccount._id,
       to: 'organization'
     })
       .populate('organization');

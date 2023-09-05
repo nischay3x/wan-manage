@@ -34,6 +34,8 @@ const Accounts = require('../models/accounts');
 const Organizations = require('../models/organizations');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
+const NotificationsConf = require('../models/notificationsConf');
+const users = require('../models/users');
 
 class MembersService {
   /**
@@ -290,14 +292,14 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static async membersIdPUT ({ id, memberRequest }, { user }) {
+  static async membersIdPUT ({ id, ...memberRequest }, { user }) {
     try {
       // Check that input parameters are OK
       const checkParams = MembersService.checkMemberParameters(memberRequest, user);
       if (checkParams.status === false) return Service.rejectResponse(checkParams.error, 400);
 
       const targetUserMembership = await membership.findOne({
-        _id: memberRequest._id,
+        _id: id,
         account: user.defaultAccount._id
       });
 
@@ -450,8 +452,9 @@ class MembersService {
           "Couldn't find membership data in your account", 400);
       }
 
+      const userToDeleteId = membershipData.user;
       // Don't allow to delete self
-      if (user._id.toString() === membershipData.user.toString()) {
+      if (user._id.toString() === userToDeleteId.toString()) {
         return Service.rejectResponse('User cannot delete itself', 400);
       }
 
@@ -482,7 +485,7 @@ class MembersService {
       // Otherwise, set both the account and org to null,
       //   this will not allow the user to make operations or login
       const userAccountPipeline = [
-        { $match: { user: membershipData.user } },
+        { $match: { user: userToDeleteId } },
         {
           $group: {
             _id: '$account',
@@ -497,15 +500,15 @@ class MembersService {
       if (curAccountUserCount.count > 1) {
         // user has other permissions for this account, keep it and set org to null
         // This will find another organization on next request
-        await Users.updateOne({ _id: membershipData.user }, { defaultOrg: null });
+        await Users.updateOne({ _id: userToDeleteId }, { defaultOrg: null });
       } else if (userAccounts.length > 1) {
         // user has permission ot other account, switch to it
         const otherUserAccount = userAccounts.find((m) => !m._id.equals(membershipData.account));
-        await Users.updateOne({ _id: membershipData.user },
+        await Users.updateOne({ _id: userToDeleteId },
           { defaultAccount: otherUserAccount._id, defaultOrg: null });
       } else {
         // No account found for the user, reset both account and organization
-        await Users.updateOne({ _id: membershipData.user },
+        await Users.updateOne({ _id: userToDeleteId },
           { defaultAccount: null, defaultOrg: null });
       }
 
@@ -514,6 +517,28 @@ class MembersService {
         _id: id,
         account: user.defaultAccount._id
       });
+
+      const userToDelete = await users.findOne({ _id: userToDeleteId });
+      const userOrgList = await getUserOrganizations(userToDelete);
+      const userOrgsIds = Object.keys(userOrgList);
+      // Stop receiving email notifications from previous organizations
+      await NotificationsConf.updateMany(
+        {
+          $or: [
+            { signedToCritical: userToDeleteId },
+            { signedToWarning: userToDeleteId },
+            { signedToDaily: userToDeleteId }
+          ],
+          org: { $nin: userOrgsIds }
+        },
+        {
+          $pull: {
+            signedToCritical: userToDeleteId,
+            signedToWarning: userToDeleteId,
+            signedToDaily: userToDeleteId
+          }
+        }
+      );
 
       return Service.successResponse(null, 204);
     } catch (e) {
@@ -530,7 +555,7 @@ class MembersService {
    * memberRequest MemberRequest  (optional)
    * returns Member
    **/
-  static async membersPOST ({ memberRequest }, { user, restUiUrl }) {
+  static async membersPOST (memberRequest, { user, restUiUrl }) {
     let session;
     try {
       // Check that input parameters are OK
@@ -754,20 +779,22 @@ class MembersService {
       }]);
     }
 
-    let optionFiled = '';
-    if (type === 'group') optionFiled = 'group';
-    else if (type === 'organization') optionFiled = 'name';
-
-    // TBD:
-    // Show only organizations valid for user
+    let optionField = '';
+    if (type === 'group') optionField = 'group';
+    else if (type === 'organization') optionField = 'name';
 
     const account = await Accounts.find({ _id: user.defaultAccount._id }).populate('organizations');
-
+    const orgList = await getUserOrganizations(user);
+    const orgListValues = Object.values(orgList);
+    const orgIds = new Set(orgListValues.map(org => org.id));
     const uniques = {};
+
     account[0].organizations.forEach((org) => {
-      uniques[type === 'organization' ? org._id : org[optionFiled]] =
-        org[optionFiled];
+      if (orgIds.has(org.id)) {
+        uniques[type === 'organization' ? org._id : org[optionField]] = org[optionField];
+      }
     });
+
     const result = Object.keys(uniques).map((key) => {
       return {
         id: key,

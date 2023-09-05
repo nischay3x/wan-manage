@@ -229,7 +229,7 @@ class QOSPoliciesService {
    * @param {*} { user } the user object
    * @returns {Object} a QOS policy object
    **/
-  static async qosPoliciesIdPUT ({ qosPolicyRequest, id, org }, { user }) {
+  static async qosPoliciesIdPUT ({ id, org, ...qosPolicyRequest }, { user }) {
     try {
       const { name, description, advanced, outbound, inbound } = qosPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -295,7 +295,24 @@ class QOSPoliciesService {
       // apply on devices
       qosPolicy._id = qosPolicy._id.toString();
       const applied = await applyPolicy(opDevices, qosPolicy, 'install', user, orgList[0], true);
-
+      // send a notification
+      // TODO - uncomment after handling the policies ref issue
+      // await notificationsMgr.sendNotifications([
+      //   {
+      //     org: orgList[0],
+      //     title: 'QOS policy change',
+      //     details: `The policy ${name} has been changed`,
+      //     eventType: 'Policy change',
+      //     targets: {
+      //       deviceId: null,
+      //       tunnelId: null,
+      //       interfaceId: null,
+      //       policyId: id
+      //     },
+      //     resolved: true,
+      //     isAlwaysResolved: true
+      //   }
+      // ]);
       return Service.successResponse({ ...qosPolicy, ...applied });
     } catch (e) {
       return Service.rejectResponse(
@@ -340,7 +357,7 @@ class QOSPoliciesService {
    * @param {*} { user } the user object
    * @returns {Object} a QOS policy object
    **/
-  static async qosPoliciesPOST ({ qosPolicyRequest, org }, { user }) {
+  static async qosPoliciesPOST ({ org, ...qosPolicyRequest }, { user }) {
     try {
       const { name, description, advanced, outbound, inbound } = qosPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -506,7 +523,7 @@ class QOSPoliciesService {
    * @param {*} { user } User object
    * @returns {Object} The QOS Traffic Map object
    **/
-  static async qosTrafficMapPUT ({ org, qosTrafficMapRequest }, { user }) {
+  static async qosTrafficMapPUT ({ org, ...qosTrafficMapRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       // todo: validate qos traffic map request

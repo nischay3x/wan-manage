@@ -81,6 +81,10 @@ const validateParentDevId = (devId) => {
     validateUsbAddress(devId)
   );
 };
+
+// specific validator for interfaces used in firewall rules
+const validateFirewallDevId = (devId) => validateDevId(devId) || devId.startsWith('app_');
+
 const validatePciAddress = pci => {
   return (
     pci === '' ||
@@ -185,13 +189,65 @@ const validateMtu = (val) => val && validateIsInteger(val) && +val >= 500 && +va
 const validateOSPFArea = (val) => val !== null && (validateIPv4(val) || (validateIsInteger(val) && +val >= 0));
 const validateOSPFCost = (val) => val === null || (validateIsInteger(val) && +val >= 0 && +val < 65535);
 const validateOSPFInterval = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
-const validateFQDN = val => val && validator.isFQDN(val);
+const validateFQDN = (val, require_tld = true) => val && validator.isFQDN(val, { require_tld });
 const validateStringNoSpaces = str => { return str === '' || /^\S+$/i.test(str || ''); };
 const validateApplicationIdentifier = str => { return /[A-Za-z_.-]/i.test(str || ''); };
 const validateBGPASN = val => val && validateIsInteger(val) && +val >= 1;
 const validateBGPInterval = val => val && validateIsInteger(val) && +val >= 0 && +val < 65535;
 const validateCpuCoresNumber = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
 const validateVlanTag = val => val === '' || (val && validateIsInteger(val) && +val >= 0 && +val <= 4096);
+
+const validateNotificationsSettings = (notificationsSettingsObj) => {
+  const MIN_VALUE = 1;
+  const UNIT_LIMITS = {
+    ms: 2000,
+    '%': 100
+  };
+
+  const errors = [];
+
+  for (const [eventType, eventSettings] of Object.entries(notificationsSettingsObj)) {
+    if (hasValue(eventSettings.warningThreshold)) {
+      const warningVal = Number(eventSettings.warningThreshold);
+      const criticalVal = Number(eventSettings.criticalThreshold);
+
+      if (!isWarningBelowCritical(warningVal, criticalVal)) {
+        errors.push({
+          eventType,
+          message: 'The critical threshold must be greater than the warning.'
+        });
+      } else {
+        validateNotificationField(eventType, warningVal, eventSettings.thresholdUnit, errors, MIN_VALUE, UNIT_LIMITS);
+        validateNotificationField(eventType, criticalVal, eventSettings.thresholdUnit, errors, MIN_VALUE, UNIT_LIMITS);
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+};
+
+const hasValue = (value) => typeof value !== 'undefined' && value !== null && value !== 'varies';
+
+const isWarningBelowCritical = (warningVal, criticalVal) => warningVal < criticalVal;
+
+const validateNotificationField = (eventType, value, unit, errors, minValue, unitLimits) => {
+  if (value < minValue) {
+    errors.push({
+      eventType,
+      message: `Please enter a value greater than ${minValue - 1} for ${eventType}.`
+    });
+  }
+
+  if (unit in unitLimits && value > unitLimits[unit]) {
+    errors.push({
+      eventType,
+      message: `Please enter a value less than or equal to ${unitLimits[unit]} for ${eventType}.`
+    });
+  }
+};
 
 module.exports = {
   validateDHCP,
@@ -202,6 +258,7 @@ module.exports = {
   validatePciAddress,
   validateDevId,
   validateParentDevId,
+  validateFirewallDevId,
   validateVlanTag,
   validateIfcName,
   validateIPv4Mask,
@@ -243,5 +300,7 @@ module.exports = {
   validateBGPInterval,
   validateIsNumber,
   validateCpuCoresNumber,
-  validateVxlanPort
+  validateVxlanPort,
+  validateNotificationsSettings,
+  validateNotificationField
 };

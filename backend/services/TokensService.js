@@ -114,7 +114,7 @@ class TokensService {
    * tokenRequest TokenRequest  (optional)
    * returns Token
    **/
-  static async tokensIdPUT ({ id, org, tokenRequest }, { user }) {
+  static async tokensIdPUT ({ id, org, ...tokenRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const servers = configs.get('restServerUrl', 'list');
@@ -157,7 +157,7 @@ class TokensService {
    * tokenRequest TokenRequest  (optional)
    * returns Token
    **/
-  static async tokensPOST ({ org, tokenRequest }, { user }) {
+  static async tokensPOST ({ org, ...tokenRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
 

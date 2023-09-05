@@ -91,6 +91,20 @@ const configEnv = {
     redisTotalAttempts: 10,
     // Kue prefix
     kuePrefix: 'deviceq',
+    // devices info channel name, devices will publish statuses to this common channel
+    devInfoChannelName: 'fw-dev-info',
+    // devices channel prefix, will be used for unique channel name of every device
+    deviceChannelPrefix: 'fw-dev',
+    // host channel prefix, will be used for unique channel name of every host
+    hostChannelPrefix: 'fw-host',
+    // unique sequence key with expiration time will be set for every socket message
+    // to store the hostId which will proceed the response
+    sequencePrefix: 'fw-seq',
+    sequenceExpireTime: 300,
+    // unique device key, will be set on connect and updated on web-socket pong response
+    // the device will be considered as disconnected on expiration of this key
+    connectDevicePrefix: 'fw-conn',
+    connectExpireTime: 300,
     // HTTP port of the node server. On production we usually forward port 80 to this port using:
     // sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 80 -j REDIRECT --to-port 3000
     httpPort: 3000,
@@ -111,8 +125,10 @@ const configEnv = {
     // sudo ln -s /etc/letsencrypt/live/app.flexiwan.com/fullchain.pem ~/FlexiWanSite/bin/cert.app.flexiwan.com/certificate.pem
     httpsCert: '/cert.local.flexiwan.com/certificate.pem',
     // Default agent broker the device tries to create connection for
-    // The agent is sent to the device when it registers
-    agentBroker: 'local.flexiwan.com:3443',
+    // The broker is sent to the device when it registers.
+    // It's possible to use multiple brokers in case of multiple domains, in that case
+    // the system will use the last broker that matches the domain used in the token or the first broker if not found
+    agentBroker: ['local.flexiwan.com:3443'],
     // Whitelist of allowed domains for CORS checks
     corsWhiteList: ['http://local.flexiwan.com:3000', 'https://local.flexiwan.com:3000', 'https://local.flexiwan.com:3443', 'https://127.0.0.1:3000'],
     // Client static root directory
@@ -199,6 +215,10 @@ const configEnv = {
     ticketingSystemUrl: '',
     // Ticketing system account ID to view
     ticketingSystemAccountId: '',
+    // Email alerts rate limit in minutes
+    emailRateLimitPerDevice: 60,
+    // Device disconnection time before triggering an alert in milliseconds (2 minutes)
+    deviceDisconnectionAlertTimeout: 120000,
     /****************************************************/
     /*         Client Fields                            */
     /****************************************************/
@@ -247,7 +267,7 @@ const configEnv = {
     uiServerUrl: ['https://app.flexiwan.com:443'],
     shouldRedirectHttps: false,
     redirectHttpsPort: 443,
-    agentBroker: 'app.flexiwan.com:443',
+    agentBroker: ['app.flexiwan.com:443'],
     validateOpenAPIResponse: false,
     clientStaticDir: 'client/build',
     // 'billingConfigSite': 'flexiwan-test',
@@ -265,7 +285,7 @@ const configEnv = {
     // modify next params for hosted server
     restServerUrl: ['https://hosted.server.com:443'],
     uiServerUrl: ['https://hosted.server.com:443'],
-    agentBroker: 'hosted.server.com:443',
+    agentBroker: ['hosted.server.com:443'],
     corsWhiteList: 'https://hosted.server.com:443, http://hosted.server.com:80',
     billingRedirectOkUrl: 'https://hosted.server.com/ok.html',
     shouldRedirectHttps: false,
@@ -288,7 +308,7 @@ const configEnv = {
     shouldRedirectHttps: false,
     redirectHttpsPort: 443,
     kuePrefix: 'mngdeviceq',
-    agentBroker: 'manage.flexiwan.com:443',
+    agentBroker: ['manage.flexiwan.com:443'],
     validateOpenAPIResponse: false,
     clientStaticDir: 'client/build',
     logFilePath: '/var/log/flexiwan/flexiwan.log',
@@ -313,7 +333,7 @@ const configEnv = {
     userIpReqRateLimit: 3000,
     unreadNotificationPeriod: 300000,
     userRefreshTokenExpiration: 86400,
-    agentBroker: 'appqa01.flexiwan.com:443',
+    agentBroker: ['appqa01.flexiwan.com:443'],
     clientStaticDir: 'client/build',
     logFilePath: '/var/log/flexiwan/flexiwan.log',
     reqLogFilePath: '/var/log/flexiwan/flexiwanReq.log',
@@ -338,7 +358,7 @@ const configEnv = {
     userIpReqRateLimit: 3000,
     unreadNotificationPeriod: 300000,
     userRefreshTokenExpiration: 86400,
-    agentBroker: 'appqa02.flexiwan.com:443',
+    agentBroker: ['appqa02.flexiwan.com:443'],
     clientStaticDir: 'client/build',
     logFilePath: '/var/log/flexiwan/flexiwan.log',
     reqLogFilePath: '/var/log/flexiwan/flexiwanReq.log',

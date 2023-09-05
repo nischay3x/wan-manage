@@ -24,6 +24,8 @@ const { devices } = require('../models/devices');
 const { ObjectId } = require('mongoose').Types;
 const { validateFirewallRules } = require('../deviceLogic/validators');
 const { applyPolicy } = require('../deviceLogic/firewallPolicy');
+const notificationsConf = require('../models/notificationsConf');
+const notificationsMgr = require('../notifications/notifications')();
 
 class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org, devices = []) {
@@ -204,7 +206,7 @@ class FirewallPoliciesService {
    * firewallPolicyRequest FirewallPolicyRequest  (optional)
    * returns FirewallPolicy
    **/
-  static async firewallPoliciesIdPUT ({ id, org, firewallPolicyRequest }, { user }) {
+  static async firewallPoliciesIdPUT ({ id, org, ...firewallPolicyRequest }, { user }) {
     try {
       const { name, description, isDefault, rules } = firewallPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);
@@ -273,6 +275,25 @@ class FirewallPoliciesService {
       const applied = await applyPolicy(opDevices, firewallPolicy, 'install', user, orgList[0]);
 
       const converted = JSON.parse(JSON.stringify(firewallPolicy));
+
+      // TODO - uncomment after handling the policies ref issue
+
+      // await notificationsMgr.sendNotifications([
+      //   {
+      //     org: orgList[0],
+      //     title: 'Firewall policy change',
+      //     details: `The policy ${name} has been changed`,
+      //     eventType: 'Policy change',
+      //     targets: {
+      //       deviceId: null,
+      //       tunnelId: null,
+      //       interfaceId: null,
+      //       policyId: id
+      //     },
+      //     resolved: true,
+      //     isAlwaysResolved: true
+      //   }
+      // ]);
       return Service.successResponse({ ...converted, ...applied });
     } catch (e) {
       return Service.rejectResponse(
@@ -316,7 +337,7 @@ class FirewallPoliciesService {
    * org String Organization to be filtered by (optional)
    * returns FirewallPolicy
    **/
-  static async firewallPoliciesPOST ({ firewallPolicyRequest, org }, { user }) {
+  static async firewallPoliciesPOST ({ org, ...firewallPolicyRequest }, { user }) {
     try {
       const { name, description, isDefault, rules } = firewallPolicyRequest;
       const orgList = await getAccessTokenOrgList(user, org, true);

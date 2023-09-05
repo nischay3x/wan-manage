@@ -17,6 +17,7 @@
 
 // File used to dispatch the apply logic to the right function
 const start = require('./start');
+const notificationsConf = require('./deviceNotifications');
 const stop = require('./stop');
 const reset = require('./reset');
 const modify = require('./modifyDevice');
@@ -33,6 +34,7 @@ const appIdentification = require('./appIdentification');
 const sync = require('./sync');
 const IKEv2 = require('./IKEv2');
 const replace = require('./replace');
+const vrrp = require('./vrrp');
 const modifyHardware = require('./modifyHardware');
 const configs = require('../configs')();
 const deviceQueues = require('../utils/deviceQueue')(
@@ -54,6 +56,10 @@ const methods = {
   start: {
     apply: start.apply,
     complete: start.complete,
+    error: errorNOOP
+  },
+  notificationsConf: {
+    apply: notificationsConf.apply,
     error: errorNOOP
   },
   stop: {
@@ -163,6 +169,11 @@ const methods = {
     apply: replace.apply,
     complete: errorNOOP,
     error: errorNOOP
+  },
+  vrrp: {
+    complete: vrrp.complete,
+    error: vrrp.error,
+    remove: vrrp.remove
   }
 };
 

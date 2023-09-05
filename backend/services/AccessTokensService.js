@@ -85,7 +85,7 @@ class AccessTokensService {
    * accessTokenRequest AccessTokenRequest  (optional)
    * returns AccessToken
    **/
-  static async accesstokensPOST ({ accessTokenRequest }, { user }) {
+  static async accesstokensPOST (accessTokenRequest, { user }) {
     try {
       const accessToken = new AccessTokens({
         account: user.defaultAccount._id,

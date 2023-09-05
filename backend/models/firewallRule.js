@@ -17,7 +17,7 @@
 
 const { Schema, Types } = require('mongoose');
 const {
-  validateDevId,
+  validateFirewallDevId,
   validateIPv4WithMask,
   validateIPv4,
   validatePort,
@@ -76,7 +76,7 @@ const destinationClassificationSchema = new Schema({
     interface: {
       type: String,
       validate: {
-        validator: validateDevId,
+        validator: validateFirewallDevId,
         message: 'interface should be a valid interface devId'
       }
     }
@@ -150,11 +150,11 @@ const firewallRuleSchema = new Schema({
   classification: {
     source: {
       type: sourceClassificationSchema,
-      default: sourceClassificationSchema
+      default: () => ({})
     },
     destination: {
       type: destinationClassificationSchema,
-      default: destinationClassificationSchema
+      default: () => ({})
     }
   },
   action: {
@@ -166,7 +166,7 @@ const firewallRuleSchema = new Schema({
   interfaces: [{
     type: String,
     validate: {
-      validator: validateDevId,
+      validator: validateFirewallDevId,
       message: 'interface should be a valid interface devId'
     }
   }],

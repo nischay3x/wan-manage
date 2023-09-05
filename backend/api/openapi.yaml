@@ -362,8 +362,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Token'
           description: Created
-        "400":
-          description: Bad Request
         "401":
           content:
             application/json:
@@ -1100,6 +1098,13 @@ paths:
         required: false
         schema:
           type: string
+      - description: Allow interfaces overlapping
+        explode: true
+        in: query
+        name: allowOverlapping
+        required: false
+        schema:
+          type: boolean
       requestBody:
        content:
          application/json:
@@ -1746,6 +1751,17 @@ paths:
           type: string
         style: form
         example: '[{"key":"peer.name","op":"contains","val":"my"}]'
+      - description: Response format of returned data
+        explode: true
+        in: query
+        name: response
+        required: false
+        schema:
+          enum:
+          - detailed
+          - summary
+          type: string
+        example: summary
       - description: Organization to be filtered by
         explode: true
         in: query
@@ -1857,6 +1873,68 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Delete a tunnel
+      tags:
+      - Tunnels
+      x-swagger-router-controller: Tunnels
+      x-openapi-router-controller: TunnelsController
+      x-openapi-router-service: TunnelsService
+  /tunnels/notifications:
+    put:
+      operationId: tunnelsNotificationsPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+             $ref: '#/components/schemas/TunnelsNotificationsPut'
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Successful operation
+        "204":
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Add tunnel specific notifications settings
       tags:
       - Tunnels
       x-swagger-router-controller: Tunnels
@@ -3425,7 +3503,7 @@ paths:
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
   /devices/{id}/interfaces/{interfaceId}/status:
-    get: 
+    get:
       operationId: devicesIdInterfacesIdStatusGET
       parameters:
       - description: Numeric ID of the Device to fetch information about
@@ -3444,6 +3522,13 @@ paths:
         schema:
           type: string
         style: simple
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
       - description: Indicator if need to take data from the device
         in: query
         name: getEdgeData
@@ -4423,7 +4508,7 @@ paths:
         schema:
           type: string
         style: simple
-      - description: Organization to be filtered by
+      - description:  Numeric ID of the Organization to be filtered by
         explode: true
         in: query
         name: org
@@ -4478,6 +4563,452 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Modify notification
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf:
+    get:
+      operationId: notificationsConfGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description:  Group to be filtered by
+        explode: true
+        in: query
+        name: group
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/NotificationsConf'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the Notifications configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+    put:
+      operationId: notificationsConfPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationsConfPut'
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Successful operation
+        "204":
+          description: Successful operation
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary:  Modify the rules of notifications
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf/emails:
+    get:
+      operationId: notificationsConfEmailsGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description:  Group to be filtered by
+        explode: true
+        in: query
+        name: group
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/EmailNotificationsConf'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the Notification emails configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+    put:
+      operationId: notificationsConfEmailsPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailNotificationsConfPut'
+      responses:
+        "204":
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Modify the Notification emails configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf/webhooks:
+    get:
+      operationId: notificationsConfWebhookGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description:  Group to be filtered by
+        explode: true
+        in: query
+        name: group
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/WebhookSettings'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the Notifications webhook configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+    put:
+      operationId: notificationsConfWebhookPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSettingsPut'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/WebhookSettings'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Modify the Notifications webhook configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf/default:
+    get:
+      operationId: notificationsConfDefaultGET
+      parameters:
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/NotificationsDefaultConf'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the account/system default notifications configuration
       tags:
       - Notifications
       x-swagger-router-controller: Notifications
@@ -5514,8 +6045,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Organization'
           description: Successful operation
-        "400":
-          description: Bad Request
         "401":
           content:
             application/json:
@@ -5674,8 +6203,15 @@ paths:
             schema:
               $ref: '#/components/schemas/CouponRequest'
       responses:
-        "204":
-          description: No Content
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+          description: Success
         "400":
           content:
             application/json:
@@ -5944,8 +6480,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PathLabel'
           description: Path label was modified
-        "400":
-          description: Bad Request
         "401":
           content:
             application/json:
@@ -8544,6 +9078,518 @@ paths:
       x-swagger-router-controller: Applications
       x-openapi-router-controller: ApplicationsController
       x-openapi-router-service: ApplicationsService
+  /appstore/purchased/{id}/action:
+    post:
+      operationId: appstorePurchasedIdActionPOST
+      parameters:
+      - description: Purchased application id to operate on
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationOperationReq'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchasedApplication'
+          x-content-type: application/json
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Perform application Operation
+      tags:
+      - Applications
+      x-swagger-router-controller: Applications
+      x-openapi-router-controller: ApplicationsController
+      x-openapi-router-service: ApplicationsService
+  /vrrp:
+    get:
+      operationId: vrrpGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description: Device ID to be filtered by
+        explode: true
+        in: query
+        name: deviceId
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/VrrpGroupListItem'
+                type: array
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve VRRP groups
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+    post:
+      operationId: vrrpPOST
+      parameters:
+      - description: Organization to create VRRP group for
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VrrpGroup'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vrrpGroup:
+                    $ref: '#/components/schemas/VrrpGroupListItem'
+                  metadata:
+                    $ref: '#/components/schemas/VrrpGroupPutPostResponse'
+          description: VRRP has been added
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Create a new VRRP Group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+  /vrrp/status:
+    get:
+      operationId: vrrpStatusGET
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VrrpStatus'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve VRRP Status
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+  /vrrp/{id}:
+    get:
+      operationId: vrrpIdGET
+      parameters:
+      - description: VRRP Group ID to retrieve
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to get VRRP group from
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VrrpGroup'
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve VRRP group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+    put:
+      operationId: vrrpIdPUT
+      parameters:
+      - description: VRRP Group ID to update
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to update the VRRP group for
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VrrpGroup'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vrrpGroup:
+                    $ref: '#/components/schemas/VrrpGroup'
+                  metadata:
+                    $ref: '#/components/schemas/VrrpGroupPutPostResponse'
+          description: VRRP has been added
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Update an existing VRRP Group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+    delete:
+      operationId: vrrpIdDELETE
+      parameters:
+      - description: VRRP Group ID to remove
+        explode: true
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Organization to delete VRRP group from
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Remove VRRP Group
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+  /vrrp/deviceVrrpInterfaces:
+    get:
+      operationId: vrrpDeviceVrrpInterfacesGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description: Virtual IP of VRRP to check for the overlapping devices
+        explode: true
+        in: query
+        name: virtualIp
+        required: true
+        schema:
+          type: string
+          format: ipv4
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/VrrpDeviceInterfacesResponse'
+                type: array
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve devices and interface that overlapping with VRRP virtual IP
+      tags:
+      - VRRP
+      x-swagger-router-controller: Vrrp
+      x-openapi-router-controller: VrrpController
+      x-openapi-router-service: VrrpService
+
 components:
   responses:
     NotFoundError:
@@ -8692,7 +9738,7 @@ components:
         creator:
           type: string
         cost:
-          type: string
+          type: number
         description:
           type: string
         identifier:
@@ -8749,7 +9795,6 @@ components:
     AppIdentification:
       example:
         _id: _id
-        id: _id
         name: custom:app-name
         description: app identification description
         category: internet
@@ -8862,7 +9907,6 @@ components:
         country: country
         companyType: companyType
         companyDesc: companyDesc
-        enableNotifications: true
         isSubscriptionValid: true
         trial_end: 1676591999
         forceMfa: false
@@ -8878,16 +9922,16 @@ components:
           type: string
         companyType:
           type: string
+          nullable: true
         companyDesc:
           type: string
-        enableNotifications:
-          default: true
-          type: boolean
+          nullable: true
         isSubscriptionValid:
           default: true
           type: boolean
         trial_end:
           type: integer
+          nullable: true
         forceMfa:
           default: false
           type: boolean
@@ -8898,7 +9942,6 @@ components:
         country: country
         companyType: companyType
         companyDesc: companyDesc
-        enableNotifications: true
         forceMfa: false
       properties:
         name:
@@ -8910,9 +9953,6 @@ components:
           type: string
         companyDesc:
           type: string
-        enableNotifications:
-          default: true
-          type: boolean
         forceMfa:
           default: false
           type: boolean
@@ -9030,6 +10070,7 @@ components:
           enum:
           - completed
           - partially completed
+          - unknown
           type: string
         message:
           type: string
@@ -9103,6 +10144,155 @@ components:
           type: string
         details:
           type: string
+      type: object
+    NotificationsConf:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+      type: object
+    NotificationsDefaultConf:
+      example:
+        account: accountId
+      properties:
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+      type: object
+    EmailNotificationsConf:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+      type: object
+    EmailNotificationsConfPut:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName,
+        emailsSigning: emailsSigning
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+        emailsSigning:
+          type: array
+      type: object
+    WebhookSettings:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+      type: object
+    WebhookSettingsPut:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName,
+        webHookSettings: webHookSettings
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+        webHookSettings:
+          type: object
+          properties:
+            'webhookURL':
+              type: string
+            'sendCriticalAlerts':
+              type: boolean
+            'sendWarningAlerts':
+              type: boolean
+      type: object
+    NotificationsConfPut:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName,
+        rules: newRules,
+        setAsDefault: false,
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+        rules:
+          type: object
+          properties:
+            'Device connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Running router':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link/Tunnel round trip time':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link/Tunnel default drop rate':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Device memory usage':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Hard drive usage':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Temperature':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Policy change':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Software update':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Internet connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
       type: object
     NotificationsDeleteRequest:
       properties:
@@ -9307,6 +10497,7 @@ components:
             inboundFilter: routingFilterName
             outboundFilter: routingFilterName
             sendCommunity: both
+            multiHop: 1
         cpuInfo:
           powerSaving: true
           vppCores: 3
@@ -9726,12 +10917,14 @@ components:
           type: object
           properties:
             keyId:
-              type: integer
+              type: string
               nullable: true
             key:
               type: string
             area:
               oneOf:
+              - type: string
+                pattern: "^[0-9]*$"
               - type: integer
               - type: string
                 format: ipv4
@@ -10040,6 +11233,10 @@ components:
           - ''
           type: string
           description: A BGP attribute to attach to the BGP peer
+        multiHop:
+          type: number
+          minimum: 1
+          maximum: 255
       type: object
     OspfConfigs:
       example:
@@ -10112,7 +11309,7 @@ components:
         gateway: gateway
       properties:
         metric:
-          type: string
+          type: number
         destination:
           type: string
         protocol:
@@ -10121,6 +11318,7 @@ components:
           type: string
         gateway:
           type: string
+          nullable: true
       type: object
     DeviceRouteVpp:
       example:
@@ -10438,6 +11636,8 @@ components:
         espIntegAlg: hmac-sha2-256-128
         espDhGroup: ecp-256
         sessionLifeTime: 3600
+        ikeLifeTime: 86400
+        pfs: false
         localIpRangeStart: 0.0.0.0
         localIpRangeEnd: 255.255.255.255
         localPortRangeStart: 0
@@ -10502,6 +11702,10 @@ components:
         espIntegAlg:
           $ref: '#/components/schemas/PeerIntegAlg'
         sessionLifeTime:
+          type: string
+        pfs:
+          type: boolean
+        ikeLifeTime:
           type: string
         localIpRangeStart:
           type: string
@@ -10603,6 +11807,30 @@ components:
         pendingReason:
           type: string
       type: object
+    TunnelsNotificationsPut:
+      example:
+        org: organizationId,
+        tunnels: tunnelsList,
+        notifications: notifications
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        tunnelsList:
+          type: array
+          items:
+            type: string
+            maxLength: 24
+            minLength: 24
+        notifications:
+          type: object
+          properties:
+            'Link/Tunnel round trip time':
+              $ref: '#/components/schemas/tunnelNotificationsSchema'
+            'Link/Tunnel default drop rate':
+              $ref: '#/components/schemas/tunnelNotificationsSchema'
+      type: object
     StaticRouteRequest:
       example:
         _id: _id
@@ -10674,6 +11902,7 @@ components:
         host: "host1"
         mac: "08:00:27:fd:00:00"
         ipv4: "20.20.20.20"
+        useHostNameAsDhcpOption: true
       properties:
         host:
           description: Device hostname
@@ -10688,6 +11917,8 @@ components:
           description: IPv4 Address
           maxLength: 20
           type: string
+        useHostNameAsDhcpOption:
+          type: boolean
       required:
       - host
       - mac
@@ -10698,7 +11929,10 @@ components:
         rangeStart: "20.20.20.2"
         rangeEnd: "20.20.20.255"
         dns: ["8.8.8.8", "8.8.8.4"]
+        options: [{ "option": "routers", "code": "3", "value": "20.20.20.100"}]
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
+        maxLeaseTime: 7200
+        defaultLeaseTime: 600
       properties:
         interface:
           description: Interface bus Address
@@ -10718,16 +11952,39 @@ components:
             type: string
             maxLength: 20
           type: array
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DhcpOptionItem'
         macAssign:
           description: List of MAC Assignments
           items:
             $ref: '#/components/schemas/DhcpMacAssign'
           type: array
+        defaultLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+        maxLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
       required:
       - interface
       - rangeStart
       - rangeEnd
       type: object
+    DhcpOptionItem:
+      type: object
+      properties:
+        option:
+          type: string
+          enum: [routers, tftp-server-name, ntp-servers, interface-mtu, time-offset, domain-name]
+        code:
+          type: string
+          enum: ['3', '66', '42', '26', '2', '15']
+        value:
+          type: string
     Dhcp:
       example:
         _id: "5e5f662f1b0eba50742b6223"
@@ -10736,7 +11993,10 @@ components:
         rangeEnd: "20.20.20.255"
         dns: ["8.8.8.8", "8.8.8.4"]
         macAssign: [{"host":"host1", "mac":"08:00:27:fd:00:00", "ipv4":"20.20.20.20"}]
+        options: [{ "option": "routers", "code": "3", "value": "20.20.20.100"}]
         status: "completed"
+        maxLeaseTime: 7200
+        defaultLeaseTime: 600
       properties:
         _id:
           maxLength: 24
@@ -10760,6 +12020,10 @@ components:
             type: string
             maxLength: 20
           type: array
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/DhcpOptionItem'
         macAssign:
           description: List of MAC Assignments
           items:
@@ -10768,6 +12032,16 @@ components:
         status:
           description: Route status
           type: string
+        defaultLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+          nullable: true
+        maxLeaseTime:
+          type: number
+          maximum: 31536000
+          minimum: -1
+          nullable: true
       type: object
     ResetPasswordRequest:
       example:
@@ -10904,13 +12178,13 @@ components:
         payment_method:
           type: string
         amount:
-          type: string
+          type: number
         base_currency_code:
           type: string
         status:
           type: string
         date:
-          type: string
+          type: number
     BillingSummary:
       properties:
         _id:
@@ -10929,7 +12203,6 @@ components:
           type: array
         summary:
           $ref: '#/components/schemas/BillingSummary'
-          nullable: true
         subscription:
           type: string
     CouponRequest:
@@ -11284,6 +12557,7 @@ components:
           type: string
         isDefault:
           type: boolean
+          nullable: true
         rules:
           items:
             $ref: '#/components/schemas/FirewallRule'
@@ -11296,7 +12570,7 @@ components:
       type: object
     FirewallPolicyList:
       example:
-        id: id
+        _id: id
         name: name
       properties:
         _id:
@@ -11561,7 +12835,7 @@ components:
       type: object
     QOSPolicyList:
       example:
-        id: id
+        _id: id
         name: name
       properties:
         _id:
@@ -11641,13 +12915,10 @@ components:
       type: string
     Error:
       properties:
-        code:
-          type: string
-        message:
+        error:
           type: string
       required:
-      - code
-      - message
+      - error
       type: object
     BadRequestError:
       properties:
@@ -11752,10 +13023,6 @@ components:
               type: string
             snr:
               type: string
-            text:
-              type: string
-              enum: [Marginal, Very low, Low, Good, Very Good, Excellent]
-              description: Based on RSSI value (-50 -> Excellent, -60 -> Very Good, -70 -> Godd, -80 -> Low, -85 -> Very Low, -95 -> Marginal)
         connectivity:
           type: boolean
         packetServiceState:
@@ -11778,7 +13045,9 @@ components:
           type: object
           properties:
             cellId:
-              type: string
+              oneOf:
+              - type: string
+              - type: number
             operatorName:
               type: string
             mcc:
@@ -11817,6 +13086,13 @@ components:
             registerState:
               type: string
             networkError:
+              type: string
+        sim:
+          type: object
+          properties:
+            iccid:
+              type: string
+            imsi:
               type: string
     LteConfiguration:
       required:
@@ -11963,6 +13239,187 @@ components:
       - op
       - val
       type: object
+    ApplicationOperationReq:
+      type: object
+      required:
+      - action
+      - params
+      properties:
+        action:
+          type: string
+        params:
+          type: object
+    VrrpDeviceInterfacesResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        _id:
+          type: string
+        interfaces:
+          type: array
+          items:
+            type: object
+            properties:
+              _id:
+                type: string
+              name:
+                type: string
+              IPv4:
+                type: string
+              dhcp:
+                type: string
+      example:
+        id: deviceId
+        name: Berlin
+        interfaces:
+        - _id: interfaceId
+          name: eth1
+          IPv4: 172.16.1.1/24
+    VrrpGroupPutPostResponse:
+      type: object
+      properties:
+        jobs:
+          type: number
+        reasons:
+          type: array
+          items:
+            type: string
+    VrrpStatus:
+      type: array
+      items:
+        type: object
+        properties:
+          _id:
+            type: string
+          name:
+            type: string
+          virtualIp:
+            type: string
+            format: ipv4
+          virtualRouterId:
+            type: number
+          devices:
+            type: array
+            items:
+              type: object
+              properties:
+                _id:
+                  type: string
+                name:
+                  type: string
+                priority:
+                  type: number
+                status:
+                  type: object
+                  properties:
+                    state:
+                      type: string
+                      enum:
+                      - Master
+                      - Backup
+                      - Initialize
+                      - Interface Down
+                    time:
+                      type: number
+                    adjusted_priority:
+                      type: number
+    VrrpGroup:
+      type: object
+      properties:
+        name:
+          type: string
+        virtualRouterId:
+          type: number
+          minimum: 1
+          maximum: 255
+        virtualIp:
+          type: string
+          format: ipv4
+        preemption:
+          type: boolean
+        acceptMode:
+          type: boolean
+        devices:
+          type: array
+          items:
+            type: object
+            properties:
+              device:
+                type: string
+              interface:
+                type: string
+              priority:
+                type: number
+                minimum: 1
+                maximum: 255
+              trackInterfacesMandatory:
+                type: array
+                items:
+                  type: string
+              trackInterfacesOptional:
+                type: array
+                items:
+                  type: string
+    VrrpGroupListItem:
+      example:
+        name: VRRP group for Site 1
+        virtualRouterId: 1
+        virtualIp: 172.16.1.100
+        devices:
+        - name: Paris-1
+          _id: deviceId
+        - name: Paris-2
+          _id: deviceId
+      properties:
+        name:
+          type: string
+        virtualRouterId:
+          type: number
+          minimum: 1
+          maximum: 255
+        virtualIp:
+          type: string
+        devices:
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              _id:
+                type: string
+              jobStatus:
+                type: string
+              status:
+                type: object
+              interface:
+                type: string
+          type: array
+      type: object
+    notificationSettingsSchema:
+      type: object
+      properties:
+        warningThreshold:
+          type: number
+        criticalThreshold:
+          type: number
+        thresholdUnit:
+          type: string
+        severity:
+          type: string
+        immediateEmail:
+          type: boolean
+        resolvedAlert:
+          type: boolean
+        type:
+          type: string
+    tunnelNotificationsSchema:
+      type: object
+      properties:
+        warningThreshold:
+          type: number
+        criticalThreshold:
+          type: number
   securitySchemes:
     apiKey:
       in: header

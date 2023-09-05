@@ -18,6 +18,8 @@
 const periodic = require('./periodic')();
 const connections = require('../websocket/Connections')();
 const { deviceStats, deviceAggregateStats } = require('../models/analytics/deviceStats');
+const notifications = require('../models/notifications');
+const notificationsConf = require('../models/notificationsConf');
 const applicationStats = require('../models/analytics/applicationStats');
 const Joi = require('joi');
 const logger = require('../logging/logging')({ module: module.filename, type: 'periodic' });
@@ -27,6 +29,9 @@ const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
+const AsyncLock = require('async-lock');
+const lock = new AsyncLock({ maxOccupationTime: 30000, timeout: 20000 });
+const tunnels = require('../models/tunnels');
 
 /***
  * This class gets periodic status from all connected devices
@@ -73,6 +78,10 @@ class DeviceStatus {
     this.setTunnelsStatusByOrg = this.setTunnelsStatusByOrg.bind(this);
     this.getTunnelsStatusByOrg = this.getTunnelsStatusByOrg.bind(this);
     this.clearTunnelsStatusByOrg = this.clearTunnelsStatusByOrg.bind(this);
+    this.statusCallback = this.statusCallback.bind(this);
+
+    // register a callback function to be called when a device status is received on channel
+    connections.registerStatusCallback(this.statusCallback);
 
     // Task information
     this.updateSyncStatus = async () => {};
@@ -115,6 +124,8 @@ class DeviceStatus {
       application_stats: Joi.object().optional(),
       lte_stats: Joi.object().optional(),
       wifi_stats: Joi.object().optional(),
+      alerts: Joi.object().optional(),
+      alerts_hash: Joi.string().allow('').optional(),
       reconfig: Joi.string().allow('').optional(),
       ikev2: Joi.object({
         certificateExpiration: Joi.string().allow('').optional(),
@@ -135,7 +146,11 @@ class DeviceStatus {
         rx_pkts: Joi.number().required(),
         tx_bytes: Joi.number().required(),
         tx_pkts: Joi.number().required()
-      }))
+      })),
+      vrrp: Joi.object().pattern(Joi.number().min(1).max(255), Joi.object({
+        state: Joi.string().valid('Master', 'Backup', 'Initialize', 'Interface Down'),
+        adjusted_priority: Joi.number().min(0).max(255).optional()
+      })).allow({}).optional()
     });
 
     for (const updateEntry of msg) {
@@ -168,8 +183,180 @@ class DeviceStatus {
   periodicPollDevices () {
     const devices = connections.getAllDevices();
     devices.forEach((deviceID) => {
-      if (connections.isConnected(deviceID)) this.periodicPollOneDevice(deviceID);
+      // run periodic task if device is connected to this host
+      const { socket } = connections.getDeviceInfo(deviceID) ?? {};
+      if (connections.isSocketAlive(socket)) this.periodicPollOneDevice(deviceID);
     });
+  }
+
+  async handleAlert (
+    deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelNum = null) {
+    let { value, unit, threshold, type } = tunnelNum
+      ? lastUpdateEntry.alerts[alertKey][tunnelNum]
+      : lastUpdateEntry.alerts[alertKey];
+
+    // Ensure that 'value' has only one digit after the '.'
+    value = parseFloat(value.toFixed(1));
+    try {
+      this.createAndPushEvent(
+        deviceInfo, lastUpdateEntry.alerts, alertKey,
+        { value, threshold, unit, type }, tunnelNum);
+    } catch (err) {
+      logger.error(`Failed to add the "${alertKey}" alert for
+       ${tunnelNum ? 'tunnel ' + tunnelNum : 'device ' + deviceInfo.name}`
+      , {
+        params: { deviceID: deviceID, err: err.message },
+        periodic: { task: this.taskInfo }
+      });
+    }
+  }
+
+  getThresholdInfo (alerts, alertKey, notificationsConfRules, org, tunnelId = null) {
+    const thresholdType = alerts[alertKey].severity === 'warning'
+      ? 'warningThreshold' : 'criticalThreshold';
+    const thresholdValue = tunnelId
+      ? (tunnels.findOne(
+        { num: tunnelId, org }, { fields: { notificationsSettings: 1 } }
+      )?.notificationsSettings?.[thresholdType] ?? notificationsConfRules[alertKey][thresholdType])
+      : notificationsConfRules[alertKey][thresholdType];
+
+    const thresholdUnit = notificationsConfRules[alertKey].thresholdUnit;
+
+    return { threshold: thresholdValue, unit: thresholdUnit };
+  }
+
+  async handleResolvedAlerts (alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
+    try {
+      const agentOnlyAlerts = ['Link/Tunnel round trip time',
+        'Link/Tunnel default drop rate', 'Device memory usage', 'Hard drive usage', 'Temperature'];
+      const notificationsConfRules = orgNotificationsConf.rules;
+
+      for (const alertKey in alerts) {
+        const isAgentAlert = agentOnlyAlerts.includes(alertKey);
+        if (!isAgentAlert) {
+          continue;
+        }
+        if (alerts[alertKey].type === 'device') {
+          if ((!lastUpdateEntry.alerts[alertKey] ||
+            lastUpdateEntry.alerts[alertKey].severity !== alerts[alertKey].severity)) {
+            const agentAlertsInfo = this.getThresholdInfo(
+              alerts, alertKey, notificationsConfRules, deviceInfo.org);
+            this.createAndPushEvent(
+              deviceInfo, alerts, alertKey,
+              agentAlertsInfo, null, true);
+          }
+        } else {
+          this.resolveTunnelAlerts(
+            alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
+        }
+      }
+    } catch (error) {
+      logger.error(`Failed to resolve alert for device ${deviceInfo.name}`, {
+        params: { deviceID: deviceID, err: error.message },
+        periodic: { task: this.taskInfo }
+      });
+    }
+  }
+
+  resolveTunnelAlerts (alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules) {
+    for (const tunnelId in alerts[alertKey]) {
+      const alertExistsForTunnel = lastUpdateEntry.alerts[alertKey]?.[tunnelId];
+      const severityHasChanged = alertExistsForTunnel &&
+      alertExistsForTunnel.severity !== alerts[alertKey][tunnelId].severity;
+
+      const shouldResolveTunnelAlert = !lastUpdateEntry.alerts[alertKey] ||
+       !alertExistsForTunnel || severityHasChanged;
+
+      if (shouldResolveTunnelAlert) {
+        const agentAlertsInfo = this.getThresholdInfo(
+          alerts, alertKey, notificationsConfRules, deviceInfo.org, tunnelId);
+        this.createAndPushEvent(
+          deviceInfo, alerts, alertKey,
+          agentAlertsInfo, tunnelId, true);
+      }
+    }
+  }
+
+  createAndPushEvent (
+    deviceInfo, alerts, alertKey,
+    agentAlertsInfo, tunnelId = null, isResolved = false) {
+    const { org, deviceObj: deviceId, name } = deviceInfo;
+    const title = isResolved ? `[resolved] ${alertKey}` : alertKey;
+    const details = 'The value of the ' + alertKey + ' in ' + (tunnelId ? 'tunnel ' +
+    tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
+    agentAlertsInfo.threshold + agentAlertsInfo.unit + ')' : 'increased to ' +
+    agentAlertsInfo.value + agentAlertsInfo.unit);
+    const severity = tunnelId ? alerts[alertKey][tunnelId].severity : alerts[alertKey].severity;
+
+    this.events.push({
+      org,
+      title,
+      details,
+      eventType: alertKey,
+      targets: {
+        deviceId,
+        tunnelId,
+        interfaceId: null
+        // policyId: null
+      },
+      severity,
+      resolved: isResolved,
+      agentAlertsInfo
+    });
+  }
+
+  async calculateNotifications (deviceID, deviceInfo, lastUpdateEntry) {
+    const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
+    for (const alertKey in lastUpdateEntry.alerts) {
+      if (alertKey.toLowerCase().includes('tunnel')) {
+        for (const tunnelId in lastUpdateEntry.alerts[alertKey]) {
+          await this.handleAlert(
+            deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelId);
+        }
+      } else {
+        await this.handleAlert(
+          deviceID, deviceInfo, alertKey, lastUpdateEntry);
+      }
+    }
+    // handle resolved alerts if needed (exist in the memory but not in the current alerts)
+    if (deviceInfo.alerts) {
+      await this.handleResolvedAlerts(
+        deviceInfo.alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo);
+    // There is no memory so we should look after the unresolved alerts in th db
+    } else {
+      const previousAlerts = await notifications.find({
+        'targets.deviceId': deviceInfo.deviceObj,
+        resolved: false
+      });
+      const prevAlertsDict = {};
+      for (let i = 0; i < previousAlerts.length; i++) {
+        if (previousAlerts[i].severity) {
+          if (previousAlerts[i].targets?.tunnelId) {
+            const tunnelId = previousAlerts[i].targets.tunnelId;
+            const eventType = previousAlerts[i].eventType;
+            prevAlertsDict[eventType] = {
+              [tunnelId]: {
+                value: previousAlerts[i].agentAlertsInfo.value,
+                threshold: previousAlerts[i].agentAlertsInfo.threshold,
+                severity: previousAlerts[i].severity,
+                unit: previousAlerts[i].agentAlertsInfo.unit,
+                type: previousAlerts[i].agentAlertsInfo.type
+              }
+            };
+          } else {
+            prevAlertsDict[previousAlerts[i].eventType] = {
+              value: previousAlerts[i].agentAlertsInfo.value,
+              threshold: previousAlerts[i].agentAlertsInfo.threshold,
+              severity: previousAlerts[i].severity,
+              unit: previousAlerts[i].agentAlertsInfo.unit,
+              type: previousAlerts[i].agentAlertsInfo.type
+            };
+          }
+        }
+      }
+      await this.handleResolvedAlerts(
+        prevAlertsDict, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo);
+    }
   }
 
   /**
@@ -194,11 +381,37 @@ class DeviceStatus {
               });
               return;
             }
-            this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
+            await this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
-            this.generateDevStatsNotifications();
+            // Use lock to prevent duplicated alerts for the same tunnel from different devices
+            lock.acquire(
+              'notifications',
+              async () => {
+                if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
+              deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
+                  await this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry);
+                  connections.devices.updateDeviceInfo(
+                    deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
+                  connections.devices.updateDeviceInfo(
+                    deviceID, 'alerts', lastUpdateEntry.alerts);
+                }
+                await this.generateDevStatsNotifications();
+              }
+            ).catch((err) => {
+              logger.warn('Failed to calculate device notifications', {
+                params: { deviceID: deviceID, err: err.message },
+                periodic: { task: this.taskInfo }
+              });
+              // The lock throws time out error if the item in th queue didn't
+              // execute the calculate notifications function. We want to reset the hash in order to
+              // execute the function next time.
+              if (err.message.includes('async-lock timed out in queue')) {
+                connections.devices.updateDeviceInfo(
+                  deviceID, 'notificationsHash', '');
+              }
+            });
             this.updateDeviceSyncStatus(
               deviceInfo.org,
               deviceInfo.deviceObj,
@@ -247,6 +460,8 @@ class DeviceStatus {
                 });
               }
             }
+            // status received and updated in memory, so it can be published to other hosts
+            connections.publishStatus(deviceID, this.status[deviceID]);
           } else {
             this.setDeviceState(deviceID, 'pending');
           }
@@ -421,7 +636,7 @@ class DeviceStatus {
    * @param  {string} state       device state
    * @return {void}
    */
-  setDeviceState (machineId, newState) {
+  async setDeviceState (machineId, newState, needToPublish = true) {
     // Generate an event if there was a transition in the device's status
     const deviceInfo = connections.getDeviceInfo(machineId);
     if (!deviceInfo) {
@@ -430,19 +645,28 @@ class DeviceStatus {
       });
       return;
     }
-    const { org, deviceObj } = deviceInfo;
+    const { org, deviceObj: deviceId, name } = deviceInfo;
     if (!this.status[machineId] || newState !== this.status[machineId].state) {
       this.events.push({
         org: org,
-        title: 'Router state change',
-        time: new Date(),
-        device: deviceObj,
-        machineId: machineId,
-        details: `Router state changed to "${newState === 'running' ? 'Running' : 'Not running'}"`
+        title: '[resolved] Router state change',
+        details: `Router state changed to running in the device ${name}`,
+        eventType: 'Running router',
+        targets: {
+          deviceId: deviceId,
+          tunnelId: null,
+          interfaceId: null
+          // policyId: null
+        },
+        resolved: newState === 'running'
       });
-      this.setDevicesStatusByOrg(org, deviceObj, newState);
+      this.setDevicesStatusByOrg(org, deviceId, newState);
     }
     this.setDeviceStatsField(machineId, 'state', newState);
+    // status updated in memory, publish it to other hosts
+    if (needToPublish) {
+      connections.publishStatus(machineId, this.status[machineId]);
+    }
   }
 
   /**
@@ -491,13 +715,56 @@ class DeviceStatus {
     Object.assign(this.status[machineId].wifiStatus[devId], { ...wifiStatus, time });
   }
 
+  getDeviceWifiStatus (machineId, devId) {
+    return this.status?.[machineId]?.wifiStatus?.[devId] ?? {};
+  }
+
+  /**
+    * Store Vrrp status in memory
+    * @param  {string} machineId  device machine id
+    * @param  {string} vrid VRID
+    * @param  {Object} status VRRP status
+    * @return {void}
+    */
+  setDeviceVrrpStatus (machineId, vrid, status) {
+    if (!this.status[machineId]) {
+      this.status[machineId] = {};
+    }
+    if (!this.status[machineId].vrrp) {
+      this.status[machineId].vrrp = {};
+    }
+    if (!this.status[machineId].vrrp[vrid]) {
+      this.status[machineId].vrrp[vrid] = {};
+    }
+    const time = new Date().getTime();
+    Object.assign(this.status[machineId].vrrp[vrid], { ...status, time });
+  }
+
+  /**
+    * Get the Vrrp status from memory
+    * @param  {string} machineId  device machine id
+    * @return {void}
+    */
+  getDeviceVrrpStatus (machineId, vrid) {
+    return this?.status?.[machineId]?.vrrp?.[vrid] ?? {};
+  }
+
+  /**
+    * Clear the Vrrp status from memory
+    * @param  {string} machineId  device machine id
+    * @return {void}
+    */
+  clearDeviceVrrpStatus (machineId) {
+    delete this?.status?.[machineId]?.vrrp;
+  }
+
   /**
      * @param  {string} machineId  device machine id
      * @param  {Object} deviceInfo device info entry
      * @param  {Object} rawStats   device stats supplied by the device
      * @return {void}
      */
-  setDeviceStatus (machineId, deviceInfo, rawStats) {
+  async setDeviceStatus (machineId, deviceInfo, rawStats) {
     let devStatus = 'failed';
     if (rawStats.hasOwnProperty('state')) { // Agent v1.X.X
       devStatus = rawStats.state;
@@ -506,8 +773,8 @@ class DeviceStatus {
       devStatus = rawStats.running === true ? 'running' : 'stopped';
     }
 
-    this.setDeviceState(machineId, devStatus);
-    const { org, deviceObj } = deviceInfo;
+    await this.setDeviceState(machineId, devStatus, false);
+    const { org, deviceObj: deviceId } = deviceInfo;
 
     // Interface statistics
     const timeDelta = rawStats.period;
@@ -558,6 +825,11 @@ class DeviceStatus {
       }
     };
 
+    // Set VRRP status in memory for now
+    for (const vrId in rawStats?.vrrp ?? {}) {
+      this.setDeviceVrrpStatus(machineId, vrId, rawStats.vrrp[vrId]);
+    }
+
     // Set tunnel status in memory for now
     const tunnelStatus = rawStats.tunnel_stats;
     if (rawStats.hasOwnProperty('tunnel_stats') && Object.entries(tunnelStatus).length !== 0) {
@@ -577,45 +849,25 @@ class DeviceStatus {
         }
 
         // Generate a notification if tunnel status has changed since
-        // the last update, and only if the new status is 'down'
-        if ((firstTunnelUpdate ||
-            tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status) &&
-            tunnelState.status === 'down') {
+        // the last update
+        if (
+          (firstTunnelUpdate ||
+            tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
+        ) {
           this.events.push({
             org: org,
-            title: 'Tunnel change',
-            time: new Date(),
-            device: deviceObj,
-            machineId: machineId,
-            details: `Tunnel ${tunnelID} state changed to "Not connected"`
-          });
-        }
-        // Generate a notification only if drop rate has
-        // changed, and the new drop rate is higher than 50%
-        if ((firstTunnelUpdate ||
-            tunnelState.drop_rate !== this.status[machineId].tunnelStatus[tunnelID].drop_rate) &&
-            tunnelState.drop_rate > 50) {
-          this.events.push({
-            org: org,
-            title: 'Tunnel drop rate',
-            time: new Date(),
-            device: deviceObj,
-            machineId: machineId,
-            details: `Tunnel ${tunnelID} drop rate reached ${tunnelState.drop_rate}%`
-          });
-        }
-        // Generate a notification only if RTT has changed,
-        // and the new RTT is higher than 300 milliseconds
-        if ((firstTunnelUpdate ||
-                    tunnelState.rtt !== this.status[machineId].tunnelStatus[tunnelID].rtt) &&
-                    tunnelState.rtt > 300) {
-          this.events.push({
-            org: org,
-            title: 'Tunnel latency',
-            time: new Date(),
-            device: deviceObj,
-            machineId: machineId,
-            details: `Tunnel ${tunnelID} latency reached ${tunnelState.rtt}ms`
+            title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
+              : 'Tunnel connection change',
+            details: 'Tunnel ' + tunnelID + ' state changed to ' +
+            (tunnelState.status === 'down' ? 'Not connected' : 'Connected'),
+            targets: {
+              deviceId,
+              tunnelId: tunnelID,
+              interfaceId: null
+              // policyId: null
+            },
+            eventType: 'Tunnel connection',
+            resolved: tunnelState.status === 'up'
           });
         }
       });
@@ -642,10 +894,10 @@ class DeviceStatus {
     * events created while processing the device reply.
     * @return {void}
     */
-  generateDevStatsNotifications () {
+  async generateDevStatsNotifications () {
     // Send notifications if exist
     if (this.events.length > 0) {
-      notificationsMgr.sendNotifications([...this.events]);
+      await notificationsMgr.sendNotifications([...this.events]);
       this.events = [];
     }
   }
@@ -896,6 +1148,36 @@ class DeviceStatus {
   clearTunnelsStatusByOrg (org) {
     if (org && this.tunnelsStatusByOrg.hasOwnProperty(org)) {
       delete this.tunnelsStatusByOrg[org];
+    }
+  }
+
+  /**
+   * Called when a device status is received on the hosts channel from another server
+   * @param  {string} machineId the machine id
+   * @param  {object} status    new status of the device
+   * @return {void}
+   */
+  statusCallback (machineId, status) {
+    if (this.status[machineId]?.state !== status.state) {
+      const deviceInfo = connections.getDeviceInfo(machineId);
+      if (!deviceInfo) {
+        logger.warn('Failed to get device info', {
+          params: { machineId }
+        });
+        return;
+      }
+      const { org, deviceObj } = deviceInfo;
+      this.setDevicesStatusByOrg(org, deviceObj, status.state);
+    }
+    this.status[machineId] = status;
+
+    // Update changed tunnel status in memory by org
+    if (status.tunnelStatus) {
+      const { tunnelStatus } = status;
+      const { org } = connections.getDeviceInfo(machineId) ?? {};
+      for (const tunnelID in tunnelStatus) {
+        this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelStatus.status);
+      }
     }
   }
 }

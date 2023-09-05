@@ -33,7 +33,7 @@ const getRangeAndMask = number => {
  * @param {String} mask   Number of bit masks
  * @param {String} shift  Number of IPs to shift from start
  */
-const getStartIp = (ipString, mask, shift = 0) => {
+const getStartEndIp = (ipString, mask, shift = 0) => {
   function u (n) { return n >>> 0; } // convert to unsigned
   function ip (n) {
     return [
@@ -48,10 +48,10 @@ const getStartIp = (ipString, mask, shift = 0) => {
     return u(+a << 8) + +o;
   });
   const maskNum = u(~0 << (32 - +mask));
-  return ip(u(addr32 & maskNum) + shift);
+  return [ip(u(addr32 & maskNum) + shift), ip(u(addr32 | ~maskNum) - shift)];
 };
 
 module.exports = {
   getRangeAndMask,
-  getStartIp
+  getStartEndIp
 };

@@ -24,14 +24,16 @@ const deviceQueues = require('../utils/deviceQueue')(
 );
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const pick = require('lodash/pick');
+const keyBy = require('lodash/keyBy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'job' });
+const { devices: devicesModel } = require('../models/devices');
 
 class JobsService {
   /**
    * Select the API fields from jobs Object
    * @param {Object} item - jobs object
    */
-  static selectJobsParams (item) {
+  static selectJobsParams (item, devicesByMachineId = {}) {
     item._id = item.id;
     const madeAttempts = item._attempts ? item._attempts : 0;
     item.attempts = {
@@ -42,9 +44,11 @@ class JobsService {
     item.priority = item._priority;
     item.progress = item._progress;
     item.state = item._state;
+    item.device = devicesByMachineId[item.type];
     const retJob = pick(item, [
       '_id', // type: integer
       'type', // type: string
+      'device', // type: object
       'data', // type: object
       'result', // type: object
       'created_at', // type: string
@@ -126,12 +130,18 @@ class JobsService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const result = [];
 
+      const devices = await devicesModel.find(
+        { org: { $in: orgList } },
+        { machineId: 1, name: 1, hostname: 1 }
+      );
+      const devicesByMachineId = keyBy(devices, 'machineId');
+
       if (ids !== undefined) {
         // Convert Ids to strings
         const intIds = ids.split(',').map(id => +id);
         await deviceQueues.iterateJobsIdsByOrg(orgList[0].toString(),
           intIds, (job) => {
-            const parsedJob = JobsService.selectJobsParams(job);
+            const parsedJob = JobsService.selectJobsParams(job, devicesByMachineId);
             result.push(parsedJob);
           }
         );
@@ -140,10 +150,10 @@ class JobsService {
       const parsedFilters = filters ? JSON.parse(filters) : [];
       await deviceQueues.iterateJobsByOrg(orgList[0].toString(),
         status, (job) => {
-          const parsedJob = JobsService.selectJobsParams(job);
+          const parsedJob = JobsService.selectJobsParams(job, devicesByMachineId);
           result.push(parsedJob);
           return true; // Mark job as done
-        }, 0, -1, 'desc', offset, limit, parsedFilters
+        }, 0, -1, 'desc', offset, limit, parsedFilters, false, devicesByMachineId
       );
       return Service.successResponse(result);
     } catch (e) {
@@ -159,7 +169,7 @@ class JobsService {
    *
    * no response value expected for this operation
    **/
-  static async jobsDELETE ({ org, jobsDeleteRequest }, { user }) {
+  static async jobsDELETE ({ org, ...jobsDeleteRequest }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const { ids, filters } = jobsDeleteRequest;
@@ -169,7 +179,17 @@ class JobsService {
       if (ids) {
         await deviceQueues.removeJobIdsByOrg(orgList[0].toString(), ids);
       } else {
-        await deviceQueues.removeJobsByOrgAndFilters(orgList[0].toString(), filters);
+        let devicesByMachineId = {};
+        if (filters?.some(f => f.key.includes('device.'))) {
+          const devices = await devicesModel.find(
+            { org: { $in: orgList } },
+            { machineId: 1, name: 1, hostname: 1 }
+          );
+          devicesByMachineId = keyBy(devices, 'machineId');
+        }
+        await deviceQueues.removeJobsByOrgAndFilters(
+          orgList[0].toString(), filters, devicesByMachineId
+        );
       }
       return Service.successResponse(null, 204);
     } catch (e) {
@@ -219,8 +239,17 @@ class JobsService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       let result = {};
       await deviceQueues.iterateJobsIdsByOrg(orgList[0].toString(),
-        [id], (job) => {
-          const parsedJob = JobsService.selectJobsParams(job);
+        [id], async (job) => {
+          const machineId = job.type;
+          const device = await devicesModel.findOne(
+            { machineId, org: { $in: orgList } },
+            { machineId: 1, name: 1, hostname: 1 }
+          );
+          const devicesByMachineId = {};
+          if (device) {
+            devicesByMachineId.machineId = device;
+          }
+          const parsedJob = JobsService.selectJobsParams(job, devicesByMachineId);
           result = parsedJob;
         }
       );

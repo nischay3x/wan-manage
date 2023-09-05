@@ -21,7 +21,13 @@ const mongoose = require('mongoose');
 const Accounts = require('../models/accounts');
 const Devices = require('../models/devices');
 const Users = require('../models/users');
+const Vrrp = require('../models/vrrp');
+const Peers = require('../models/peers');
+const FirewallPolicies = require('../models/firewallPolicies');
+const { appIdentifications, importedAppIdentifications } = require('../models/appIdentifications');
+const Applications = require('../models/applications');
 const Organizations = require('../models/organizations');
+const NotificationsConf = require('../models/notificationsConf');
 const Tunnels = require('../models/tunnels');
 const TunnelIds = require('../models/tunnelids');
 const Tokens = require('../models/tokens');
@@ -48,6 +54,7 @@ const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
 const { validateFirewallRules } = require('../deviceLogic/validators');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+const notificationsMgr = require('../notifications/notifications')();
 
 class OrganizationsService {
   /**
@@ -93,7 +100,7 @@ class OrganizationsService {
     }
   }
 
-  static async organizationsSelectPOST ({ organizationSelectRequest }, { user }, res) {
+  static async organizationsSelectPOST (organizationSelectRequest, { user }, res) {
     try {
       if (!user._id || !user.defaultAccount) {
         return Service.rejectResponse('Error in selecting organization', 500);
@@ -205,6 +212,14 @@ class OrganizationsService {
         await AccessTokens.deleteMany({ organization: id }, { session: session });
         await MultiLinkPolicies.deleteMany({ org: id }, { session: session });
         await PathLabels.deleteMany({ org: id }, { session: session });
+        await Vrrp.deleteMany({ org: id }, { session: session });
+        await Peers.deleteMany({ org: id }, { session: session });
+        await Applications.deleteMany({ org: id }, { session: session });
+        await QosPolicies.deleteMany({ org: id }, { session: session });
+        await FirewallPolicies.deleteMany({ org: id }, { session: session });
+        await appIdentifications.deleteMany({ 'meta.org': id }, { session: session });
+        await importedAppIdentifications.deleteMany({ 'meta.org': id }, { session: session });
+        await NotificationsConf.deleteMany({ org: id }, { session: session });
 
         // Find all devices for organization
         orgDevices = await Devices.devices.find({ org: id },
@@ -252,8 +267,9 @@ class OrganizationsService {
    * organizationRequest OrganizationRequest  (optional)
    * returns Organization
    **/
-  static async organizationsIdPUT ({ id, organizationRequest }, { user }, response) {
+  static async organizationsIdPUT (organizationRequest, { user }, response) {
     try {
+      const { id } = organizationRequest;
       // Only allow to update current default org, this is required to make sure the API permissions
       // are set properly for updating this organization
       const orgList = await getAccessTokenOrgList(user, undefined, false);
@@ -518,7 +534,7 @@ class OrganizationsService {
    * organizationRequest OrganizationRequest  (optional)
    * returns Organization
    **/
-  static async organizationsPOST ({ organizationRequest }, { user }, response) {
+  static async organizationsPOST (organizationRequest, { user }, response) {
     try {
       const session = await mongoConns.getMainDB().startSession();
       await session.startTransaction();
@@ -582,6 +598,33 @@ class OrganizationsService {
       });
       if (!qosPolicy) throw new Error('Error default QoS policy adding');
 
+      // Add default notifications settings
+      const notificationsSettings = await notificationsMgr.getDefaultNotificationsSettings(
+        updUser.defaultAccount._id);
+      const ownerMembership = await membership.find({
+        account: updUser.defaultAccount,
+        to: 'account',
+        role: 'owner'
+      });
+      let accountOwners = [];
+      if (ownerMembership.length > 1) {
+        ownerMembership.forEach(owner => {
+          accountOwners.push(owner.user);
+        });
+      } else {
+        accountOwners = [ownerMembership[0].user];
+      }
+      const setNotificationsConf = await NotificationsConf.create({
+        org: org._id,
+        rules: notificationsSettings,
+        signedToCritical: [],
+        signedToWarning: [],
+        signedToDaily: accountOwners,
+        webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
+      });
+      if (!setNotificationsConf) {
+        throw new Error('Error adding default notifications settings');
+      }
       session.commitTransaction();
 
       const token = await getToken({ user }, { org: org._id, orgName: org.name });

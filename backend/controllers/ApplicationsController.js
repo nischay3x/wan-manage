@@ -42,6 +42,10 @@ class ApplicationsController {
     await Controller.handleRequest(request, response, this.service.appstorePurchasedIdPUT);
   }
 
+  async appstorePurchasedIdActionPOST (request, response) {
+    await Controller.handleRequest(request, response, this.service.appstorePurchasedIdActionPOST);
+  }
+
   async appstorePurchasedIdGET (request, response) {
     await Controller.handleRequest(request, response, this.service.appstorePurchasedIdGET);
   }
