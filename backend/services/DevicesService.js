@@ -1286,24 +1286,36 @@ class DevicesService {
     }
   }
 
-  static async devicesIdBgpStatusGET ({ id, org }, { user }) {
+  static async devicesIdBgpStatusGET ({ id, org, getEdgeData = 'false' }, { user }) {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const device = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      }, 'machineId'); // add project to return relevant fields only
+      }, 'machineId versions'); // add project to return relevant fields only
 
       if (!device) {
         return Service.rejectResponse('Device not found', 404);
       }
 
-      if (!connections.isConnected(device.machineId)) {
+      const majorVersion = getMajorVersion(device.versions.agent);
+      const minorVersion = getMinorVersion(device.versions.agent);
+
+      if (majorVersion < 6 || (majorVersion === 6 && minorVersion < 3)) {
+        return Service.rejectResponse(
+          'Devices with a version lower than 6.3.X do not support the BGP status', 400);
+      }
+
+      if (getEdgeData === 'false') {
         return Service.successResponse({
           error: null,
-          deviceStatus: 'disconnected',
-          status: {}
+          deviceStatus: 'unknown',
+          status: deviceStatus.getDeviceBgpStatus(device.machineId)
         });
+      }
+
+      if (!connections.isConnected(device.machineId)) {
+        return Service.rejectResponse('Device must be connected when getEdgeData is set', 400);
       }
 
       const bgpStatusResponse = await connections.deviceSendMessage(
@@ -1325,10 +1337,13 @@ class DevicesService {
         return Service.rejectResponse('Failed to get BGP status', 500);
       }
 
+      // update server stats cache, so the UI will have the most updated data
+      const data = deviceStatus.setDeviceBgpStatus(device.machineId, bgpStatusResponse.message);
+
       return Service.successResponse({
         error: null,
         deviceStatus: 'connected',
-        status: bgpStatusResponse.message
+        status: data
       });
     } catch (e) {
       return DevicesService.handleRequestError(e, { deviceStatus: 'connected', status: {} });
