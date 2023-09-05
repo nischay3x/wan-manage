@@ -35,6 +35,7 @@ const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
 const { validateNotificationsSettings } = require('../models/validators');
 const mongoConns = require('../mongoConns.js')();
+const Joi = require('joi');
 
 class CustomError extends Error {
   constructor ({ message, status, data }) {
@@ -315,10 +316,11 @@ class NotificationsService {
       if (!org && !account && !group) {
         return Service.rejectResponse('Missing parameter: org, account or group', 400);
       }
+      // The request should contain only the necessary fields. orgId is unique so it should be sent alone
       if (org && (account || group)) {
         return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
       }
-      // since the group name is not unique it is always being sent with an account id
+      // Since the group name is not unique, it should always be sent with an account ID
       if (group && !account) {
         return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
       }
@@ -446,6 +448,16 @@ class NotificationsService {
       if (orgIds && orgIds.error) {
         return orgIds;
       }
+
+      const isRulesContainsAllFields = NotificationsService.validateNotificationsRules(newRules);
+      if (isRulesContainsAllFields) {
+        throw new CustomError({
+          status: 400,
+          message: 'Missing notification rules',
+          data: { error: isRulesContainsAllFields }
+        });
+      }
+
       // If we modify a single organization we can send the whole newRules object to validation as it is
       // Since it doesn't contain "varies" values when we expect numeric values
       if (orgIds.length === 1) {
@@ -475,46 +487,45 @@ class NotificationsService {
           { status: 'completed', message: 'Current settings successfully established as the default for new organizations' }, 202
         );
       } else {
-        const notificationsByOrg = new Map();
+        // A map to save the updated notifications for each organization in order to use it in the job
+        // Note that the newRules input isn't always applicable as the updated settings since it may contain "varies" in some fields.
+        // In this case the original setting for that specific field in the organization settings should be used instead
+        const updatedNotificationsByOrg = new Map();
 
         await mongoConns.mainDBwithTransaction(async (session) => {
-          const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } });
-          const orgRulesMap = new Map();
-
-          allCurrentRules.forEach(orgRule => {
-            orgRulesMap.set(orgRule.org, orgRule);
-          });
-
           let updatedNotifications;
           if (orgIds.length === 1) {
-            updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, { $set: { rules: newRules } }, { new: true, session: session });
-            notificationsByOrg.set(orgId, updatedNotifications);
+            updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, { $set: { rules: newRules } }, { new: true, session: session }).lean();
+            updatedNotificationsByOrg.set(orgId, updatedNotifications.rules);
           } else {
+            const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } }).lean();
+            const originalNotificationsByOrg = {};
+
+            allCurrentRules.forEach(orgNotificationsSettings => {
+              originalNotificationsByOrg[orgNotificationsSettings.org] = orgNotificationsSettings.rules;
+            });
+
             for (const orgId of orgIds) {
-              const updateData = { $set: {} };
-              const currentRules = orgRulesMap.get(orgId);
+              const currentRules = originalNotificationsByOrg[orgId];
 
               for (const event in newRules) {
                 const { warningThreshold, criticalThreshold } = newRules[event];
                 if (warningThreshold && criticalThreshold) {
                   NotificationsService.validateThresholds(
                     newRules[event],
-                    currentRules.rules[event],
+                    currentRules[event],
                     event
                   );
                 }
 
                 Object.entries(newRules[event]).forEach(([field, value]) => {
-                  if (value !== 'varies') {
-                    updateData.$set[`rules.${event}.${field}`] = value;
+                  if (value && value !== 'varies') {
+                    currentRules[event][field] = value;
                   }
                 });
               }
-
-              if (Object.keys(updateData.$set).length > 0) {
-                const updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, updateData, { new: true, session: session });
-                notificationsByOrg.set(orgId, updatedNotifications);
-              }
+              updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, { $set: { rules: currentRules } }, { new: true, session: session }).lean();
+              updatedNotificationsByOrg.set(orgId, updatedNotifications.rules);
             }
           }
         });
@@ -522,11 +533,11 @@ class NotificationsService {
         let devicesShouldReceiveJobs = 0;
         const applyPromises = [];
         let fulfilledJobs = 0;
-        for (const [orgId, notificationsSettings] of notificationsByOrg.entries()) {
+        for (const [orgId, notificationsSettings] of updatedNotificationsByOrg.entries()) {
           const orgDevices = await devices.find({ org: orgId });
           devicesShouldReceiveJobs += orgDevices.length;
           const data = {
-            rules: notificationsSettings.rules,
+            rules: notificationsSettings,
             org: orgId
           };
           applyPromises.push(apply(orgDevices, user, data));
@@ -655,6 +666,15 @@ class NotificationsService {
         return orgIds;
       }
 
+      const isEmailSigningContainsAllFields = NotificationsService.validateEmailNotifications(emailsSigning);
+      if (isEmailSigningContainsAllFields) {
+        return Service.rejectResponse({
+          code: 400,
+          message: 'Missing details in email signing list',
+          data: isEmailSigningContainsAllFields
+        });
+      }
+
       const userIds = emailsSigning.map(e => e._id);
       const userDataList = await users.find({ _id: { $in: userIds } });
 
@@ -667,9 +687,10 @@ class NotificationsService {
         usersOrgAccess[userData._id] = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
       }
 
-      let groupOrgs = [];
+      // let groupOrgs = [];
+      let groupOrgsCount;
       if (group) {
-        groupOrgs = await Organizations.find({
+        groupOrgsCount = await Organizations.count({
           account: user.defaultAccount._id,
           group
         });
@@ -689,7 +710,7 @@ class NotificationsService {
           // Since group is always being sent with account, we should check it first
           if (group) {
             const userGroupOrgs = Object.values(usersOrgAccess?.[emailSigning._id]).filter(o => o.group === group);
-            if (userGroupOrgs.length !== groupOrgs.length) {
+            if (userGroupOrgs.length !== groupOrgsCount) {
               const errorMsg = 'All the users must be authorized to each one of the organizations under the group';
               logger.warn('Error in email subscription', {
                 params: {
@@ -718,12 +739,7 @@ class NotificationsService {
         await notificationsConf.bulkWrite(operations);
       }
 
-      return Service.successResponse({
-        error: '',
-        code: 200,
-        message: 'Success',
-        data: 'updated successfully'
-      });
+      return Service.successResponse('updated successfully', 204);
     } catch (e) {
       return Service.rejectResponse({
         code: e.status || 500,
@@ -813,17 +829,62 @@ class NotificationsService {
         await notificationsConf.updateMany({ org: { $in: orgIds } }, updateData);
       }
 
-      return Service.successResponse({
-        code: 200,
-        message: 'Success',
-        data: 'updated successfully'
-      });
+      return Service.successResponse('updated successfully', 204);
     } catch (e) {
       return Service.rejectResponse({
         code: e.status || 500,
         message: e.message || 'Internal Server Error'
       });
     }
+  }
+
+  static validateNotificationsRules (notificationsRules) {
+    const notificationsRulesSchema = Joi.object().keys({
+      'Device connection': Joi.object().required(),
+      'Running router': Joi.object().required(),
+      'Link/Tunnel round trip time': Joi.object().required(),
+      'Link/Tunnel default drop rate': Joi.object().required(),
+      'Device memory usage': Joi.object().required(),
+      'Hard drive usage': Joi.object().required(),
+      Temperature: Joi.object().required(),
+      'Software update': Joi.object().required(),
+      'Link status': Joi.object().required(),
+      'Missing interface ip': Joi.object().required(),
+      'Pending tunnel': Joi.object().required(),
+      'Tunnel connection': Joi.object().required(),
+      'Internet connection': Joi.object().required(),
+      'Static route state': Joi.object().required(),
+      'Failed self-healing': Joi.object().required()
+    });
+
+    const { error } = notificationsRulesSchema.validate(notificationsRules, { abortEarly: false });
+    let messages;
+    if (error) {
+      messages = error.details.map(detail => detail.message);
+    }
+    return messages;
+  }
+
+  static validateEmailNotifications (emailNotificationsUsersList) {
+    const emailSigningSchema = Joi.object({
+      _id: Joi.string().required(),
+      email: Joi.string().email(),
+      name: Joi.string(),
+      lastName: Joi.string(),
+      signedToCritical: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
+      signedToWarning: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
+      signedToDaily: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required()
+    });
+
+    for (const user of emailNotificationsUsersList) {
+      const { error } = emailSigningSchema.validate(user, { abortEarly: false });
+      if (error) {
+        const message = error.details.map(detail => detail.message);
+        return message;
+      }
+    }
+
+    return null;
   }
 }
 
