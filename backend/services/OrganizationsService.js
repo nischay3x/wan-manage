@@ -938,9 +938,11 @@ const validateVxlanPortChange = (devices, org) => {
       continue;
     }
 
-    const { valid, err } = validateFirewallRules(rules, org, interfaces);
+    const { valid } = validateFirewallRules(rules, org, interfaces);
     if (!valid) {
-      throw new Error(`VXLAN port is invalid: ${err}`);
+      const errMsg = `Your organization has a firewall rule using port ${org.vxlanPort}. ` +
+      'The VxLAN port must not be used in any firewall rule';
+      throw new Error(errMsg);
     }
   }
 };
