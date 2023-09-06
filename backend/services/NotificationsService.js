@@ -35,6 +35,7 @@ const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
 const { validateNotificationsSettings, validateNotificationsEventTypes, validateEmailNotifications, validateWebhookSettings } = require('../models/validators');
 const mongoConns = require('../mongoConns.js')();
+const includes = require('lodash/includes');
 
 class CustomError extends Error {
   constructor ({ message, status, data }) {
@@ -718,60 +719,35 @@ class NotificationsService {
       if (areEmailSigningFieldsMissing) {
         return Service.rejectResponse({
           code: 400,
-          message: 'Missing details in email signing list',
+          message: 'Missing details in email signing object',
           data: areEmailSigningFieldsMissing
         });
       }
 
       const userIds = emailsSigning.map(e => e._id);
-      const userDataList = await users.find({ _id: { $in: userIds } });
+      const usersDataList = await users.find({ _id: { $in: userIds } });
 
       // If one of the user ids does not exist in the db
-      if (userIds.length !== userDataList.length) {
+      if (userIds.length !== usersDataList.length) {
         return Service.rejectResponse('Not all the user IDs exist in the database');
       }
-      const usersOrgAccess = {};
-      for (const userData of userDataList) {
-        usersOrgAccess[userData._id] = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
-      }
 
-      let groupOrgsCount;
-      if (group) {
-        groupOrgsCount = await Organizations.count({
-          account: user.defaultAccount._id,
-          group
-        });
+      for (const userData of usersDataList) {
+        const usersOrgAccess = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
+        const missingOrgIdsAccess = orgIds.filter(orgId => !includes(Object.keys(usersOrgAccess), orgId));
+
+        if (missingOrgIdsAccess.length > 0) {
+          const errorMsg = org ? 'One of the users does not have a permission to access the organization'
+            : `All the users must be authorized to each one of the organizations under the ${group ? 'group' : 'account'}`;
+          logger.warn('Error in email subscription', { params: { err: `user id ${userData._id} is not authorized for the organizations: ${missingOrgIdsAccess}` } });
+          return Service.rejectResponse(errorMsg, 403);
+        }
       }
 
       const operations = [];
 
       for (const org of orgIds) {
         for (const emailSigning of emailsSigning) {
-          if (!usersOrgAccess?.[emailSigning._id]?.[org]) {
-            const errorMsg = org ? 'One of the users does not have a permission to access the organization'
-              : `All the users must be authorized to each one of the organizations under the ${group ? 'group' : 'account'}`;
-            logger.warn('Error in email subscription', { params: { err: `user id ${emailSigning._id} is not authorized for the organization ${org}` } });
-            return Service.rejectResponse(errorMsg, 403);
-          }
-
-          // Since group is always being sent with account, we should check it first
-          if (group) {
-            const userGroupOrgs = Object.values(usersOrgAccess?.[emailSigning._id]).filter(o => o.group === group);
-            if (userGroupOrgs.length !== groupOrgsCount) {
-              const errorMsg = 'All the users must be authorized to each one of the organizations under the group';
-              logger.warn('Error in email subscription', {
-                params: {
-                  err: `user id ${emailSigning._id} is not authorized for all the organizations in the group ${group} under the account ${account}`
-                }
-              });
-              return Service.rejectResponse(errorMsg, 403);
-            }
-          } else if (account && user.defaultAccount.organizations.length !== Object.keys(usersOrgAccess[emailSigning._id]).length) {
-            const errorMsg = 'All the users must be authorized to each one of the organizations under the account';
-            logger.warn('Error in email subscription', { params: { err: `user id ${emailSigning._id} is not authorized for all the organizations in the account ${account}` } });
-            return Service.rejectResponse(errorMsg, 403);
-          }
-
           ['signedToCritical', 'signedToWarning', 'signedToDaily'].forEach(field => {
             if (emailSigning[field] === false) {
               operations.push({ updateOne: { filter: { org }, update: { $pull: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
