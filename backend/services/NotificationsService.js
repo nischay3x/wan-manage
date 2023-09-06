@@ -33,9 +33,8 @@ const { ObjectId } = require('mongodb');
 const { apply } = require('../deviceLogic/deviceNotifications');
 const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
-const { validateNotificationsSettings } = require('../models/validators');
+const { validateNotificationsSettings, validateNotificationsEventTypes, validateEmailNotifications, validateWebhookSettings } = require('../models/validators');
 const mongoConns = require('../mongoConns.js')();
-const Joi = require('joi');
 
 class CustomError extends Error {
   constructor ({ message, status, data }) {
@@ -304,7 +303,14 @@ class NotificationsService {
     }
   }
 
-  // Validate request params and return the list of organizations according to the param
+  /**
+  * Validate notifications conf request params and return the list of organizations according to the param
+  * @param org String organization ID
+  * @param account String account ID
+  * @param group String group name (must be sent with account ID)
+  * user: Object
+  * returns Notification
+  **/
   static async validateParams (org, account, group, user, setAsDefault = null, get = false) {
     if (setAsDefault) {
       if (!account) {
@@ -371,7 +377,12 @@ class NotificationsService {
   }
 
   /**
-   * Get notifications settings of a given organization/account/group
+  * Get notifications settings for a given organization/account/group
+  * @param org String organization ID
+  * @param account String account ID
+  * @param group String group name (must be sent with account ID)
+  * user: Object
+  * The request should contain one of the 3: org / account / account + group
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
@@ -418,6 +429,13 @@ class NotificationsService {
     }
   }
 
+  /**
+  * Send the notifications settings of numeric fields to validation
+  * If one of the new fields value is "varies" it means we should use the original value
+  * in the validation in order to make sure that the other value is valid (bigger/smaller than the other)
+  * @param newRulesEventSettings Object of a specific event type settings, sent by the user
+  * @param currentRuleEventSettings Object of a specific event type settings, taken from the original organization settings
+  **/
   static validateThresholds (newRulesEventSettings, currentRuleEventSettings, eventName) {
     let { warningThreshold, criticalThreshold } = newRulesEventSettings;
     if (warningThreshold === 'varies') {
@@ -440,8 +458,14 @@ class NotificationsService {
   }
 
   /**
-   * Modify the notifications settings of a given organization/account/group
-   **/
+  * Modify the notifications settings of a given organization/account/group
+  * @param org String organization ID
+  * @param account String account ID
+  * @param group String group name (must be sent with account ID)
+  * @param rules Object of notifications settings (each one is an object in which the event name is the key and the value
+  * is the event settings)
+  * user: Object
+  **/
   static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules, setAsDefault = false }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
@@ -449,12 +473,12 @@ class NotificationsService {
         return orgIds;
       }
 
-      const isRulesContainsAllFields = NotificationsService.validateNotificationsRules(newRules);
-      if (isRulesContainsAllFields) {
+      const areRulesFieldsMissing = validateNotificationsEventTypes(newRules);
+      if (areRulesFieldsMissing) {
         throw new CustomError({
           status: 400,
           message: 'Missing notification rules',
-          data: { error: isRulesContainsAllFields }
+          data: { error: areRulesFieldsMissing }
         });
       }
 
@@ -569,6 +593,10 @@ class NotificationsService {
 
   /**
    * Get account/system default notifications settings
+   * @param account  String account ID
+   * user Object
+   * @return Default notification settings for either the specified account or the system.
+   * If the account-specific settings are not found, system default settings will be returned.
    **/
   static async notificationsConfDefaultGET ({ account = null }, { user }) {
     try {
@@ -582,6 +610,17 @@ class NotificationsService {
       );
     }
   }
+
+  /**
+   * Get email notifications settings for a given organization/account/group
+   * @param org  String organization ID
+   * @param account  String account ID
+   * @param group  String group name (must be sent with account ID)
+   * user Object
+   * @return Object: Returns email notification settings for a specific organization, or aggregated email notification settings
+   *  for a list of organizations under the account/group.
+   * The object contains nested objects with details of each subscribed user (id, signedToCritical, signedToWarning, etc.).
+   **/
 
   static async notificationsConfEmailsGET ({ org, account, group }, { user }) {
     try {
@@ -659,6 +698,15 @@ class NotificationsService {
     }
   }
 
+  /**
+   * Modify email notifications settings of a given organization/account/group
+   * @param org  String organization ID
+   * @param account  String account ID
+   * @param group  String group name (must be sent with account ID)
+   * @param emailsSigning  Object which contains nested objects with the email signing details for each user (id, signToCritical, signToWarning, etc.)
+   * user Object
+   **/
+
   static async notificationsConfEmailsPUT ({ org, account, group, emailsSigning }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user);
@@ -666,12 +714,12 @@ class NotificationsService {
         return orgIds;
       }
 
-      const isEmailSigningContainsAllFields = NotificationsService.validateEmailNotifications(emailsSigning);
-      if (isEmailSigningContainsAllFields) {
+      const areEmailSigningFieldsMissing = validateEmailNotifications(emailsSigning, !org);
+      if (areEmailSigningFieldsMissing) {
         return Service.rejectResponse({
           code: 400,
           message: 'Missing details in email signing list',
-          data: isEmailSigningContainsAllFields
+          data: areEmailSigningFieldsMissing
         });
       }
 
@@ -687,7 +735,6 @@ class NotificationsService {
         usersOrgAccess[userData._id] = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
       }
 
-      // let groupOrgs = [];
       let groupOrgsCount;
       if (group) {
         groupOrgsCount = await Organizations.count({
@@ -748,6 +795,15 @@ class NotificationsService {
     }
   }
 
+  /**
+   * Get webhook notifications settings for a given organization/account/group
+   * @param org  String organization ID
+   * @param account  String account ID
+   * @param group  String group name (must be sent with account ID)
+   * @return Object Returns webhook notification settings for a specific organization, or aggregated email notification settings
+   *  for a list of organizations under the account/group.
+   **/
+
   static async notificationsConfWebhookGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
@@ -780,41 +836,27 @@ class NotificationsService {
     }
   }
 
-  static validateWebhookURL (webhookURL) {
-    if (webhookURL.trim() === '') {
-      return Service.rejectResponse('Webhook URL cannot be empty', 400);
-    }
-
-    if (!webhookURL.startsWith('https://')) {
-      return Service.rejectResponse('Webhook URL must start with "https://', 400);
-    }
-
+  /**
+   * Modify webhook notifications settings of a given organization/account/group
+   * @param org  String organization ID
+   * @param account  String account ID
+   * @param group  String group name (must be sent with account ID)
+   * @param webHookSettings  Object
+   **/
+  static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings }, { user }) {
     try {
-      Boolean(new URL(webhookURL));
-    } catch (_) {
-      return Service.rejectResponse('Invalid Webhook URL', 400);
-    }
-
-    if (webhookURL.length > 100) {
-      return Service.rejectResponse('Webhook URL is too long', 400);
-    }
-
-    return null;
-  };
-
-  static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings, setAsDefault = false }, { user }) {
-    try {
-      const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
+      const orgIds = await NotificationsService.validateParams(orgId, account, group, user, false);
       if (orgIds && orgIds.error) {
         return orgIds;
       }
 
-      const webhookURL = webHookSettings && webHookSettings.webhookURL;
-      if (webhookURL !== null) {
-        const webhookValidationError = NotificationsService.validateWebhookURL(webhookURL);
-        if (webhookValidationError) {
-          return webhookValidationError;
-        }
+      const invalidWebHookSettings = validateWebhookSettings(webHookSettings, !orgId);
+      if (invalidWebHookSettings) {
+        throw new CustomError({
+          status: 400,
+          message: 'Invalid webhook settings',
+          data: invalidWebHookSettings
+        });
       }
 
       const updateData = { $set: {} };
@@ -831,60 +873,12 @@ class NotificationsService {
 
       return Service.successResponse('updated successfully', 204);
     } catch (e) {
-      return Service.rejectResponse({
-        code: e.status || 500,
-        message: e.message || 'Internal Server Error'
-      });
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500,
+        e.data
+      );
     }
-  }
-
-  static validateNotificationsRules (notificationsRules) {
-    const notificationsRulesSchema = Joi.object().keys({
-      'Device connection': Joi.object().required(),
-      'Running router': Joi.object().required(),
-      'Link/Tunnel round trip time': Joi.object().required(),
-      'Link/Tunnel default drop rate': Joi.object().required(),
-      'Device memory usage': Joi.object().required(),
-      'Hard drive usage': Joi.object().required(),
-      Temperature: Joi.object().required(),
-      'Software update': Joi.object().required(),
-      'Link status': Joi.object().required(),
-      'Missing interface ip': Joi.object().required(),
-      'Pending tunnel': Joi.object().required(),
-      'Tunnel connection': Joi.object().required(),
-      'Internet connection': Joi.object().required(),
-      'Static route state': Joi.object().required(),
-      'Failed self-healing': Joi.object().required()
-    });
-
-    const { error } = notificationsRulesSchema.validate(notificationsRules, { abortEarly: false });
-    let messages;
-    if (error) {
-      messages = error.details.map(detail => detail.message);
-    }
-    return messages;
-  }
-
-  static validateEmailNotifications (emailNotificationsUsersList) {
-    const emailSigningSchema = Joi.object({
-      _id: Joi.string().required(),
-      email: Joi.string().email(),
-      name: Joi.string(),
-      lastName: Joi.string(),
-      signedToCritical: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
-      signedToWarning: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
-      signedToDaily: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required()
-    });
-
-    for (const user of emailNotificationsUsersList) {
-      const { error } = emailSigningSchema.validate(user, { abortEarly: false });
-      if (error) {
-        const message = error.details.map(detail => detail.message);
-        return message;
-      }
-    }
-
-    return null;
   }
 }
 

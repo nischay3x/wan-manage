@@ -4856,6 +4856,12 @@ paths:
                   $ref: '#/components/schemas/WebhookSettings'
                 x-content-type: application/json
           description: Successful operation
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         "401":
           content:
             application/json:
