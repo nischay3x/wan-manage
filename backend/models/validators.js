@@ -21,6 +21,7 @@ const urlValidator = require('valid-url');
 const validator = require('validator');
 const filenamify = require('filenamify');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
+const Joi = require('joi');
 
 // Globals
 const protocols = ['OSPF', 'NONE', 'BGP', 'OSPF,BGP'];
@@ -249,6 +250,106 @@ const validateNotificationField = (eventType, value, unit, errors, minValue, uni
   }
 };
 
+const validateNotificationsEventTypes = (notificationsRules) => {
+  const notificationsRulesSchema = Joi.object().keys({
+    'Device connection': Joi.object().required(),
+    'Running router': Joi.object().required(),
+    'Link/Tunnel round trip time': Joi.object().required(),
+    'Link/Tunnel default drop rate': Joi.object().required(),
+    'Device memory usage': Joi.object().required(),
+    'Hard drive usage': Joi.object().required(),
+    Temperature: Joi.object().required(),
+    'Software update': Joi.object().required(),
+    'Link status': Joi.object().required(),
+    'Missing interface ip': Joi.object().required(),
+    'Pending tunnel': Joi.object().required(),
+    'Tunnel connection': Joi.object().required(),
+    'Internet connection': Joi.object().required(),
+    'Static route state': Joi.object().required(),
+    'Failed self-healing': Joi.object().required()
+  });
+
+  const { error } = notificationsRulesSchema.validate(notificationsRules, { abortEarly: false });
+  let messages;
+  if (error) {
+    messages = error.details.map(detail => detail.message);
+  }
+  return messages;
+};
+
+const validateEmailNotifications = (emailNotificationsUsersList, allowNull) => {
+  const emailSigningSchema = allowNull ? Joi.object({
+    _id: Joi.string().required(),
+    email: Joi.string().email(),
+    name: Joi.string(),
+    lastName: Joi.string(),
+    signedToCritical: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
+    signedToWarning: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
+    signedToDaily: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required()
+  }) : Joi.object({
+    _id: Joi.string().required(),
+    email: Joi.string().email(),
+    name: Joi.string(),
+    lastName: Joi.string(),
+    signedToCritical: Joi.boolean().required(),
+    signedToWarning: Joi.boolean().required(),
+    signedToDaily: Joi.boolean().required()
+  });
+
+  for (const user of emailNotificationsUsersList) {
+    const { error } = emailSigningSchema.validate(user, { abortEarly: false });
+    if (error) {
+      const message = error.details.map(detail => detail.message);
+      return message;
+    }
+  }
+
+  return null;
+};
+
+const validateWebhookSettings = (webhookNotificationsSettings, allowNull) => {
+  const webHookSettingsSchema = allowNull ? Joi.object({
+    _id: Joi.string(),
+    webhookURL: Joi.alternatives().try(Joi.string(), Joi.valid(null)).required(),
+    sendCriticalAlerts: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
+    sendWarningAlerts: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required()
+  }) : Joi.object({
+    _id: Joi.string(),
+    webhookURL: Joi.string().required(),
+    sendCriticalAlerts: Joi.boolean().required(),
+    sendWarningAlerts: Joi.boolean().required()
+  });
+  const { error } = webHookSettingsSchema.validate(webhookNotificationsSettings, { abortEarly: false });
+  let messages = [];
+
+  if (error) {
+    messages = error.details.map(detail => detail.message);
+  }
+
+  const webhookURL = webhookNotificationsSettings.webhookURL;
+  if (webhookURL) {
+    if (webhookURL.trim() === '') {
+      messages.push('Webhook URL cannot be empty');
+    } else {
+      if (!webhookURL.startsWith('https://')) {
+        messages.push('Webhook URL must start with "https://"');
+      }
+
+      try {
+        Boolean(new URL(webhookURL));
+      } catch (_) {
+        messages.push('Invalid Webhook URL');
+      }
+
+      if (webhookURL.length > 100) {
+        messages.push('Webhook URL is too long');
+      }
+    }
+  }
+
+  return messages.length > 0 ? messages : null;
+};
+
 module.exports = {
   validateDHCP,
   validateIPv4,
@@ -302,5 +403,8 @@ module.exports = {
   validateCpuCoresNumber,
   validateVxlanPort,
   validateNotificationsSettings,
-  validateNotificationField
+  validateNotificationField,
+  validateNotificationsEventTypes,
+  validateEmailNotifications,
+  validateWebhookSettings
 };
