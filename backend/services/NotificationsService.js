@@ -812,11 +812,16 @@ class NotificationsService {
       }
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
       if (org) {
-        return Service.successResponse(response[0].webHookSettings);
+        const webHookSettings = { ...response[0].webHookSettings };
+        delete webHookSettings._id;
+        return Service.successResponse(webHookSettings);
       } else {
         const mergedSettings = {};
         for (let i = 0; i < response.length; i++) {
           Object.keys(response[i].webHookSettings).forEach(setting => {
+            if (setting === '_id') {
+              return;
+            }
             if (!mergedSettings.hasOwnProperty(setting)) {
               mergedSettings[setting] = response[i].webHookSettings[setting];
             } else {

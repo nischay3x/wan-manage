@@ -309,7 +309,6 @@ const validateEmailNotifications = (emailNotificationsUsersList, allowNull) => {
 
 const validateWebhookSettings = (webhookNotificationsSettings, allowNull) => {
   const webHookSettingsSchema = allowNull ? Joi.object({
-    _id: Joi.string(),
     webhookURL: Joi.alternatives().try(Joi.string(), Joi.valid(null)).required(),
     sendCriticalAlerts: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
     sendWarningAlerts: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required()
