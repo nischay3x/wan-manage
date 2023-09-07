@@ -150,7 +150,25 @@ class DeviceStatus {
       vrrp: Joi.object().pattern(Joi.number().min(1).max(255), Joi.object({
         state: Joi.string().valid('Master', 'Backup', 'Initialize', 'Interface Down'),
         adjusted_priority: Joi.number().min(0).max(255).optional()
-      })).allow({}).optional()
+      })).allow({}).optional(),
+      bgp: Joi.object({
+        routerId: Joi.string(),
+        as: Joi.number(),
+        failedPeers: Joi.number(),
+        displayedPeers: Joi.number(),
+        totalPeers: Joi.number(),
+        peers: Joi.object().pattern(Joi.string().ip({ version: ['ipv4'] }), Joi.object({
+          remoteAs: Joi.number(),
+          msgRcvd: Joi.number(),
+          msgSent: Joi.number(),
+          peerUptime: Joi.string(),
+          peerUptimeMsec: Joi.number(),
+          pfxRcd: Joi.number(),
+          pfxSnt: Joi.number(),
+          state: Joi.string(),
+          peerState: Joi.string()
+        }))
+      }).allow({}).optional()
     });
 
     for (const updateEntry of msg) {
@@ -741,6 +759,29 @@ class DeviceStatus {
   }
 
   /**
+    * Store BGP status in memory
+    * @param  {string} machineId  device machine id
+    * @param  {string} vrid VRID
+    * @param  {Object} status VRRP status
+    * @return {void}
+    */
+  setDeviceBgpStatus (machineId, status) {
+    if (!this.status[machineId]) {
+      this.status[machineId] = {};
+    }
+    if (!this.status[machineId].bgp) {
+      this.status[machineId].bgp = {};
+    }
+    const time = new Date().getTime();
+    Object.assign(this.status[machineId].bgp = { ...status, time });
+    return this.getDeviceBgpStatus(machineId);
+  }
+
+  getDeviceBgpStatus (machineId) {
+    return this.status?.[machineId]?.bgp ?? {};
+  }
+
+  /**
     * Get the Vrrp status from memory
     * @param  {string} machineId  device machine id
     * @return {void}
@@ -828,6 +869,11 @@ class DeviceStatus {
     // Set VRRP status in memory for now
     for (const vrId in rawStats?.vrrp ?? {}) {
       this.setDeviceVrrpStatus(machineId, vrId, rawStats.vrrp[vrId]);
+    }
+
+    // Set BGP status in memory for now
+    if (Object.entries(rawStats.bgp).length !== 0) {
+      this.setDeviceBgpStatus(machineId, rawStats.bgp);
     }
 
     // Set tunnel status in memory for now

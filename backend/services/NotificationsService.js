@@ -105,7 +105,7 @@ class NotificationsService {
               $and: [...deviceFilters, {
                 org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
               }]
-            }, { name: 1 });
+            }, { name: 1, interfaces: 1 });
             notificationFilters.push({
               'targets.deviceId': { $in: devicesArray.map(d => d._id) }
             });
@@ -155,7 +155,7 @@ class NotificationsService {
           // there was no 'device.*' filter
           devicesArray = await devices.find({
             _id: { $in: notifications[0].records.map(n => n.targets.deviceId) }
-          }, { name: 1 });
+          }, { name: 1, interfaces: 1 });
         }
       };
       const devicesByDeviceId = keyBy(devicesArray, '_id');
@@ -169,15 +169,16 @@ class NotificationsService {
         : notifications[0].records.map(element => {
           const device = devicesByDeviceId[element.targets.deviceId];
           let interfaceObj = null;
-          if (element.targets.interfaceId) {
-            const ifc = device?.interfaces?.find(ifc => String(ifc._id) === String(element.targets.interfaceId));
+          const { deviceId, interfaceId } = element.targets;
+          if (interfaceId) {
+            const ifc = device?.interfaces?.find(ifc => String(ifc._id) === String(interfaceId));
             interfaceObj = {
-              _id: element.targets.interfaceId,
+              _id: interfaceId,
               name: ifc?.name
             };
           }
           const deviceObj = {
-            _id: element.targets.deviceId,
+            _id: deviceId,
             name: device?.name
           };
           return {
