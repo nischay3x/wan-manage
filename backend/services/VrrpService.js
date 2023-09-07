@@ -302,7 +302,19 @@ class VrrpService {
           }
         },
         { $match: { isOverlapping: true } },
-        { $unset: ['isOverlapping'] }
+        { $unset: ['isOverlapping'] },
+        {
+          $addFields: {
+            interfaces: {
+              $arrayToObject: {
+                $map: {
+                  input: '$interfaces',
+                  in: { k: '$$this.devId', v: '$$this' }
+                }
+              }
+            }
+          }
+        }
       ];
 
       const data = await devices.aggregate(pipeline).allowDiskUse(true);
@@ -370,8 +382,7 @@ class VrrpService {
         };
       }
 
-      const { valid } = isLocalOrBroadcastAddress(vrrp.virtualIp, ifc.IPv4Mask);
-      if (!valid) {
+      if (isLocalOrBroadcastAddress(vrrp.virtualIp, ifc.IPv4Mask)) {
         return {
           valid: false,
           err: `The virtual IP ${vrrp.virtualIp} cannot be Network or Broadcast IP`

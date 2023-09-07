@@ -820,8 +820,7 @@ const validateIPv4Address = (ip, mask) => {
   };
   if (mask < 31) {
     // Based on RFC-3021, /31 point-to-point network doesn't use local and broadcast addresses
-    const { valid } = isLocalOrBroadcastAddress(ip, mask);
-    if (!valid) {
+    if (isLocalOrBroadcastAddress(ip, mask)) {
       return {
         valid: false,
         err: `IP (${ip}/${mask}) cannot be Local or Broadcast address`
@@ -833,15 +832,7 @@ const validateIPv4Address = (ip, mask) => {
 
 const isLocalOrBroadcastAddress = (ip, mask) => {
   const [start, end] = getStartEndIp(ip, mask);
-  if (ip === start) {
-    return { valid: false, err: 'IP is local address' };
-  }
-
-  if (ip === end) {
-    return { valid: false, err: 'IP is broadcast address' };
-  }
-
-  return { valid: true, err: '' };
+  return ip === start || ip === end;
 };
 
 /**
