@@ -33,7 +33,7 @@ const { ObjectId } = require('mongodb');
 const { apply } = require('../deviceLogic/deviceNotifications');
 const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
-const { validateNotificationsSettings, validateNotificationsEventTypes, validateEmailNotifications, validateWebhookSettings } = require('../models/validators');
+const { validateNotificationsSettings, validateNotificationsThresholds, validateEmailNotifications, validateWebhookSettings } = require('../models/validators');
 const mongoConns = require('../mongoConns.js')();
 const includes = require('lodash/includes');
 
@@ -377,6 +377,12 @@ class NotificationsService {
     }
   }
 
+  static removeIdFromRules (obj) {
+    for (const key in obj) {
+      if (obj[key]._id) delete obj[key]._id;
+    }
+  };
+
   /**
   * Get notifications settings for a given organization/account/group
   * @param org String organization ID
@@ -391,7 +397,8 @@ class NotificationsService {
       if (orgIds.error) {
         return orgIds;
       }
-      const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { rules: 1, _id: 0 }).lean();
+      const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }).lean();
+      NotificationsService.removeIdFromRules(response[0].rules);
       if (org) {
         const sortedRules = Object.fromEntries(
           Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
@@ -404,16 +411,12 @@ class NotificationsService {
             if (!mergedRules[ruleName]) {
               mergedRules[ruleName] = {};
               Object.keys(org.rules[ruleName]).forEach(settingName => {
-                if (settingName !== '_id') {
-                  mergedRules[ruleName][settingName] = org.rules[ruleName][settingName];
-                }
+                mergedRules[ruleName][settingName] = org.rules[ruleName][settingName];
               });
             } else {
               Object.keys(org.rules[ruleName]).forEach(settingName => {
-                if (settingName !== '_id') {
-                  if (mergedRules[ruleName][settingName] !== org.rules[ruleName][settingName]) {
-                    mergedRules[ruleName][settingName] = 'varies';
-                  }
+                if (mergedRules[ruleName][settingName] !== org.rules[ruleName][settingName]) {
+                  mergedRules[ruleName][settingName] = 'varies';
                 }
               });
             }
@@ -447,7 +450,7 @@ class NotificationsService {
       criticalThreshold = currentRuleEventSettings.criticalThreshold;
     }
 
-    const validRule = validateNotificationsSettings({ [eventName]: { warningThreshold, criticalThreshold } });
+    const validRule = validateNotificationsThresholds({ [eventName]: { warningThreshold, criticalThreshold } });
 
     if (!validRule.valid) {
       throw new CustomError({
@@ -474,27 +477,6 @@ class NotificationsService {
         return orgIds;
       }
 
-      const areRulesFieldsMissing = validateNotificationsEventTypes(newRules);
-      if (areRulesFieldsMissing) {
-        throw new CustomError({
-          status: 400,
-          message: 'Missing notification rules',
-          data: { error: areRulesFieldsMissing }
-        });
-      }
-
-      // If we modify a single organization we can send the whole newRules object to validation as it is
-      // Since it doesn't contain "varies" values when we expect numeric values
-      if (orgIds.length === 1) {
-        const validNotifications = validateNotificationsSettings(newRules);
-        if (!validNotifications.valid) {
-          throw new CustomError({
-            status: 400,
-            message: 'Invalid notification settings',
-            data: validNotifications.errors
-          });
-        }
-      }
       if (setAsDefault) {
         const accountOwners = await membership.find({
           account: user.defaultAccount._id,
@@ -518,41 +500,50 @@ class NotificationsService {
         const updatedNotificationsByOrg = new Map();
 
         await mongoConns.mainDBwithTransaction(async (session) => {
-          let updatedNotifications;
-          if (orgIds.length === 1) {
-            updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, { $set: { rules: newRules } }, { new: true, session: session }).lean();
-            updatedNotificationsByOrg.set(orgId, updatedNotifications.rules);
-          } else {
-            const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } }).lean();
-            const originalNotificationsByOrg = {};
+          const bulkUpdates = [];
 
-            allCurrentRules.forEach(orgNotificationsSettings => {
-              originalNotificationsByOrg[orgNotificationsSettings.org] = orgNotificationsSettings.rules;
-            });
+          const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } }).lean();
+          const originalNotificationsByOrg = {};
 
-            for (const orgId of orgIds) {
-              const currentRules = originalNotificationsByOrg[orgId];
+          allCurrentRules.forEach(orgNotificationsSettings => {
+            NotificationsService.removeIdFromRules(orgNotificationsSettings.rules);
+            originalNotificationsByOrg[orgNotificationsSettings.org] = orgNotificationsSettings.rules;
+          });
 
+          for (const orgId of orgIds) {
+            // Default to new rules in case there's only one orgId.
+            let currentRules = newRules;
+            if (orgIds.length > 1) {
+              currentRules = { ...originalNotificationsByOrg[orgId] };
               for (const event in newRules) {
-                const { warningThreshold, criticalThreshold } = newRules[event];
-                if (warningThreshold && criticalThreshold) {
-                  NotificationsService.validateThresholds(
-                    newRules[event],
-                    currentRules[event],
-                    event
-                  );
-                }
-
                 Object.entries(newRules[event]).forEach(([field, value]) => {
                   if (value && value !== 'varies') {
                     currentRules[event][field] = value;
                   }
                 });
               }
-              updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, { $set: { rules: currentRules } }, { new: true, session: session }).lean();
-              updatedNotificationsByOrg.set(orgId, updatedNotifications.rules);
             }
+            // Validate the current notification settings
+            const invalidNotifications = validateNotificationsSettings(currentRules);
+            if (invalidNotifications) {
+              throw new CustomError({
+                status: 400,
+                message: 'Invalid notifications settings',
+                data: { error: invalidNotifications }
+              });
+            }
+
+            bulkUpdates.push({
+              updateOne: {
+                filter: { org: orgId },
+                update: { $set: { rules: currentRules } }
+              }
+            });
+
+            updatedNotificationsByOrg.set(orgId, currentRules);
           }
+
+          await notificationsConf.bulkWrite(bulkUpdates, { session: session });
         });
 
         let devicesShouldReceiveJobs = 0;
