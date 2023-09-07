@@ -104,7 +104,7 @@ class NotificationsService {
               $and: [...deviceFilters, {
                 org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
               }]
-            }, { name: 1 });
+            }, { name: 1, interfaces: 1 });
             notificationFilters.push({
               'targets.deviceId': { $in: devicesArray.map(d => d._id) }
             });
