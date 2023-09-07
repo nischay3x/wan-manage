@@ -93,8 +93,6 @@ class NotificationsService {
             for (const key in filter) {
               if (key.startsWith('targets.deviceId')) {
                 res[0].push({ [key.replace('targets.deviceId.', '')]: filter[key] });
-              } else if (key.startsWith('targets.interfaceId')) {
-                res[0].push({ [key.replace('targets.interfaceId.', '')]: filter[key] });
               } else {
                 res[1].push(filter);
               }
@@ -102,45 +100,14 @@ class NotificationsService {
             return res;
           }, [[], []]);
           if (deviceFilters.length > 0) {
-            const interfaceNameFilter = deviceFilters.find(filter => filter.hasOwnProperty('interfaceName'));
-            if (interfaceNameFilter) {
-              devicesArray = await devices.aggregate([
-                {
-                  $match: {
-                    org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
-                  }
-                },
-                {
-                  $addFields: {
-                    matchingInterfaces: {
-                      $filter: {
-                        input: '$interfaces',
-                        as: 'interface',
-                        cond: { $regexMatch: { input: '$$interface.name', regex: interfaceNameFilter.interfaceName } }
-                      }
-                    }
-                  }
-                },
-                {
-                  $match: { matchingInterfaces: { $ne: [] } }
-                },
-                {
-                  $project: { name: 1, interfaces: 1, matchingInterfaces: 1 }
-                }
-              ]).exec();
-
-              const matchingInterfaceIds = devicesArray.flatMap(device =>
-                device.matchingInterfaces.map(intf => intf._id)
-              );
-
-              query['targets.interfaceId'] = { $in: matchingInterfaceIds };
-            } else {
-              devicesArray = await devices.find({
-                $and: [...deviceFilters, {
-                  org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
-                }]
-              }, { name: 1 });
-            }
+            devicesArray = await devices.find({
+              $and: [...deviceFilters, {
+                org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
+              }]
+            }, { name: 1 });
+            notificationFilters.push({
+              'targets.deviceId': { $in: devicesArray.map(d => d._id) }
+            });
           };
           if (notificationFilters.length > 0) {
             pipeline.push({
