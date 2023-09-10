@@ -43,7 +43,8 @@ const {
   validateDevice,
   validateDhcpConfig,
   validateStaticRoute,
-  validateQOSPolicy
+  validateQOSPolicy,
+  isLocalOrBroadcastAddress
 } = require('../deviceLogic/validators');
 const { validateFQDN } = require('../models/validators');
 const {
@@ -2290,6 +2291,7 @@ class DevicesService {
         { $match: { 'devices.device': deviceId } },
         {
           $project: {
+            virtualRouterId: 1,
             virtualIp: 1,
             interface: '$devices.interface',
             trackInterfacesMandatory: '$devices.trackInterfacesMandatory',
@@ -2337,6 +2339,14 @@ class DevicesService {
           `The interface ${ifc.name} has VRRP on it. ` +
           `The IP ${ip} must ` +
           `overlap with the VRRP virtual IP ${deviceVrrp.virtualIp}`
+        );
+      }
+
+      if (isLocalOrBroadcastAddress(deviceVrrp.virtualIp, ifc.IPv4Mask)) {
+        throw createError(
+          400,
+          `The VRRP group ${deviceVrrp.virtualRouterId} virtual IP ${deviceVrrp.virtualIp} ` +
+          `defined on ${ifc.name} must not be broadcast or local address`
         );
       }
 

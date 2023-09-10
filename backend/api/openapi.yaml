@@ -13265,8 +13265,8 @@ components:
         _id:
           type: string
         interfaces:
-          type: array
-          items:
+          type: object
+          additionalProperties:
             type: object
             properties:
               _id:

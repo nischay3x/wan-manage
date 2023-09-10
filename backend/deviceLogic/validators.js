@@ -17,13 +17,13 @@
 
 const net = require('net');
 const cidr = require('cidr-tools');
-const IPCidr = require('ip-cidr');
 const { generateTunnelParams, getOrgDefaultTunnelPort } = require('../utils/tunnelUtils');
 const { getBridges, getCpuInfo } = require('../utils/deviceUtils');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const keyBy = require('lodash/keyBy');
 const { isEqual } = require('lodash');
 const maxMetric = 2 * 10 ** 9;
+const { getStartEndIp } = require('../utils/networks');
 
 /**
  * Checks whether a value is empty
@@ -820,16 +820,19 @@ const validateIPv4Address = (ip, mask) => {
   };
   if (mask < 31) {
     // Based on RFC-3021, /31 point-to-point network doesn't use local and broadcast addresses
-    const ipCidr = new IPCidr(`${ip}/${mask}`);
-    if (ipCidr.start() === ip || ipCidr.end() === ip) {
+    if (isLocalOrBroadcastAddress(ip, mask)) {
       return {
         valid: false,
-        // eslint-disable-next-line max-len
-        err: `Local ${ipCidr.start()}/${mask} and Broadcast ${ipCidr.end()}/${mask} are invalid IPv4 addresses`
+        err: `IP (${ip}/${mask}) cannot be Local or Broadcast address`
       };
     }
   }
   return { valid: true, err: '' };
+};
+
+const isLocalOrBroadcastAddress = (ip, mask) => {
+  const [start, end] = getStartEndIp(ip, mask);
+  return ip === start || ip === end;
 };
 
 /**
@@ -974,5 +977,6 @@ module.exports = {
   validateModifyDeviceMsg,
   validateMultilinkPolicy,
   validateQOSPolicy,
-  validateFirewallRules
+  validateFirewallRules,
+  isLocalOrBroadcastAddress
 };
