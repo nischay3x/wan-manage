@@ -158,11 +158,6 @@ class DeviceQueues {
           return done(err, false);
         }
       }
-      // in case the device is reconnected the job can be missed in the kue worker memory
-      // it should be set to be completed and prevent TTL exceeded failure
-      if (!this.queue.job) {
-        this.queue.job = job;
-      }
       done(null, job.data.response);
     });
 
@@ -282,17 +277,28 @@ class DeviceQueues {
           new Error('DeviceQueues: Pausing a queue with no context, deviceID=' + deviceId)
         );
       }
-      // Pause immediatly
-      this.deviceQueues[deviceId].context.pause(0, (err) => {
-        if (err) {
-          return reject(err);
-        }
-      });
+      // in case the device is reconnected and active job exists in the queue
+      // the pause/resume process clears the current job in the kue worker's memory
+      // which causes not assigning the 'complete' status and 'TTL exceeded' failure
+      // hence there should be a delay to prevent unnecessary pause/resume process
+      const jobTimeout = configs.get('jobTimeout', 'number');
+      this.getCount('active').then(async (count) => {
+        if (count > 0) {
+          await new Promise(resolve => {
+            this.deviceQueues[deviceId].pauseHandler = setTimeout(resolve, jobTimeout);
+          });
+        };
+        this.deviceQueues[deviceId].context.pause(0, (err) => {
+          if (err) {
+            return reject(err);
+          }
+        });
 
-      logger.debug('Queue paused, succeeded',
-        { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
-      this.deviceQueues[deviceId].paused = true;
-      return resolve();
+        logger.debug('Queue paused, succeeded',
+          { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
+        this.deviceQueues[deviceId].paused = true;
+        return resolve();
+      });
     });
   }
 
@@ -306,6 +312,9 @@ class DeviceQueues {
       { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
     if (!this.deviceQueues[deviceId]) {
       throw new Error('DeviceQueues: Trying to resume an undefined queue, deviceID=' + deviceId);
+    }
+    if (this.deviceQueues[deviceId].pauseHandler) {
+      clearTimeout(this.deviceQueues[deviceId].pauseHandler);
     }
     if (!this.deviceQueues[deviceId].paused) return; // Already resumed
     if (!this.deviceQueues[deviceId].context) {
