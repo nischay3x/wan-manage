@@ -871,8 +871,9 @@ class DeviceStatus {
       this.setDeviceVrrpStatus(machineId, vrId, rawStats.vrrp[vrId]);
     }
 
-    // Set BGP status in memory for now
-    if (Object.entries(rawStats.bgp).length !== 0) {
+    // Set BGP status in memory for now.
+    // ""> 0" since bgp status arrives once in a few minutes
+    if (Object.entries(rawStats?.bgp ?? {}).length > 0) {
       this.setDeviceBgpStatus(machineId, rawStats.bgp);
     }
 
