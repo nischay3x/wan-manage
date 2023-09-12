@@ -61,7 +61,7 @@ const checkLanOverlappingWith = async (orgIds, subnetsToCheck) => {
         interfaceDevId: '$interfaces.devId',
         interfaceSubnet: [{
           $concat: ['$interfaces.IPv4', '/', '$interfaces.IPv4Mask']
-        }] // put is as array in order
+        }] // put is as array in order to pass "array" to the $function below
       }
     },
     {
@@ -76,7 +76,12 @@ const checkLanOverlappingWith = async (orgIds, subnetsToCheck) => {
       }
     },
     { $match: { 'isOverlappingWith.0': { $exists: true } } },
-    { $addFields: { isOverlappingWith: { $arrayElemAt: ['$isOverlappingWith', 0] } } }
+    {
+      $addFields: {
+        isOverlappingWith: { $arrayElemAt: ['$isOverlappingWith', 0] },
+        interfaceSubnet: { $arrayElemAt: ['$interfaceSubnet', 0] }
+      }
+    }
   ]);
 
   return subnets;

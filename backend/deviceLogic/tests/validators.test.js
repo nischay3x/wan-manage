@@ -180,7 +180,7 @@ describe('validateDevice', () => {
     device.interfaces[0].IPv4 = '192.168.111.0';
     device.interfaces[0].IPv4Mask = '24';
     failureObject.err = `[${device.interfaces[0].name}]: ` +
-      'Local 192.168.111.0/24 and Broadcast 192.168.111.255/24 are invalid IPv4 addresses';
+    'IP (192.168.111.0/24) cannot be Local or Broadcast address';
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -189,7 +189,7 @@ describe('validateDevice', () => {
     device.interfaces[0].IPv4 = '192.168.111.255';
     device.interfaces[0].IPv4Mask = '24';
     failureObject.err = `[${device.interfaces[0].name}]: ` +
-      'Local 192.168.111.0/24 and Broadcast 192.168.111.255/24 are invalid IPv4 addresses';
+    'IP (192.168.111.255/24) cannot be Local or Broadcast address';
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -205,7 +205,7 @@ describe('validateDevice', () => {
     device.interfaces[1].IPv4 = '95.217.255.255';
     device.interfaces[1].IPv4Mask = '15';
     failureObject.err = `[${device.interfaces[1].name}]: ` +
-      'Local 95.216.0.0/15 and Broadcast 95.217.255.255/15 are invalid IPv4 addresses';
+    'IP (95.217.255.255/15) cannot be Local or Broadcast address';
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
@@ -214,7 +214,7 @@ describe('validateDevice', () => {
     device.interfaces[1].IPv4 = '95.216.0.0';
     device.interfaces[1].IPv4Mask = '15';
     failureObject.err = `[${device.interfaces[1].name}]: ` +
-      'Local 95.216.0.0/15 and Broadcast 95.217.255.255/15 are invalid IPv4 addresses';
+    'IP (95.216.0.0/15) cannot be Local or Broadcast address';
     const result = validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });

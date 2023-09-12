@@ -277,17 +277,33 @@ class DeviceQueues {
           new Error('DeviceQueues: Pausing a queue with no context, deviceID=' + deviceId)
         );
       }
-      // Pause immediatly
-      this.deviceQueues[deviceId].context.pause(0, (err) => {
-        if (err) {
-          return reject(err);
+      // in case the device is reconnected and active job exists in the queue
+      // the pause/resume process clears the current job in the kue worker's memory
+      // which causes not assigning the 'complete' status and 'TTL exceeded' failure
+      // hence there should be a delay to prevent unnecessary pause/resume process
+      const jobTimeout = configs.get('jobTimeout', 'number');
+      const pause = () => {
+        if (this.deviceQueues[deviceId].waitPause) {
+          this.deviceQueues[deviceId].context.pause(0, (err) => {
+            if (err) {
+              return reject(err);
+            };
+            logger.debug('Queue paused, succeeded',
+              { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
+            this.deviceQueues[deviceId].paused = true;
+          });
+          this.deviceQueues[deviceId].waitPause = false;
         }
+        return resolve();
+      };
+      this.getCount('active', deviceId).then((count) => {
+        this.deviceQueues[deviceId].waitPause = true;
+        if (count > 0) {
+          setTimeout(pause, jobTimeout);
+        } else {
+          pause();
+        };
       });
-
-      logger.debug('Queue paused, succeeded',
-        { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
-      this.deviceQueues[deviceId].paused = true;
-      return resolve();
     });
   }
 
@@ -302,6 +318,7 @@ class DeviceQueues {
     if (!this.deviceQueues[deviceId]) {
       throw new Error('DeviceQueues: Trying to resume an undefined queue, deviceID=' + deviceId);
     }
+    this.deviceQueues[deviceId].waitPause = false;
     if (!this.deviceQueues[deviceId].paused) return; // Already resumed
     if (!this.deviceQueues[deviceId].context) {
       throw new Error('DeviceQueues: Resuming a queue with no context, deviceID=' + deviceId);

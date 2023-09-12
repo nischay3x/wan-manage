@@ -27,6 +27,7 @@ const FirewallPolicies = require('../models/firewallPolicies');
 const { appIdentifications, importedAppIdentifications } = require('../models/appIdentifications');
 const Applications = require('../models/applications');
 const Organizations = require('../models/organizations');
+const NotificationsConf = require('../models/notificationsConf');
 const Tunnels = require('../models/tunnels');
 const TunnelIds = require('../models/tunnelids');
 const Tokens = require('../models/tokens');
@@ -53,6 +54,7 @@ const { prepareTunnelAddJob, prepareTunnelRemoveJob } = require('../deviceLogic/
 const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
 const { validateFirewallRules } = require('../utils/deviceUtils');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+const notificationsMgr = require('../notifications/notifications')();
 
 class OrganizationsService {
   /**
@@ -217,6 +219,7 @@ class OrganizationsService {
         await FirewallPolicies.deleteMany({ org: id }, { session: session });
         await appIdentifications.deleteMany({ 'meta.org': id }, { session: session });
         await importedAppIdentifications.deleteMany({ 'meta.org': id }, { session: session });
+        await NotificationsConf.deleteMany({ org: id }, { session: session });
 
         // Find all devices for organization
         orgDevices = await Devices.devices.find({ org: id },
@@ -595,6 +598,33 @@ class OrganizationsService {
       });
       if (!qosPolicy) throw new Error('Error default QoS policy adding');
 
+      // Add default notifications settings
+      const notificationsSettings = await notificationsMgr.getDefaultNotificationsSettings(
+        updUser.defaultAccount._id);
+      const ownerMembership = await membership.find({
+        account: updUser.defaultAccount,
+        to: 'account',
+        role: 'owner'
+      });
+      let accountOwners = [];
+      if (ownerMembership.length > 1) {
+        ownerMembership.forEach(owner => {
+          accountOwners.push(owner.user);
+        });
+      } else {
+        accountOwners = [ownerMembership[0].user];
+      }
+      const setNotificationsConf = await NotificationsConf.create({
+        org: org._id,
+        rules: notificationsSettings,
+        signedToCritical: [],
+        signedToWarning: [],
+        signedToDaily: accountOwners,
+        webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
+      });
+      if (!setNotificationsConf) {
+        throw new Error('Error adding default notifications settings');
+      }
       session.commitTransaction();
 
       const token = await getToken({ user }, { org: org._id, orgName: org.name });
@@ -908,9 +938,11 @@ const validateVxlanPortChange = (devices, org) => {
       continue;
     }
 
-    const { valid, err } = validateFirewallRules(rules, org, interfaces);
+    const { valid } = validateFirewallRules(rules, org, interfaces);
     if (!valid) {
-      throw new Error(`VXLAN port is invalid: ${err}`);
+      const errMsg = `Your organization has a firewall rule using port ${org.vxlanPort}. ` +
+      'The VxLAN port must not be used in any firewall rule';
+      throw new Error(errMsg);
     }
   }
 };

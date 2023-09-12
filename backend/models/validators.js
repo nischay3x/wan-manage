@@ -197,6 +197,58 @@ const validateBGPInterval = val => val && validateIsInteger(val) && +val >= 0 &&
 const validateCpuCoresNumber = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
 const validateVlanTag = val => val === '' || (val && validateIsInteger(val) && +val >= 0 && +val <= 4096);
 
+const validateNotificationsSettings = (notificationsSettingsObj) => {
+  const MIN_VALUE = 1;
+  const UNIT_LIMITS = {
+    ms: 2000,
+    '%': 100
+  };
+
+  const errors = [];
+
+  for (const [eventType, eventSettings] of Object.entries(notificationsSettingsObj)) {
+    if (hasValue(eventSettings.warningThreshold)) {
+      const warningVal = Number(eventSettings.warningThreshold);
+      const criticalVal = Number(eventSettings.criticalThreshold);
+
+      if (!isWarningBelowCritical(warningVal, criticalVal)) {
+        errors.push({
+          eventType,
+          message: 'The critical threshold must be greater than the warning.'
+        });
+      } else {
+        validateNotificationField(eventType, warningVal, eventSettings.thresholdUnit, errors, MIN_VALUE, UNIT_LIMITS);
+        validateNotificationField(eventType, criticalVal, eventSettings.thresholdUnit, errors, MIN_VALUE, UNIT_LIMITS);
+      }
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+};
+
+const hasValue = (value) => typeof value !== 'undefined' && value !== null && value !== 'varies';
+
+const isWarningBelowCritical = (warningVal, criticalVal) => warningVal < criticalVal;
+
+const validateNotificationField = (eventType, value, unit, errors, minValue, unitLimits) => {
+  if (value < minValue) {
+    errors.push({
+      eventType,
+      message: `Please enter a value greater than ${minValue - 1} for ${eventType}.`
+    });
+  }
+
+  if (unit in unitLimits && value > unitLimits[unit]) {
+    errors.push({
+      eventType,
+      message: `Please enter a value less than or equal to ${unitLimits[unit]} for ${eventType}.`
+    });
+  }
+};
+
 module.exports = {
   validateDHCP,
   validateIPv4,
@@ -248,5 +300,7 @@ module.exports = {
   validateBGPInterval,
   validateIsNumber,
   validateCpuCoresNumber,
-  validateVxlanPort
+  validateVxlanPort,
+  validateNotificationsSettings,
+  validateNotificationField
 };

@@ -24,6 +24,8 @@ const { devices } = require('../models/devices');
 const { ObjectId } = require('mongoose').Types;
 const { validateFirewallRules } = require('../utils/deviceUtils');
 const { applyPolicy } = require('../deviceLogic/firewallPolicy');
+const notificationsConf = require('../models/notificationsConf');
+const notificationsMgr = require('../notifications/notifications')();
 
 class FirewallPoliciesService {
   static async verifyRequestSchema (firewallPolicyRequest, org, devices = []) {
@@ -273,6 +275,25 @@ class FirewallPoliciesService {
       const applied = await applyPolicy(opDevices, firewallPolicy, 'install', user, orgList[0]);
 
       const converted = JSON.parse(JSON.stringify(firewallPolicy));
+
+      // TODO - uncomment after handling the policies ref issue
+
+      // await notificationsMgr.sendNotifications([
+      //   {
+      //     org: orgList[0],
+      //     title: 'Firewall policy change',
+      //     details: `The policy ${name} has been changed`,
+      //     eventType: 'Policy change',
+      //     targets: {
+      //       deviceId: null,
+      //       tunnelId: null,
+      //       interfaceId: null,
+      //       policyId: id
+      //     },
+      //     resolved: true,
+      //     isAlwaysResolved: true
+      //   }
+      // ]);
       return Service.successResponse({ ...converted, ...applied });
     } catch (e) {
       return Service.rejectResponse(

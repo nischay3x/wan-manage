@@ -19,6 +19,44 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 
+const targetsSchema = new Schema({
+  deviceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'devices',
+    required: false
+  },
+  tunnelId: {
+    type: String,
+    required: false
+  },
+  interfaceId: {
+    type: Schema.Types.ObjectId,
+    ref: 'devices',
+    required: false
+  }
+  // policyId: {
+  //   type: Schema.Types.ObjectId,
+  //   required: false
+  // }
+});
+
+const alertInfoSchema = new Schema({
+  value: {
+    type: Number
+  },
+  threshold: {
+    type: Number
+  },
+  unit: {
+    type: String,
+    enum: ['%', 'ms', 'C°']
+  },
+  type: {
+    type: String,
+    enum: ['tunnel', 'device']
+  }
+});
+
 /**
  * Notifications Database Schema
  */
@@ -45,17 +83,6 @@ const notificationsSchema = new Schema({
     type: Date,
     required: true
   },
-  // device
-  device: {
-    type: Schema.Types.ObjectId,
-    ref: 'devices',
-    required: true
-  },
-  // machineId (device id)
-  machineId: {
-    type: String,
-    required: true
-  },
   // additional details, description
   details: {
     type: String,
@@ -66,6 +93,63 @@ const notificationsSchema = new Schema({
     type: String,
     required: true,
     default: 'unread'
+  },
+  count: {
+    type: Number,
+    required: false,
+    default: 1
+  },
+  eventType: {
+    type: String,
+    required: false,
+    enum: ['Device connection',
+      'Running router',
+      'Link/Tunnel round trip time',
+      'Link/Tunnel default drop rate',
+      'Device memory usage',
+      'Hard drive usage',
+      'Temperature',
+      'Software update',
+      'Internet connection',
+      'Link status',
+      'Missing interface ip',
+      'Pending tunnel',
+      'Tunnel connection',
+      'Failed self-healing',
+      'Static route state'
+    ]
+  },
+  resolved:
+  {
+    type: Boolean,
+    required: false,
+    default: false
+  },
+  targets: {
+    type: targetsSchema,
+    required: false
+  },
+  severity: {
+    type: String,
+    required: true,
+    enum: ['warning', 'critical', null],
+    default: null
+  },
+  agentAlertsInfo: {
+    type: alertInfoSchema,
+    required: false,
+    default: {}
+  },
+  emailSent: {
+    sendingTime: {
+      type: Date,
+      required: false,
+      default: null
+    },
+    rateLimitedCount: {
+      type: Number,
+      default: 0
+    }
   }
 }, {
   timestamps: true

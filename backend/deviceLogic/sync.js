@@ -49,10 +49,11 @@ const {
   releasePublicAddrLimiterBlockage
 } = require('./events');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
+const deviceNotificationsSync = require('./deviceNotifications').sync;
 const AsyncLock = require('async-lock');
 const lock = new AsyncLock({ maxOccupationTime: 60000 });
 
-// Create a object of all sync handlers
+// Create an object of all sync handlers
 const syncHandlers = {
   deviceConf: {
     syncHandler: deviceConfSyncHandler,
@@ -85,6 +86,9 @@ const syncHandlers = {
   applications: {
     syncHandler: applicationsSyncHandler,
     completeHandler: applicationsCompleteHandler
+  },
+  deviceNotifications: {
+    syncHandler: deviceNotificationsSync
   },
   vrrp: {
     syncHandler: vrrpSyncHandler,
@@ -186,7 +190,7 @@ const setSyncStateOnJobQueue = async (machineId, message) => {
   });
 };
 
-const updateSyncState = (org, deviceId, state) => {
+const updateSyncState = async (org, deviceId, state) => {
   // When moving to "synced" state we have to
   // also reset auto sync state and trials
   const set =
@@ -423,8 +427,9 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       params: { state, newState, hash, deviceHash, autoSync, trials }
     });
 
+    const isStateChanged = state !== newState;
     // Update the device sync state if it has changed
-    if (state !== newState) {
+    if (isStateChanged) {
       await updateSyncState(org, deviceId, newState);
       logger.info('Device sync state updated', {
         params: {
@@ -436,11 +441,12 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
         }
       });
     }
-
-    // If the device is synced, we have nothing to do anyway.
-    // If the device is not-synced, user has to first resync
+    // TODO Notify the user about the new state of the device
+    // If the device is not-synced, the user has to first resync
     // the device manually
-    if (['synced', 'not-synced'].includes(newState)) return;
+    if (['synced', 'not-synced'].includes(newState)) {
+      return;
+    }
 
     // Don't attempt to sync if there are pending jobs
     // in the queue, as sync state might change when

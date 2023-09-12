@@ -19,7 +19,6 @@ class WebHooks {
   async sendToWebHook (url, message, secret) {
     // For an empty url (development), return true
     if (url === '') return Promise.resolve(true);
-
     const data = JSON.stringify({ ...message, secret: secret });
     const headers = {
       'Content-Type': 'application/json',
@@ -46,7 +45,6 @@ class WebHooks {
         throw error;
       })
       .then(response => {
-        // console.log(JSON.stringify(response));
         if (response.ok) {
           // Success handling
           if (response.message.status === 'success') return true;

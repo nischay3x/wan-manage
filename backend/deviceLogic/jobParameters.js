@@ -304,6 +304,8 @@ const transformDHCP = (dhcp, deviceId, vrrpGroups = []) => {
       // we adding and encoding the double quotes.
       if (fields.option === 'tftp-server-name' && !Number.isNaN(fields.value[0])) {
         fields.value = `\\"${fields.value}\\"`;
+      } else if (fields.option === 'domain-name') {
+        fields.value = `\\"${fields.value}\\"`;
       }
 
       if (fields.option === 'routers') {
@@ -333,6 +335,11 @@ const transformDHCP = (dhcp, deviceId, vrrpGroups = []) => {
         if (dev.device._id.toString() !== deviceId.toString()) {
           continue;
         }
+
+        if (dev.interface !== dhcp.interface) {
+          continue;
+        }
+
         routers.add(vrrpGroup.virtualIp);
       }
     }
@@ -378,6 +385,22 @@ const transformVrrp = (device, vrrpGroup) => {
   return params;
 };
 
+/**
+ * Transform relevant event types from the "rules" field in the notificationsConf collection
+ * @param  {object} notificationsSettings the notifications configuration
+ * @param  {Set} relevantEventTypes the relevant event types (event names).
+ * @return {object} An object of the filtered notifications settings
+ */
+const transformNotificationsSettings = (notificationsSettings, relevantEventTypes) => {
+  const notificationsObject = Object.keys(notificationsSettings).reduce((obj, eventName) => {
+    if (relevantEventTypes.has(eventName)) {
+      obj[eventName] = notificationsSettings[eventName];
+    }
+    return obj;
+  }, {});
+  return notificationsObject;
+};
+
 module.exports = {
   transformInterfaces,
   transformRoutingFilters,
@@ -386,5 +409,6 @@ module.exports = {
   transformDHCP,
   transformVxlanConfig,
   transformLte,
-  transformVrrp
+  transformVrrp,
+  transformNotificationsSettings
 };

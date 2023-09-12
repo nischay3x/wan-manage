@@ -29,6 +29,7 @@ const cidr = require('cidr-tools');
 const deviceStatus = require('../periodic/deviceStatus')();
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const { checkOverlapping } = require('../utils/networks');
+const { isLocalOrBroadcastAddress } = require('../deviceLogic/validators');
 
 class VrrpService {
   static selectVrrpGroupParams (vrrpGroup) {
@@ -313,7 +314,19 @@ class VrrpService {
           }
         },
         { $match: { 'isOverlapping.0': { $exists: true } } },
-        { $unset: ['isOverlapping', 'subnets'] }
+        { $unset: ['isOverlapping', 'subnets'] },
+        {
+          $addFields: {
+            interfaces: {
+              $arrayToObject: {
+                $map: {
+                  input: '$interfaces',
+                  in: { k: '$$this.devId', v: '$$this' }
+                }
+              }
+            }
+          }
+        }
       ];
 
       const data = await devices.aggregate(pipeline).allowDiskUse(true);
@@ -381,6 +394,13 @@ class VrrpService {
         };
       }
 
+      if (isLocalOrBroadcastAddress(vrrp.virtualIp, ifc.IPv4Mask)) {
+        return {
+          valid: false,
+          err: `The virtual IP ${vrrp.virtualIp} cannot be Network or Broadcast IP`
+        };
+      }
+
       const tracked = [
         ...vrrpDevice.trackInterfacesOptional ?? [],
         ...vrrpDevice.trackInterfacesMandatory ?? []
@@ -407,8 +427,11 @@ class VrrpService {
     const vrrpGroups = await Vrrp.find({ _id: { $ne: vrrp._id }, org }).lean();
 
     const usedInterfaces = new Set();
+    const usedGroupIds = new Set();
     for (const vrrpGroup of vrrpGroups) {
       const groupId = vrrpGroup.virtualRouterId;
+      usedGroupIds.add(groupId);
+
       for (const vrrpGroupDevice of vrrpGroup.devices) {
         const key = `${vrrpGroupDevice.interface.toString()}-${groupId}`;
         usedInterfaces.add(key);
@@ -416,6 +439,13 @@ class VrrpService {
     }
 
     const groupId = vrrp.virtualRouterId;
+    if (usedGroupIds.has(+groupId)) {
+      return {
+        valid: false,
+        err: `Virtual Router ID ${groupId} already exists in your organization`
+      };
+    }
+
     for (const vrrpGroupDevice of vrrp.devices) {
       const key = `${vrrpGroupDevice.interface}-${groupId}`;
       if (usedInterfaces.has(key)) {
