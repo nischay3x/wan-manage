@@ -77,7 +77,7 @@ const OrgSchema = new Schema({
     default: '10.100.0.0',
     required: true,
     validate: {
-      validator: validators.validateIPaddr,
+      validator: validators.validateTunnelRangeIP,
       message: 'tunnelRange must be a valid IP address'
     }
   }

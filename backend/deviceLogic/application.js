@@ -156,7 +156,7 @@ const apply = async (deviceList, user, data) => {
   const app = await applications.findOne({
     org: org,
     _id: id
-  }).populate('appStoreApp').lean();
+  }).populate('appStoreApp').populate('org').lean();
 
   if (!app) {
     throw createError(500, 'The requested app was not purchased');

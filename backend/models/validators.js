@@ -21,6 +21,8 @@ const urlValidator = require('valid-url');
 const validator = require('validator');
 const filenamify = require('filenamify');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
+const configs = require('../configs')();
+const IPCidr = require('ip-cidr');
 
 // Globals
 const protocols = ['OSPF', 'NONE', 'BGP', 'OSPF,BGP'];
@@ -68,6 +70,11 @@ const validateIPv6Mask = mask => {
 };
 const validateIPv6 = (ip) => { return ip === '' || net.isIPv6(ip); };
 const validateIPaddr = (ip) => { return validateIPv4(ip) || validateIPv6(ip); };
+const validateTunnelRangeIP = (ip) => {
+  const ipCidr = new IPCidr(ip + '/' + configs.get('tunnelRangeMask'));
+  return (ipCidr.start() === ip);
+};
+
 const validateDevId = (devId) => {
   return (
     validatePciAddress(devId) ||
@@ -203,6 +210,7 @@ module.exports = {
   validateIPv4WithMask,
   validateIPv6,
   validateIPaddr,
+  validateTunnelRangeIP,
   validatePciAddress,
   validateDevId,
   validateParentDevId,

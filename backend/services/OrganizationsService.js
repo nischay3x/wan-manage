@@ -95,7 +95,10 @@ class OrganizationsService {
 
       return Service.successResponse(result);
     } catch (e) {
-      return Service.rejectResponse(e.message || 'Internal Server Error', e.status || 500);
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
@@ -123,20 +126,20 @@ class OrganizationsService {
         ).populate('defaultOrg');
         // Success, return OK and refresh JWT with new values
         user.defaultOrg = updUser.defaultOrg;
-        const token = await getToken(
-          { user },
-          {
-            org: updUser.defaultOrg._id,
-            orgName: updUser.defaultOrg.name
-          }
-        );
+        const token = await getToken({ user }, {
+          org: updUser.defaultOrg._id,
+          orgName: updUser.defaultOrg.name
+        });
         res.setHeader('Refresh-JWT', token);
 
         const result = OrganizationsService.selectOrganizationParams(updUser.defaultOrg);
         return Service.successResponse(result, 201);
       }
     } catch (e) {
-      return Service.rejectResponse(e.message || 'Internal Server Error', e.status || 500);
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
@@ -153,7 +156,10 @@ class OrganizationsService {
       if (resultOrg.length !== 1) throw new Error('Unable to find organization');
       return Service.successResponse(OrganizationsService.selectOrganizationParams(resultOrg[0]));
     } catch (e) {
-      return Service.rejectResponse(e.message || 'Internal Server Error', e.status || 500);
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
@@ -196,8 +202,7 @@ class OrganizationsService {
         // Remove organization
         await Organizations.findOneAndRemove(
           { _id: id, account: user.defaultAccount },
-          { session: session }
-        );
+          { session: session });
 
         // Remove all memberships that belong to the organization, but keep group even if empty
         await membership.deleteMany({ organization: id }, { session: session });
@@ -218,34 +223,28 @@ class OrganizationsService {
         await importedAppIdentifications.deleteMany({ 'meta.org': id }, { session: session });
 
         // Find all devices for organization
-        orgDevices = await Devices.devices.find(
-          { org: id },
+        orgDevices = await Devices.devices.find({ org: id },
           { machineId: 1, _id: 0 },
-          { session: session }
-        );
+          { session: session });
 
         // Get the account total device count
-        deviceCount = await Devices.devices
-          .countDocuments({ account: user.defaultAccount._id })
+        deviceCount = await Devices.devices.countDocuments({ account: user.defaultAccount._id })
           .session(session);
 
-        deviceOrgCount = await Devices.devices
-          .countDocuments({ account: user.defaultAccount._id, org: id })
-          .session(session);
+        deviceOrgCount = await Devices.devices.countDocuments(
+          { account: user.defaultAccount._id, org: id }
+        ).session(session);
 
         // Delete all devices
         await Devices.devices.deleteMany({ org: id }, { session: session });
         // Unregister a device (by removing the removed org number)
-        await Flexibilling.registerDevice(
-          {
-            account: user.defaultAccount._id,
-            org: id,
-            count: deviceCount,
-            orgCount: deviceOrgCount,
-            increment: -orgDevices.length
-          },
-          session
-        );
+        await Flexibilling.registerDevice({
+          account: user.defaultAccount._id,
+          org: id,
+          count: deviceCount,
+          orgCount: deviceOrgCount,
+          increment: -orgDevices.length
+        }, session);
       });
 
       // If successful, Disconnect all devices
@@ -255,7 +254,10 @@ class OrganizationsService {
     } catch (e) {
       logger.error('Error deleting organization', { params: { reason: e.message } });
 
-      return Service.rejectResponse(e.message || 'Internal Server Error', e.status || 500);
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
@@ -343,7 +345,10 @@ class OrganizationsService {
 
       return Service.successResponse(OrganizationsService.selectOrganizationParams(updatedOrg));
     } catch (e) {
-      return Service.rejectResponse(e.message || 'Internal Server Error', e.status || 500);
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
@@ -370,77 +375,58 @@ class OrganizationsService {
             // Running devices - connected and running
             running: {
               $sum: {
-                $cond: [
-                  {
-                    $and: [{ $eq: ['$isConnected', true] }, { $eq: ['$status', 'running'] }]
-                  },
-                  1,
-                  0
-                ]
+                $cond: [{
+                  $and: [
+                    { $eq: ['$isConnected', true] },
+                    { $eq: ['$status', 'running'] }]
+                }, 1, 0]
               }
             },
             // Devices with warning
             warning: {
               $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      // Device should be connected
-                      { $eq: ['$isConnected', true] },
-                      {
-                        $or: [
-                          {
-                            // One of the interfaces internet access != yes (size > 0)
-                            $gt: [
-                              {
-                                $size: {
-                                  $filter: {
-                                    input: '$interfaces',
-                                    as: 'intf',
-                                    cond: {
+                $cond: [{
+                  $and: [
+                    // Device should be connected
+                    { $eq: ['$isConnected', true] },
+                    {
+                      $or: [{
+                        // One of the interfaces internet access != yes (size > 0)
+                        $gt: [{
+                          $size: {
+                            $filter: {
+                              input: '$interfaces',
+                              as: 'intf',
+                              cond: {
+                                $and: [{
+                                  $or: [
+                                    { $eq: ['$$intf.linkStatus', 'down'] },
+                                    {
                                       $and: [
-                                        {
-                                          $or: [
-                                            { $eq: ['$$intf.linkStatus', 'down'] },
-                                            {
-                                              $and: [
-                                                { $ne: ['$$intf.internetAccess', 'yes'] },
-                                                { $eq: ['$$intf.monitorInternet', true] }
-                                              ]
-                                            }
-                                          ]
-                                        },
-                                        { $eq: ['$$intf.type', 'WAN'] }
-                                      ]
-                                    }
-                                  }
-                                }
-                              },
-                              0
-                            ]
-                          },
-                          {
-                            // or one of the static routes is pending (size > 0)
-                            $gt: [
-                              {
-                                $size: {
-                                  $filter: {
-                                    input: '$staticroutes',
-                                    as: 'sr',
-                                    cond: { $eq: ['$$sr.isPending', true] }
-                                  }
-                                }
-                              },
-                              0
-                            ]
+                                        { $ne: ['$$intf.internetAccess', 'yes'] },
+                                        { $eq: ['$$intf.monitorInternet', true] }]
+                                    }]
+                                },
+                                { $eq: ['$$intf.type', 'WAN'] }]
+                              }
+                            }
                           }
-                        ]
-                      }
-                    ]
-                  },
-                  1,
-                  0
-                ]
+                        }, 0]
+                      },
+                      {
+                        // or one of the static routes is pending (size > 0)
+                        $gt: [{
+                          $size: {
+                            $filter: {
+                              input: '$staticroutes',
+                              as: 'sr',
+                              cond: { $eq: ['$$sr.isPending', true] }
+                            }
+                          }
+                        }, 0]
+                      }]
+                    }]
+                }, 1, 0]
               }
             },
             // Total devices
@@ -558,7 +544,10 @@ class OrganizationsService {
 
       return Service.successResponse(response);
     } catch (e) {
-      return Service.rejectResponse(e.message || 'Internal Server Error', e.status || 500);
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
@@ -644,7 +633,10 @@ class OrganizationsService {
 
       return Service.successResponse(OrganizationsService.selectOrganizationParams(org), 201);
     } catch (e) {
-      return Service.rejectResponse(e.message || 'Internal Server Error', e.status || 500);
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 }

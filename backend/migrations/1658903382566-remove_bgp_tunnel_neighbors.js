@@ -76,7 +76,7 @@ async function down () {
 
     for (const bgpTunnel of bgpTunnels) {
       const { num, deviceA, deviceB, org } = bgpTunnel;
-      const { ip1, ip2 } = generateTunnelParams(num, org.tunnelRange);
+      const { ip1, ip2 } = generateTunnelParams(num, org.tunnelRange ?? '10.100.0.0');
 
       const aAsn = deviceA.bgp.localASN;
       const bAsn = deviceB.bgp.localASN;
