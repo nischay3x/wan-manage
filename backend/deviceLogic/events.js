@@ -61,13 +61,18 @@ class Events {
    * @param  {string} reason  notification reason
   */
   async staticRouteSetToPending (route, device, reason) {
+    const { org, name, _id } = device;
     await notificationsMgr.sendNotifications([{
-      org: device.org,
-      title: `Static route via ${route.gateway} in device ${device.name} is in pending state`,
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: reason
+      org,
+      title: `Static route via ${route.gateway} in device ${name} is in pending state`,
+      eventType: 'Static route state',
+      details: reason,
+      targets: {
+        deviceId: _id,
+        tunnelId: null,
+        interfaceId: null
+        // policyId: null
+      }
     }]);
   }
 
@@ -126,7 +131,7 @@ class Events {
       await this.tunnelSetToPending(tunnel, device, reason);
     } else {
       this.activeTunnels.add(tunnel._id.toString());
-      await this.tunnelSetToActive(tunnel);
+      await this.tunnelSetToActive(tunnel, device);
     }
   };
 
@@ -161,14 +166,20 @@ class Events {
   */
   async interfaceConnectivityChanged (device, origIfc, state) {
     const stateTxt = state === 'yes' ? 'online' : 'offline';
-    logger.info(`Interface connectivity changed to ${stateTxt}`, { params: { origIfc } });
+    const resolved = stateTxt === 'online';
+    logger.info(`Internet connectivity changed to ${stateTxt}`, { params: { origIfc } });
     await notificationsMgr.sendNotifications([{
       org: device.org,
-      title: 'Interface connection changed',
-      time: new Date(),
-      device: device._id,
-      machineId: device.machineId,
-      details: `Interface ${origIfc.name} state changed to "${stateTxt}"`
+      title: resolved ? '[resolved] Internet connection changed' : 'Internet connection changed',
+      details: `Interface ${origIfc.name} state changed to "${stateTxt}"`,
+      eventType: 'Internet connection',
+      targets: {
+        deviceId: device._id,
+        tunnelId: null,
+        interfaceId: origIfc._id
+        // policyId: null
+      },
+      resolved: resolved
     }]);
   };
 
@@ -189,14 +200,19 @@ class Events {
         }
       });
 
-      // only at the first time - send notification
+      // only at the first time - send a notification
       await notificationsMgr.sendNotifications([{
         org: device.org,
-        title: 'Interface IP restored',
-        time: new Date(),
-        device: device._id,
-        machineId: device.machineId,
-        details: `The IP address of Interface ${origIfc.name} has been restored`
+        title: '[resolved] Missing interface ip',
+        eventType: 'Missing interface ip',
+        details: `The IP address of Interface ${origIfc.name} has been restored`,
+        targets: {
+          deviceId: device._id,
+          tunnelId: null,
+          interfaceId: origIfc._id
+          // policyId: null
+        },
+        resolved: true
       }]);
     }
 
@@ -266,10 +282,14 @@ class Events {
       await notificationsMgr.sendNotifications([{
         org: device.org,
         title: 'Interface IP missing',
-        time: new Date(),
-        device: device._id,
-        machineId: device.machineId,
-        details: `The interface ${origIfc.name} has no IP address`
+        eventType: 'Missing interface ip',
+        details: `The interface ${origIfc.name} has no IP address`,
+        targets: {
+          deviceId: device._id,
+          tunnelId: null,
+          interfaceId: origIfc._id
+          // policyId: null
+        }
       }]);
     }
 
@@ -350,7 +370,7 @@ class Events {
 
     // no need to update active tunnels, go and check routes
     if (!isPending) {
-      await this.tunnelSetToActive(tunnel);
+      await this.tunnelSetToActive(tunnel, device);
       return;
     }
 
@@ -453,10 +473,15 @@ class Events {
       await notificationsMgr.sendNotifications([{
         org: tunnel.org,
         title: `Tunnel number ${tunnel.num} is in pending state`,
-        time: new Date(),
-        device: device._id,
-        machineId: device.machineId,
-        details: reason
+        eventType: 'Pending tunnel',
+        details: reason,
+        targets: {
+          deviceId: device._id,
+          tunnelId: tunnel.num,
+          interfaceId: null
+          // policyId: null
+        },
+        resolved: false
       }]);
     }
 
@@ -475,7 +500,21 @@ class Events {
    * Handle event: tunnel configured as a active
    * @param  {object} tunnel tunnel object
   */
-  async tunnelSetToActive (tunnel) {
+  async tunnelSetToActive (tunnel, device) {
+    await notificationsMgr.sendNotifications([{
+      org: tunnel.org,
+      title: '[resolved] Tunnel state changed',
+      eventType: 'Pending tunnel',
+      details: `Tunnel number ${tunnel.num} has become active again`,
+      targets: {
+        deviceId: device._id,
+        tunnelId: tunnel.num,
+        interfaceId: null
+        // policyId: null
+      },
+      resolved: true
+    }]);
+
     // get tunnel static routes
     const dependedDevices = await getTunnelConfigDependencies(tunnel, true);
 
@@ -530,7 +569,6 @@ class Events {
       for (const devId in orig) {
         const origIfc = orig[devId];
         const updatedIfc = updated[devId];
-
         // no need to send events for unassigned interfaces
         if (!origIfc.isAssigned) {
           continue;

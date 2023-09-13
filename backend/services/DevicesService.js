@@ -43,7 +43,8 @@ const {
   validateDevice,
   validateDhcpConfig,
   validateStaticRoute,
-  validateQOSPolicy
+  validateQOSPolicy,
+  isLocalOrBroadcastAddress
 } = require('../deviceLogic/validators');
 const { validateFQDN } = require('../models/validators');
 const {
@@ -634,13 +635,25 @@ class DevicesService {
         const pendingNotificationsArr = await notificationsModel.aggregate([
           {
             $match: {
+              org: org
+            }
+          },
+          {
+            $unwind: '$targets'
+          },
+          {
+            $match: {
               status: 'unread',
-              device: { $in: paginated[0].records.map(d => mongoose.Types.ObjectId(d._id)) }
+              'targets.deviceId': {
+                $in: paginated[0].records.map(d => mongoose.Types.ObjectId(d._id)),
+                $exists: true,
+                $ne: null
+              }
             }
           },
           {
             $group: {
-              _id: '$device',
+              _id: '$targets.deviceId',
               count: { $sum: 1 }
             }
           },
@@ -1271,6 +1284,70 @@ class DevicesService {
       });
     } catch (e) {
       return DevicesService.handleRequestError(e, { deviceStatus: 'connected', traces: [] });
+    }
+  }
+
+  static async devicesIdBgpStatusGET ({ id, org, getEdgeData = 'false' }, { user }) {
+    try {
+      const orgList = await getAccessTokenOrgList(user, org, false);
+      const device = await devices.findOne({
+        _id: mongoose.Types.ObjectId(id),
+        org: { $in: orgList }
+      }, 'machineId versions'); // add project to return relevant fields only
+
+      if (!device) {
+        return Service.rejectResponse('Device not found', 404);
+      }
+
+      const majorVersion = getMajorVersion(device.versions.agent);
+      const minorVersion = getMinorVersion(device.versions.agent);
+
+      if (majorVersion < 6 || (majorVersion === 6 && minorVersion < 3)) {
+        return Service.rejectResponse(
+          'Devices with a version lower than 6.3.X do not support the BGP status', 400);
+      }
+
+      if (getEdgeData === 'false') {
+        return Service.successResponse({
+          error: null,
+          deviceStatus: 'unknown',
+          status: deviceStatus.getDeviceBgpStatus(device.machineId)
+        });
+      }
+
+      if (!connections.isConnected(device.machineId)) {
+        return Service.rejectResponse('Device must be connected when getEdgeData is set', 400);
+      }
+
+      const bgpStatusResponse = await connections.deviceSendMessage(
+        null,
+        device.machineId,
+        {
+          entity: 'agent',
+          message: 'get-bgp-status'
+        }
+      );
+
+      if (!bgpStatusResponse.ok) {
+        logger.error('Failed to get BGP status', {
+          params: {
+            deviceId: id,
+            response: bgpStatusResponse.message
+          }
+        });
+        return Service.rejectResponse('Failed to get BGP status', 500);
+      }
+
+      // update server stats cache, so the UI will have the most updated data
+      const data = deviceStatus.setDeviceBgpStatus(device.machineId, bgpStatusResponse.message);
+
+      return Service.successResponse({
+        error: null,
+        deviceStatus: 'connected',
+        status: data
+      });
+    } catch (e) {
+      return DevicesService.handleRequestError(e, { deviceStatus: 'connected', status: {} });
     }
   }
 
@@ -2214,6 +2291,7 @@ class DevicesService {
         { $match: { 'devices.device': deviceId } },
         {
           $project: {
+            virtualRouterId: 1,
             virtualIp: 1,
             interface: '$devices.interface',
             trackInterfacesMandatory: '$devices.trackInterfacesMandatory',
@@ -2261,6 +2339,14 @@ class DevicesService {
           `The interface ${ifc.name} has VRRP on it. ` +
           `The IP ${ip} must ` +
           `overlap with the VRRP virtual IP ${deviceVrrp.virtualIp}`
+        );
+      }
+
+      if (isLocalOrBroadcastAddress(deviceVrrp.virtualIp, ifc.IPv4Mask)) {
+        throw createError(
+          400,
+          `The VRRP group ${deviceVrrp.virtualRouterId} virtual IP ${deviceVrrp.virtualIp} ` +
+          `defined on ${ifc.name} must not be broadcast or local address`
         );
       }
 

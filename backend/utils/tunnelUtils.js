@@ -193,6 +193,7 @@ const getTunnelsPipeline = (orgList, filters, detailed = true) => {
       'deviceB.status': 1,
       deviceAconf: 1,
       deviceBconf: 1,
+      notificationsSettings: 1,
       isPending: 1,
       pendingReason: 1,
       'org._id': 1,

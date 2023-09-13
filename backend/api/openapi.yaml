@@ -1878,6 +1878,68 @@ paths:
       x-swagger-router-controller: Tunnels
       x-openapi-router-controller: TunnelsController
       x-openapi-router-service: TunnelsService
+  /tunnels/notifications:
+    put:
+      operationId: tunnelsNotificationsPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+             $ref: '#/components/schemas/TunnelsNotificationsPut'
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Successful operation
+        "204":
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Bad request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Add tunnel specific notifications settings
+      tags:
+      - Tunnels
+      x-swagger-router-controller: Tunnels
+      x-openapi-router-controller: TunnelsController
+      x-openapi-router-service: TunnelsService
   /devices/{id}/routes:
     get:
       operationId: devicesIdRoutesGET
@@ -3624,6 +3686,76 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/{id}/bgp/status:
+    get:
+      operationId: devicesIdBgpStatusGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Indicator if need to take data from the device
+        in: query
+        name: getEdgeData
+        required: false
+        schema:
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceBgpStatus'
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve device BGP information
+      tags:
+      - BGP
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/{id}/traces:
     get:
       operationId: devicesIdPacketTracesGET
@@ -4382,7 +4514,7 @@ paths:
         schema:
           type: string
         style: simple
-      - description: Organization to be filtered by
+      - description:  Numeric ID of the Organization to be filtered by
         explode: true
         in: query
         name: org
@@ -4437,6 +4569,452 @@ paths:
       - apiKey: []
       - bearerAuth: []
       summary: Modify notification
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf:
+    get:
+      operationId: notificationsConfGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description:  Group to be filtered by
+        explode: true
+        in: query
+        name: group
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/NotificationsConf'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the Notifications configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+    put:
+      operationId: notificationsConfPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationsConfPut'
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Successful operation
+        "204":
+          description: Successful operation
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary:  Modify the rules of notifications
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf/emails:
+    get:
+      operationId: notificationsConfEmailsGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description:  Group to be filtered by
+        explode: true
+        in: query
+        name: group
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/EmailNotificationsConf'
+                type: array
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the Notification emails configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+    put:
+      operationId: notificationsConfEmailsPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailNotificationsConfPut'
+      responses:
+        "204":
+          description: Successful operation
+        "400":
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Modify the Notification emails configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf/webhooks:
+    get:
+      operationId: notificationsConfWebhookGET
+      parameters:
+      - description: Organization to be filtered by
+        explode: true
+        in: query
+        name: org
+        required: false
+        schema:
+          type: string
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      - description:  Group to be filtered by
+        explode: true
+        in: query
+        name: group
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/WebhookSettings'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the Notifications webhook configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+    put:
+      operationId: notificationsConfWebhookPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookSettingsPut'
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/WebhookSettings'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Modify the Notifications webhook configuration
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
+  /notifications-conf/default:
+    get:
+      operationId: notificationsConfDefaultGET
+      parameters:
+      - description:  Account to be filtered by
+        explode: true
+        in: query
+        name: account
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/NotificationsDefaultConf'
+                x-content-type: application/json
+          description: Successful operation
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - bearerAuth: []
+      - apiKey: []
+      summary: Get the account/system default notifications configuration
       tags:
       - Notifications
       x-swagger-router-controller: Notifications
@@ -9335,7 +9913,6 @@ components:
         country: country
         companyType: companyType
         companyDesc: companyDesc
-        enableNotifications: true
         isSubscriptionValid: true
         trial_end: 1676591999
         forceMfa: false
@@ -9355,9 +9932,6 @@ components:
         companyDesc:
           type: string
           nullable: true
-        enableNotifications:
-          default: true
-          type: boolean
         isSubscriptionValid:
           default: true
           type: boolean
@@ -9374,7 +9948,6 @@ components:
         country: country
         companyType: companyType
         companyDesc: companyDesc
-        enableNotifications: true
         forceMfa: false
       properties:
         name:
@@ -9386,9 +9959,6 @@ components:
           type: string
         companyDesc:
           type: string
-        enableNotifications:
-          default: true
-          type: boolean
         forceMfa:
           default: false
           type: boolean
@@ -9580,6 +10150,155 @@ components:
           type: string
         details:
           type: string
+      type: object
+    NotificationsConf:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+      type: object
+    NotificationsDefaultConf:
+      example:
+        account: accountId
+      properties:
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+      type: object
+    EmailNotificationsConf:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+      type: object
+    EmailNotificationsConfPut:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName,
+        emailsSigning: emailsSigning
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+        emailsSigning:
+          type: array
+      type: object
+    WebhookSettings:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+      type: object
+    WebhookSettingsPut:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName,
+        webHookSettings: webHookSettings
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+        webHookSettings:
+          type: object
+          properties:
+            'webhookURL':
+              type: string
+            'sendCriticalAlerts':
+              type: boolean
+            'sendWarningAlerts':
+              type: boolean
+      type: object
+    NotificationsConfPut:
+      example:
+        org: organizationId,
+        account: accountId,
+        group: groupName,
+        rules: newRules,
+        setAsDefault: false,
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        accountId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        group:
+          type: string
+        rules:
+          type: object
+          properties:
+            'Device connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Running router':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link/Tunnel round trip time':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link/Tunnel default drop rate':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Device memory usage':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Hard drive usage':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Temperature':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Policy change':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Software update':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Internet connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
       type: object
     NotificationsDeleteRequest:
       properties:
@@ -10750,6 +11469,28 @@ components:
             type: string
           type: array
       type: object
+    DeviceBgpStatus:
+      example:
+        deviceStatus: connected
+        status:
+          neighbors:
+          - neighbor
+          - neighbor
+      properties:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
+          $ref: '#/components/schemas/DeviceConnectionStatus'
+        status:
+          type: object
+          properties:
+            time:
+              type: number
+            neighbors:
+              items:
+                type: string
+              type: array
+      type: object
     DevicePacketTraces:
       example:
         logs:
@@ -11073,6 +11814,30 @@ components:
           type: boolean
         pendingReason:
           type: string
+      type: object
+    TunnelsNotificationsPut:
+      example:
+        org: organizationId,
+        tunnels: tunnelsList,
+        notifications: notifications
+      properties:
+        organizationId:
+          maxLength: 24
+          minLength: 24
+          type: string
+        tunnelsList:
+          type: array
+          items:
+            type: string
+            maxLength: 24
+            minLength: 24
+        notifications:
+          type: object
+          properties:
+            'Link/Tunnel round trip time':
+              $ref: '#/components/schemas/tunnelNotificationsSchema'
+            'Link/Tunnel default drop rate':
+              $ref: '#/components/schemas/tunnelNotificationsSchema'
       type: object
     StaticRouteRequest:
       example:
@@ -12500,8 +13265,8 @@ components:
         _id:
           type: string
         interfaces:
-          type: array
-          items:
+          type: object
+          additionalProperties:
             type: object
             properties:
               _id:
@@ -12639,6 +13404,30 @@ components:
                 type: string
           type: array
       type: object
+    notificationSettingsSchema:
+      type: object
+      properties:
+        warningThreshold:
+          type: number
+        criticalThreshold:
+          type: number
+        thresholdUnit:
+          type: string
+        severity:
+          type: string
+        immediateEmail:
+          type: boolean
+        resolvedAlert:
+          type: boolean
+        type:
+          type: string
+    tunnelNotificationsSchema:
+      type: object
+      properties:
+        warningThreshold:
+          type: number
+        criticalThreshold:
+          type: number
   securitySchemes:
     apiKey:
       in: header

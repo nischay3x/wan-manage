@@ -67,10 +67,12 @@ const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
  * @param  {String}   topology topology of created tunnels (hubAndSpoke|fullMesh)
  * @param  {Number}   hubIdx index of the hub in 'Hub and Spoke' topology
  * @param  {set}      reasons reference to Set of reasons
+ * @param  {Dictionary}   notificationsSettings an object of notification settings
  * @return {array}    A promises array of tunnels creations
  */
 const handleTunnels = async (
-  org, userName, opDevices, pathLabels, advancedOptions, topology, hubIdx, reasons
+  org, userName, opDevices, pathLabels,
+  advancedOptions, topology, hubIdx, reasons, notificationsSettings = null
 ) => {
   const devicesLen = opDevices.length;
   const tasks = [];
@@ -244,7 +246,8 @@ const handleTunnels = async (
                   tunnelsPerDevice[deviceB._id] = (tunnelsPerDevice[deviceB._id] ?? 0) + 1;
                   tasks.push(generateTunnelPromise(userName, org, null,
                     { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, advancedOptions));
+                    { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, advancedOptions,
+                    null, notificationsSettings));
                 }
               } else {
                 reasons.add(
@@ -283,7 +286,8 @@ const handleTunnels = async (
                 // Use a copy of devices objects as promise runs later
                 tasks.push(generateTunnelPromise(userName, org, label,
                   { ...deviceA.toObject() }, { ...deviceB.toObject() },
-                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, advancedOptions));
+                  { ...wanIfcA }, { ...wanIfcB }, encryptionMethod, advancedOptions,
+                  null, notificationsSettings));
               }
             }
           };
@@ -576,7 +580,44 @@ const applyTunnelAdd = async (devices, user, data) => {
     throw new Error('At least 2 devices must be selected to create tunnels');
   }
 
-  const { pathLabels, advancedOptions, peers, topology, hub } = data.meta;
+  const {
+    pathLabels, advancedOptions,
+    peers, topology, hub, notificationsSettings = null
+  } = data.meta;
+  if (notificationsSettings) {
+    for (const eventType in Object.keys(notificationsSettings)) {
+      const { warningThreshold, criticalThreshold } = notificationsSettings[eventType];
+      if (warningThreshold !== undefined && criticalThreshold !== undefined &&
+        (isNaN(warningThreshold) || isNaN(criticalThreshold) ||
+        warningThreshold >= criticalThreshold || warningThreshold < 1 || criticalThreshold < 1)) {
+        logger.error('Wrong threshold value when creating tunnels',
+          { params: notificationsSettings[eventType] });
+        throw new Error(
+          // eslint-disable-next-line max-len
+          'Please ensure that the notification thresholds are defined as positive values and that the warning threshold is kept smaller than the critical threshold.');
+      }
+      switch (eventType) {
+        case 'Link/Tunnel round trip time':
+          if (warningThreshold > 30000 || criticalThreshold > 30000) {
+            logger.error('Wrong threshold value when creating tunnels',
+              { params: notificationsSettings[eventType] });
+            throw new Error(
+            // eslint-disable-next-line max-len
+              'RTT thresholds must be between 1ms to 30 seconds');
+          }
+          break;
+        case 'Link/Tunnel default drop rate':
+          if (warningThreshold > 100 || criticalThreshold > 100) {
+            logger.error('Wrong threshold value when creating tunnels',
+              { params: notificationsSettings[eventType] });
+            throw new Error(
+            // eslint-disable-next-line max-len
+              'Drop rate thresholds must be between 1 to 100(%)');
+          }
+          break;
+      }
+    }
+  }
   // If ospfCost is not defined, use the default cost
   advancedOptions.ospfCost = Number(advancedOptions.ospfCost || defaultTunnelOspfCost);
   const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
@@ -634,7 +675,8 @@ const applyTunnelAdd = async (devices, user, data) => {
     dbTasks = dbTasks.concat(tasks);
   } else {
     const tasks = await handleTunnels(
-      org, userName, opDevices, pathLabels, advancedOptions, topology, hubIdx, reasons);
+      org, userName, opDevices, pathLabels, advancedOptions,
+      topology, hubIdx, reasons, notificationsSettings);
     dbTasks = dbTasks.concat(tasks);
   }
 
@@ -765,7 +807,8 @@ const errorTunnelAdd = async (jobId, res) => {
  * @param  {boolean}  peer         peer configurations
  */
 const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
-  deviceAIntf, deviceBIntf, encryptionMethod, advancedOptions, peer = null) => {
+  deviceAIntf, deviceBIntf, encryptionMethod, advancedOptions, peer = null,
+  notificationsSettings = null) => {
   logger.debug(`Adding tunnel${peer ? '' : ' between devices'}`, {
     params: {
       deviceA: deviceA.hostname,
@@ -776,7 +819,8 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
       },
       label: pathLabel,
       encryptionMethod: encryptionMethod,
-      peer
+      peer,
+      notificationsSettings
     }
   });
   let tunnelnum = null;
@@ -847,7 +891,8 @@ const generateTunnelPromise = async (user, org, pathLabel, deviceA, deviceB,
       throw new Error('Failed to get a new tunnel number');
     }
     const tunnelJobs = await addTunnel(user, org, tunnelnum, encryptionMethod,
-      deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel, advancedOptions, peer);
+      deviceA, deviceB, deviceAIntf, deviceBIntf, pathLabel,
+      advancedOptions, peer, notificationsSettings);
     return tunnelJobs;
   } catch (err) {
     // there can be an exception in the addTunnel function
@@ -1268,7 +1313,8 @@ const addTunnel = async (
   deviceBIntf,
   pathLabel,
   advancedOptions,
-  peer = null
+  peer = null,
+  notificationsSettings = null
 ) => {
   const devicesInfo = {
     deviceA: { hostname: deviceA.hostname, interface: deviceAIntf.name }
@@ -1332,7 +1378,8 @@ const addTunnel = async (
       encryptionMethod,
       tunnelKeys,
       advancedOptions: { mtu, mssClamp, ospfCost, routing },
-      peer: peer ? peer._id : null
+      peer: peer ? peer._id : null,
+      notificationsSettings: notificationsSettings
     },
     // Options
     { upsert: true, new: true }
@@ -1741,6 +1788,7 @@ const sync = async (deviceId, org) => {
       encryptionMethod: 1,
       pathlabel: 1,
       advancedOptions: 1,
+      notificationsSettings: 1,
       peer: 1
     }
   )
@@ -1766,6 +1814,7 @@ const sync = async (deviceId, org) => {
       peer,
       org: tunnelOrg
     } = tunnel;
+
     if (!tunnelKeys && encryptionMethod === 'psk' && peer === null) {
       // No keys for some reason, probably version 2 upgraded.
       // Tunnel keys will be generated in prepareTunnelAddJob.
@@ -1872,12 +1921,19 @@ const populateTunnelDestinations = (
  * @param  {object} advancedOptions advanced tunnel options: MTU, MSS Clamp, OSPF cost, routing
  * @param  {object?}  peer peer configurations. If exists, fill peer configurations
 */
+
 const prepareTunnelParams = (
   tunnel, deviceAIntf, deviceBIntf, deviceA, deviceB, org,
   pathLabel = null, advancedOptions = {}, peer = null
 ) => {
   const paramsDeviceA = {};
   const paramsDeviceB = {};
+
+  // add tunnel notifications settings for both devices
+  if (tunnel?.notificationsSettings && Object.keys(tunnel.notificationsSettings).length > 0) {
+    paramsDeviceA.notificationsSettings = tunnel.notificationsSettings;
+    paramsDeviceB.notificationsSettings = tunnel.notificationsSettings;
+  }
 
   // need to check versions for some parameters compatibility
   const majorVersionA = getMajorVersion(deviceA.versions.agent);

@@ -17,6 +17,7 @@
 
 // File used to dispatch the apply logic to the right function
 const start = require('./start');
+const notificationsConf = require('./deviceNotifications');
 const stop = require('./stop');
 const reset = require('./reset');
 const modify = require('./modifyDevice');
@@ -55,6 +56,10 @@ const methods = {
   start: {
     apply: start.apply,
     complete: start.complete,
+    error: errorNOOP
+  },
+  notificationsConf: {
+    apply: notificationsConf.apply,
     error: errorNOOP
   },
   stop: {
