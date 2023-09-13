@@ -3690,6 +3690,76 @@ paths:
       x-swagger-router-controller: Devices
       x-openapi-router-controller: DevicesController
       x-openapi-router-service: DevicesService
+  /devices/{id}/bgp/status:
+    get:
+      operationId: devicesIdBgpStatusGET
+      parameters:
+      - description: Numeric ID of the Device to fetch information about
+        explode: false
+        in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Indicator if need to take data from the device
+        in: query
+        name: getEdgeData
+        required: false
+        schema:
+          type: boolean
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceBgpStatus'
+          description: Successful operation
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadRequestError'
+          description: Bad Request
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary: Retrieve device BGP information
+      tags:
+      - BGP
+      x-swagger-router-controller: Devices
+      x-openapi-router-controller: DevicesController
+      x-openapi-router-service: DevicesService
   /devices/{id}/traces:
     get:
       operationId: devicesIdPacketTracesGET
@@ -11413,6 +11483,28 @@ components:
             type: string
           type: array
       type: object
+    DeviceBgpStatus:
+      example:
+        deviceStatus: connected
+        status:
+          neighbors:
+          - neighbor
+          - neighbor
+      properties:
+        error:
+          $ref: '#/components/schemas/DeviceResponseStatus'
+        deviceStatus:
+          $ref: '#/components/schemas/DeviceConnectionStatus'
+        status:
+          type: object
+          properties:
+            time:
+              type: number
+            neighbors:
+              items:
+                type: string
+              type: array
+      type: object
     DevicePacketTraces:
       example:
         logs:
@@ -13187,8 +13279,8 @@ components:
         _id:
           type: string
         interfaces:
-          type: array
-          items:
+          type: object
+          additionalProperties:
             type: object
             properties:
               _id:

@@ -186,12 +186,21 @@ class Connections {
           // the broadcast message was published in order to disconnect the device
           this.devices.disconnectDevice(machineId);
         } else if (action === 'disconnected') {
-          // the device is disconnected, deviceInfo should be removed
-          this.devices.removeDeviceInfo(machineId);
+          // the 'disconnected' event is received from another server
+          // check if the device was reconnected to this server after the event was sent
+          const { socket } = this.devices.getDeviceInfo(machineId) ?? {};
+          if (!this.isSocketAlive(socket)) {
+            // the device is disconnected, deviceInfo should be removed
+            this.devices.removeDeviceInfo(machineId);
+          }
         } else if (action === 'pong') {
           // the device is alive, set info in memory if it does not exist
           if (!this.isConnected(machineId)) {
             this.devices.setDeviceInfo(machineId, info, false);
+          }
+          // must be removed from disconnectedDevices to prevent scheduled disconnect notification
+          if (this.disconnectedDevices.hasOwnProperty(machineId)) {
+            delete this.disconnectedDevices[machineId];
           }
         }
       }

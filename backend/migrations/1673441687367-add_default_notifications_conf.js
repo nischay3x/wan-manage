@@ -173,28 +173,42 @@ async function up () {
     );
 
     // Create default notification settings to any existing organization
-    const organizations = await Organizations.find();
-    for (const organization of organizations) {
-      const orgExists = await notificationConfModel.findOne({ org: organization._id });
-      if (!orgExists) {
+    const organizationsWithAccounts = await Organizations.aggregate([
+      {
+        $lookup: {
+          from: 'accounts',
+          localField: 'account',
+          foreignField: '_id',
+          as: 'orgAccount'
+        }
+      }
+    ]);
+    for (const orgAndAccount of organizationsWithAccounts) {
+      const accountOwners = [];
+      // Subscribing account owners for email notifications only if they used to
+      // get email notifications before the migration
+      if (orgAndAccount.orgAccount[0].enableNotifications) {
         const ownerMembership = await membership.find({
-          account: organization.account,
+          account: orgAndAccount.account,
           to: 'account',
           role: 'owner'
         });
-        const accountOwners = [];
-        if (ownerMembership) {
-          ownerMembership.forEach(owner => {
-            accountOwners.push(owner.user);
-          });
-        }
-        await notificationConfModel.create({
-          org: organization._id,
-          rules: systemNotificationsConf,
-          signedToDaily: accountOwners,
-          webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
+        ownerMembership.forEach(owner => {
+          accountOwners.push(owner.user);
         });
       }
+      await notificationConfModel.updateOne(
+        { org: orgAndAccount._id },
+        {
+          $setOnInsert: {
+            org: orgAndAccount._id,
+            rules: systemNotificationsConf,
+            signedToDaily: accountOwners,
+            webHookSettings: { webhookURL: '', sendCriticalAlerts: false, sendWarningAlerts: false }
+          }
+        },
+        { upsert: true }
+      );
     }
   } catch (err) {
     logger.error('Database migration failed', {
