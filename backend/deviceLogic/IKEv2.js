@@ -120,12 +120,13 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
  * @param  {boolean} flag      the value to be set in the database
  * @return {Promise}
  */
-const setIKEv2QueuedFlag = (deviceIDs, flag) => {
-  return devices.updateMany(
+const setIKEv2QueuedFlag = async (deviceIDs, flag) => {
+  const result = await devices.updateMany(
     { _id: { $in: deviceIDs } },
     { $set: { 'IKEv2.jobQueued': flag } },
     { upsert: false }
   );
+  logger.debug('IKEv2 jobQueued flag set', { params: { deviceIDs, flag, result } });
 };
 
 /**
