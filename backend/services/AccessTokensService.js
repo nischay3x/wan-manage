@@ -20,7 +20,10 @@ const Service = require('./Service');
 const { getAccessKey } = require('../tokens');
 const AccessTokens = require('../models/accesstokens');
 const Organizations = require('../models/organizations');
-const { getUserPermissions, validatePermissionCombination } = require('../models/membership');
+const {
+  preDefinedPermissions,
+  validatePermissionCombination
+} = require('../models/membership');
 const ObjectId = require('mongoose').Types.ObjectId;
 
 class AccessTokensService {
@@ -100,10 +103,14 @@ class AccessTokensService {
         return Service.rejectResponse('Request does not have all necessary info', 400);
       };
 
+      const permissionTo = accessTokenRequest.accessKeyPermissionTo;
+      const role = accessTokenRequest.accessKeyRole;
+      const entity = accessTokenRequest.accessKeyEntity;
+
       // Check permission combination
       const checkCombination = validatePermissionCombination(
-        accessTokenRequest.accessKeyRole,
-        accessTokenRequest.accessKeyPermissionTo
+        role,
+        permissionTo
       );
       if (checkCombination.status === false) {
         return Service.rejectResponse(checkCombination.error, 400);
@@ -112,30 +119,30 @@ class AccessTokensService {
       // This API is allowed only for account owner, so no need to check for permissions
       // But we need to make sure the entities are part of the account
       let inclusionChecker = { status: true, error: '' };
-      switch (accessTokenRequest.accessKeyPermissionTo) {
+      switch (permissionTo) {
         case 'account':
           // check that entity equals to the account id
-          if (user.defaultAccount._id.toString() !== accessTokenRequest.accessKeyEntity) {
-            inclusionChecker = { status: false, error: 'Account not found' };
+          if (user.defaultAccount._id.toString() !== entity) {
+            inclusionChecker = { status: false, error: 'Invalid Account' };
           }
           break;
         case 'group': {
           // check that at least one of the account organizations belong to the group entity
           const groupCount = await Organizations.count({
             _id: { $in: user.defaultAccount.organizations },
-            group: accessTokenRequest.accessKeyEntity
+            group: entity
           });
           if (!groupCount) {
-            inclusionChecker = { status: false, error: 'Group not found' };
+            inclusionChecker = { status: false, error: 'Invalid Group' };
           }
           break;
         }
         case 'organization':
           // check that the entity is part of the account organizations
           if (!user.defaultAccount.organizations.includes(
-            ObjectId(accessTokenRequest.accessKeyEntity)
+            ObjectId(entity)
           )) {
-            inclusionChecker = { status: false, error: 'Organization not found' };
+            inclusionChecker = { status: false, error: 'Invalid Organization' };
           }
           break;
       }
@@ -145,20 +152,21 @@ class AccessTokensService {
 
       const accessToken = new AccessTokens({
         account: user.defaultAccount._id,
-        organization: null,
+        to: permissionTo,
+        group: permissionTo === 'group' ? entity : '',
+        organization: permissionTo === 'organization' ? entity : null,
+        role: role,
+        // This api used as account owner only and user has permission to the entity (checked above)
+        perms: preDefinedPermissions[permissionTo + '_' + role],
         name: accessTokenRequest.name,
         token: '', // should be empty for now
         isValid: true
       });
 
       const token = await getAccessKey({ user }, {
-        id: accessToken._id.toString(),
-        org: null
+        id: accessToken._id.toString()
       }, false);
       accessToken.token = token;
-
-      const perms = await getUserPermissions(user);
-      accessToken.permissions = perms;
 
       await accessToken.save();
 
