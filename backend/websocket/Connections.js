@@ -1100,16 +1100,23 @@ class Connections {
               // management and the actual response from device.
               return;
             }
-            logger.info('Updating job result received from device', {
-              params: { deviceId: deviceId, job_id: job.job_id, state: job.state }
-            });
-            if (job.state === 'complete') {
+            if (jobToUpdate.data.metadata.jobUpdated) {
+              // Updated already
+              return;
+            }
+            if (job.state === 'complete' && jobToUpdate._state !== 'complete') {
+              logger.info('Updating job result received from device', {
+                params: { deviceId: deviceId, job_id: job.job_id, state: job.state }
+              });
               jobToUpdate.complete();
               jobToUpdate.error('');
               jobToUpdate.data.metadata.jobUpdated = true;
               jobToUpdate.save();
             }
             if (job?.errors?.length > 0) {
+              logger.info('Updating job result received from device', {
+                params: { deviceId: deviceId, job_id: job.job_id, state: job.state }
+              });
               jobToUpdate.error(JSON.stringify({ errors: job.errors }));
               // unlike the jobs which got marked as failed due to the send timeout, in the case
               // of the upgrade-device-sw job, it is initially marked as complete, so need to
