@@ -28,6 +28,7 @@ const {
 const lanNat = {
   match: {
     type: String,
+    required: false,
     maxlength: [20, 'IP length must be at most 20'],
     validate: {
       validator: validateIPv4WithMask,
@@ -36,6 +37,7 @@ const lanNat = {
   },
   action: {
     type: String,
+    required: false,
     maxlength: [20, 'IP length must be at most 20'],
     validate: {
       validator: validateIPv4WithMask,
