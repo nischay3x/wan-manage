@@ -24,8 +24,29 @@ const {
   validatePortRange
 } = require('./validators');
 
+// LAN NAT parameters
+const lanNat = {
+  match: {
+    type: String,
+    maxlength: [20, 'IP length must be at most 20'],
+    validate: {
+      validator: validateIPv4WithMask,
+      message: 'Match IP should be a valid IP address'
+    }
+  },
+  action: {
+    type: String,
+    maxlength: [20, 'IP length must be at most 20'],
+    validate: {
+      validator: validateIPv4WithMask,
+      message: 'Action IP should be a valid IP address'
+    }
+  }
+};
+
 // Source classification schema
 const sourceClassificationSchema = new Schema({
+  _id: false,
   ipPort: {
     ip: {
       type: String,
@@ -46,11 +67,23 @@ const sourceClassificationSchema = new Schema({
   trafficId: {
     type: String,
     maxlength: [25, 'trafficId must be at most 25']
+  },
+  lanNat: {
+    interface: {
+      type: String,
+      required: false,
+      validate: {
+        validator: validateFirewallDevId,
+        message: 'interface should be a valid interface devId'
+      }
+    },
+    ...lanNat
   }
 });
 
 // Destination classification schema
 const destinationClassificationSchema = new Schema({
+  _id: false,
   ipProtoPort: {
     ip: {
       type: String,
@@ -98,7 +131,8 @@ const destinationClassificationSchema = new Schema({
       type: String,
       enum: ['', 'high', 'medium', 'low']
     }
-  }
+  },
+  lanNat: lanNat
 });
 
 // Rule schema
@@ -110,7 +144,7 @@ const firewallRuleSchema = new Schema({
   },
   direction: {
     type: String,
-    enum: ['inbound', 'outbound'],
+    enum: ['inbound', 'outbound', 'lanNat'],
     default: 'inbound',
     required: true
   },
