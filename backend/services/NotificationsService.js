@@ -35,7 +35,6 @@ const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
 const { validateNotificationsSettings, validateNotificationsThresholds, validateEmailNotifications, validateWebhookSettings } = require('../models/validators');
 const mongoConns = require('../mongoConns.js')();
-const includes = require('lodash/includes');
 
 class CustomError extends Error {
   constructor ({ message, status, data }) {
@@ -726,7 +725,7 @@ class NotificationsService {
 
       for (const userData of usersDataList) {
         const usersOrgAccess = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
-        const missingOrgIdsAccess = orgIds.filter(orgId => !includes(Object.keys(usersOrgAccess), orgId));
+        const missingOrgIdsAccess = orgIds.filter(orgId => !(orgId in usersOrgAccess));
 
         if (missingOrgIdsAccess.length > 0) {
           const errorMsg = org ? 'One of the users does not have a permission to access the organization'
