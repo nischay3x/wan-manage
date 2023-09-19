@@ -715,35 +715,74 @@ class NotificationsService {
         });
       }
 
-      const userIds = emailsSigning.map(e => e._id);
-      const usersDataList = await users.find({ _id: { $in: userIds } });
+      const emailSigningMap = Object.fromEntries(emailsSigning.map(e => [e._id, e]));
+      const userIds = Object.keys(emailSigningMap);
 
+      const usersDataList = await users.find({ _id: { $in: userIds } }).lean();
       // If one of the user ids does not exist in the db
       if (userIds.length !== usersDataList.length) {
         return Service.rejectResponse('Not all the user IDs exist in the database');
       }
 
-      for (const userData of usersDataList) {
-        const usersOrgAccess = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
-        const missingOrgIdsAccess = orgIds.filter(orgId => !(orgId in usersOrgAccess));
-
-        if (missingOrgIdsAccess.length > 0) {
-          const errorMsg = org ? 'One of the users does not have a permission to access the organization'
-            : `All the users must be authorized to each one of the organizations under the ${group ? 'group' : 'account'}`;
-          logger.warn('Error in email subscription', { params: { err: `user id ${userData._id} is not authorized for the organizations: ${missingOrgIdsAccess}` } });
-          return Service.rejectResponse(errorMsg, 403);
-        }
-      }
+      const usersDataMap = Object.fromEntries(usersDataList.map(u => [u._id.toString(), u]));
 
       const operations = [];
 
-      for (const org of orgIds) {
-        for (const emailSigning of emailsSigning) {
+      const orgUpdates = {};
+
+      // Loop through each user and update their email notification settings for the provided organizations.
+      // If any user doesn't have access to a given organization, log an error and reject the request.
+      // Update operations are batched and executed at the end of the process.
+      for (const userId of userIds) {
+        const userEmailSigning = emailSigningMap[userId];
+        const userData = usersDataMap[userId];
+        const userOrgAccess = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
+
+        for (const org of orgIds) {
+          if (!(org in userOrgAccess)) {
+            const errorMsg = org ? 'One of the users does not have permission to access the organization'
+              : `All the users must be authorized to each one of the organizations under the ${group ? 'group' : 'account'}`;
+            logger.warn('Error in email subscription', { params: { err: `user id ${userData._id} is not authorized for the organization: ${org}` } });
+            return Service.rejectResponse(errorMsg, 403);
+          }
+
+          if (!orgUpdates[org]) {
+            orgUpdates[org] = { $pull: {}, $addToSet: {} };
+          }
+
           ['signedToCritical', 'signedToWarning', 'signedToDaily'].forEach(field => {
-            if (emailSigning[field] === false) {
-              operations.push({ updateOne: { filter: { org }, update: { $pull: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
-            } else if (emailSigning[field]) {
-              operations.push({ updateOne: { filter: { org }, update: { $addToSet: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
+            if (userEmailSigning[field] === false) {
+              if (!orgUpdates[org].$pull[field]) orgUpdates[org].$pull[field] = [];
+              orgUpdates[org].$pull[field].push(mongoose.Types.ObjectId(userEmailSigning._id));
+            } else if (userEmailSigning[field]) {
+              if (!orgUpdates[org].$addToSet[field]) orgUpdates[org].$addToSet[field] = [];
+              orgUpdates[org].$addToSet[field].push(mongoose.Types.ObjectId(userEmailSigning._id));
+            }
+          });
+        }
+      }
+
+      for (const org in orgUpdates) {
+        // For each organization, loop through the operations (like $pull and $addToSet)
+        for (const op in orgUpdates[org]) {
+          const updateFields = {};
+
+          const currentUpdates = orgUpdates[org][op];
+
+          // Loop through each field in the current operation (like signedToCritical, signedToWarning, etc.)
+          Object.entries(currentUpdates).forEach(([field, userIds]) => {
+            // If there are user IDs specified for this field, set the update condition
+            // If there's only one ID, use it directly. Otherwise, use the $each modifier to specify multiple IDs
+            if (userIds.length) {
+              updateFields[field] = userIds.length === 1 ? userIds[0] : { $each: userIds };
+            }
+          });
+
+          operations.push({
+            updateOne: {
+              filter: { org },
+              update: { [op]: updateFields },
+              upsert: true
             }
           });
         }
