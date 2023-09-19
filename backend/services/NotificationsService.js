@@ -351,7 +351,8 @@ class NotificationsService {
             .map(org => org.id);
         // If this is not a get request we want the user to have account/group permissions
         } else {
-          const membersOfAccountOrGroup = await membership.find({
+          const userMembershipsOfAccountOrGroup = await membership.find({
+            user: user._id,
             account: account,
             $or: [
               { $and: [{ to: 'group' }, { group: group }] },
@@ -359,8 +360,7 @@ class NotificationsService {
             ],
             role: { $ne: 'viewer' }
           });
-          const membersIds = Object.values(membersOfAccountOrGroup).map(membership => membership.user.toString());
-          if (membersIds.includes(user._id.toString())) {
+          if (userMembershipsOfAccountOrGroup.length > 0) {
             const filter = { account };
             if (group) filter.group = group;
             const orgs = await Organizations.find(filter).lean();
