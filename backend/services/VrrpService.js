@@ -28,6 +28,7 @@ const { queue } = require('../deviceLogic/vrrp');
 const cidr = require('cidr-tools');
 const deviceStatus = require('../periodic/deviceStatus')();
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+const { isLocalOrBroadcastAddress } = require('../deviceLogic/validators');
 
 class VrrpService {
   static selectVrrpGroupParams (vrrpGroup) {
@@ -301,7 +302,19 @@ class VrrpService {
           }
         },
         { $match: { isOverlapping: true } },
-        { $unset: ['isOverlapping'] }
+        { $unset: ['isOverlapping'] },
+        {
+          $addFields: {
+            interfaces: {
+              $arrayToObject: {
+                $map: {
+                  input: '$interfaces',
+                  in: { k: '$$this.devId', v: '$$this' }
+                }
+              }
+            }
+          }
+        }
       ];
 
       const data = await devices.aggregate(pipeline).allowDiskUse(true);
@@ -366,6 +379,13 @@ class VrrpService {
           valid: false,
           err: `The interface ${ifc.name}'s IP ${ip} is not ` +
           `overlapping with the VRRP's virtual IP ${vrrp.virtualIp}`
+        };
+      }
+
+      if (isLocalOrBroadcastAddress(vrrp.virtualIp, ifc.IPv4Mask)) {
+        return {
+          valid: false,
+          err: `The virtual IP ${vrrp.virtualIp} cannot be Network or Broadcast IP`
         };
       }
 

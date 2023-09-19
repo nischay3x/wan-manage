@@ -6826,6 +6826,10 @@ paths:
                 $ref: '#/components/schemas/MLPolicy'
           description: Multi Link was modified
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
         "401":
           content:
@@ -13285,8 +13289,8 @@ components:
         _id:
           type: string
         interfaces:
-          type: array
-          items:
+          type: object
+          additionalProperties:
             type: object
             properties:
               _id:
