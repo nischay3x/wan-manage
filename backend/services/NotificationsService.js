@@ -35,6 +35,7 @@ const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
 const { validateNotificationsSettings, validateNotificationsThresholds, validateEmailNotifications, validateWebhookSettings } = require('../models/validators');
 const mongoConns = require('../mongoConns.js')();
+const createError = require('http-errors');
 
 class CustomError extends Error {
   constructor ({ message, status, data }) {
@@ -315,31 +316,31 @@ class NotificationsService {
   static async validateParams (org, account, group, user, setAsDefault = null, get = false) {
     if (setAsDefault) {
       if (!account) {
-        return Service.rejectResponse('Please specify the account id', 400);
+        throw createError(400, 'Please specify the account id');
       }
       return [];
     } else {
     // Validate parameters
       if (!org && !account && !group) {
-        return Service.rejectResponse('Missing parameter: org, account or group', 400);
+        throw createError(400, 'Missing parameter: org, account or group');
       }
       // The request should contain only the necessary fields. orgId is unique so it should be sent alone
       if (org && (account || group)) {
-        return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
+        throw createError(400, 'Invalid parameter: org should be used alone');
       }
       // Since the group name is not unique, it should always be sent with an account ID
       if (group && !account) {
-        return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
+        throw createError(400, 'Invalid parameter: group should be used with account');
       }
       if (account && org) {
-        return Service.rejectResponse('Invalid parameter: account should be used alone or with group(for modifying the group)', 400);
+        throw createError(400, 'Invalid parameter: account should be used alone or with group(for modifying the group)');
       }
 
       const orgList = await getUserOrganizations(user);
       let orgIds = [];
       if (org) {
         if (!orgList[org]) {
-          return Service.rejectResponse('You do not have permission to access this organization', 403);
+          throw createError(403, 'You do not have permission to access this organization');
         }
         orgIds = [org];
       // At this point, we are working with either an account or a group.
@@ -366,12 +367,14 @@ class NotificationsService {
             const orgs = await Organizations.find(filter).lean();
             orgIds = orgs.map(org => org._id.toString());
           } else {
-            return Service.rejectResponse("You don't have a permission to modify the settings", 403);
+            throw createError(403, "You don't have a permission to modify the settings");
+            // return Service.rejectResponse("You don't have a permission to modify the settings", 403);
           }
         }
       }
       if (!orgIds.length) {
-        return Service.rejectResponse('No organizations found', 404);
+        throw createError(404, 'No organizations found');
+        // return Service.rejectResponse('No organizations found', 404);
       }
       return orgIds;
     }
@@ -394,9 +397,6 @@ class NotificationsService {
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
-      if (orgIds.error) {
-        return orgIds;
-      }
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }).lean();
       NotificationsService.removeIdFromRules(response[0].rules);
       if (org) {
@@ -617,7 +617,6 @@ class NotificationsService {
   static async notificationsConfEmailsGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
-      if (orgIds.error) return orgIds;
       let response = [];
       const uniqueUsers = new Set();
       const processOrganization = async (orgId) => {
@@ -702,9 +701,6 @@ class NotificationsService {
   static async notificationsConfEmailsPUT ({ org, account, group, emailsSigning }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user);
-      if (orgIds.error) {
-        return orgIds;
-      }
 
       const areEmailSigningFieldsMissing = validateEmailNotifications(emailsSigning, !org);
       if (areEmailSigningFieldsMissing) {
@@ -813,9 +809,6 @@ class NotificationsService {
   static async notificationsConfWebhookGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
-      if (orgIds.error) {
-        return orgIds;
-      }
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
       if (org) {
         const webHookSettings = { ...response[0].webHookSettings };
