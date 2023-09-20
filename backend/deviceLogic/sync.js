@@ -423,10 +423,6 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
     // value received from the agent and the current state
     const { state, hash, autoSync, trials } = sync;
     const newState = calculateNewSyncState(hash, deviceHash, autoSync);
-    logger.debug('updateSyncStatus calculateNewSyncState', {
-      params: { state, newState, hash, deviceHash, autoSync, trials }
-    });
-
     const isStateChanged = state !== newState;
     // Update the device sync state if it has changed
     if (isStateChanged) {
