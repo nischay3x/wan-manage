@@ -380,12 +380,6 @@ class NotificationsService {
     }
   }
 
-  static removeIdFromRules (obj) {
-    for (const key in obj) {
-      if (obj[key]._id) delete obj[key]._id;
-    }
-  };
-
   /**
   * Get notifications settings for a given organization/account/group
   * @param org String organization ID
@@ -398,7 +392,6 @@ class NotificationsService {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }).lean();
-      NotificationsService.removeIdFromRules(response[0].rules);
       if (org) {
         const sortedRules = Object.fromEntries(
           Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
@@ -506,7 +499,6 @@ class NotificationsService {
           const originalNotificationsByOrg = {};
 
           allCurrentRules.forEach(orgNotificationsSettings => {
-            NotificationsService.removeIdFromRules(orgNotificationsSettings.rules);
             originalNotificationsByOrg[orgNotificationsSettings.org] = orgNotificationsSettings.rules;
           });
 
@@ -812,7 +804,6 @@ class NotificationsService {
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
       if (org) {
         const webHookSettings = { ...response[0].webHookSettings };
-        delete webHookSettings._id;
         return Service.successResponse(webHookSettings);
       } else {
         const mergedSettings = {};
