@@ -157,7 +157,7 @@ class AccessTokensService {
         organization: permissionTo === 'organization' ? entity : null,
         role: role,
         // This api used as account owner only and user has permission to the entity (checked above)
-        perms: preDefinedPermissions[permissionTo + '_' + role],
+        permissions: preDefinedPermissions[permissionTo + '_' + role],
         name: accessTokenRequest.name,
         token: '', // should be empty for now
         isValid: true
