@@ -196,20 +196,65 @@ class NotificationsManager {
     return usersData.map(u => u.email);
   }
 
+  async getOrgWithAccount (orgId) {
+    const orgDetails = await organizations.aggregate([
+      {
+        $match: { _id: mongoose.Types.ObjectId(orgId) }
+      },
+      {
+        $lookup: {
+          from: 'accounts',
+          localField: 'account',
+          foreignField: '_id',
+          as: 'accountDetails'
+        }
+      },
+      {
+        $project: {
+          name: 1,
+          accountDetails: {
+            $arrayElemAt: ['$accountDetails', 0]
+          }
+        }
+      }
+    ]);
+    return orgDetails;
+  }
+
   async sendEmailNotification (title, orgNotificationsConf, severity, emailBody) {
+    const orgWithAccount = await this.getOrgWithAccount(orgNotificationsConf.org);
     const userIds = severity === 'warning' ? orgNotificationsConf.signedToWarning
       : orgNotificationsConf.signedToCritical;
     const emailAddresses = await this.getUsersEmail(userIds);
+    const organization = orgWithAccount[0];
+    const uiServerUrl = configs.get('uiServerUrl', 'list');
+
     if (emailAddresses.length > 0) {
+      const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
+      <a href="${uiServerUrl[0]}">${uiServerUrl[0]}</a></p>`;
+      const notificationLink = uiServerUrl.length > 1 ? ' Notifications '
+        : `<a href="${uiServerUrl[0]}/notifications-config">Notifications settings</a>`;
+
+      const orgInfo = `<p><b>Organization:</b> ${organization.name}</p>
+        <p><b>Account:</b> ${organization.accountDetails.name}</p>`;
+
       await mailer.sendMailHTML(
         configs.get('mailerEnvelopeFromAddress'),
         configs.get('mailerFromAddress'),
         emailAddresses,
-        title,
-        (`<p>Please be aware that ${emailBody.toLowerCase()}.</p>
-            </p>To make changes to the notification settings in flexiManage, 
-            please access the "Account -> Notifications" section</p>`)
+        '[flexiWAN Alert] ' + title,
+            `
+            <p><h2>${configs.get('companyName')} new notification</h2><p>
+            <p><b>Notification details:</b> ${emailBody}</p>
+            ${orgInfo}
+            ${serverInfo}
+            <p>To make changes to the notification settings in flexiManage,
+            please access the ${notificationLink} page in your flexiMange account.</p>
+            `
       );
+      logger.info('An immediate notification email has been sent', {
+        params: { emailAddresses: emailAddresses, notificationDetails: emailBody }
+      });
       return new Date();
     }
     return null;
@@ -510,7 +555,7 @@ class NotificationsManager {
      * @async
      * @return {void}
      */
-  async notifyUsersByEmail () {
+  async sendDailySummaryEmail () {
     // Extract email addresses of users with pending unread notifications.
     // This has to be done in two phases, as mongodb does not
     // support the 'lookup' command across different databases:
@@ -520,7 +565,7 @@ class NotificationsManager {
     try {
       orgIDs = await notificationsDb.distinct('org', { status: 'unread' });
     } catch (err) {
-      logger.warn('Failed to get account IDs with pending notifications', {
+      logger.warn('Failed to get organization IDs with pending notifications', {
         params: { err: err.message }
       });
     }
@@ -528,10 +573,14 @@ class NotificationsManager {
     for (const orgID of orgIDs) {
       try {
         const orgNotificationsConf = await notificationsConf.findOne({ org: orgID });
+        if (!orgNotificationsConf) {
+          continue;
+        }
         const emailAddresses = await this.getUsersEmail(orgNotificationsConf.signedToDaily);
         if (emailAddresses.length > 0) {
-          const organization = await organizations.findOne({ _id: orgID }, { account: 1, name: 1 });
-
+          const orgWithAccount = await this.getOrgWithAccount(orgID);
+          const organization = orgWithAccount[0];
+          const accountInfo = `<p><b>Account:</b> ${organization.accountDetails.name}</p>`;
           const messages = await notificationsDb.find(
             { org: orgID, status: 'unread' },
             'time targets.deviceId details'
@@ -541,16 +590,16 @@ class NotificationsManager {
             .populate('targets.deviceId', 'name -_id', devicesModel).lean();
 
           const uiServerUrl = configs.get('uiServerUrl', 'list');
+          const serverInfo = uiServerUrl.length > 1 ? ''
+            : `<p><b>Server:</b> <a href="${uiServerUrl[0]}">${uiServerUrl[0]}</a></p>`;
           await mailer.sendMailHTML(
             configs.get('mailerEnvelopeFromAddress'),
             configs.get('mailerFromAddress'),
             emailAddresses,
             'Pending unread notifications',
-            `<h2>${configs.get('companyName')} Notification Reminder</h2>
+            `<h2>${configs.get('companyName')} Notifications Reminder</h2>
             <p style="font-size:16px">This email was sent to you since you have pending
-             unread notifications in the organization
-             "${organization ? organization.name : 'Deleted'} : 
-             ${orgID.toString().substring(0, 13)}".</p>
+             unread notifications in the organization "${organization.name}".</p>
              <i><small>
              <ul>
               ${messages.map(message => `
@@ -562,6 +611,8 @@ class NotificationsManager {
               `).join('')}
             </ul>
             </small></i>
+            ${serverInfo}
+            ${accountInfo}
             <p style="font-size:16px"> Further to this email,
             all Notifications in your Account have been set to status Read.
             <br>To view the notifications, please check the
@@ -572,20 +623,19 @@ class NotificationsManager {
              page in your flexiMange account.</br>
             </p>
             <p style="font-size:16px;color:gray">Note: Unread notification email alerts
-             are sent to Account owners (not Users in Organization level).
-              You can disable these emails in the
+             are sent only to the subscribed users.
+              You can change the subscription in the
               ${uiServerUrl.length > 1
-                ? ' Account profile '
-                : `<a href="${uiServerUrl[0]}/accounts/update">Account profile</a>`
+                ? ' email notifications section in the '
+                : `<a href="${uiServerUrl[0]}/notifications-config">notification settings </a>`
               }
-               page in your flexiManage account. Alerts on new flexiEdge software versions
-               or billing information are always sent, regardless of the notifications settings.
+               page in your flexiManage account.
                More about notifications
                <a href="https://docs.flexiwan.com/troubleshoot/notifications.html">here</a>.</p>
             <p style="font-size:16px">Your friends @ ${configs.get('companyName')}</p>`
           );
 
-          logger.info('User notifications reminder email sent', {
+          logger.info('A daily notifications summary email has been sent', {
             params: { emailAddresses: emailAddresses }
           });
         }
