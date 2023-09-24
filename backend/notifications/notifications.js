@@ -221,43 +221,58 @@ class NotificationsManager {
     return orgDetails;
   }
 
-  async sendEmailNotification (title, orgNotificationsConf, severity, emailBody) {
-    const orgWithAccount = await this.getOrgWithAccount(orgNotificationsConf.org);
-    const userIds = severity === 'warning' ? orgNotificationsConf.signedToWarning
-      : orgNotificationsConf.signedToCritical;
-    const emailAddresses = await this.getUsersEmail(userIds);
-    const organization = orgWithAccount[0];
+  async getInfoForEmail (orgId) {
     const uiServerUrl = configs.get('uiServerUrl', 'list');
-
-    if (emailAddresses.length > 0) {
-      const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
+    const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
       <a href="${uiServerUrl[0]}">${uiServerUrl[0]}</a></p>`;
+    const orgWithAccount = await this.getOrgWithAccount(orgId);
+    const orgInfo = `<p><b>Organization:</b> ${orgWithAccount[0].name}</p>`;
+    const accountInfo = `<p><b>Account:</b> ${orgWithAccount[0].accountDetails.name}</p>`;
+    return { serverInfo, orgInfo, accountInfo };
+  }
+
+  async sendEmailNotification (title, orgNotificationsConf, severity, alertDetails) {
+    try {
+      const uiServerUrl = configs.get('uiServerUrl', 'list');
+      const userIds = severity === 'warning' ? orgNotificationsConf.signedToWarning
+        : orgNotificationsConf.signedToCritical;
+      const emailAddresses = await this.getUsersEmail(userIds);
+      if (emailAddresses.length === 0) return null;
+
+      const { serverInfo, orgInfo, accountInfo } = await this.getInfoForEmail(
+        orgNotificationsConf.org);
+
       const notificationLink = uiServerUrl.length > 1 ? ' Notifications '
         : `<a href="${uiServerUrl[0]}/notifications-config">Notifications settings</a>`;
 
-      const orgInfo = `<p><b>Organization:</b> ${organization.name}</p>
-        <p><b>Account:</b> ${organization.accountDetails.name}</p>`;
+      const emailBody = `
+        <h2>${configs.get('companyName')} new notification</h2>
+        <p><b>Notification details:</b> ${alertDetails}</p>
+        ${serverInfo}
+        ${accountInfo}
+        ${orgInfo}
+        <p>To make changes to the notification settings in flexiManage,
+        please access the ${notificationLink} page in your flexiMange account.</p>
+      `;
 
       await mailer.sendMailHTML(
         configs.get('mailerEnvelopeFromAddress'),
         configs.get('mailerFromAddress'),
         emailAddresses,
         '[flexiWAN Alert] ' + title,
-            `
-            <p><h2>${configs.get('companyName')} new notification</h2><p>
-            <p><b>Notification details:</b> ${emailBody}</p>
-            ${orgInfo}
-            ${serverInfo}
-            <p>To make changes to the notification settings in flexiManage,
-            please access the ${notificationLink} page in your flexiMange account.</p>
-            `
+        emailBody
       );
+
       logger.info('An immediate notification email has been sent', {
-        params: { emailAddresses: emailAddresses, notificationDetails: emailBody }
+        params: { emailAddresses, notificationDetails: emailBody, org: orgNotificationsConf.org }
       });
+
       return new Date();
+    } catch (err) {
+      logger.warn('Failed to send an immediate email notification', {
+        params: { err: err.message, alertDetails }
+      });
     }
-    return null;
   }
 
   async getQueryForExitingAlert (eventType, targets, resolved, severity, org) {
@@ -556,11 +571,6 @@ class NotificationsManager {
      * @return {void}
      */
   async sendDailySummaryEmail () {
-    // Extract email addresses of users with pending unread notifications.
-    // This has to be done in two phases, as mongodb does not
-    // support the 'lookup' command across different databases:
-    // 1. Get the list of account IDs with pending notifications.
-    // 2. Go over the list, populate the users and send them emails.
     let orgIDs = [];
     try {
       orgIDs = await notificationsDb.distinct('org', { status: 'unread' });
@@ -573,72 +583,71 @@ class NotificationsManager {
     for (const orgID of orgIDs) {
       try {
         const orgNotificationsConf = await notificationsConf.findOne({ org: orgID });
-        if (!orgNotificationsConf) {
-          continue;
-        }
-        const emailAddresses = await this.getUsersEmail(orgNotificationsConf.signedToDaily);
-        if (emailAddresses.length > 0) {
-          const orgWithAccount = await this.getOrgWithAccount(orgID);
-          const organization = orgWithAccount[0];
-          const accountInfo = `<p><b>Account:</b> ${organization.accountDetails.name}</p>`;
-          const messages = await notificationsDb.find(
-            { org: orgID, status: 'unread' },
-            'time targets.deviceId details'
-          )
-            .sort({ time: -1 })
-            .limit(configs.get('unreadNotificationsMaxSent', 'number'))
-            .populate('targets.deviceId', 'name -_id', devicesModel).lean();
+        if (!orgNotificationsConf) continue;
 
-          const uiServerUrl = configs.get('uiServerUrl', 'list');
-          const serverInfo = uiServerUrl.length > 1 ? ''
-            : `<p><b>Server:</b> <a href="${uiServerUrl[0]}">${uiServerUrl[0]}</a></p>`;
-          await mailer.sendMailHTML(
-            configs.get('mailerEnvelopeFromAddress'),
-            configs.get('mailerFromAddress'),
-            emailAddresses,
-            'Pending unread notifications',
-            `<h2>${configs.get('companyName')} Notifications Reminder</h2>
-            <p style="font-size:16px">This email was sent to you since you have pending
-             unread notifications in the organization "${organization.name}".</p>
-             <i><small>
-             <ul>
+        const emailAddresses = await this.getUsersEmail(orgNotificationsConf.signedToDaily);
+        if (emailAddresses.length === 0) continue;
+
+        const messages = await notificationsDb.find({ org: orgID, status: 'unread' }
+          , 'time targets.deviceId details')
+          .sort({ time: -1 })
+          .limit(configs.get('unreadNotificationsMaxSent', 'number'))
+          .populate('targets.deviceId', 'name -_id', devicesModel).lean();
+
+        const uiServerUrl = configs.get('uiServerUrl', 'list');
+        const { serverInfo, orgInfo, accountInfo } = await this.getInfoForEmail(
+          orgID);
+
+        const emailBody = `
+          <h2>${configs.get('companyName')} Notifications Reminder</h2>
+          <p style="font-size:16px">This email was sent to you
+          since you have pending unread notifications.</p>
+          <i><small>
+            <ul>
               ${messages.map(message => `
-              <li>
-                ${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}
-                device ${message.targets.deviceId ? message.targets.deviceId.name : 'Deleted'}
-                - ${message.details}
-              </li>
+                <li>
+                  ${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}
+                  device ${message.targets.deviceId ? message.targets.deviceId.name : 'Deleted'}
+                  - ${message.details}
+                </li>
               `).join('')}
             </ul>
-            </small></i>
-            ${serverInfo}
-            ${accountInfo}
-            <p style="font-size:16px"> Further to this email,
-            all Notifications in your Account have been set to status Read.
-            <br>To view the notifications, please check the
+          </small></i>
+          ${serverInfo}
+          ${accountInfo}
+          ${orgInfo}
+          <p style="font-size:16px"> Further to this email,
+          all Notifications in your Account have been set to status Read.
+          <br>To view the notifications, please check the
+          ${uiServerUrl.length > 1
+            ? ' Notifications '
+            : `<a href="${uiServerUrl[0]}/notifications">Notifications</a>`
+          }
+           page in your flexiMange account.</br>
+          </p>
+          <p style="font-size:16px;color:gray">Note: Unread notification email alerts
+           are sent only to the subscribed users.
+            You can change the subscription in the
             ${uiServerUrl.length > 1
-              ? ' Notifications '
-              : `<a href="${uiServerUrl[0]}/notifications">Notifications</a>`
+              ? ' email notifications section in the '
+              : `<a href="${uiServerUrl[0]}/notifications-config">notification settings </a>`
             }
-             page in your flexiMange account.</br>
-            </p>
-            <p style="font-size:16px;color:gray">Note: Unread notification email alerts
-             are sent only to the subscribed users.
-              You can change the subscription in the
-              ${uiServerUrl.length > 1
-                ? ' email notifications section in the '
-                : `<a href="${uiServerUrl[0]}/notifications-config">notification settings </a>`
-              }
-               page in your flexiManage account.
-               More about notifications
-               <a href="https://docs.flexiwan.com/troubleshoot/notifications.html">here</a>.</p>
-            <p style="font-size:16px">Your friends @ ${configs.get('companyName')}</p>`
-          );
+             page in your flexiManage account.
+             More about notifications
+             <a href="https://docs.flexiwan.com/troubleshoot/notifications.html">here</a>.</p>
+          <p style="font-size:16px">Your friends @ ${configs.get('companyName')}</p>`;
 
-          logger.info('A daily notifications summary email has been sent', {
-            params: { emailAddresses: emailAddresses }
-          });
-        }
+        await mailer.sendMailHTML(
+          configs.get('mailerEnvelopeFromAddress'),
+          configs.get('mailerFromAddress'),
+          emailAddresses,
+          'Pending unread notifications',
+          emailBody
+        );
+
+        logger.info('A daily notifications summary email has been sent', {
+          params: { emailAddresses: emailAddresses }
+        });
       } catch (err) {
         logger.warn('Failed to notify users about pending notifications', {
           params: { err: err.message, organization: orgID }
