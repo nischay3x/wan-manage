@@ -1635,6 +1635,14 @@ class DevicesService {
                 logger.error('Unknown parent interface', { params: { ifc } });
                 throw createError(400, `Unknown parent interface ${ifc.parentDevId}`);
               }
+
+              if (ifc.isAssigned && !parentIfc.isAssigned) {
+                throw createError(
+                  400,
+                  `Assigning a VLAN sub-interface (${ifc.name}) ` +
+                  'requires a parent interface to be assigned'
+                );
+              }
               // update isAssigned and MTU of the parent for VLAN sub-interfaces
               ifc.isAssigned = parentIfc.isAssigned;
               ifc.mtu = parentIfc.mtu;
