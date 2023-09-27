@@ -46,7 +46,11 @@ class AccessTokensService {
           _id: record.id,
           name: record.name,
           token: record.token,
-          isValid: record.isValid
+          isValid: record.isValid,
+          group: record.group,
+          organization: record?.organization?.name || null,
+          to: record.to,
+          role: record.role
         };
       });
       return Service.successResponse(result);

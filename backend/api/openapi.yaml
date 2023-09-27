@@ -9644,6 +9644,9 @@ components:
       example:
         isValid: true
         name: name
+        group: ''
+        to: account
+        role: owner
         _id: id
         token: token
       properties:
@@ -9654,6 +9657,12 @@ components:
         name:
           type: string
         token:
+          type: string
+        group:
+          type: string
+        to:
+          type: string
+        role:
           type: string
         isValid:
           default: true
