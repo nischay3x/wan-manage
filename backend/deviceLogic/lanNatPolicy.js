@@ -14,31 +14,55 @@
 
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
+const { getMajorVersion, getMinorVersion } = require('../versioning');
+
+const isLanNatSupported = (device) => {
+  const majorVersion = getMajorVersion(device.versions.agent);
+  const minorVersion = getMinorVersion(device.versions.agent);
+  return (majorVersion > 6 || (majorVersion === 6 && minorVersion >= 3));
+};
 
 /**
- * Gets the device LAN NAT rules for creating a job
- * @async
- * @param   {Array}  rules - enabled LAN NAT rules
+ * Gets the device LAN NAT info for creating a job
+ * @param   {Object} device - the device object where to send LAN NAT parameters
  * @return  {Object} parameters to include in the job response data
 */
-const getLanNatJobInfo = async (rules) => {
-  const requestTime = Date.now();
-  const lanNatRules = rules.map(rule => {
+const getLanNatJobInfo = (device) => {
+  const tasks = [];
+  if (!isLanNatSupported(device)) {
+    return { tasks };
+  }
+  const lanNatRules = device.firewall?.rules?.filter(
+    r => r.enabled && r.direction === 'lanNat'
+  ).map(rule => {
     return {
       source: rule.classification?.source?.lanNat,
       destination: rule.classification?.destination?.lanNat
     };
   });
-  const params = { 'nat44-1to1': lanNatRules };
-  const tasks = [{
-    entity: 'agent',
-    message: 'add-lan-nat-policy',
-    params: params
-  }];
-  const data = {
-    requestTime: requestTime
-  };
-  return { tasks, data };
+  if (lanNatRules?.length > 0) {
+    const params = { 'nat44-1to1': lanNatRules };
+    tasks.push({
+      entity: 'agent',
+      message: 'add-lan-nat-policy',
+      params: params
+    });
+  }
+  return { tasks };
 };
 
-module.exports = { getLanNatJobInfo };
+/**
+ * Creates the LAN NAT section in the full sync job.
+ * @return Object
+ */
+const sync = async (deviceId, org, device) => {
+  const callComplete = false;
+  // if no firewall policy then device specific rules will be sent
+  const res = getLanNatJobInfo(device);
+  return {
+    requests: res.tasks,
+    callComplete
+  };
+};
+
+module.exports = { getLanNatJobInfo, sync };

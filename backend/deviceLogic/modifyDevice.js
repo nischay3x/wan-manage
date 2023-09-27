@@ -1424,7 +1424,7 @@ const apply = async (device, user, data) => {
     ));
 
   if (lanNatRulesModified) {
-    modifyParams.modify_lan_nat = await getLanNatJobInfo(updNatRules);
+    modifyParams.modify_lan_nat = getLanNatJobInfo(updDevice);
   }
 
   // Send QoS policy job only when interfaces specific policy modified
