@@ -32,13 +32,13 @@ const ruleSchema = new Schema({
     enum: ['device', 'tunnel', 'policy', 'interface']
   },
   sendWebHook: { type: Boolean, default: false }
-});
+}, { _id: false });
 
 const webHookSchema = new Schema({
   webhookURL: { type: String },
   sendCriticalAlerts: { type: Boolean, default: true },
   sendWarningAlerts: { type: Boolean, default: false }
-});
+}, { _id: false });
 
 /**
  * Notifications configuration Database Schema

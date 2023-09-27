@@ -33,8 +33,9 @@ const { ObjectId } = require('mongodb');
 const { apply } = require('../deviceLogic/deviceNotifications');
 const keyBy = require('lodash/keyBy');
 const notificationsMgr = require('../notifications/notifications')();
-const { validateNotificationsSettings } = require('../models/validators');
+const { validateNotificationsSettings, validateNotificationsThresholds, validateEmailNotifications, validateWebhookSettings } = require('../models/validators');
 const mongoConns = require('../mongoConns.js')();
+const createError = require('http-errors');
 
 class CustomError extends Error {
   constructor ({ message, status, data }) {
@@ -331,34 +332,42 @@ class NotificationsService {
     }
   }
 
-  // Validate request params and return the list of organizations according to the param
+  /**
+  * Validate notifications conf request params and return the list of organizations according to the param
+  * @param org String organization ID
+  * @param account String account ID
+  * @param group String group name (must be sent with account ID)
+  * user: Object
+  * returns Notification
+  **/
   static async validateParams (org, account, group, user, setAsDefault = null, get = false) {
     if (setAsDefault) {
       if (!account) {
-        return Service.rejectResponse('Please specify the account id', 400);
+        throw createError(400, 'Please specify the account id');
       }
       return [];
     } else {
     // Validate parameters
       if (!org && !account && !group) {
-        return Service.rejectResponse('Missing parameter: org, account or group', 400);
+        throw createError(400, 'Missing parameter: org, account or group');
       }
+      // The request should contain only the necessary fields. orgId is unique so it should be sent alone
       if (org && (account || group)) {
-        return Service.rejectResponse('Invalid parameter: org should be used alone', 400);
+        throw createError(400, 'Invalid parameter: org should be used alone');
       }
-      // since the group name is not unique it is always being sent with an account id
+      // Since the group name is not unique, it should always be sent with an account ID
       if (group && !account) {
-        return Service.rejectResponse('Invalid parameter: group should be used with account', 400);
+        throw createError(400, 'Invalid parameter: group should be used with account');
       }
       if (account && org) {
-        return Service.rejectResponse('Invalid parameter: account should be used alone or with group(for modifying the group)', 400);
+        throw createError(400, 'Invalid parameter: account should be used alone or with group(for modifying the group)');
       }
 
       const orgList = await getUserOrganizations(user);
       let orgIds = [];
       if (org) {
         if (!orgList[org]) {
-          return Service.rejectResponse('You do not have permission to access this organization', 403);
+          throw createError(403, 'You do not have permission to access this organization');
         }
         orgIds = [org];
       // At this point, we are working with either an account or a group.
@@ -370,7 +379,8 @@ class NotificationsService {
             .map(org => org.id);
         // If this is not a get request we want the user to have account/group permissions
         } else {
-          const membersOfAccountOrGroup = await membership.find({
+          const userMembershipsOfAccountOrGroup = await membership.find({
+            user: user._id,
             account: account,
             $or: [
               { $and: [{ to: 'group' }, { group: group }] },
@@ -378,34 +388,37 @@ class NotificationsService {
             ],
             role: { $ne: 'viewer' }
           });
-          const membersIds = Object.values(membersOfAccountOrGroup).map(membership => membership.user.toString());
-          if (membersIds.includes(user._id.toString())) {
+          if (userMembershipsOfAccountOrGroup.length > 0) {
             const filter = { account };
             if (group) filter.group = group;
             const orgs = await Organizations.find(filter).lean();
             orgIds = orgs.map(org => org._id.toString());
           } else {
-            return Service.rejectResponse("You don't have a permission to modify the settings", 403);
+            throw createError(403, "You don't have a permission to modify the settings");
+            // return Service.rejectResponse("You don't have a permission to modify the settings", 403);
           }
         }
       }
       if (!orgIds.length) {
-        return Service.rejectResponse('No organizations found', 404);
+        throw createError(404, 'No organizations found');
+        // return Service.rejectResponse('No organizations found', 404);
       }
       return orgIds;
     }
   }
 
   /**
-   * Get notifications settings of a given organization/account/group
+  * Get notifications settings for a given organization/account/group
+  * @param org String organization ID
+  * @param account String account ID
+  * @param group String group name (must be sent with account ID)
+  * user: Object
+  * The request should contain one of the 3: org / account / account + group
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
-      if (orgIds.error) {
-        return orgIds;
-      }
-      const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { rules: 1, _id: 0 }).lean();
+      const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }).lean();
       if (org) {
         const sortedRules = Object.fromEntries(
           Object.entries(response[0].rules).sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
@@ -418,16 +431,12 @@ class NotificationsService {
             if (!mergedRules[ruleName]) {
               mergedRules[ruleName] = {};
               Object.keys(org.rules[ruleName]).forEach(settingName => {
-                if (settingName !== '_id') {
-                  mergedRules[ruleName][settingName] = org.rules[ruleName][settingName];
-                }
+                mergedRules[ruleName][settingName] = org.rules[ruleName][settingName];
               });
             } else {
               Object.keys(org.rules[ruleName]).forEach(settingName => {
-                if (settingName !== '_id') {
-                  if (mergedRules[ruleName][settingName] !== org.rules[ruleName][settingName]) {
-                    mergedRules[ruleName][settingName] = 'varies';
-                  }
+                if (mergedRules[ruleName][settingName] !== org.rules[ruleName][settingName]) {
+                  mergedRules[ruleName][settingName] = 'varies';
                 }
               });
             }
@@ -444,6 +453,13 @@ class NotificationsService {
     }
   }
 
+  /**
+  * Send the notifications settings of numeric fields to validation
+  * If one of the new fields value is "varies" it means we should use the original value
+  * in the validation in order to make sure that the other value is valid (bigger/smaller than the other)
+  * @param newRulesEventSettings Object of a specific event type settings, sent by the user
+  * @param currentRuleEventSettings Object of a specific event type settings, taken from the original organization settings
+  **/
   static validateThresholds (newRulesEventSettings, currentRuleEventSettings, eventName) {
     let { warningThreshold, criticalThreshold } = newRulesEventSettings;
     if (warningThreshold === 'varies') {
@@ -454,7 +470,7 @@ class NotificationsService {
       criticalThreshold = currentRuleEventSettings.criticalThreshold;
     }
 
-    const validRule = validateNotificationsSettings({ [eventName]: { warningThreshold, criticalThreshold } });
+    const validRule = validateNotificationsThresholds({ [eventName]: { warningThreshold, criticalThreshold } });
 
     if (!validRule.valid) {
       throw new CustomError({
@@ -466,26 +482,21 @@ class NotificationsService {
   }
 
   /**
-   * Modify the notifications settings of a given organization/account/group
-   **/
+  * Modify the notifications settings of a given organization/account/group
+  * @param org String organization ID
+  * @param account String account ID
+  * @param group String group name (must be sent with account ID)
+  * @param rules Object of notifications settings (each one is an object in which the event name is the key and the value
+  * is the event settings)
+  * user: Object
+  **/
   static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules, setAsDefault = false }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
       if (orgIds && orgIds.error) {
         return orgIds;
       }
-      // If we modify a single organization we can send the whole newRules object to validation as it is
-      // Since it doesn't contain "varies" values when we expect numeric values
-      if (orgIds.length === 1) {
-        const validNotifications = validateNotificationsSettings(newRules);
-        if (!validNotifications.valid) {
-          throw new CustomError({
-            status: 400,
-            message: 'Invalid notification settings',
-            data: validNotifications.errors
-          });
-        }
-      }
+
       if (setAsDefault) {
         const accountOwners = await membership.find({
           account: user.defaultAccount._id,
@@ -503,58 +514,65 @@ class NotificationsService {
           { status: 'completed', message: 'Current settings successfully established as the default for new organizations' }, 202
         );
       } else {
-        const notificationsByOrg = new Map();
+        // A map to save the updated notifications for each organization in order to use it in the job
+        // Note that the newRules input isn't always applicable as the updated settings since it may contain "varies" in some fields.
+        // In this case the original setting for that specific field in the organization settings should be used instead
+        const updatedNotificationsByOrg = new Map();
 
         await mongoConns.mainDBwithTransaction(async (session) => {
-          const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } });
-          const orgRulesMap = new Map();
+          const bulkUpdates = [];
 
-          allCurrentRules.forEach(orgRule => {
-            orgRulesMap.set(orgRule.org, orgRule);
+          const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } }).lean();
+          const originalNotificationsByOrg = {};
+
+          allCurrentRules.forEach(orgNotificationsSettings => {
+            originalNotificationsByOrg[orgNotificationsSettings.org] = orgNotificationsSettings.rules;
           });
 
-          let updatedNotifications;
-          if (orgIds.length === 1) {
-            updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, { $set: { rules: newRules } }, { new: true, session: session });
-            notificationsByOrg.set(orgId, updatedNotifications);
-          } else {
-            for (const orgId of orgIds) {
-              const updateData = { $set: {} };
-              const currentRules = orgRulesMap.get(orgId);
-
+          for (const orgId of orgIds) {
+            // Default to new rules in case there's only one orgId.
+            let currentRules = newRules;
+            if (orgIds.length > 1) {
+              currentRules = { ...originalNotificationsByOrg[orgId] };
               for (const event in newRules) {
-                const { warningThreshold, criticalThreshold } = newRules[event];
-                if (warningThreshold && criticalThreshold) {
-                  NotificationsService.validateThresholds(
-                    newRules[event],
-                    currentRules.rules[event],
-                    event
-                  );
-                }
-
                 Object.entries(newRules[event]).forEach(([field, value]) => {
-                  if (value !== 'varies') {
-                    updateData.$set[`rules.${event}.${field}`] = value;
+                  if (value && value !== 'varies') {
+                    currentRules[event][field] = value;
                   }
                 });
               }
-
-              if (Object.keys(updateData.$set).length > 0) {
-                const updatedNotifications = await notificationsConf.findOneAndUpdate({ org: orgId }, updateData, { new: true, session: session });
-                notificationsByOrg.set(orgId, updatedNotifications);
-              }
             }
+            // Validate the current notification settings
+            const invalidNotifications = validateNotificationsSettings(currentRules);
+            if (invalidNotifications) {
+              throw new CustomError({
+                status: 400,
+                message: 'Invalid notifications settings',
+                data: { error: invalidNotifications }
+              });
+            }
+
+            bulkUpdates.push({
+              updateOne: {
+                filter: { org: orgId },
+                update: { $set: { rules: currentRules } }
+              }
+            });
+
+            updatedNotificationsByOrg.set(orgId, currentRules);
           }
+
+          await notificationsConf.bulkWrite(bulkUpdates, { session: session });
         });
 
         let devicesShouldReceiveJobs = 0;
         const applyPromises = [];
         let fulfilledJobs = 0;
-        for (const [orgId, notificationsSettings] of notificationsByOrg.entries()) {
+        for (const [orgId, notificationsSettings] of updatedNotificationsByOrg.entries()) {
           const orgDevices = await devices.find({ org: orgId });
           devicesShouldReceiveJobs += orgDevices.length;
           const data = {
-            rules: notificationsSettings.rules,
+            rules: notificationsSettings,
             org: orgId
           };
           applyPromises.push(apply(orgDevices, user, data));
@@ -586,6 +604,10 @@ class NotificationsService {
 
   /**
    * Get account/system default notifications settings
+   * @param account  String account ID
+   * user Object
+   * @return Default notification settings for either the specified account or the system.
+   * If the account-specific settings are not found, system default settings will be returned.
    **/
   static async notificationsConfDefaultGET ({ account = null }, { user }) {
     try {
@@ -600,10 +622,20 @@ class NotificationsService {
     }
   }
 
+  /**
+   * Get email notifications settings for a given organization/account/group
+   * @param org  String organization ID
+   * @param account  String account ID
+   * @param group  String group name (must be sent with account ID)
+   * user Object
+   * @return Object: Returns email notification settings for a specific organization, or aggregated email notification settings
+   *  for a list of organizations under the account/group.
+   * The object contains nested objects with details of each subscribed user (id, signedToCritical, signedToWarning, etc.).
+   **/
+
   static async notificationsConfEmailsGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
-      if (orgIds.error) return orgIds;
       let response = [];
       const uniqueUsers = new Set();
       const processOrganization = async (orgId) => {
@@ -676,67 +708,96 @@ class NotificationsService {
     }
   }
 
+  /**
+   * Modify email notifications settings of a given organization/account/group
+   * @param org  String organization ID
+   * @param account  String account ID
+   * @param group  String group name (must be sent with account ID)
+   * @param emailsSigning  Object which contains nested objects with the email signing details for each user (id, signToCritical, signToWarning, etc.)
+   * user Object
+   **/
+
   static async notificationsConfEmailsPUT ({ org, account, group, emailsSigning }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user);
-      if (orgIds.error) {
-        return orgIds;
-      }
 
-      const userIds = emailsSigning.map(e => e._id);
-      const userDataList = await users.find({ _id: { $in: userIds } });
-
-      // If one of the user ids does not exist in the db
-      if (userIds.length !== userDataList.length) {
-        return Service.rejectResponse('Not all the user IDs exist in the database');
-      }
-      const usersOrgAccess = {};
-      for (const userData of userDataList) {
-        usersOrgAccess[userData._id] = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
-      }
-
-      let groupOrgs = [];
-      if (group) {
-        groupOrgs = await Organizations.find({
-          account: user.defaultAccount._id,
-          group
+      const areEmailSigningFieldsMissing = validateEmailNotifications(emailsSigning, !org);
+      if (areEmailSigningFieldsMissing) {
+        return Service.rejectResponse({
+          code: 400,
+          message: 'Missing details in email signing object',
+          data: areEmailSigningFieldsMissing
         });
       }
 
+      const emailSigningMap = Object.fromEntries(emailsSigning.map(e => [e._id, e]));
+      const userIds = Object.keys(emailSigningMap);
+
+      const usersDataList = await users.find({ _id: { $in: userIds } }).lean();
+      // If one of the user ids does not exist in the db
+      if (userIds.length !== usersDataList.length) {
+        return Service.rejectResponse('Not all the user IDs exist in the database');
+      }
+
+      const usersDataMap = Object.fromEntries(usersDataList.map(u => [u._id.toString(), u]));
+
       const operations = [];
 
-      for (const org of orgIds) {
-        for (const emailSigning of emailsSigning) {
-          if (!usersOrgAccess?.[emailSigning._id]?.[org]) {
-            const errorMsg = org ? 'One of the users does not have a permission to access the organization'
+      const orgUpdates = {};
+
+      // Loop through each user and update their email notification settings for the provided organizations.
+      // If any user doesn't have access to a given organization, log an error and reject the request.
+      // Update operations are batched and executed at the end of the process.
+      for (const userId of userIds) {
+        const userEmailSigning = emailSigningMap[userId];
+        const userData = usersDataMap[userId];
+        const userOrgAccess = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
+
+        for (const org of orgIds) {
+          if (!(org in userOrgAccess)) {
+            const errorMsg = org ? 'One of the users does not have permission to access the organization'
               : `All the users must be authorized to each one of the organizations under the ${group ? 'group' : 'account'}`;
-            logger.warn('Error in email subscription', { params: { err: `user id ${emailSigning._id} is not authorized for the organization ${org}` } });
+            logger.warn('Error in email subscription', { params: { err: `user id ${userData._id} is not authorized for the organization: ${org}` } });
             return Service.rejectResponse(errorMsg, 403);
           }
 
-          // Since group is always being sent with account, we should check it first
-          if (group) {
-            const userGroupOrgs = Object.values(usersOrgAccess?.[emailSigning._id]).filter(o => o.group === group);
-            if (userGroupOrgs.length !== groupOrgs.length) {
-              const errorMsg = 'All the users must be authorized to each one of the organizations under the group';
-              logger.warn('Error in email subscription', {
-                params: {
-                  err: `user id ${emailSigning._id} is not authorized for all the organizations in the group ${group} under the account ${account}`
-                }
-              });
-              return Service.rejectResponse(errorMsg, 403);
-            }
-          } else if (account && user.defaultAccount.organizations.length !== Object.keys(usersOrgAccess[emailSigning._id]).length) {
-            const errorMsg = 'All the users must be authorized to each one of the organizations under the account';
-            logger.warn('Error in email subscription', { params: { err: `user id ${emailSigning._id} is not authorized for all the organizations in the account ${account}` } });
-            return Service.rejectResponse(errorMsg, 403);
+          if (!orgUpdates[org]) {
+            orgUpdates[org] = { $pull: {}, $addToSet: {} };
           }
 
           ['signedToCritical', 'signedToWarning', 'signedToDaily'].forEach(field => {
-            if (emailSigning[field] === false) {
-              operations.push({ updateOne: { filter: { org }, update: { $pull: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
-            } else if (emailSigning[field]) {
-              operations.push({ updateOne: { filter: { org }, update: { $addToSet: { [field]: mongoose.Types.ObjectId(emailSigning._id) } }, upsert: true } });
+            if (userEmailSigning[field] === false) {
+              if (!orgUpdates[org].$pull[field]) orgUpdates[org].$pull[field] = [];
+              orgUpdates[org].$pull[field].push(mongoose.Types.ObjectId(userEmailSigning._id));
+            } else if (userEmailSigning[field]) {
+              if (!orgUpdates[org].$addToSet[field]) orgUpdates[org].$addToSet[field] = [];
+              orgUpdates[org].$addToSet[field].push(mongoose.Types.ObjectId(userEmailSigning._id));
+            }
+          });
+        }
+      }
+
+      for (const org in orgUpdates) {
+        // For each organization, loop through the operations (like $pull and $addToSet)
+        for (const op in orgUpdates[org]) {
+          const updateFields = {};
+
+          const currentUpdates = orgUpdates[org][op];
+
+          // Loop through each field in the current operation (like signedToCritical, signedToWarning, etc.)
+          Object.entries(currentUpdates).forEach(([field, userIds]) => {
+            // If there are user IDs specified for this field, set the update condition
+            // If there's only one ID, use it directly. Otherwise, use the $each modifier to specify multiple IDs
+            if (userIds.length) {
+              updateFields[field] = userIds.length === 1 ? userIds[0] : { $each: userIds };
+            }
+          });
+
+          operations.push({
+            updateOne: {
+              filter: { org },
+              update: { [op]: updateFields },
+              upsert: true
             }
           });
         }
@@ -746,12 +807,7 @@ class NotificationsService {
         await notificationsConf.bulkWrite(operations);
       }
 
-      return Service.successResponse({
-        error: '',
-        code: 200,
-        message: 'Success',
-        data: 'updated successfully'
-      });
+      return Service.successResponse('updated successfully', 204);
     } catch (e) {
       return Service.rejectResponse({
         code: e.status || 500,
@@ -760,19 +816,29 @@ class NotificationsService {
     }
   }
 
+  /**
+   * Get webhook notifications settings for a given organization/account/group
+   * @param org  String organization ID
+   * @param account  String account ID
+   * @param group  String group name (must be sent with account ID)
+   * @return Object Returns webhook notification settings for a specific organization, or aggregated email notification settings
+   *  for a list of organizations under the account/group.
+   **/
+
   static async notificationsConfWebhookGET ({ org, account, group }, { user }) {
     try {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
-      if (orgIds.error) {
-        return orgIds;
-      }
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
       if (org) {
-        return Service.successResponse(response[0].webHookSettings);
+        const webHookSettings = { ...response[0].webHookSettings };
+        return Service.successResponse(webHookSettings);
       } else {
         const mergedSettings = {};
         for (let i = 0; i < response.length; i++) {
           Object.keys(response[i].webHookSettings).forEach(setting => {
+            if (setting === '_id') {
+              return;
+            }
             if (!mergedSettings.hasOwnProperty(setting)) {
               mergedSettings[setting] = response[i].webHookSettings[setting];
             } else {
@@ -792,41 +858,27 @@ class NotificationsService {
     }
   }
 
-  static validateWebhookURL (webhookURL) {
-    if (webhookURL.trim() === '') {
-      return Service.rejectResponse('Webhook URL cannot be empty', 400);
-    }
-
-    if (!webhookURL.startsWith('https://')) {
-      return Service.rejectResponse('Webhook URL must start with "https://', 400);
-    }
-
+  /**
+   * Modify webhook notifications settings of a given organization/account/group
+   * @param org  String organization ID
+   * @param account  String account ID
+   * @param group  String group name (must be sent with account ID)
+   * @param webHookSettings  Object
+   **/
+  static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings }, { user }) {
     try {
-      Boolean(new URL(webhookURL));
-    } catch (_) {
-      return Service.rejectResponse('Invalid Webhook URL', 400);
-    }
-
-    if (webhookURL.length > 100) {
-      return Service.rejectResponse('Webhook URL is too long', 400);
-    }
-
-    return null;
-  };
-
-  static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings, setAsDefault = false }, { user }) {
-    try {
-      const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
+      const orgIds = await NotificationsService.validateParams(orgId, account, group, user, false);
       if (orgIds && orgIds.error) {
         return orgIds;
       }
 
-      const webhookURL = webHookSettings && webHookSettings.webhookURL;
-      if (webhookURL !== null) {
-        const webhookValidationError = NotificationsService.validateWebhookURL(webhookURL);
-        if (webhookValidationError) {
-          return webhookValidationError;
-        }
+      const invalidWebHookSettings = validateWebhookSettings(webHookSettings, !orgId);
+      if (invalidWebHookSettings) {
+        throw new CustomError({
+          status: 400,
+          message: 'Invalid webhook settings',
+          data: invalidWebHookSettings
+        });
       }
 
       const updateData = { $set: {} };
@@ -841,16 +893,13 @@ class NotificationsService {
         await notificationsConf.updateMany({ org: { $in: orgIds } }, updateData);
       }
 
-      return Service.successResponse({
-        code: 200,
-        message: 'Success',
-        data: 'updated successfully'
-      });
+      return Service.successResponse('updated successfully', 204);
     } catch (e) {
-      return Service.rejectResponse({
-        code: e.status || 500,
-        message: e.message || 'Internal Server Error'
-      });
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500,
+        e.data
+      );
     }
   }
 }
