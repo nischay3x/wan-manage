@@ -46,6 +46,31 @@ class CustomError extends Error {
 }
 
 class NotificationsService {
+  // Helper function to handle device filters
+  static async getDeviceIDsFromFilters (deviceFilters, orgList) {
+    const devicesArray = await devices.find({
+      $and: [...deviceFilters, {
+        org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
+      }]
+    }, { name: 1, interfaces: 1 });
+
+    return devicesArray;
+  }
+
+  // Helper function to split matchFilters
+  static splitMatchFilters (matchFilters) {
+    return matchFilters.reduce((res, filter) => {
+      for (const key in filter) {
+        if (key.startsWith('targets.deviceId')) {
+          res[0].push({ [key.replace('targets.deviceId.', '')]: filter[key] });
+        } else {
+          res[1].push(filter);
+        }
+      }
+      return res;
+    }, [[], []]);
+  }
+
   /**
    * Get all Notifications
    *
@@ -56,12 +81,14 @@ class NotificationsService {
   static async notificationsGET (requestParams, { user }, response) {
     const { org, op, status, offset, limit, sortField, sortOrder, filters } = requestParams;
     let orgList;
+
     try {
       orgList = await getAccessTokenOrgList(user, org, false);
       const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
       if (status) {
         query.status = status;
       }
+
       const pipeline = op !== 'count' ? [
         {
           $match: query
@@ -84,28 +111,17 @@ class NotificationsService {
         }
       ] : [];
       let devicesArray;
+
       if (filters) {
         const parsedFilters = JSON.parse(filters);
         const matchFilters = getMatchFilters(parsedFilters);
+
         if (matchFilters.length > 0) {
           // if there is a 'device.*' filter we need another query, $lookup will not work
           // because 'devices' and 'notifications' are in different databases
-          const [deviceFilters, notificationFilters] = matchFilters.reduce((res, filter) => {
-            for (const key in filter) {
-              if (key.startsWith('targets.deviceId')) {
-                res[0].push({ [key.replace('targets.deviceId.', '')]: filter[key] });
-              } else {
-                res[1].push(filter);
-              }
-            }
-            return res;
-          }, [[], []]);
+          const [deviceFilters, notificationFilters] = NotificationsService.splitMatchFilters(matchFilters);
           if (deviceFilters.length > 0) {
-            devicesArray = await devices.find({
-              $and: [...deviceFilters, {
-                org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
-              }]
-            }, { name: 1, interfaces: 1 });
+            devicesArray = await NotificationsService.getDeviceIDsFromFilters(deviceFilters, orgList);
             notificationFilters.push({
               'targets.deviceId': { $in: devicesArray.map(d => d._id) }
             });
@@ -117,6 +133,7 @@ class NotificationsService {
           }
         }
       }
+
       if (sortField) {
         const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
         pipeline.push({
@@ -288,10 +305,20 @@ class NotificationsService {
       const { filters } = notificationsDeleteRequest;
       if (filters) {
         const matchFilters = getMatchFilters(filters);
-        if (matchFilters.length > 0) {
-          query.$and = matchFilters;
+        const [deviceFilters, notificationFilters] = NotificationsService.splitMatchFilters(matchFilters);
+
+        if (deviceFilters.length > 0) {
+          const deviceIDs = await NotificationsService.getDeviceIDsFromFilters(deviceFilters, orgList);
+          if (deviceIDs.length > 0) {
+            notificationFilters.push({ 'targets.deviceId': { $in: deviceIDs.map(d => d._id) } });
+          }
+        }
+
+        if (notificationFilters.length > 0) {
+          query.$and = notificationFilters;
         }
       }
+
       const { deletedCount } = await notificationsDb.deleteMany(query);
       if (deletedCount === 0) {
         return Service.rejectResponse('Not found', 404);
