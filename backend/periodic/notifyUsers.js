@@ -61,7 +61,7 @@ class NotifyUsers {
     ha.runIfActive(() => {
       // Send a reminder email for users with
       // pending unread notifications
-      notificationsMgr.notifyUsersByEmail();
+      notificationsMgr.sendDailySummaryEmail();
     });
   }
 }
