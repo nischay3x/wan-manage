@@ -71,6 +71,9 @@ const syncHandlers = {
     syncHandler: firewallPolicySyncHandler,
     completeHandler: firewallPolicyCompleteHandler
   },
+  lanNatPolicies: {
+    syncHandler: require('./lanNatPolicy').sync
+  },
   qosPolicies: {
     syncHandler: qosPolicySyncHandler,
     completeHandler: qosPolicyCompleteHandler
@@ -408,7 +411,7 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
     // Get current device sync status
     const device = await devices.findOne(
       { org, _id: deviceId },
-      { sync: 1, hostname: 1, versions: 1 }
+      { sync: 1, hostname: 1, versions: 1, deviceSpecificRulesEnabled: 1, firewall: 1 }
     )
       .lean();
 
@@ -418,7 +421,7 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
       });
       return;
     }
-    const { sync, hostname, versions } = device;
+    const { sync, hostname, versions, deviceSpecificRulesEnabled, firewall } = device;
     // Calculate the new sync state based on the hash
     // value received from the agent and the current state
     const { state, hash, autoSync, trials } = sync;
@@ -458,7 +461,9 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
     logger.info('Queueing full-sync job', {
       params: { deviceId, state, newState, hash, trials }
     });
-    await queueFullSyncJob({ deviceId, machineId, hostname, versions }, hash, org);
+    await queueFullSyncJob({
+      deviceId, machineId, hostname, versions, deviceSpecificRulesEnabled, firewall
+    }, hash, org);
   } catch (err) {
     logger.error('Device sync state update failed', {
       params: { deviceId, error: err.message }
@@ -467,7 +472,9 @@ const updateSyncStatus = async (org, deviceId, machineId, deviceHash) => {
 };
 
 const apply = async (device, user, data) => {
-  const { _id, isApproved, machineId, hostname, org, versions } = device[0];
+  const {
+    _id, isApproved, machineId, hostname, org, versions, deviceSpecificRulesEnabled, firewall
+  } = device[0];
 
   if (!isApproved) {
     logger.error('Sync failed, the device is not approved', { params: { machineId } });
@@ -499,7 +506,7 @@ const apply = async (device, user, data) => {
 
   const { hash } = sync;
   const job = await queueFullSyncJob(
-    { deviceId: _id, machineId, hostname, versions },
+    { deviceId: _id, machineId, hostname, versions, deviceSpecificRulesEnabled, firewall },
     hash,
     org,
     user.username
