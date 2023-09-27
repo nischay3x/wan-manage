@@ -19,7 +19,6 @@ const organizations = require('../models/organizations');
 const User = require('../models/users');
 const { membership } = require('../models/membership');
 const { getToken } = require('../tokens');
-const ObjectId = require('mongoose').Types.ObjectId;
 const difference = require('lodash/difference');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
@@ -139,7 +138,11 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
     switch (permission.to) {
       case 'account':
         // Get all organizations under the account
-        return user.defaultAccount?.organizations.map(o => o._id.toString()) ?? [];
+        if (user.defaultAccount._id.toString() === permission.entity) {
+          return user.defaultAccount?.organizations.map(o => o._id.toString()) ?? [];
+        } else {
+          return [];
+        }
       case 'group': {
         // Get all organizations for this group
         const orgs = await organizations.find({
@@ -150,15 +153,15 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
       }
       case 'organization':
         // Reply with the organization
-        if (user.defaultAccount.organizations.includes(ObjectId(permission.entity))) {
-          return permission.entity;
+        if (user.defaultAccount.organizations.some((id) => id.toString() === permission.entity)) {
+          return [permission.entity];
         } else {
           return [];
         }
     }
   };
 
-  const organizationsToAccess = getPermissionOrganizations({ to, entity });
+  const organizationsToAccess = await getPermissionOrganizations({ to, entity });
   if (foundPermission) { // return the organizations for the requested permission
     return organizationsToAccess;
   }
@@ -169,7 +172,9 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
   let leftOrganizations = [...organizationsToAccess];
   for (const permission of userPermissions) {
     if (roles.includes(permission.role)) {
-      const allowedOrganizations = getPermissionOrganizations(permission);
+      permission.entity = permission.to === 'organization' ? permission.organization.toString()
+        : permission.to === 'group' ? permission.group : user.defaultAccount._id;
+      const allowedOrganizations = await getPermissionOrganizations(permission);
       leftOrganizations = difference(leftOrganizations, allowedOrganizations);
     }
     // If the list is empty we can skip the rest of the permissions
@@ -207,11 +212,11 @@ const getAccessTokenOrgList = async (
    * More info in the following table:
    *  orgId     orgIdRequired   accountId/group   allowModify   result
    *  -------   -------------   ---------------   -----------   -----------
-   *  set       true            set               true          orgID requied + account/group
-   *                                                            is not allowed (1)
-   *  not set   true            set               false         not allowed (1)
+   *  set       true            set               true          not allowed (1)
+   *                                                            orgID requied + account/group
    *  set       true            set               false         not allowed (1)
    *  not set   true            set               true          not allowed (1)
+   *  not set   true            set               false         not allowed (1)
    *  set       false           set               true          not allowed (2)
    *                                                            When orgId is not required
    *                                                            only one orgId/accountId/group
@@ -221,7 +226,7 @@ const getAccessTokenOrgList = async (
    *  not set   true            not set           true          for UI token, return user org (5)
    *                                                            for access token, not allowed (4)
    *  not set   true            not set           false         for UI token, return user org (5)
-   *                                                            for access tokan, not allowed (4)
+   *                                                            for access token, not allowed (4)
    *  set       true            not set           true          for UI token, not allowed (6)
    *                                                            for access token, return org after
    *                                                            validation
@@ -245,12 +250,12 @@ const getAccessTokenOrgList = async (
    */
   // 1. It's not allowed to set orgIdRequired and accountId/group who require multiple organizations
   if (orgIdRequired && (accountId || group)) {
-    throw new Error('Organization ID required for a multi organization operation');
+    throw new Error('Organization ID required and multi organization operation is not allowed');
   }
   // 2. only one group is allowed, if empty query is in the account level
   const groups = [orgId, accountId, group].filter(g => g);
   if (groups.length > 1) {
-    throw new Error('Multiple organization groups are defined');
+    throw new Error('Multiple organization definitions are not allowed');
   }
   // 3. When modifying, an entity must be specified
   if (groups.length === 0 && !orgIdRequired && allowModify) {
@@ -279,21 +284,21 @@ const getAccessTokenOrgList = async (
     if (groups.length === 0) {
       // Default case
       if (!user.accessToken) return [user.defaultOrg._id.toString()];
-      const organizations = await validateOrgAccess(user, user.tokenTo,
+      const orgs = await validateOrgAccess(user, user.tokenTo,
         user.tokenTo === 'organization' ? user.tokenOrganization
           : user.tokenTo === 'group' ? user.tokenGroup
-            : user.defaultAccount._id, false);
-      return organizations;
+            : user.defaultAccount._id.toString(), false);
+      return orgs;
     } else {
-      let organizations;
+      let orgs;
       if (accountId) {
-        organizations = await validateOrgAccess(user, 'account', accountId, allowModify);
+        orgs = await validateOrgAccess(user, 'account', accountId, allowModify);
       } else if (group) {
-        organizations = await validateOrgAccess(user, 'group', group, allowModify);
+        orgs = await validateOrgAccess(user, 'group', group, allowModify);
       } else {
-        organizations = await validateOrgAccess(user, 'organization', orgId, allowModify);
+        orgs = await validateOrgAccess(user, 'organization', orgId, allowModify);
       }
-      return organizations;
+      return orgs;
     }
   }
   // Should not reach this place
