@@ -10131,7 +10131,8 @@ components:
           - read
           - unread
           type: string
-        resolve: true
+        resolve:
+          type: boolean
         ids:
           items:
             type: string
@@ -10142,21 +10143,19 @@ components:
         _id: 123
         eventType: Running router
         title: Router state change
-        createdAt: ISODate('2023-09-28T00:32:32.354Z'),
-        updatedAt: ISODate('2023-09-28T00:33:38.238Z')
-        targets: {
-          deviceId: 61055a03b4832c4a6c365179,
-          interfaceId: null,
+        createdAt: '2023-09-28T00:32:32.354Z'
+        updatedAt: '2023-09-28T00:33:38.238Z'
+        targets:
+          deviceId: '61055a03b4832c4a6c365179'
+          interfaceId: null
           tunnelId: null
-        }
         details: Router state changed to "Not running"
         resolved: false
         severity: 'warning'
         count: 1
-        emailSent: {
-        sendingTime: '2023-09-28T00:33:22.238Z',
-        rateLimitedCount: 0
-        }
+        emailSent:
+          sendingTime: '2023-09-28T00:33:22.238Z'
+          rateLimitedCount: 0
         org: 123
         account: 456
       properties:
