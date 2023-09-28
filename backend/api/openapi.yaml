@@ -4798,6 +4798,10 @@ paths:
           description: Successful operation
         "400":
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         "401":
           content:
             application/json:
@@ -4926,6 +4930,12 @@ paths:
                   $ref: '#/components/schemas/WebhookSettings'
                 x-content-type: application/json
           description: Successful operation
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         "401":
           content:
             application/json:
@@ -6820,6 +6830,10 @@ paths:
                 $ref: '#/components/schemas/MLPolicy'
           description: Multi Link was modified
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
         "401":
           content:
@@ -10316,11 +10330,21 @@ components:
               $ref: '#/components/schemas/notificationSettingsSchema'
             'Temperature':
               $ref: '#/components/schemas/notificationSettingsSchema'
-            'Policy change':
-              $ref: '#/components/schemas/notificationSettingsSchema'
             'Software update':
               $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link status':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Missing interface ip':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Pending tunnel':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Tunnel connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Internet connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Static route state':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Failed self-healing':
               $ref: '#/components/schemas/notificationSettingsSchema'
       type: object
     NotificationsDeleteRequest:
@@ -10485,11 +10509,15 @@ components:
           gateway: gateway
         deviceSpecificRulesEnabled: true
         firewallRules:
-        - name: name
+        - description: description
+          priority: priority
+          enabled: enabled
           direction: direction
           status: status
           action: action
-        - name: name
+        - description: description
+          priority: priority
+          enabled: enabled
           direction: direction
           status: status
           action: action
@@ -12687,6 +12715,7 @@ components:
           enum:
           - inbound
           - outbound
+          - lanNat
           type: string
         inbound:
           enum:
@@ -12742,6 +12771,7 @@ components:
           enum:
           - inbound
           - outbound
+          - lanNat
           type: string
         inbound:
           enum:
