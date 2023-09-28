@@ -10113,12 +10113,17 @@ components:
     NotificationsIDPutRequest:
       example:
         status: read
+        resolve: true
       properties:
         status:
           enum:
           - read
           - unread
           type: string
+        resolve:
+          enum:
+            - true
+          type: boolean
     NotificationsPutRequest:
       properties:
         status:
@@ -10126,6 +10131,7 @@ components:
           - read
           - unread
           type: string
+        resolve: true
         ids:
           items:
             type: string
@@ -10134,12 +10140,25 @@ components:
       example:
         status: unread
         _id: 123
+        eventType: Running router
         title: Router state change
-        time: "2019-12-19T12:10:01.667Z"
-        device: test0
-        deviceId: 61055a03b4832c4a6c365179
-        machineId: "123"
+        createdAt: ISODate('2023-09-28T00:32:32.354Z'),
+        updatedAt: ISODate('2023-09-28T00:33:38.238Z')
+        targets: {
+          deviceId: 61055a03b4832c4a6c365179,
+          interfaceId: null,
+          tunnelId: null
+        }
         details: Router state changed to "Not running"
+        resolved: false
+        severity: 'warning'
+        count: 1
+        emailSent: {
+        sendingTime: '2023-09-28T00:33:22.238Z',
+        rateLimitedCount: 0
+        }
+        org: 123
+        account: 456
       properties:
         _id:
           maxLength: 24
