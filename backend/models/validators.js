@@ -21,6 +21,7 @@ const urlValidator = require('valid-url');
 const validator = require('validator');
 const filenamify = require('filenamify');
 const phoneUtil = require('google-libphonenumber').PhoneNumberUtil.getInstance();
+const Joi = require('joi');
 
 // Globals
 const protocols = ['OSPF', 'NONE', 'BGP', 'OSPF,BGP'];
@@ -197,7 +198,7 @@ const validateBGPInterval = val => val && validateIsInteger(val) && +val >= 0 &&
 const validateCpuCoresNumber = val => val && validateIsInteger(val) && +val >= 1 && +val < 65535;
 const validateVlanTag = val => val === '' || (val && validateIsInteger(val) && +val >= 0 && +val <= 4096);
 
-const validateNotificationsSettings = (notificationsSettingsObj) => {
+const validateNotificationsThresholds = (notificationsSettingsObj) => {
   const MIN_VALUE = 1;
   const UNIT_LIMITS = {
     ms: 2000,
@@ -247,6 +248,162 @@ const validateNotificationField = (eventType, value, unit, errors, minValue, uni
       message: `Please enter a value less than or equal to ${unitLimits[unit]} for ${eventType}.`
     });
   }
+};
+
+const validateNotificationsSettings = (notificationsRules) => {
+  const notificationsRulesSchema = Joi.object().keys({
+    'Device connection': Joi.object().required(),
+    'Running router': Joi.object().required(),
+    'Link/Tunnel round trip time': Joi.object().required(),
+    'Link/Tunnel default drop rate': Joi.object().required(),
+    'Device memory usage': Joi.object().required(),
+    'Hard drive usage': Joi.object().required(),
+    Temperature: Joi.object().required(),
+    'Software update': Joi.object().required(),
+    'Link status': Joi.object().required(),
+    'Missing interface ip': Joi.object().required(),
+    'Pending tunnel': Joi.object().required(),
+    'Tunnel connection': Joi.object().required(),
+    'Internet connection': Joi.object().required(),
+    'Static route state': Joi.object().required(),
+    'Failed self-healing': Joi.object().required()
+  });
+
+  const { error } = notificationsRulesSchema.validate(notificationsRules, { abortEarly: false });
+  let messages = [];
+  if (error) {
+    messages = error.details.map(detail => detail.message);
+  } else {
+    for (const [eventType, eventSettings] of Object.entries(notificationsRules)) {
+      const validationMessages = validateNotificationFields(eventType, eventSettings);
+      if (validationMessages && validationMessages.length) {
+        messages = [...messages, ...validationMessages];
+      }
+    }
+    const thresholdsValidation = validateNotificationsThresholds(notificationsRules);
+    if (!thresholdsValidation.valid) {
+      messages = [...messages, ...thresholdsValidation.errors.map(err => `${err.eventType}: ${err.message}`)];
+    }
+  }
+  return messages.length > 0 ? messages : null;
+};
+
+const validateNotificationFields = (eventType, notificationSettingsFields) => {
+  // Define general schema
+  const baseSchema = {
+    warningThreshold: Joi.number().required(),
+    criticalThreshold: Joi.number().required(),
+    thresholdUnit: Joi.string().valid('ms', '%', 'C°').required(),
+    severity: Joi.string().valid('critical', 'warning').required(),
+    immediateEmail: Joi.boolean().required(),
+    resolvedAlert: Joi.boolean().required(),
+    sendWebHook: Joi.boolean().required(),
+    type: Joi.string().valid('device', 'tunnel', 'interface').required()
+  };
+  const setNullForFields = (schema, fields) => {
+    fields.forEach(field => {
+      schema[field] = Joi.valid(null).required();
+    });
+    return schema;
+  };
+
+  const eventTypeConfig = {
+    'Device connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+    'Running router': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+    'Link/Tunnel round trip time': ['severity'],
+    'Link/Tunnel default drop rate': ['severity'],
+    'Device memory usage': ['severity'],
+    'Hard drive usage': ['severity'],
+    Temperature: ['warningThreshold', 'criticalThreshold'],
+    'Software update': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert'],
+    'Link status': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+    'Missing interface ip': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+    'Pending tunnel': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+    'Tunnel connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+    'Internet connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+    'Static route state': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert'],
+    'Failed self-healing': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert']
+  };
+
+  setNullForFields(baseSchema, eventTypeConfig[eventType]);
+
+  const schema = Joi.object().keys(baseSchema);
+
+  const { error } = schema.validate(notificationSettingsFields, { abortEarly: false });
+
+  return error ? error.details.map(detail => detail.message) : null;
+};
+
+const validateEmailNotifications = (emailNotificationsUsersList, allowNull) => {
+  const emailSigningSchema = allowNull ? Joi.object({
+    _id: Joi.string().required(),
+    email: Joi.string().email(),
+    name: Joi.string(),
+    lastName: Joi.string(),
+    signedToCritical: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
+    signedToWarning: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
+    signedToDaily: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required()
+  }) : Joi.object({
+    _id: Joi.string().required(),
+    email: Joi.string().email(),
+    name: Joi.string(),
+    lastName: Joi.string(),
+    signedToCritical: Joi.boolean().required(),
+    signedToWarning: Joi.boolean().required(),
+    signedToDaily: Joi.boolean().required()
+  });
+
+  for (const user of emailNotificationsUsersList) {
+    const { error } = emailSigningSchema.validate(user, { abortEarly: false });
+    if (error) {
+      const message = error.details.map(detail => detail.message);
+      return message;
+    }
+  }
+
+  return null;
+};
+
+const validateWebhookSettings = (webhookNotificationsSettings, allowNull) => {
+  const webHookSettingsSchema = allowNull ? Joi.object({
+    webhookURL: Joi.alternatives().try(Joi.string(), Joi.valid(null)).required(),
+    sendCriticalAlerts: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required(),
+    sendWarningAlerts: Joi.alternatives().try(Joi.boolean(), Joi.valid(null)).required()
+  }) : Joi.object({
+    _id: Joi.string(),
+    webhookURL: Joi.string().required(),
+    sendCriticalAlerts: Joi.boolean().required(),
+    sendWarningAlerts: Joi.boolean().required()
+  });
+  const { error } = webHookSettingsSchema.validate(webhookNotificationsSettings, { abortEarly: false });
+  let messages = [];
+
+  if (error) {
+    messages = error.details.map(detail => detail.message);
+  }
+
+  const webhookURL = webhookNotificationsSettings.webhookURL;
+  if (webhookURL) {
+    if (webhookURL.trim() === '') {
+      messages.push('Webhook URL cannot be empty');
+    } else {
+      if (!webhookURL.startsWith('https://')) {
+        messages.push('Webhook URL must start with "https://"');
+      }
+
+      try {
+        Boolean(new URL(webhookURL));
+      } catch (_) {
+        messages.push('Invalid Webhook URL');
+      }
+
+      if (webhookURL.length > 100) {
+        messages.push('Webhook URL is too long');
+      }
+    }
+  }
+
+  return messages.length > 0 ? messages : null;
 };
 
 module.exports = {
@@ -302,5 +459,8 @@ module.exports = {
   validateCpuCoresNumber,
   validateVxlanPort,
   validateNotificationsSettings,
-  validateNotificationField
+  validateNotificationField,
+  validateNotificationsThresholds,
+  validateEmailNotifications,
+  validateWebhookSettings
 };

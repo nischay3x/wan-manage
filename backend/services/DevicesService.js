@@ -1628,6 +1628,14 @@ class DevicesService {
                 logger.error('Unknown parent interface', { params: { ifc } });
                 throw createError(400, `Unknown parent interface ${ifc.parentDevId}`);
               }
+
+              if (ifc.isAssigned && !parentIfc.isAssigned) {
+                throw createError(
+                  400,
+                  `Assigning a VLAN sub-interface (${ifc.name}) ` +
+                  'requires a parent interface to be assigned'
+                );
+              }
               // update isAssigned and MTU of the parent for VLAN sub-interfaces
               ifc.isAssigned = parentIfc.isAssigned;
               ifc.mtu = parentIfc.mtu;
@@ -3296,7 +3304,8 @@ class DevicesService {
       throw new Error(`Unknown interface: ${dhcpRequest.interface} in DHCP Server parameters`);
     }
     if (!interfaceObj.isAssigned) {
-      throw new Error('DHCP Server can be defined only for assigned interfaces');
+      throw new Error(
+        `DHCP Server can be defined only for assigned interfaces (${interfaceObj.name})`);
     }
     if (interfaceObj.type !== 'LAN') {
       throw new Error('DHCP Server can be defined only for LAN interfaces');
