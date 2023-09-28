@@ -40,6 +40,7 @@ const {
   remove: qosPolicyRemove,
   getDevicesQOSJobInfo
 } = require('./qosPolicy');
+const { getLanNatJobInfo } = require('./lanNatPolicy');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const has = require('lodash/has');
 const omit = require('lodash/omit');
@@ -395,6 +396,10 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
 
   if (has(messageParams, 'modify_firewall')) {
     requests.push(...messageParams.modify_firewall.tasks);
+  }
+
+  if (has(messageParams, 'modify_lan_nat')) {
+    requests.push(...messageParams.modify_lan_nat.tasks);
   }
 
   if (has(messageParams, 'modify_qos')) {
@@ -1365,27 +1370,61 @@ const apply = async (device, user, data) => {
 
   const origDevice = device[0];
   const updDevice = data.newDevice;
-  const updRules = updDevice.firewall.rules.toObject();
-  const origRules = origDevice.firewall.rules.toObject();
-  const rulesModified =
+  const updFwRules = [];
+  const origFwRules = [];
+  const updNatRules = [];
+  const origNatRules = [];
+  for (const rule of updDevice.firewall.rules.toObject()) {
+    if (rule.direction === 'lanNat' && rule.enabled) {
+      updNatRules.push(rule);
+    } else {
+      updFwRules.push(rule);
+    }
+  }
+  for (const rule of origDevice.firewall.rules.toObject()) {
+    if (rule.direction === 'lanNat' && rule.enabled) {
+      origNatRules.push(rule);
+    } else {
+      origFwRules.push(rule);
+    }
+  }
+
+  const firewallRulesModified =
     origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
-    !(updRules.length === origRules.length && updRules.every((updatedRule, index) =>
+    !(updFwRules.length === origFwRules.length && updFwRules.every((updatedRule, index) =>
       isEqual(
         omit(updatedRule, ['_id', 'name', 'classification']),
-        omit(origRules[index], ['_id', 'name', 'classification'])
+        omit(origFwRules[index], ['_id', 'name', 'classification'])
       ) &&
       isEqual(
         omit(updatedRule.classification.source, ['_id']),
-        omit(origRules[index].classification.source, ['_id'])
+        omit(origFwRules[index]?.classification.source, ['_id'])
       ) &&
       isEqual(
         omit(updatedRule.classification.destination, ['_id']),
-        omit(origRules[index].classification.destination, ['_id'])
+        omit(origFwRules[index]?.classification.destination, ['_id'])
       )
     ));
 
-  if (rulesModified) {
+  if (firewallRulesModified) {
     modifyParams.modify_firewall = await getDevicesFirewallJobInfo(updDevice.toObject());
+  }
+
+  const lanNatRulesModified =
+    origDevice.deviceSpecificRulesEnabled !== updDevice.deviceSpecificRulesEnabled ||
+    !(updNatRules.length === origNatRules.length && updNatRules.every((updatedRule, index) =>
+      isEqual(
+        omit(updatedRule.classification?.source, ['_id']),
+        omit(origFwRules[index]?.classification?.source, ['_id'])
+      ) &&
+      isEqual(
+        omit(updatedRule.classification?.destination, ['_id']),
+        omit(origFwRules[index]?.classification?.destination, ['_id'])
+      )
+    ));
+
+  if (lanNatRulesModified) {
+    modifyParams.modify_lan_nat = getLanNatJobInfo(updDevice);
   }
 
   // Send QoS policy job only when interfaces specific policy modified
@@ -1412,6 +1451,7 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_routing_filters') ||
       has(modifyParams, 'modify_bgp') ||
       has(modifyParams, 'modify_firewall') ||
+      has(modifyParams, 'modify_lan_nat') ||
       has(modifyParams, 'modify_qos') ||
       has(modifyParams, 'modify_lte') ||
       has(modifyParams, 'modify_dhcp_config');
@@ -1744,6 +1784,7 @@ const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
     !has(messageParams, 'modify_routing_filters') &&
     !has(messageParams, 'modify_lte') &&
     !has(messageParams, 'modify_firewall') &&
+    !has(messageParams, 'modify_lan_nat') &&
     !has(messageParams, 'modify_qos') &&
     Object.values(modifiedIfcsMap).every(modifiedIfc => {
       const origIfc = origIfcs.find(o => o._id.toString() === modifiedIfc._id.toString());

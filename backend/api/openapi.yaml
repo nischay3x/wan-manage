@@ -10504,11 +10504,15 @@ components:
           gateway: gateway
         deviceSpecificRulesEnabled: true
         firewallRules:
-        - name: name
+        - description: description
+          priority: priority
+          enabled: enabled
           direction: direction
           status: status
           action: action
-        - name: name
+        - description: description
+          priority: priority
+          enabled: enabled
           direction: direction
           status: status
           action: action
@@ -12706,6 +12710,7 @@ components:
           enum:
           - inbound
           - outbound
+          - lanNat
           type: string
         inbound:
           enum:
@@ -12761,6 +12766,7 @@ components:
           enum:
           - inbound
           - outbound
+          - lanNat
           type: string
         inbound:
           enum:
