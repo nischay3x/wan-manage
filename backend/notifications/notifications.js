@@ -223,8 +223,13 @@ class NotificationsManager {
 
   async getInfoForEmail (orgId) {
     const uiServerUrl = configs.get('uiServerUrl', 'list');
+
+    // Use the URL object to extract the domain from the URL, excluding the port.
+    const urlSchema = new URL(uiServerUrl[0]);
+    const urlToDisplay = `${urlSchema.protocol}//${urlSchema.hostname}`;
+
     const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
-      <a href="${uiServerUrl[0]}">${uiServerUrl[0]}</a></p>`;
+      <a href="${uiServerUrl[0]}">${urlToDisplay}</a></p>`;
     const orgWithAccount = await this.getOrgWithAccount(orgId);
     const orgInfo = `<p><b>Organization:</b> ${orgWithAccount[0].name}</p>`;
     const accountInfo = `<p><b>Account:</b> ${orgWithAccount[0].accountDetails.name}</p>`;
