@@ -24,7 +24,6 @@ const {
   preDefinedPermissions,
   validatePermissionCombination
 } = require('../models/membership');
-const ObjectId = require('mongoose').Types.ObjectId;
 
 class AccessTokensService {
   /**
@@ -131,7 +130,8 @@ class AccessTokensService {
           }
           break;
         case 'group': {
-          // check that at least one of the account organizations belong to the group entity
+          // check that the group belongs to the account by checking that at least one of the
+          // account organizations belong to the group entity
           const groupCount = await Organizations.count({
             _id: { $in: user.defaultAccount.organizations },
             group: entity
@@ -143,9 +143,7 @@ class AccessTokensService {
         }
         case 'organization':
           // check that the entity is part of the account organizations
-          if (!user.defaultAccount.organizations.includes(
-            ObjectId(entity)
-          )) {
+          if (!user.defaultAccount.organizations.some((id) => id.toString() === entity)) {
             inclusionChecker = { status: false, error: 'Invalid Organization' };
           }
           break;
