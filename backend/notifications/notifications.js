@@ -224,9 +224,9 @@ class NotificationsManager {
   async getInfoForEmail (orgId) {
     const uiServerUrl = configs.get('uiServerUrl', 'list');
 
-    // Use regex to extract the domain from the URL, excluding the port.
-    const domain = uiServerUrl[0].match(/^(https?:\/\/[^:/]+)/);
-    const urlToDisplay = domain ? domain[1] : uiServerUrl[0];
+    // Use the URL object to extract the domain from the URL, excluding the port.
+    const urlSchema = new URL(uiServerUrl[0]);
+    const urlToDisplay = `${urlSchema.protocol}//${urlSchema.hostname}`;
 
     const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
       <a href="${uiServerUrl[0]}">${urlToDisplay}</a></p>`;
