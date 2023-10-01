@@ -124,8 +124,8 @@ class Connections {
     this.disconnectedDevices = {};
     // Ping each client every 30 sec, with two retries
     this.ping_interval = setInterval(this.pingCheck, 20000);
-    // Check every 1 min if a device disconnection alert is needed
-    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 60000);
+    // Check every 30 sec if a device disconnection alert is needed
+    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 30000);
   }
 
   /**
