@@ -233,21 +233,26 @@ class NotificationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const query = { org: { $in: orgList }, _id: id };
+      const { status, resolve } = notificationsIDPutRequest;
+      const updateFields = {};
+      if (status) updateFields.status = status;
+      if (resolve) updateFields.resolved = true;
       const res = await notificationsDb.updateOne(
         query,
-        { $set: { status: notificationsIDPutRequest.status } },
+        { $set: updateFields },
         { upsert: false }
       );
       if (res.n === 0) throw new Error('Failed to update notifications');
 
       const notifications = await notificationsDb.find(
         query,
-        'time device title details status machineId'
-      ).populate('device', 'name -_id', devices);
+        'time device title details status machineId targets'
+      ).populate('device', 'name -_id', devices).lean();
 
       const result = {
         _id: notifications[0]._id.toString(),
         status: notifications[0].status,
+        resolved: notifications[0].resolved,
         details: notifications[0].details,
         title: notifications[0].title,
         targets: notifications[0].targets,
@@ -275,10 +280,13 @@ class NotificationsService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { org: { $in: orgList } };
       if (notificationsPutRequest.ids) query._id = { $in: notificationsPutRequest.ids };
-
+      const { status, resolve } = notificationsPutRequest;
+      const updateFields = {};
+      if (status) updateFields.status = status;
+      if (resolve) updateFields.resolved = true;
       const res = await notificationsDb.updateMany(
         query,
-        { $set: { status: notificationsPutRequest.status } },
+        { $set: updateFields },
         { upsert: false }
       );
       if (notificationsPutRequest.ids && res.n !== notificationsPutRequest.ids.length) {
