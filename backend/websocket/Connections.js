@@ -124,8 +124,8 @@ class Connections {
     this.disconnectedDevices = {};
     // Ping each client every 30 sec, with two retries
     this.ping_interval = setInterval(this.pingCheck, 20000);
-    // Check every 1 min if a device disconnection alert is needed
-    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 60000);
+    // Check every 30 sec if a device disconnection alert is needed
+    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 30000);
   }
 
   /**
@@ -1100,16 +1100,23 @@ class Connections {
               // management and the actual response from device.
               return;
             }
-            logger.info('Updating job result received from device', {
-              params: { deviceId: deviceId, job_id: job.job_id, state: job.state }
-            });
-            if (job.state === 'complete') {
+            if (jobToUpdate.data.metadata.jobUpdated) {
+              // Updated already
+              return;
+            }
+            if (job.state === 'complete' && jobToUpdate._state === 'failed') {
+              logger.info('Updating job result received from device', {
+                params: { deviceId: deviceId, job_id: job.job_id, state: job.state }
+              });
               jobToUpdate.complete();
               jobToUpdate.error('');
               jobToUpdate.data.metadata.jobUpdated = true;
               jobToUpdate.save();
             }
             if (job?.errors?.length > 0) {
+              logger.info('Updating job result received from device', {
+                params: { deviceId: deviceId, job_id: job.job_id, state: job.state }
+              });
               jobToUpdate.error(JSON.stringify({ errors: job.errors }));
               // unlike the jobs which got marked as failed due to the send timeout, in the case
               // of the upgrade-device-sw job, it is initially marked as complete, so need to
@@ -1327,7 +1334,7 @@ class Connections {
 
     const msgQ = this.msgQueue;
     const p = new Promise((resolve, reject) => {
-      if (org == null || info.org === org) {
+      if (org == null || (info?.org === org)) {
         // Increment seq and update queue with resolve function for this promise,
         // set timeout to clear when no response received
         const tohandle = setTimeout(() => {

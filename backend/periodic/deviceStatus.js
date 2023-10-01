@@ -667,8 +667,8 @@ class DeviceStatus {
     if (!this.status[machineId] || newState !== this.status[machineId].state) {
       this.events.push({
         org: org,
-        title: '[resolved] Router state change',
-        details: `Router state changed to running in the device ${name}`,
+        title: newState === 'running' ? '[resolved] Router state change' : 'Router state change',
+        details: `Router state changed to ${newState} in the device ${name}`,
         eventType: 'Running router',
         targets: {
           deviceId: deviceId,
