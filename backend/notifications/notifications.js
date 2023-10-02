@@ -138,24 +138,25 @@ const RunningRouterEvent = new RunningRouterEventClass('Running router', [Device
 const LinkStatusEvent = new LinkStatusEventClass('Link status', [
   RunningRouterEvent
 ]);
-const InternetConnectionEvent = new InternetConnectionEventClass('Internet connection', [
-  LinkStatusEvent
-]);
 const InterfaceIpChangeEvent = new MissingInterfaceIPEventClass('Missing interface ip', [
   LinkStatusEvent
 ]);
+const InternetConnectionEvent = new InternetConnectionEventClass('Internet connection', [
+  InterfaceIpChangeEvent
+]);
+// eslint-disable-next-line no-unused-vars
 const PendingTunnelEvent = new TunnelStateChangeEventClass('Pending tunnel', [
-  LinkStatusEvent
+  InterfaceIpChangeEvent
 ]);
 const TunnelConnectionEvent = new TunnelStateChangeEventClass('Tunnel connection', [
-  LinkStatusEvent
+  InternetConnectionEvent
 ]);
 // eslint-disable-next-line no-unused-vars
 const RttEvent = new Event('Link/Tunnel round trip time',
-  [InternetConnectionEvent, InterfaceIpChangeEvent, PendingTunnelEvent, TunnelConnectionEvent]);
+  [TunnelConnectionEvent]);
 // eslint-disable-next-line no-unused-vars
 const DropRateEvent = new Event('Link/Tunnel default drop rate',
-  [InternetConnectionEvent, InterfaceIpChangeEvent, PendingTunnelEvent, TunnelConnectionEvent]);
+  [TunnelConnectionEvent]);
 
 /**
  * Notification Manager class
