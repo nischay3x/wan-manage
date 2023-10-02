@@ -17,7 +17,12 @@
 
 const Service = require('./Service');
 
-const { membership, permissionMasks, preDefinedPermissions } = require('../models/membership');
+const {
+  membership,
+  permissionMasks,
+  preDefinedPermissions,
+  validatePermissionCombination
+} = require('../models/membership');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const mongoose = require('mongoose');
 const configs = require('../configs')();
@@ -91,21 +96,7 @@ class MembersService {
       !memberRequest.userEntity
     ) { return { status: false, error: 'Invitation Fields Error' }; }
 
-    // Account permissions could be owner, manager or viewer
-    // Group and organization permissions could be manager or viewer
-    if (memberRequest.userRole !== 'owner' &&
-      memberRequest.userRole !== 'manager' &&
-      memberRequest.userRole !== 'viewer') {
-      return { status: false, error: 'Illegal role' };
-    }
-
-    if ((memberRequest.userPermissionTo === 'group' ||
-      memberRequest.userPermissionTo === 'organization') &&
-      memberRequest.userRole !== 'manager' &&
-      memberRequest.userRole !== 'viewer') {
-      return { status: false, error: 'Illegal permission combination' };
-    }
-    return { status: true, error: '' };
+    return validatePermissionCombination(memberRequest.userRole, memberRequest.userPermissionTo);
   };
 
   // check levels and relationships

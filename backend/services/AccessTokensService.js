@@ -19,7 +19,11 @@ const Service = require('./Service');
 
 const { getAccessKey } = require('../tokens');
 const AccessTokens = require('../models/accesstokens');
-const { getUserPermissions } = require('../models/membership');
+const Organizations = require('../models/organizations');
+const {
+  preDefinedPermissions,
+  validatePermissionCombination
+} = require('../models/membership');
 
 class AccessTokensService {
   /**
@@ -41,7 +45,11 @@ class AccessTokensService {
           _id: record.id,
           name: record.name,
           token: record.token,
-          isValid: record.isValid
+          isValid: record.isValid,
+          group: record.group,
+          organization: record?.organization?.name || null,
+          to: record.to,
+          role: record.role
         };
       });
       return Service.successResponse(result);
@@ -87,22 +95,80 @@ class AccessTokensService {
    **/
   static async accesstokensPOST (accessTokenRequest, { user }) {
     try {
+      // Check that required fields exist
+      if (
+        !user._id ||
+        !user.defaultAccount ||
+        !accessTokenRequest.accessKeyPermissionTo ||
+        !accessTokenRequest.accessKeyRole ||
+        !accessTokenRequest.accessKeyEntity
+      ) {
+        return Service.rejectResponse('Request does not have all necessary info', 400);
+      };
+
+      const permissionTo = accessTokenRequest.accessKeyPermissionTo;
+      const role = accessTokenRequest.accessKeyRole;
+      const entity = accessTokenRequest.accessKeyEntity;
+
+      // Check permission combination
+      const checkCombination = validatePermissionCombination(
+        role,
+        permissionTo
+      );
+      if (checkCombination.status === false) {
+        return Service.rejectResponse(checkCombination.error, 400);
+      }
+
+      // This API is allowed only for account owner, so no need to check for permissions
+      // But we need to make sure the entities are part of the account
+      let inclusionChecker = { status: true, error: '' };
+      switch (permissionTo) {
+        case 'account':
+          // check that entity equals to the account id
+          if (user.defaultAccount._id.toString() !== entity) {
+            inclusionChecker = { status: false, error: 'Invalid Account' };
+          }
+          break;
+        case 'group': {
+          // check that the group belongs to the account by checking that at least one of the
+          // account organizations belong to the group entity
+          const groupCount = await Organizations.count({
+            _id: { $in: user.defaultAccount.organizations },
+            group: entity
+          });
+          if (!groupCount) {
+            inclusionChecker = { status: false, error: 'Invalid Group' };
+          }
+          break;
+        }
+        case 'organization':
+          // check that the entity is part of the account organizations
+          if (!user.defaultAccount.organizations.some((id) => id.toString() === entity)) {
+            inclusionChecker = { status: false, error: 'Invalid Organization' };
+          }
+          break;
+      }
+      if (inclusionChecker.status === false) {
+        return Service.rejectResponse(inclusionChecker.error, 400);
+      }
+
       const accessToken = new AccessTokens({
         account: user.defaultAccount._id,
-        organization: null,
+        to: permissionTo,
+        group: permissionTo === 'group' ? entity : '',
+        organization: permissionTo === 'organization' ? entity : null,
+        role: role,
+        // This api used as account owner only and user has permission to the entity (checked above)
+        permissions: preDefinedPermissions[permissionTo + '_' + role],
         name: accessTokenRequest.name,
         token: '', // should be empty for now
         isValid: true
       });
 
       const token = await getAccessKey({ user }, {
-        id: accessToken._id.toString(),
-        org: null
+        id: accessToken._id.toString()
       }, false);
       accessToken.token = token;
-
-      const perms = await getUserPermissions(user);
-      accessToken.permissions = perms;
 
       await accessToken.save();
 
