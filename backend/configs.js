@@ -215,6 +215,8 @@ const configEnv = {
     ticketingSystemUrl: '',
     // Ticketing system account ID to view
     ticketingSystemAccountId: '',
+    // IP mask for tunnel Range
+    tunnelRangeMask: '16',
     // Email alerts rate limit in minutes
     emailRateLimitPerDevice: 60,
     // Device disconnection time before triggering an alert in milliseconds (1 minute)

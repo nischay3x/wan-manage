@@ -66,12 +66,14 @@ const getTunnelsSubnets = async org => {
   const tunnels = await tunnelsModel.find({
     isActive: true,
     org: org
-  }).lean();
+  })
+    .populate('org', 'tunnelRange')
+    .lean();
 
   const subnets = [];
 
   for (const tunnel of tunnels) {
-    const { ip1 } = generateTunnelParams(tunnel.num);
+    const { ip1 } = generateTunnelParams(tunnel.num, tunnel.org.tunnelRange);
     subnets.push({ _id: tunnel._id, num: tunnel.num, subnet: `${ip1}/31`, type: 'tunnel' });
   }
 

@@ -71,11 +71,12 @@ async function down () {
     })
       .populate('deviceA', '_id bgp')
       .populate('deviceB', '_id bgp')
+      .populate('org', 'tunnelRange')
       .lean();
 
     for (const bgpTunnel of bgpTunnels) {
-      const { num, deviceA, deviceB } = bgpTunnel;
-      const { ip1, ip2 } = generateTunnelParams(num);
+      const { num, deviceA, deviceB, org } = bgpTunnel;
+      const { ip1, ip2 } = generateTunnelParams(num, org.tunnelRange ?? '10.100.0.0');
 
       const aAsn = deviceA.bgp.localASN;
       const bAsn = deviceB.bgp.localASN;
