@@ -1488,7 +1488,7 @@ const applyTunnelDel = async (devices, user, data) => {
       .populate('deviceA', '_id machineId name hostname sync staticroutes interfaces')
       .populate('deviceB', '_id machineId name hostname sync staticroutes interfaces')
       .populate('peer')
-      .populate('org');
+      .populate('org', '_id tunnelRange');
 
     if (tunnelsArray.length !== tunnelIds.length) {
       logger.error('Some tunnels were not found, try refresh and delete again',

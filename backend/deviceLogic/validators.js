@@ -555,6 +555,7 @@ const validateDevice = (
       }
     }
 
+    const tunnelRangeMask = configs.get('tunnelRangeMask');
     // Prevent setting LAN network that overlaps the network we are using for tunnels.
     for (const lanIfc of lanIfcs) {
       const subnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
@@ -564,7 +565,7 @@ const validateDevice = (
         continue;
       }
 
-      if (cidr.overlap(subnet, `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`)) {
+      if (cidr.overlap(subnet, `${org.tunnelRange}/${tunnelRangeMask}`)) {
         return {
           valid: false,
           err:
