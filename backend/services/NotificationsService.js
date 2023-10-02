@@ -113,7 +113,7 @@ class NotificationsService {
         }
       ] : [];
       let devicesArray;
-
+      let deviceFilterWasGiven = false;
       const parsedFilters = filters ? JSON.parse(filters) : null;
       if (parsedFilters && parsedFilters.length > 0) {
         const matchFilters = getMatchFilters(parsedFilters);
@@ -123,6 +123,7 @@ class NotificationsService {
           // because 'devices' and 'notifications' are in different databases
           const [deviceFilters, notificationFilters] = NotificationsService.splitMatchFilters(matchFilters);
           if (deviceFilters.length > 0) {
+            deviceFilterWasGiven = true;
             devicesArray = await NotificationsService.getDevicesFromFilters(orgList, deviceFilters);
             notificationFilters.push({
               'targets.deviceId': { $in: devicesArray.map(d => d._id) }
@@ -134,8 +135,9 @@ class NotificationsService {
             });
           }
         }
-      // If there are no specific filters, fetch all devices to make sure we will get only existing devices notifications
-      } else {
+      }
+      // If there are no device filters, fetch all devices to make sure we will get only existing devices notifications
+      if (!devicesArray) {
         devicesArray = await NotificationsService.getDevicesFromFilters(orgList);
         pipeline.push({
           $match: { 'targets.deviceId': { $in: [...devicesArray.map(d => d._id), null] } } // We allow null, assuming not all notifications include deviceId
@@ -175,10 +177,16 @@ class NotificationsService {
         ])
         : await notificationsDb.aggregate(pipeline).allowDiskUse(true);
 
+      let notificationsRelatedDevices = devicesArray;
       if (op !== 'count' && notifications[0].meta.length > 0) {
         response.setHeader('records-total', notifications[0].meta[0].total);
+        if (!deviceFilterWasGiven) {
+          notificationsRelatedDevices = await NotificationsService.getDevicesFromFilters(
+            orgList, [{ _id: { $in: notifications[0].records.map(n => n.targets.deviceId) } }]);
+        }
       };
-      const devicesByDeviceId = keyBy(devicesArray, '_id');
+
+      const devicesByDeviceId = keyBy(notificationsRelatedDevices, '_id');
       const result = (op === 'count')
         ? notifications.map(element => {
           return {
