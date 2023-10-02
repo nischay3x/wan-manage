@@ -17,9 +17,9 @@
 
 const organizations = require('../models/organizations');
 const User = require('../models/users');
-const Accounts = require('../models/accounts');
 const { membership } = require('../models/membership');
 const { getToken } = require('../tokens');
+const difference = require('lodash/difference');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 
 /**
@@ -99,6 +99,92 @@ const getUserOrgByID = async (user, orgId) => {
   }
 };
 
+/** validateOrgAccess
+ *  Check if user is allowed to access the orgs specified for view or modify
+ *  User (or access token) has permissions, check if they are sufficient to access
+ */
+const validateOrgAccess = async (user, to = 'organization', entity = null, modify = false) => {
+  if (entity === null) throw new Error('Access entity is not specified');
+  // get all permissions for the user
+  let userPermissions = [];
+  if (user.accessToken) {
+    userPermissions.push({
+      to: user.tokenTo,
+      group: user.tokenGroup,
+      organization: user.tokenOrganization,
+      role: user.role
+    });
+  } else {
+    userPermissions = await membership.find({ account: user.defaultAccount._id, user: user._id },
+      { to: 1, group: 1, organization: 1, role: 1, _id: 0 }).lean();
+  }
+
+  const roles = ['manager', 'owner']; // roles for any modify value
+  if (!modify) roles.push('viewer'); // if view operation, we can add viewer permission
+  // Start with the simple and more common options:
+  // If use has an account permission, or exact permission,
+  // he can access all entities under it
+  const foundPermission = userPermissions.find((permission) => {
+    const permissionEntity = permission.to === 'organization' ? permission.organization
+      : permission.to === 'group' ? permission.group
+        : user.defaultAccount._id;
+    if ((permission.to === 'account' || (permission.to === to && permissionEntity === entity)) &&
+    roles.includes(permission.role)) return true;
+    return false;
+  });
+
+  // Find the organizations for permission
+  const getPermissionOrganizations = async (permission) => {
+    switch (permission.to) {
+      case 'account':
+        // Get all organizations under the account
+        if (user.defaultAccount._id.toString() === permission.entity) {
+          return user.defaultAccount?.organizations.map(o => o._id.toString()) ?? [];
+        } else {
+          return [];
+        }
+      case 'group': {
+        // Get all organizations for this group
+        const orgs = await organizations.find({
+          _id: { $in: user.defaultAccount?.organizations ?? [] },
+          group: permission.entity
+        }, { _id: 1 });
+        return orgs.map(o => o._id.toString());
+      }
+      case 'organization':
+        // Reply with the organization
+        if (user.defaultAccount.organizations.some((id) => id.toString() === permission.entity)) {
+          return [permission.entity];
+        } else {
+          return [];
+        }
+    }
+  };
+
+  const organizationsToAccess = await getPermissionOrganizations({ to, entity });
+  if (foundPermission) { // return the organizations for the requested permission
+    return organizationsToAccess;
+  }
+  // The more complex case, requires mix and match across all permissions
+  // Since user can have for example permission to multiple individual orgs
+  // so he can also access the group composed of all these orgs
+  // Loop through all permissions and make sure all require access orgs are permitted
+  let leftOrganizations = [...organizationsToAccess];
+  for (const permission of userPermissions) {
+    if (roles.includes(permission.role)) {
+      permission.entity = permission.to === 'organization' ? permission.organization.toString()
+        : permission.to === 'group' ? permission.group : user.defaultAccount._id;
+      const allowedOrganizations = await getPermissionOrganizations(permission);
+      leftOrganizations = difference(leftOrganizations, allowedOrganizations);
+    }
+    // If the list is empty we can skip the rest of the permissions
+    if (leftOrganizations.length === 0) return organizationsToAccess;
+  }
+  // If we reached this place, organizations we want to access not satisfied
+  // return empty list
+  return [];
+};
+
 /**
  * Get Account Organization List when Access Token is used
  * If no Access Token is used, return the default organization
@@ -108,28 +194,114 @@ const getUserOrgByID = async (user, orgId) => {
  * @param {Object} user - request user
  * @param {String} orgId
  * @param {Boolean} orgIdRequired - whether org must be specified for the operation
+ * @param {String} accountId - if access to the account is required
+ * @param {String} group - if access to specific group is required
+ * @param {Boolean} isModify - if the operation is for view (false) or modification (true)
  * @returns {List} List of organizations (as strings)
  */
-const getAccessTokenOrgList = async (user, orgId, orgIdRequired = false) => {
-  // No access token, return default orgId, if no orgId found, otherwise throw an error
-  if (!user.accessToken) {
-    if (!orgId) return [user.defaultOrg._id.toString()];
-    else throw new Error('Organization query parameter is only available in Access Key');
+const getAccessTokenOrgList = async (
+  user, orgId, orgIdRequired = false, accountId = null, group = '', isModify = false) => {
+  /*
+   * If orgIdRequired, n single organization must be specified - taken from the query or user
+   * Otherwise multiple organization can be accessed.
+   * In the standard case, user view information from multiple organizations under the
+   * account or group and isModify = false
+   * There are cases where user wants to modify multiple organizations. An example is
+   * on notification changes where user wants to modify the settings for all organizations
+   * or group in that case isModify should be true
+   * More info in the following table:
+   *  orgId     orgIdRequired   accountId/group   isModify      result
+   *  -------   -------------   ---------------   -----------   -----------
+   *  set       true            set               true          not allowed (1)
+   *                                                            orgID requied + account/group
+   *  set       true            set               false         not allowed (1)
+   *  not set   true            set               true          not allowed (1)
+   *  not set   true            set               false         not allowed (1)
+   *  set       false           set               true          not allowed (2)
+   *                                                            When orgId is not required
+   *                                                            only one orgId/accountId/group
+   *                                                            is allowed
+   *  set       false           set               false         not allowed (2)
+   *  not set   false           not set           true          not allowed (3)
+   *  not set   true            not set           true          for UI token, return user org (5)
+   *                                                            for access token, not allowed (4)
+   *  not set   true            not set           false         for UI token, return user org (5)
+   *                                                            for access token, not allowed (4)
+   *  set       true            not set           true          for UI token, not allowed (6)
+   *                                                            for access token, return org after
+   *                                                            validation
+   *  set       true            not set           false         for UI token, not allowed (6)
+   *                                                            for access token return org after
+   *                                                            validation
+   *  not set   false           not set           false         Default case: for UI token,
+   *                                                            return user org
+   *                                                            for access-token, return all
+   *                                                            organizations under the token entity
+   *  not set   false           set               true          Return all organizations in the
+   *                                                            account/group with modify permission
+   *  not set   false           set               false         Return all organizations in the
+   *                                                            account/group with view permission
+   *  set       false           not set           true          return org with modify permission
+   *                                                            after validation
+   *  set       false           not set           false         return org with view permission
+   *                                                            after validation
+   *
+   *
+   */
+  // 1. It's not allowed to set orgIdRequired and accountId/group who require multiple organizations
+  if (orgIdRequired && (accountId || group)) {
+    throw new Error('Organization ID required and multi organization operation is not allowed');
   }
-  // Access token where org is required for the operation, must be specified
-  if (orgIdRequired && !orgId) {
-    throw new Error('Organization query parameter must be specified for this operation');
+  // 2. only one group is allowed, if empty query is in the account level
+  const groups = [orgId, accountId, group].filter(g => g);
+  if (groups.length > 1) {
+    throw new Error('Multiple organization definitions are not allowed');
   }
-  const account = await Accounts.findOne({ _id: user.jwtAccount });
-  const organizations = account.organizations.map(o => o._id.toString());
-  // If Access token with orgId specified
-  if (orgId) {
-    // Return orgId if included in the account, otherwise throw an error
-    if (organizations.includes(orgId)) return [orgId];
-    else throw new Error('Organization not found');
+  // 3. When modifying, an entity must be specified
+  if (groups.length === 0 && !orgIdRequired && isModify) {
+    throw new Error('Modification with no entity is not allowed');
   }
-  // Access token without orgId, use all account organizations
-  return organizations;
+
+  if (orgIdRequired) {
+    if (user.accessToken) {
+      if (!orgId) {
+        // 4. Access token where org is required for the operation, must be specified
+        throw new Error('Organization query parameter must be specified for this operation');
+      } else {
+        // return org after validation for modify/view
+        return await validateOrgAccess(user, 'organization', orgId, isModify);
+      }
+    } else {
+      if (!orgId) {
+        // 5. No access token return user orgId if no orgId found
+        return [user.defaultOrg._id.toString()];
+      } else {
+        // 6. For UI token, orgId must not be specified when orgRequired
+        throw new Error('Organization query parameter is only available in Access Key');
+      }
+    }
+  } else {
+    if (groups.length === 0) {
+      // Default case
+      if (!user.accessToken) return [user.defaultOrg._id.toString()];
+      const orgs = await validateOrgAccess(user, user.tokenTo,
+        user.tokenTo === 'organization' ? user.tokenOrganization
+          : user.tokenTo === 'group' ? user.tokenGroup
+            : user.defaultAccount._id.toString(), false);
+      return orgs;
+    } else {
+      let orgs;
+      if (accountId) {
+        orgs = await validateOrgAccess(user, 'account', accountId, isModify);
+      } else if (group) {
+        orgs = await validateOrgAccess(user, 'group', group, isModify);
+      } else {
+        orgs = await validateOrgAccess(user, 'organization', orgId, isModify);
+      }
+      return orgs;
+    }
+  }
+  // Should not reach this place
 };
 
 /**
