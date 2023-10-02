@@ -185,10 +185,12 @@ class NotificationsService {
         })
         : notifications[0].records.map(element => {
           const device = devicesByDeviceId[element.targets.deviceId];
+          if (!device) return null; // Skip the notification if the device doesn't exist
+
           let interfaceObj = null;
           const { deviceId, interfaceId } = element.targets;
           if (interfaceId) {
-            const ifc = device?.interfaces?.find(ifc => String(ifc._id) === String(interfaceId));
+            const ifc = device.interfaces?.find(ifc => String(ifc._id) === String(interfaceId));
             interfaceObj = {
               _id: interfaceId,
               name: ifc?.name
@@ -196,7 +198,7 @@ class NotificationsService {
           }
           const deviceObj = {
             _id: deviceId,
-            name: device?.name
+            name: device.name
           };
           return {
             ...element,
@@ -204,7 +206,7 @@ class NotificationsService {
             time: element.time.toISOString(),
             targets: { ...element.targets, deviceId: deviceObj, interfaceId: interfaceObj }
           };
-        });
+        }).filter(notification => notification);
 
       return Service.successResponse(result);
     } catch (e) {
