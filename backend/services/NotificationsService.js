@@ -47,9 +47,10 @@ class CustomError extends Error {
 
 class NotificationsService {
   // Helper function to handle device filters
-  static async getDeviceIDsFromFilters (deviceFilters, orgList) {
+  static async getDevicesFromFilters (orgList, deviceFilters = null) {
+    const queryFilters = deviceFilters ? [...deviceFilters] : [];
     const devicesArray = await devices.find({
-      $and: [...deviceFilters, {
+      $and: [...queryFilters, {
         org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
       }]
     }, { name: 1, interfaces: 1 });
@@ -85,6 +86,7 @@ class NotificationsService {
     try {
       orgList = await getAccessTokenOrgList(user, org, false);
       const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
+
       if (status) {
         query.status = status;
       }
@@ -112,8 +114,8 @@ class NotificationsService {
       ] : [];
       let devicesArray;
 
-      if (filters) {
-        const parsedFilters = JSON.parse(filters);
+      const parsedFilters = filters ? JSON.parse(filters) : null;
+      if (parsedFilters && parsedFilters.length > 0) {
         const matchFilters = getMatchFilters(parsedFilters);
 
         if (matchFilters.length > 0) {
@@ -121,7 +123,7 @@ class NotificationsService {
           // because 'devices' and 'notifications' are in different databases
           const [deviceFilters, notificationFilters] = NotificationsService.splitMatchFilters(matchFilters);
           if (deviceFilters.length > 0) {
-            devicesArray = await NotificationsService.getDeviceIDsFromFilters(deviceFilters, orgList);
+            devicesArray = await NotificationsService.getDevicesFromFilters(orgList, deviceFilters);
             notificationFilters.push({
               'targets.deviceId': { $in: devicesArray.map(d => d._id) }
             });
@@ -132,6 +134,12 @@ class NotificationsService {
             });
           }
         }
+      // If there are no specific filters, fetch all devices to make sure we will get only existing devices notifications
+      } else {
+        devicesArray = await NotificationsService.getDevicesFromFilters(orgList);
+        pipeline.push({
+          $match: { 'targets.deviceId': { $in: [...devicesArray.map(d => d._id), null] } } // We allow null, assuming not all notifications include deviceId
+        });
       }
 
       if (sortField) {
@@ -143,6 +151,7 @@ class NotificationsService {
       const paginationParams = [{
         $skip: offset > 0 ? +offset : 0
       }];
+
       if (limit !== undefined) {
         paginationParams.push({ $limit: +limit });
       };
@@ -168,12 +177,6 @@ class NotificationsService {
 
       if (op !== 'count' && notifications[0].meta.length > 0) {
         response.setHeader('records-total', notifications[0].meta[0].total);
-        if (!devicesArray) {
-          // there was no 'device.*' filter
-          devicesArray = await devices.find({
-            _id: { $in: notifications[0].records.map(n => n.targets.deviceId) }
-          }, { name: 1, interfaces: 1 });
-        }
       };
       const devicesByDeviceId = keyBy(devicesArray, '_id');
       const result = (op === 'count')
@@ -185,7 +188,6 @@ class NotificationsService {
         })
         : notifications[0].records.map(element => {
           const device = devicesByDeviceId[element.targets.deviceId];
-          if (!device) return null; // Skip the notification if the device doesn't exist
 
           let interfaceObj = null;
           const { deviceId, interfaceId } = element.targets;
@@ -206,7 +208,7 @@ class NotificationsService {
             time: element.time.toISOString(),
             targets: { ...element.targets, deviceId: deviceObj, interfaceId: interfaceObj }
           };
-        }).filter(notification => notification);
+        });
 
       return Service.successResponse(result);
     } catch (e) {
@@ -318,7 +320,7 @@ class NotificationsService {
         const [deviceFilters, notificationFilters] = NotificationsService.splitMatchFilters(matchFilters);
 
         if (deviceFilters.length > 0) {
-          const deviceIDs = await NotificationsService.getDeviceIDsFromFilters(deviceFilters, orgList);
+          const deviceIDs = await NotificationsService.getDevicesFromFilters(orgList, deviceFilters);
           if (deviceIDs.length > 0) {
             notificationFilters.push({ 'targets.deviceId': { $in: deviceIDs.map(d => d._id) } });
           }
