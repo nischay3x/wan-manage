@@ -190,7 +190,7 @@ class NotificationsService {
           let interfaceObj = null;
           const { deviceId, interfaceId } = element.targets;
           if (interfaceId) {
-            const ifc = device.interfaces?.find(ifc => String(ifc._id) === String(interfaceId));
+            const ifc = device?.interfaces?.find(ifc => String(ifc._id) === String(interfaceId));
             interfaceObj = {
               _id: interfaceId,
               name: ifc?.name
@@ -198,7 +198,7 @@ class NotificationsService {
           }
           const deviceObj = {
             _id: deviceId,
-            name: device.name
+            name: device?.name
           };
           return {
             ...element,
