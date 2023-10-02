@@ -104,10 +104,10 @@ const getFirewallParameters = (policy, device) => {
   // assuming there will be not more than 10000 local rules
   const globalShift = 10000;
   const policyRules = policy ? policy.rules
-    .filter(r => r.enabled)
+    .filter(r => r.enabled && ['inbound', 'outbound'].includes(r.direction))
     .map(r => ({ ...r, priority: r.priority + globalShift })) : [];
   const deviceRules = device.deviceSpecificRulesEnabled ? device.firewall.rules
-    .filter(r => r.enabled) : [];
+    .filter(r => r.enabled && ['inbound', 'outbound'].includes(r.direction)) : [];
   const firewallRules = [...policyRules, ...deviceRules]
     .sort((r1, r2) => r1.priority - r2.priority);
   if (firewallRules.length === 0) {

@@ -173,7 +173,7 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
       }
     }
     for (const side of ['source', 'destination']) {
-      const { trafficId, trafficTags, ipPort, ipProtoPort } = classification[side] || {};
+      const { trafficId, trafficTags, ipPort, ipProtoPort, lanNat } = classification[side] || {};
       // trafficId cannot be empty string or null
       if (isEmpty(trafficId) && trafficId !== undefined) {
         return { valid: false, err: 'Traffic name must be specified' };
@@ -199,6 +199,40 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
         // Empty Traffic Tags not allowed
         if (!category && !serviceClass && !importance) {
           return { valid: false, err: 'Category, service class or importance must be provided' };
+        }
+      }
+      if (direction === 'lanNat') {
+        if (!lanNat) {
+          return { valid: false, err: 'LAN NAT parameters must be set' };
+        }
+        const { match, action, interface: devId } = lanNat;
+        if (side === 'source') {
+          if (!devId) {
+            return { valid: false, err: 'Interface must be set for source' };
+          }
+          const lanIfc = interfaces.find(ifc => ifc.devId === devId);
+          if (!lanIfc || !lanIfc.isAssigned || lanIfc.type !== 'LAN') {
+            return {
+              valid: false,
+              err: 'Only assigned LAN interface can be selected in LAN NAT rule'
+            };
+          }
+          if (!match || !action) {
+            return { valid: false, err: 'Match and Action can not be empty for source' };
+          }
+        }
+        if ((match && !action) || (!match && action)) {
+          return { valid: false, err: 'Match and Action should be both empty or set for ' + side };
+        }
+        if (match) {
+          const [, matchMask] = match.split('/');
+          const [, actionMask] = action.split('/');
+          if (matchMask !== actionMask) {
+            return {
+              valid: false,
+              err: 'The prefix length of Match and Action has to be the same'
+            };
+          }
         }
       }
     }

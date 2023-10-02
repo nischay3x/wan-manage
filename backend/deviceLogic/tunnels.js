@@ -1485,8 +1485,8 @@ const applyTunnelDel = async (devices, user, data) => {
     tunnelsArray = await tunnelsModel.find(
       { _id: { $in: tunnelIds }, isActive: true, org: data.org }
     )
-      .populate('deviceA', '_id machineId name hostname sync staticroutes interfaces')
-      .populate('deviceB', '_id machineId name hostname sync staticroutes interfaces')
+      .populate('deviceA', '_id machineId name hostname sync staticroutes interfaces versions')
+      .populate('deviceB', '_id machineId name hostname sync staticroutes interfaces versions')
       .populate('peer')
       .populate('org', '_id tunnelRange');
 

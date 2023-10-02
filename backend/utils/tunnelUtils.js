@@ -196,8 +196,6 @@ const getTunnelsPipeline = (orgList, filters, detailed = true) => {
       notificationsSettings: 1,
       isPending: 1,
       pendingReason: 1,
-      'org._id': 1,
-      'org.vxlanPort': 1,
       'org.tunnelRange': 1,
       tunnelStatus: {
         $switch: {
