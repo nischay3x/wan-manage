@@ -597,7 +597,11 @@ class NotificationsManager {
           , 'time targets.deviceId details')
           .sort({ time: -1 })
           .limit(configs.get('unreadNotificationsMaxSent', 'number'))
-          .populate('targets.deviceId', 'name -_id', devicesModel).lean();
+          .populate('targets.deviceId', 'name -_id', devicesModel)
+          .lean();
+
+        // Filter out notifications where the device has been deleted
+        const existingDevicesMessages = messages.filter(message => message.targets.deviceId);
 
         const uiServerUrl = configs.get('uiServerUrl', 'list');
         const { serverInfo, orgInfo, accountInfo } = await this.getInfoForEmail(
@@ -609,10 +613,10 @@ class NotificationsManager {
           since you have pending unread notifications.</p>
           <i><small>
             <ul>
-              ${messages.map(message => `
+              ${existingDevicesMessages.map(message => `
                 <li>
                   ${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}
-                  device ${message.targets.deviceId ? message.targets.deviceId.name : 'Deleted'}
+                  device ${message.targets.deviceId.name}
                   - ${message.details}
                 </li>
               `).join('')}
