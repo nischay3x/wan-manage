@@ -42,6 +42,10 @@ class NotificationsController {
     await Controller.handleRequest(request, response, this.service.notificationsConfDefaultGET);
   }
 
+  async notificationsConfDefaultPUT (request, response) {
+    await Controller.handleRequest(request, response, this.service.notificationsConfDefaultPUT);
+  }
+
   async notificationsIdPUT (request, response) {
     await Controller.handleRequest(request, response, this.service.notificationsIdPUT);
   }

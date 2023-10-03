@@ -363,9 +363,16 @@ class NotificationsService {
   **/
   static async validateParams (org, account, group, user, setAsDefault = null, get = false) {
     if (setAsDefault) {
+      const orgList = await getAccessTokenOrgList(user, null, false);
+
+      if (orgList.length === 0) {
+        throw createError(403, 'You do not have permission to set as account default.');
+      }
+
       if (!account) {
         throw createError(400, 'Please specify the account id');
       }
+
       return [];
     } else {
     // Validate parameters
@@ -485,102 +492,84 @@ class NotificationsService {
         return orgIds;
       }
 
-      if (setAsDefault) {
-        const accountOwners = await membership.find({
-          account: user.defaultAccount._id,
-          to: 'account',
-          role: 'owner'
+      // A map to save the updated notifications for each organization in order to use it in the job
+      // Note that the newRules input isn't always applicable as the updated settings since it may contain "varies" in some fields.
+      // In this case the original setting for that specific field in the organization settings should be used instead
+      const updatedNotificationsByOrg = new Map();
+
+      await mongoConns.mainDBwithTransaction(async (session) => {
+        const bulkUpdates = [];
+
+        const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } }).lean();
+        const originalNotificationsByOrg = {};
+
+        allCurrentRules.forEach(orgNotificationsSettings => {
+          originalNotificationsByOrg[orgNotificationsSettings.org] = orgNotificationsSettings.rules;
         });
-        const accountOwnersIds = Object.values(accountOwners).map(membership => membership.user.toString());
-        if (accountOwnersIds.includes(user._id.toString())) {
-          await notificationsConf.update({ account: account }, { $set: { account: account, rules: newRules } }, { upsert: true });
-        } else {
-          return Service.rejectResponse(
-            'Only account owners can set the account default settings', 403);
-        }
-        return Service.successResponse(
-          { status: 'completed', message: 'Current settings successfully established as the default for new organizations' }, 202
-        );
-      } else {
-        // A map to save the updated notifications for each organization in order to use it in the job
-        // Note that the newRules input isn't always applicable as the updated settings since it may contain "varies" in some fields.
-        // In this case the original setting for that specific field in the organization settings should be used instead
-        const updatedNotificationsByOrg = new Map();
 
-        await mongoConns.mainDBwithTransaction(async (session) => {
-          const bulkUpdates = [];
-
-          const allCurrentRules = await notificationsConf.find({ org: { $in: orgIds } }).lean();
-          const originalNotificationsByOrg = {};
-
-          allCurrentRules.forEach(orgNotificationsSettings => {
-            originalNotificationsByOrg[orgNotificationsSettings.org] = orgNotificationsSettings.rules;
-          });
-
-          for (const orgId of orgIds) {
-            // Default to new rules in case there's only one orgId.
-            let currentRules = newRules;
-            if (orgIds.length > 1) {
-              currentRules = { ...originalNotificationsByOrg[orgId] };
-              for (const event in newRules) {
-                Object.entries(newRules[event]).forEach(([field, value]) => {
-                  if (value && value !== 'varies') {
-                    currentRules[event][field] = value;
-                  }
-                });
-              }
-            }
-            // Validate the current notification settings
-            const invalidNotifications = validateNotificationsSettings(currentRules);
-            if (invalidNotifications) {
-              throw new CustomError({
-                status: 400,
-                message: 'Invalid notifications settings',
-                data: { error: invalidNotifications }
+        for (const orgId of orgIds) {
+          // Default to new rules in case there's only one orgId.
+          let currentRules = newRules;
+          if (orgIds.length > 1) {
+            currentRules = { ...originalNotificationsByOrg[orgId] };
+            for (const event in newRules) {
+              Object.entries(newRules[event]).forEach(([field, value]) => {
+                if (value && value !== 'varies') {
+                  currentRules[event][field] = value;
+                }
               });
             }
-
-            bulkUpdates.push({
-              updateOne: {
-                filter: { org: orgId },
-                update: { $set: { rules: currentRules } }
-              }
+          }
+          // Validate the current notification settings
+          const invalidNotifications = validateNotificationsSettings(currentRules);
+          if (invalidNotifications) {
+            throw new CustomError({
+              status: 400,
+              message: 'Invalid notifications settings',
+              data: { error: invalidNotifications }
             });
-
-            updatedNotificationsByOrg.set(orgId, currentRules);
           }
 
-          await notificationsConf.bulkWrite(bulkUpdates, { session: session });
-        });
+          bulkUpdates.push({
+            updateOne: {
+              filter: { org: orgId },
+              update: { $set: { rules: currentRules } }
+            }
+          });
 
-        let devicesShouldReceiveJobs = 0;
-        const applyPromises = [];
-        let fulfilledJobs = 0;
-        for (const [orgId, notificationsSettings] of updatedNotificationsByOrg.entries()) {
-          const orgDevices = await devices.find({ org: orgId });
-          devicesShouldReceiveJobs += orgDevices.length;
-          const data = {
-            rules: notificationsSettings,
-            org: orgId
-          };
-          applyPromises.push(apply(orgDevices, user, data));
+          updatedNotificationsByOrg.set(orgId, currentRules);
         }
-        const promisesStatus = await Promise.allSettled(applyPromises);
-        for (const promiseStatus of promisesStatus) {
-          if (promiseStatus.status === 'fulfilled') {
-            const { ids } = promiseStatus.value;
-            fulfilledJobs += ids.length;
-          }
-        }
-        const status = fulfilledJobs < devicesShouldReceiveJobs.length
-          ? 'partially completed' : 'completed';
-        const message = fulfilledJobs < devicesShouldReceiveJobs.length
-          ? `Warning: ${fulfilledJobs} of ${devicesShouldReceiveJobs.length} Set device's notifications job added.`
-          : 'The notifications were updated successfully';
-        return Service.successResponse(
-          { status, message }, 202
-        );
+
+        await notificationsConf.bulkWrite(bulkUpdates, { session: session });
+      });
+
+      let devicesShouldReceiveJobs = 0;
+      const applyPromises = [];
+      let fulfilledJobs = 0;
+      for (const [orgId, notificationsSettings] of updatedNotificationsByOrg.entries()) {
+        const orgDevices = await devices.find({ org: orgId });
+        devicesShouldReceiveJobs += orgDevices.length;
+        const data = {
+          rules: notificationsSettings,
+          org: orgId
+        };
+        applyPromises.push(apply(orgDevices, user, data));
       }
+      const promisesStatus = await Promise.allSettled(applyPromises);
+      for (const promiseStatus of promisesStatus) {
+        if (promiseStatus.status === 'fulfilled') {
+          const { ids } = promiseStatus.value;
+          fulfilledJobs += ids.length;
+        }
+      }
+      const status = fulfilledJobs < devicesShouldReceiveJobs.length
+        ? 'partially completed' : 'completed';
+      const message = fulfilledJobs < devicesShouldReceiveJobs.length
+        ? `Warning: ${fulfilledJobs} of ${devicesShouldReceiveJobs.length} Set device's notifications job added.`
+        : 'The notifications were updated successfully';
+      return Service.successResponse(
+        { status, message }, 202
+      );
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
@@ -625,6 +614,48 @@ class NotificationsService {
       }
       const defaultSettings = await notificationsMgr.getDefaultNotificationsSettings(account);
       return Service.successResponse(defaultSettings);
+    } catch (e) {
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
+    }
+  }
+
+  /**
+   * Modify account default notifications settings (set rules as account default)
+   * @param account  String account ID
+   * user Object
+   **/
+  static async notificationsConfDefaultPUT ({ account, rules }, { user }) {
+    try {
+      const orgIds = await NotificationsService.validateParams(null, account, null, user, true);
+      if (orgIds && orgIds.error) {
+        return orgIds;
+      }
+      const accountOwners = await membership.find({
+        account,
+        to: 'account',
+        role: 'owner'
+      });
+      const accountOwnersIds = Object.values(accountOwners).map(membership => membership.user.toString());
+      if (!accountOwnersIds.includes(user._id.toString())) {
+        return Service.rejectResponse(
+          'Only account owners can set the account default settings', 403);
+      }
+      const invalidNotifications = validateNotificationsSettings(rules);
+      if (invalidNotifications) {
+        throw new CustomError({
+          status: 400,
+          message: 'Invalid notifications settings',
+          data: { error: invalidNotifications }
+        });
+      }
+      await notificationsConf.update({ account: account }, { $set: { account: account, rules } }, { upsert: true });
+
+      return Service.successResponse(
+        { status: 'completed', message: 'Current settings successfully established as the default for new organizations' }, 202
+      );
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
