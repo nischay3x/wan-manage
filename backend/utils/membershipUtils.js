@@ -122,7 +122,7 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
   const roles = ['manager', 'owner']; // roles for any modify value
   if (!modify) roles.push('viewer'); // if view operation, we can add viewer permission
   // Start with the simple and more common options:
-  // If use has an account permission, or exact permission,
+  // If user has an account permission, or exact permission,
   // he can access all entities under it
   const foundPermission = userPermissions.find((permission) => {
     const permissionEntity = permission.to === 'organization' ? permission.organization
@@ -202,7 +202,7 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
 const getAccessTokenOrgList = async (
   user, orgId, orgIdRequired = false, accountId = null, group = '', isModify = false) => {
   /*
-   * If orgIdRequired, n single organization must be specified - taken from the query or user
+   * If orgIdRequired, a single organization must be specified - taken from the query or user
    * Otherwise multiple organization can be accessed.
    * In the standard case, user view information from multiple organizations under the
    * account or group and isModify = false
@@ -213,7 +213,7 @@ const getAccessTokenOrgList = async (
    *  orgId     orgIdRequired   accountId/group   isModify      result
    *  -------   -------------   ---------------   -----------   -----------
    *  set       true            set               true          not allowed (1)
-   *                                                            orgID requied + account/group
+   *                                                            orgID required + account/group
    *  set       true            set               false         not allowed (1)
    *  not set   true            set               true          not allowed (1)
    *  not set   true            set               false         not allowed (1)
