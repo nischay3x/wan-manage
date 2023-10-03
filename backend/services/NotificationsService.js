@@ -383,47 +383,14 @@ class NotificationsService {
         throw createError(400, 'Invalid parameter: account should be used alone or with group(for modifying the group)');
       }
 
-      const orgList = await getUserOrganizations(user);
-      let orgIds = [];
-      if (org) {
-        if (!orgList[org]) {
-          throw createError(403, 'You do not have permission to access this organization');
-        }
-        orgIds = [org];
-      // At this point, we are working with either an account or a group.
-      } else {
-        // If this is a GET request anyone in the account/group can access the data so we don't check the user's membership
-        if (get) {
-          orgIds = Object.values(orgList)
-            .filter(org => org.account.toString() === account && (!group || org.group === group))
-            .map(org => org.id);
-        // If this is not a get request we want the user to have account/group permissions
-        } else {
-          const userMembershipsOfAccountOrGroup = await membership.find({
-            user: user._id,
-            account: account,
-            $or: [
-              { $and: [{ to: 'group' }, { group: group }] },
-              { $and: [{ to: 'account' }, { group: '' }] }
-            ],
-            role: { $ne: 'viewer' }
-          });
-          if (userMembershipsOfAccountOrGroup.length > 0) {
-            const filter = { account };
-            if (group) filter.group = group;
-            const orgs = await Organizations.find(filter).lean();
-            orgIds = orgs.map(org => org._id.toString());
-          } else {
-            throw createError(403, "You don't have a permission to modify the settings");
-            // return Service.rejectResponse("You don't have a permission to modify the settings", 403);
-          }
-        }
+      // If group is given send it without account, else send org / account (one of them will be undefined,
+      // since they can't be used together)
+      // The function getAccessTokenOrgList allows only one of: org/account/group
+      const orgList = group ? await getAccessTokenOrgList(user, null, false, null, group, !get) : await getAccessTokenOrgList(user, org, false, account, '', !get);
+      if (!orgList.length || (org && !orgList.includes(org))) {
+        throw createError(403, `You don't have a permission to ${get ? 'access' : 'modify'} the settings`);
       }
-      if (!orgIds.length) {
-        throw createError(404, 'No organizations found');
-        // return Service.rejectResponse('No organizations found', 404);
-      }
-      return orgIds;
+      return orgList;
     }
   }
 
