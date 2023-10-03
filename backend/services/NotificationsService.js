@@ -20,6 +20,7 @@ const Service = require('./Service');
 
 const notificationsDb = require('../models/notifications');
 const { devices } = require('../models/devices');
+const accounts = require('../models/accounts');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoose = require('mongoose');
@@ -598,7 +599,30 @@ class NotificationsService {
    **/
   static async notificationsConfDefaultGET ({ account = null }, { user }) {
     try {
-      // TODO - add a validation of the user permissions
+      const orgList = await getAccessTokenOrgList(user, null, false);
+      if (orgList.length === 0) {
+        return Service.rejectResponse(
+          'You do not have permission for this operation', 403);
+      }
+      if (account) {
+        const accountObj = await accounts.findOne({ _id: account }).lean();
+
+        if (!accountObj) {
+          return Service.rejectResponse(
+            'Account not found.',
+            404
+          );
+        }
+
+        const orgsInAccount = accountObj.organizations.map(orgId => orgId.toString());
+
+        if (!orgsInAccount.some(org => orgList.includes(org))) {
+          return Service.rejectResponse(
+            'You do not have permission for this operation',
+            403
+          );
+        }
+      }
       const defaultSettings = await notificationsMgr.getDefaultNotificationsSettings(account);
       return Service.successResponse(defaultSettings);
     } catch (e) {
