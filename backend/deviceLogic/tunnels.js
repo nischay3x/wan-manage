@@ -45,6 +45,7 @@ const globalTunnelMtu = configs.get('globalTunnelMtu', 'number');
 const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
 const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
 const { transformBGP } = require('./jobParameters');
+const organizations = require('../models/organizations');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -1486,7 +1487,8 @@ const applyTunnelDel = async (devices, user, data) => {
     )
       .populate('deviceA', '_id machineId name hostname sync staticroutes interfaces versions')
       .populate('deviceB', '_id machineId name hostname sync staticroutes interfaces versions')
-      .populate('peer');
+      .populate('peer')
+      .populate('org', '_id tunnelRange');
 
     if (tunnelsArray.length !== tunnelIds.length) {
       logger.error('Some tunnels were not found, try refresh and delete again',
@@ -1506,7 +1508,7 @@ const applyTunnelDel = async (devices, user, data) => {
   }
 
   if (devices && tunnelsArray.length > 0) {
-    const org = data.org;
+    const org = tunnelsArray[0].org;
     const userName = user.username;
 
     const delPromises = [];
@@ -1589,14 +1591,15 @@ const applyTunnelDel = async (devices, user, data) => {
  * Deletes a single tunnel.
  * @param  {object}   tunnel     the tunnel object
  * @param  {string}   user       the user id of the requesting user
- * @param  {string}   org        the user's organization id
+ * @param  {string}   org        the user's organization
  * @return {array}    jobs created
  */
 const delTunnel = async (tunnel, user, org, updateOps) => {
   const { _id, isPending, num, deviceA, deviceB, peer } = tunnel;
 
   // Check is tunnel used by any static route
-  const { ip1, ip2 } = generateTunnelParams(num);
+  // const organization = await organizations.findOne({ _id: org }).lean();
+  const { ip1, ip2 } = generateTunnelParams(num, org.tunnelRange);
   const tunnelUsedByStaticRoute =
     (Array.isArray(deviceA.staticroutes) &&
     deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
@@ -1611,7 +1614,7 @@ const delTunnel = async (tunnel, user, org, updateOps) => {
 
   updateOps.push({
     updateOne: {
-      filter: { _id, org },
+      filter: { _id, org: org._id },
       update: {
         isActive: false,
         deviceAconf: false,
@@ -1940,7 +1943,7 @@ const prepareTunnelParams = (
   const minorVersionB = peer ? null : getMinorVersion(deviceB?.versions.agent);
 
   // Generate from the tunnel num: IP A/B, MAC A/B, SA A/B
-  const tunnelParams = generateTunnelParams(tunnel.num);
+  const tunnelParams = generateTunnelParams(tunnel.num, org.tunnelRange);
 
   // no additional header for not encrypted tunnels
   const packetHeaderSize = tunnel.encryptionMethod === 'none' ? 0 : 150;
@@ -2314,7 +2317,8 @@ const getInterfacesWithPathLabels = device => {
  * @return {[{object}]} array of devices with config
 */
 const getTunnelConfigDependencies = async (tunnel, isPending) => {
-  const { ip1, ip2 } = generateTunnelParams(tunnel.num);
+  const org = await organizations.findOne({ _id: tunnel.org }).lean();
+  const { ip1, ip2 } = generateTunnelParams(tunnel.num, org.tunnelRange);
 
   const staticRouteArrayFilters = {
     $and: [{

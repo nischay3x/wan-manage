@@ -138,24 +138,25 @@ const RunningRouterEvent = new RunningRouterEventClass('Running router', [Device
 const LinkStatusEvent = new LinkStatusEventClass('Link status', [
   RunningRouterEvent
 ]);
-const InternetConnectionEvent = new InternetConnectionEventClass('Internet connection', [
-  LinkStatusEvent
-]);
 const InterfaceIpChangeEvent = new MissingInterfaceIPEventClass('Missing interface ip', [
   LinkStatusEvent
 ]);
+const InternetConnectionEvent = new InternetConnectionEventClass('Internet connection', [
+  InterfaceIpChangeEvent
+]);
+// eslint-disable-next-line no-unused-vars
 const PendingTunnelEvent = new TunnelStateChangeEventClass('Pending tunnel', [
-  LinkStatusEvent
+  InterfaceIpChangeEvent
 ]);
 const TunnelConnectionEvent = new TunnelStateChangeEventClass('Tunnel connection', [
-  LinkStatusEvent
+  InternetConnectionEvent
 ]);
 // eslint-disable-next-line no-unused-vars
 const RttEvent = new Event('Link/Tunnel round trip time',
-  [InternetConnectionEvent, InterfaceIpChangeEvent, PendingTunnelEvent, TunnelConnectionEvent]);
+  [TunnelConnectionEvent]);
 // eslint-disable-next-line no-unused-vars
 const DropRateEvent = new Event('Link/Tunnel default drop rate',
-  [InternetConnectionEvent, InterfaceIpChangeEvent, PendingTunnelEvent, TunnelConnectionEvent]);
+  [TunnelConnectionEvent]);
 
 /**
  * Notification Manager class
@@ -223,8 +224,13 @@ class NotificationsManager {
 
   async getInfoForEmail (orgId) {
     const uiServerUrl = configs.get('uiServerUrl', 'list');
+
+    // Use the URL object to extract the domain from the URL, excluding the port.
+    const urlSchema = new URL(uiServerUrl[0]);
+    const urlToDisplay = `${urlSchema.protocol}//${urlSchema.hostname}`;
+
     const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
-      <a href="${uiServerUrl[0]}">${uiServerUrl[0]}</a></p>`;
+      <a href="${uiServerUrl[0]}">${urlToDisplay}</a></p>`;
     const orgWithAccount = await this.getOrgWithAccount(orgId);
     const orgInfo = `<p><b>Organization:</b> ${orgWithAccount[0].name}</p>`;
     const accountInfo = `<p><b>Account:</b> ${orgWithAccount[0].accountDetails.name}</p>`;
@@ -592,7 +598,11 @@ class NotificationsManager {
           , 'time targets.deviceId details')
           .sort({ time: -1 })
           .limit(configs.get('unreadNotificationsMaxSent', 'number'))
-          .populate('targets.deviceId', 'name -_id', devicesModel).lean();
+          .populate('targets.deviceId', 'name -_id', devicesModel)
+          .lean();
+
+        // Filter out notifications where the device has been deleted
+        const existingDevicesMessages = messages.filter(message => message.targets.deviceId);
 
         const uiServerUrl = configs.get('uiServerUrl', 'list');
         const { serverInfo, orgInfo, accountInfo } = await this.getInfoForEmail(
@@ -604,10 +614,10 @@ class NotificationsManager {
           since you have pending unread notifications.</p>
           <i><small>
             <ul>
-              ${messages.map(message => `
+              ${existingDevicesMessages.map(message => `
                 <li>
                   ${message.time.toISOString().replace(/T/, ' ').replace(/\..+/, '')}
-                  device ${message.targets.deviceId ? message.targets.deviceId.name : 'Deleted'}
+                  device ${message.targets.deviceId.name}
                   - ${message.details}
                 </li>
               `).join('')}

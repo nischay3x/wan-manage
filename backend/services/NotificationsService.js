@@ -47,9 +47,10 @@ class CustomError extends Error {
 
 class NotificationsService {
   // Helper function to handle device filters
-  static async getDeviceIDsFromFilters (deviceFilters, orgList) {
+  static async getDevicesFromFilters (orgList, deviceFilters = null) {
+    const queryFilters = deviceFilters ? [...deviceFilters] : [];
     const devicesArray = await devices.find({
-      $and: [...deviceFilters, {
+      $and: [...queryFilters, {
         org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
       }]
     }, { name: 1, interfaces: 1 });
@@ -85,6 +86,7 @@ class NotificationsService {
     try {
       orgList = await getAccessTokenOrgList(user, org, false);
       const query = { org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) } };
+
       if (status) {
         query.status = status;
       }
@@ -111,9 +113,9 @@ class NotificationsService {
         }
       ] : [];
       let devicesArray;
-
-      if (filters) {
-        const parsedFilters = JSON.parse(filters);
+      let deviceFilterWasGiven = false;
+      const parsedFilters = filters ? JSON.parse(filters) : null;
+      if (parsedFilters && parsedFilters.length > 0) {
         const matchFilters = getMatchFilters(parsedFilters);
 
         if (matchFilters.length > 0) {
@@ -121,7 +123,8 @@ class NotificationsService {
           // because 'devices' and 'notifications' are in different databases
           const [deviceFilters, notificationFilters] = NotificationsService.splitMatchFilters(matchFilters);
           if (deviceFilters.length > 0) {
-            devicesArray = await NotificationsService.getDeviceIDsFromFilters(deviceFilters, orgList);
+            deviceFilterWasGiven = true;
+            devicesArray = await NotificationsService.getDevicesFromFilters(orgList, deviceFilters);
             notificationFilters.push({
               'targets.deviceId': { $in: devicesArray.map(d => d._id) }
             });
@@ -133,6 +136,13 @@ class NotificationsService {
           }
         }
       }
+      // If there are no device filters, fetch all devices to make sure we will get only existing devices notifications
+      if (!devicesArray) {
+        devicesArray = await NotificationsService.getDevicesFromFilters(orgList);
+        pipeline.push({
+          $match: { 'targets.deviceId': { $in: [...devicesArray.map(d => d._id), null] } } // We allow null, assuming not all notifications include deviceId
+        });
+      }
 
       if (sortField) {
         const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
@@ -143,6 +153,7 @@ class NotificationsService {
       const paginationParams = [{
         $skip: offset > 0 ? +offset : 0
       }];
+
       if (limit !== undefined) {
         paginationParams.push({ $limit: +limit });
       };
@@ -166,16 +177,16 @@ class NotificationsService {
         ])
         : await notificationsDb.aggregate(pipeline).allowDiskUse(true);
 
+      let notificationsRelatedDevices = devicesArray;
       if (op !== 'count' && notifications[0].meta.length > 0) {
         response.setHeader('records-total', notifications[0].meta[0].total);
-        if (!devicesArray) {
-          // there was no 'device.*' filter
-          devicesArray = await devices.find({
-            _id: { $in: notifications[0].records.map(n => n.targets.deviceId) }
-          }, { name: 1, interfaces: 1 });
+        if (!deviceFilterWasGiven) {
+          notificationsRelatedDevices = await NotificationsService.getDevicesFromFilters(
+            orgList, [{ _id: { $in: notifications[0].records.map(n => n.targets.deviceId) } }]);
         }
       };
-      const devicesByDeviceId = keyBy(devicesArray, '_id');
+
+      const devicesByDeviceId = keyBy(notificationsRelatedDevices, '_id');
       const result = (op === 'count')
         ? notifications.map(element => {
           return {
@@ -185,6 +196,7 @@ class NotificationsService {
         })
         : notifications[0].records.map(element => {
           const device = devicesByDeviceId[element.targets.deviceId];
+
           let interfaceObj = null;
           const { deviceId, interfaceId } = element.targets;
           if (interfaceId) {
@@ -233,21 +245,26 @@ class NotificationsService {
     try {
       const orgList = await getAccessTokenOrgList(user, org, false);
       const query = { org: { $in: orgList }, _id: id };
+      const { status, resolve } = notificationsIDPutRequest;
+      const updateFields = {};
+      if (status) updateFields.status = status;
+      if (resolve) updateFields.resolved = true;
       const res = await notificationsDb.updateOne(
         query,
-        { $set: { status: notificationsIDPutRequest.status } },
+        { $set: updateFields },
         { upsert: false }
       );
       if (res.n === 0) throw new Error('Failed to update notifications');
 
       const notifications = await notificationsDb.find(
         query,
-        'time device title details status machineId'
-      ).populate('device', 'name -_id', devices);
+        'time device title details status machineId targets'
+      ).populate('device', 'name -_id', devices).lean();
 
       const result = {
         _id: notifications[0]._id.toString(),
         status: notifications[0].status,
+        resolved: notifications[0].resolved,
         details: notifications[0].details,
         title: notifications[0].title,
         targets: notifications[0].targets,
@@ -275,10 +292,13 @@ class NotificationsService {
       const orgList = await getAccessTokenOrgList(user, org, true);
       const query = { org: { $in: orgList } };
       if (notificationsPutRequest.ids) query._id = { $in: notificationsPutRequest.ids };
-
+      const { status, resolve } = notificationsPutRequest;
+      const updateFields = {};
+      if (status) updateFields.status = status;
+      if (resolve) updateFields.resolved = true;
       const res = await notificationsDb.updateMany(
         query,
-        { $set: { status: notificationsPutRequest.status } },
+        { $set: updateFields },
         { upsert: false }
       );
       if (notificationsPutRequest.ids && res.n !== notificationsPutRequest.ids.length) {
@@ -308,7 +328,7 @@ class NotificationsService {
         const [deviceFilters, notificationFilters] = NotificationsService.splitMatchFilters(matchFilters);
 
         if (deviceFilters.length > 0) {
-          const deviceIDs = await NotificationsService.getDeviceIDsFromFilters(deviceFilters, orgList);
+          const deviceIDs = await NotificationsService.getDevicesFromFilters(orgList, deviceFilters);
           if (deviceIDs.length > 0) {
             notificationFilters.push({ 'targets.deviceId': { $in: deviceIDs.map(d => d._id) } });
           }

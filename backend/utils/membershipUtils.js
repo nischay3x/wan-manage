@@ -196,21 +196,21 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
  * @param {Boolean} orgIdRequired - whether org must be specified for the operation
  * @param {String} accountId - if access to the account is required
  * @param {String} group - if access to specific group is required
- * @param {Boolean} allowModify - if the operation is for view (false) or modification (true)
+ * @param {Boolean} isModify - if the operation is for view (false) or modification (true)
  * @returns {List} List of organizations (as strings)
  */
 const getAccessTokenOrgList = async (
-  user, orgId, orgIdRequired = false, accountId = null, group = '', allowModify = false) => {
+  user, orgId, orgIdRequired = false, accountId = null, group = '', isModify = false) => {
   /*
    * If orgIdRequired, n single organization must be specified - taken from the query or user
    * Otherwise multiple organization can be accessed.
    * In the standard case, user view information from multiple organizations under the
-   * account or group and allowModify = false
+   * account or group and isModify = false
    * There are cases where user wants to modify multiple organizations. An example is
    * on notification changes where user wants to modify the settings for all organizations
-   * or group in that case allowModify should be true
+   * or group in that case isModify should be true
    * More info in the following table:
-   *  orgId     orgIdRequired   accountId/group   allowModify   result
+   *  orgId     orgIdRequired   accountId/group   isModify      result
    *  -------   -------------   ---------------   -----------   -----------
    *  set       true            set               true          not allowed (1)
    *                                                            orgID requied + account/group
@@ -258,7 +258,7 @@ const getAccessTokenOrgList = async (
     throw new Error('Multiple organization definitions are not allowed');
   }
   // 3. When modifying, an entity must be specified
-  if (groups.length === 0 && !orgIdRequired && allowModify) {
+  if (groups.length === 0 && !orgIdRequired && isModify) {
     throw new Error('Modification with no entity is not allowed');
   }
 
@@ -269,7 +269,7 @@ const getAccessTokenOrgList = async (
         throw new Error('Organization query parameter must be specified for this operation');
       } else {
         // return org after validation for modify/view
-        return await validateOrgAccess(user, 'organization', orgId, allowModify);
+        return await validateOrgAccess(user, 'organization', orgId, isModify);
       }
     } else {
       if (!orgId) {
@@ -292,11 +292,11 @@ const getAccessTokenOrgList = async (
     } else {
       let orgs;
       if (accountId) {
-        orgs = await validateOrgAccess(user, 'account', accountId, allowModify);
+        orgs = await validateOrgAccess(user, 'account', accountId, isModify);
       } else if (group) {
-        orgs = await validateOrgAccess(user, 'group', group, allowModify);
+        orgs = await validateOrgAccess(user, 'group', group, isModify);
       } else {
-        orgs = await validateOrgAccess(user, 'organization', orgId, allowModify);
+        orgs = await validateOrgAccess(user, 'organization', orgId, isModify);
       }
       return orgs;
     }

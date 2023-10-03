@@ -53,7 +53,8 @@ const accessTokenSchema = new Schema({
   // default roles are 'owner', 'manager', 'viewer'
   role: {
     type: String,
-    required: false,
+    enum: ['owner', 'manager', 'viewer'],
+    required: true,
     unique: false,
     maxlength: [10, 'role length must be at most 10']
   },
