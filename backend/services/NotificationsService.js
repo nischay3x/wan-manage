@@ -361,7 +361,7 @@ class NotificationsService {
   * user: Object
   * returns Notification
   **/
-  static async validateParams (org, account, group, user, setAsDefault = null, get = false) {
+  static async validateParams (org, account, group, user, setAsDefault = false, get = false) {
     if (setAsDefault) {
       const orgList = await getAccessTokenOrgList(user, null, false);
 
@@ -485,9 +485,9 @@ class NotificationsService {
   * is the event settings)
   * user: Object
   **/
-  static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules, setAsDefault = false }, { user }) {
+  static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(orgId, account, group, user, setAsDefault);
+      const orgIds = await NotificationsService.validateParams(orgId, account, group, user);
       if (orgIds && orgIds.error) {
         return orgIds;
       }
@@ -909,7 +909,7 @@ class NotificationsService {
    **/
   static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(orgId, account, group, user, false);
+      const orgIds = await NotificationsService.validateParams(orgId, account, group, user);
       if (orgIds && orgIds.error) {
         return orgIds;
       }
