@@ -10383,7 +10383,142 @@ components:
         org: organizationId,
         account: accountId,
         group: groupName,
-        rules: newRules
+        rules:
+          'Device connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Running router':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Link/Tunnel round trip time':
+            warningThreshold: 300
+            criticalThreshold: 600
+            thresholdUnit: ms
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Link/Tunnel default drop rate':
+            warningThreshold: 5
+            criticalThreshold: 20
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Device memory usage':
+            warningThreshold: 85
+            criticalThreshold: 95
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Hard drive usage':
+            warningThreshold: 85
+            criticalThreshold: 95
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          Temperature:
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: 'C°'
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Software update':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: warning
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+          'Internet connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Link status':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Missing interface ip':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Pending tunnel':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Tunnel connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Failed self-healing':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+          'Static route state':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device        
       properties:
         organizationId:
           maxLength: 24
@@ -10430,8 +10565,144 @@ components:
               $ref: '#/components/schemas/notificationSettingsSchema'
       type: object
     NotificationsConfDefaultPut:
-     example:
-      account: accountId
+      example:
+        account: accountId
+        rules:
+          'Device connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Running router':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Link/Tunnel round trip time':
+            warningThreshold: 300
+            criticalThreshold: 600
+            thresholdUnit: ms
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Link/Tunnel default drop rate':
+            warningThreshold: 5
+            criticalThreshold: 20
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Device memory usage':
+            warningThreshold: 85
+            criticalThreshold: 95
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Hard drive usage':
+            warningThreshold: 85
+            criticalThreshold: 95
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          Temperature:
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: 'C°'
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Software update':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: warning
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+          'Internet connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Link status':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Missing interface ip':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Pending tunnel':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Tunnel connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Failed self-healing':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+          'Static route state':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
       properties:
         accountId:
           maxLength: 24
