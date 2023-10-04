@@ -10319,7 +10319,15 @@ components:
         org: organizationId,
         account: accountId,
         group: groupName,
-        emailsSigning: emailsSigning
+        emailsSigning:
+          - _id: "64ecbbf8285b366710693965"
+            signedToCritical: true
+            signedToWarning: false
+            signedToDaily: false
+          - _id: "63712196b6c7482ae46ccbc8"
+            signedToCritical: false
+            signedToWarning: true
+            signedToDaily: true
       properties:
         organizationId:
           maxLength: 24
@@ -10356,7 +10364,10 @@ components:
         org: organizationId,
         account: accountId,
         group: groupName,
-        webHookSettings: webHookSettings
+        webHookSettings:
+          webhookURL: "https://localhost:7000/webhook"
+          sendCriticalAlerts: true
+          sendWarningAlerts: false
       properties:
         organizationId:
           maxLength: 24
