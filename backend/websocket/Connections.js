@@ -124,8 +124,8 @@ class Connections {
     this.disconnectedDevices = {};
     // Ping each client every 30 sec, with two retries
     this.ping_interval = setInterval(this.pingCheck, 20000);
-    // Check every 1 min if a device disconnection alert is needed
-    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 60000);
+    // Check every 30 sec if a device disconnection alert is needed
+    this.alert_interval = setInterval(this.triggerAlertWhenNeeded, 30000);
   }
 
   /**
@@ -1104,7 +1104,7 @@ class Connections {
               // Updated already
               return;
             }
-            if (job.state === 'complete' && jobToUpdate._state !== 'complete') {
+            if (job.state === 'complete' && jobToUpdate._state === 'failed') {
               logger.info('Updating job result received from device', {
                 params: { deviceId: deviceId, job_id: job.job_id, state: job.state }
               });
@@ -1334,7 +1334,7 @@ class Connections {
 
     const msgQ = this.msgQueue;
     const p = new Promise((resolve, reject) => {
-      if (org == null || info.org === org) {
+      if (org == null || (info?.org === org)) {
         // Increment seq and update queue with resolve function for this promise,
         // set timeout to clear when no response received
         const tohandle = setTimeout(() => {

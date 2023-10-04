@@ -40,8 +40,11 @@ const QosPolicies = require('../models/qosPolicies');
 const Connections = require('../websocket/Connections')();
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const Flexibilling = require('../flexibilling');
-const { getUserOrganizations, getUserOrgByID, orgUpdateFromNull } =
-  require('../utils/membershipUtils');
+const {
+  getUserOrganizations,
+  getUserOrgByID,
+  orgUpdateFromNull
+} = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
 const pick = require('lodash/pick');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
@@ -69,7 +72,8 @@ class OrganizationsService {
       'account',
       'group',
       'encryptionMethod',
-      'vxlanPort'
+      'vxlanPort',
+      'tunnelRange'
     ]);
     retOrg._id = retOrg._id.toString();
     retOrg.account = retOrg.account.toString();
@@ -277,12 +281,14 @@ class OrganizationsService {
         throw new Error('Please select an organization to update it');
       }
 
-      const { name, description, group, encryptionMethod, vxlanPort } = organizationRequest;
+      const { name, description, group, encryptionMethod, vxlanPort, tunnelRange } =
+        organizationRequest;
       const org = await Organizations.findOne({ _id: id });
       if (!org) {
         throw new Error('Organization ID is incorrect');
       }
       const origVxlanPort = org.vxlanPort;
+      const origTunnelRange = org.tunnelRange;
       let orgDevices = [];
 
       // update org, don't save
@@ -291,11 +297,14 @@ class OrganizationsService {
       org.group = group;
       org.encryptionMethod = encryptionMethod;
       org.vxlanPort = vxlanPort ?? origVxlanPort; // if not specified by user, set the orig value
+      org.tunnelRange = tunnelRange ?? origTunnelRange;
 
       const isVxlanPortChanged = origVxlanPort !== vxlanPort;
+      const isTunnelRangeChanged = origTunnelRange !== tunnelRange;
       if (isVxlanPortChanged) {
         // if vxlan port is changed, need to check the firewall ports before saving in db
-        orgDevices = await Devices.devices.find({ org: id })
+        orgDevices = await Devices.devices
+          .find({ org: id })
           .populate('org')
           .populate('policies.firewall.policy', '_id name rules');
 
@@ -308,15 +317,29 @@ class OrganizationsService {
       // after save, send jobs to devices
       if (isVxlanPortChanged) {
         // only 6.2 and later support vxlan port change.
-        const devices = orgDevices.filter(d => {
+        const devices = orgDevices.filter((d) => {
           const majorVersion = getMajorVersion(d.versions.agent);
           const minorVersion = getMinorVersion(d.versions.agent);
           return majorVersion > 6 || (majorVersion === 6 && minorVersion >= 2);
         });
 
         if (devices.length > 0) {
-          await handleVxlanPortChange(updatedOrg, vxlanPort, devices, user);
+          await handleVxlanPortTunnelRangeChange(
+            updatedOrg,
+            vxlanPort,
+            devices,
+            user,
+            isVxlanPortChanged
+          );
         }
+      } else if (isTunnelRangeChanged) {
+        await handleVxlanPortTunnelRangeChange(
+          updatedOrg,
+          vxlanPort,
+          orgDevices,
+          user,
+          isVxlanPortChanged
+        );
       }
 
       // Update token
@@ -367,38 +390,34 @@ class OrganizationsService {
               $sum: {
                 $cond: [{
                   $and: [
-                  // Device should be connected
+                    // Device should be connected
                     { $eq: ['$isConnected', true] },
                     {
                       $or: [{
-                      // One of the interfaces internet access != yes (size > 0)
+                        // One of the interfaces internet access != yes (size > 0)
                         $gt: [{
                           $size: {
                             $filter: {
                               input: '$interfaces',
                               as: 'intf',
                               cond: {
-                                $and: [
-                                  {
-                                    $or: [
-                                      { $eq: ['$$intf.linkStatus', 'down'] },
-                                      {
-                                        $and: [
-                                          { $ne: ['$$intf.internetAccess', 'yes'] },
-                                          { $eq: ['$$intf.monitorInternet', true] }
-                                        ]
-                                      }
-                                    ]
-                                  },
-                                  { $eq: ['$$intf.type', 'WAN'] }
-                                ]
+                                $and: [{
+                                  $or: [
+                                    { $eq: ['$$intf.linkStatus', 'down'] },
+                                    {
+                                      $and: [
+                                        { $ne: ['$$intf.internetAccess', 'yes'] },
+                                        { $eq: ['$$intf.monitorInternet', true] }]
+                                    }]
+                                },
+                                { $eq: ['$$intf.type', 'WAN'] }]
                               }
                             }
                           }
                         }, 0]
                       },
                       {
-                      // or one of the static routes is pending (size > 0)
+                        // or one of the static routes is pending (size > 0)
                         $gt: [{
                           $size: {
                             $filter: {
@@ -433,11 +452,13 @@ class OrganizationsService {
                   $expr: {
                     $and: [
                       { $or: [{ $eq: ['$_id', '$$idA'] }, { $eq: ['$_id', '$$idB'] }] },
-                      { $eq: ['$isConnected', false] }]
+                      { $eq: ['$isConnected', false] }
+                    ]
                   }
                 }
               },
-              { $project: { _id: 0, isConnected: 1 } }],
+              { $project: { _id: 0, isConnected: 1 } }
+            ],
             as: 'devices'
           }
         },
@@ -449,8 +470,7 @@ class OrganizationsService {
             // Tunnels with warning (pending) - devices connected and isPending
             tunWarning: {
               $sum: {
-                $cond: [
-                  { $and: [{ $eq: ['$isPending', true] }, { $eq: ['$devices', []] }] }, 1, 0]
+                $cond: [{ $and: [{ $eq: ['$isPending', true] }, { $eq: ['$devices', []] }] }, 1, 0]
               }
             },
             // Connected tunnels - devices connected, not pending, and status up
@@ -461,8 +481,12 @@ class OrganizationsService {
                     $and: [
                       { $eq: ['$status', 'up'] },
                       { $eq: ['$isPending', false] },
-                      { $eq: ['$devices', []] }]
-                  }, 1, 0]
+                      { $eq: ['$devices', []] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
               }
             },
             // Total tunnels
@@ -499,13 +523,15 @@ class OrganizationsService {
       ];
 
       const devicesRes = await Devices.devices.aggregate(devicesPipeline).allowDiskUse(true);
-      const { connected, approved, running, warning, total } = devicesRes.length > 0
-        ? devicesRes[0]
-        : { connected: 0, approved: 0, running: 0, warning: 0, total: 0 };
+      const { connected, approved, running, warning, total } =
+        devicesRes.length > 0
+          ? devicesRes[0]
+          : { connected: 0, approved: 0, running: 0, warning: 0, total: 0 };
       const tunnelsRes = await Tunnels.aggregate(tunnelsPipeline).allowDiskUse(true);
-      const { tunConnected, tunWarning, tunUnknown, tunTotal } = tunnelsRes.length > 0
-        ? tunnelsRes[0]
-        : { tunConnected: 0, tunWarning: 0, tunUnknown: 0, tunTotal: 0 };
+      const { tunConnected, tunWarning, tunUnknown, tunTotal } =
+        tunnelsRes.length > 0
+          ? tunnelsRes[0]
+          : { tunConnected: 0, tunWarning: 0, tunUnknown: 0, tunTotal: 0 };
       const bytesRes = await deviceAggregateStats.aggregate(bytesPipeline).allowDiskUse(true);
 
       const response = {
@@ -561,41 +587,46 @@ class OrganizationsService {
       if (!updAccount) throw new Error('Error adding organization to account');
 
       // Create a default QoS policy
-      const qosPolicy = await QosPolicies.create([{
-        org: org,
-        name: 'Default QoS',
-        description: 'Created automatically',
-        outbound: {
-          realtime: {
-            bandwidthLimitPercent: '30',
-            dscpRewrite: 'CS0'
-          },
-          'control-signaling': {
-            weight: '40',
-            dscpRewrite: 'CS0'
-          },
-          'prime-select': {
-            weight: '30',
-            dscpRewrite: 'CS0'
-          },
-          'standard-select': {
-            weight: '20',
-            dscpRewrite: 'CS0'
-          },
-          'best-effort': {
-            weight: '10',
-            dscpRewrite: 'CS0'
+      const qosPolicy = await QosPolicies.create(
+        [
+          {
+            org: org,
+            name: 'Default QoS',
+            description: 'Created automatically',
+            outbound: {
+              realtime: {
+                bandwidthLimitPercent: '30',
+                dscpRewrite: 'CS0'
+              },
+              'control-signaling': {
+                weight: '40',
+                dscpRewrite: 'CS0'
+              },
+              'prime-select': {
+                weight: '30',
+                dscpRewrite: 'CS0'
+              },
+              'standard-select': {
+                weight: '20',
+                dscpRewrite: 'CS0'
+              },
+              'best-effort': {
+                weight: '10',
+                dscpRewrite: 'CS0'
+              }
+            },
+            inbound: {
+              bandwidthLimitPercentHigh: 90,
+              bandwidthLimitPercentMedium: 80,
+              bandwidthLimitPercentLow: 70
+            },
+            advanced: false
           }
-        },
-        inbound: {
-          bandwidthLimitPercentHigh: 90,
-          bandwidthLimitPercentMedium: 80,
-          bandwidthLimitPercentLow: 70
-        },
-        advanced: false
-      }], {
-        session: session
-      });
+        ],
+        {
+          session: session
+        }
+      );
       if (!qosPolicy) throw new Error('Error default QoS policy adding');
 
       // Add default notifications settings
@@ -696,23 +727,26 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
               hostname: 1,
               'interfaces._id': 1,
               tunnelInterface: {
-                $arrayElemAt: [{
-                  $filter: {
-                    input: '$interfaces',
-                    as: 'ifc',
-                    cond: {
-                      $and: [
-                        { $eq: ['$$ifc.type', 'WAN'] },
-                        {
-                          $or: [
-                            { $eq: ['$$ifc._id', '$$ifcA'] },
-                            { $eq: ['$$ifc._id', '$$ifcB'] }
-                          ]
-                        }
-                      ]
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: '$interfaces',
+                      as: 'ifc',
+                      cond: {
+                        $and: [
+                          { $eq: ['$$ifc.type', 'WAN'] },
+                          {
+                            $or: [
+                              { $eq: ['$$ifc._id', '$$ifcA'] },
+                              { $eq: ['$$ifc._id', '$$ifcB'] }
+                            ]
+                          }
+                        ]
+                      }
                     }
-                  }
-                }, 0]
+                  },
+                  0
+                ]
               }
             }
           }
@@ -852,7 +886,13 @@ const addDeviceTasks = (obj, device, task) => {
   }
 };
 
-const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
+const handleVxlanPortTunnelRangeChange = async (
+  org,
+  origVxlanPort,
+  orgDevices,
+  user,
+  isVxlanPortChange
+) => {
   const orgId = org._id;
   const devicesJobs = {}; // mapping object [deviceId] = { device: {}, tasks: [] }
   const desynchronizedDevices = new Set();
@@ -866,9 +906,11 @@ const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
     const toPending = tunnels?.[0]?.toPending ?? [];
     const toReconstruct = tunnels?.[0]?.toReconstruct ?? [];
 
-    // handle tunnels that should be pending. Do not send jobs
-    const failedDevicesIds = await handleToPendingTunnels(toPending);
-    failedDevicesIds.forEach(f => desynchronizedDevices.add(f));
+    if (isVxlanPortChange) {
+      // handle tunnels that should be pending. Do not send jobs
+      const failedDevicesIds = await handleToPendingTunnels(toPending);
+      failedDevicesIds.forEach((f) => desynchronizedDevices.add(f));
+    } else toReconstruct.push(...toPending);
 
     // first prepare remove-tunnel tasks for each device
     for (const removeTunnel of [...toPending, ...toReconstruct]) {
@@ -916,7 +958,7 @@ const handleVxlanPortChange = async (org, origVxlanPort, orgDevices, user) => {
     });
 
     // here, no job was sent (it was handled by nested try and catch). hence we sync all devices
-    await forceDevicesSync(orgDevices.map(d => d._id));
+    await forceDevicesSync(orgDevices.map((d) => d._id));
     desynchronizedDevices.clear();
   }
 

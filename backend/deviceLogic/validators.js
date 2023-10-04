@@ -22,6 +22,7 @@ const { getBridges, getCpuInfo } = require('../utils/deviceUtils');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const keyBy = require('lodash/keyBy');
 const { isEqual } = require('lodash');
+const configs = require('../configs')();
 const maxMetric = 2 * 10 ** 9;
 const { getStartEndIp } = require('../utils/networks');
 
@@ -172,7 +173,7 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
       }
     }
     for (const side of ['source', 'destination']) {
-      const { trafficId, trafficTags, ipPort, ipProtoPort } = classification[side] || {};
+      const { trafficId, trafficTags, ipPort, ipProtoPort, lanNat } = classification[side] || {};
       // trafficId cannot be empty string or null
       if (isEmpty(trafficId) && trafficId !== undefined) {
         return { valid: false, err: 'Traffic name must be specified' };
@@ -198,6 +199,40 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
         // Empty Traffic Tags not allowed
         if (!category && !serviceClass && !importance) {
           return { valid: false, err: 'Category, service class or importance must be provided' };
+        }
+      }
+      if (direction === 'lanNat') {
+        if (!lanNat) {
+          return { valid: false, err: 'LAN NAT parameters must be set' };
+        }
+        const { match, action, interface: devId } = lanNat;
+        if (side === 'source') {
+          if (!devId) {
+            return { valid: false, err: 'Interface must be set for source' };
+          }
+          const lanIfc = interfaces.find(ifc => ifc.devId === devId);
+          if (!lanIfc || !lanIfc.isAssigned || lanIfc.type !== 'LAN') {
+            return {
+              valid: false,
+              err: 'Only assigned LAN interface can be selected in LAN NAT rule'
+            };
+          }
+          if (!match || !action) {
+            return { valid: false, err: 'Match and Action can not be empty for source' };
+          }
+        }
+        if ((match && !action) || (!match && action)) {
+          return { valid: false, err: 'Match and Action should be both empty or set for ' + side };
+        }
+        if (match) {
+          const [, matchMask] = match.split('/');
+          const [, actionMask] = action.split('/');
+          if (matchMask !== actionMask) {
+            return {
+              valid: false,
+              err: 'The prefix length of Match and Action has to be the same'
+            };
+          }
         }
       }
     }
@@ -554,6 +589,7 @@ const validateDevice = (
       }
     }
 
+    const tunnelRangeMask = configs.get('tunnelRangeMask');
     // Prevent setting LAN network that overlaps the network we are using for tunnels.
     for (const lanIfc of lanIfcs) {
       const subnet = `${lanIfc.IPv4}/${lanIfc.IPv4Mask}`;
@@ -563,11 +599,12 @@ const validateDevice = (
         continue;
       }
 
-      if (cidr.overlap(subnet, '10.100.0.0/16')) {
+      if (cidr.overlap(subnet, `${org.tunnelRange}/${tunnelRangeMask}`)) {
         return {
           valid: false,
           err:
-          `The subnet ${subnet} overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)`
+          `The subnet ${subnet} overlaps with the flexiWAN tunnel loopback range ` +
+          `(${org.tunnelRange}/${configs.get('tunnelRangeMask')})`
         };
       }
     }
@@ -702,11 +739,13 @@ const validateDevice = (
     }
 
     const neighborIp = bgpNeighbor.ip + '/32';
-    if (cidr.overlap(neighborIp, '10.100.0.0/16')) {
+    if (cidr.overlap(neighborIp, `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`)) {
       return {
         valid: false,
-        err: `The BGP Neighbor ${bgpNeighbor.ip} ` +
-        'overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)'
+        err:
+          `The BGP Neighbor ${bgpNeighbor.ip} ` +
+          'overlaps with the flexiWAN tunnel loopback range ' +
+          `(${org.tunnelRange}/${configs.get('tunnelRangeMask')})`
       };
     }
 
@@ -842,7 +881,7 @@ const isLocalOrBroadcastAddress = (ip, mask) => {
  * @param {Object} route - the added/modified route
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateStaticRoute = (device, tunnels, route) => {
+const validateStaticRoute = async (device, tunnels, route) => {
   const { ifname, gateway, isPending, redistributeViaBGP, onLink } = route;
   const gatewaySubnet = `${gateway}/32`;
 
@@ -891,6 +930,7 @@ const validateStaticRoute = (device, tunnels, route) => {
     }
 
     // Don't allow putting static route on a bridged interface
+    await device.populate('org', 'tunnelRange');
     const anotherBridgedIfc = device.interfaces.some(i => {
       return i.devId !== ifc.devId && ifc.IPv4 && i.IPv4 === ifc.IPv4 && i.isAssigned;
     });
@@ -906,7 +946,7 @@ const validateStaticRoute = (device, tunnels, route) => {
     );
     if (!valid) {
       valid = tunnels.some(tunnel => {
-        const { ip1 } = generateTunnelParams(tunnel.num);
+        const { ip1 } = generateTunnelParams(tunnel.num, device.org.tunnelRange);
         return cidr.overlap(`${ip1}/31`, gatewaySubnet);
       });
     }

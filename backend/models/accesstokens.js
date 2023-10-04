@@ -31,11 +31,32 @@ const accessTokenSchema = new Schema({
     ref: 'accounts',
     required: true
   },
+  // group name
+  group: {
+    type: String,
+    required: false,
+    unique: false,
+    maxlength: [50, 'Group length must be at most 50']
+  },
   // organization
   organization: {
     type: Schema.Types.ObjectId,
     ref: 'organizations',
     required: false
+  },
+  // applied to
+  to: {
+    type: String,
+    enum: ['account', 'organization', 'group'],
+    required: true
+  },
+  // default roles are 'owner', 'manager', 'viewer'
+  role: {
+    type: String,
+    enum: ['owner', 'manager', 'viewer'],
+    required: true,
+    unique: false,
+    maxlength: [10, 'role length must be at most 10']
   },
   // access token description
   name: {

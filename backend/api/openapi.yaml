@@ -503,6 +503,10 @@ paths:
                 type: string
               style: simple
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
         "401":
           content:
@@ -4794,6 +4798,10 @@ paths:
           description: Successful operation
         "400":
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         "401":
           content:
             application/json:
@@ -4922,6 +4930,12 @@ paths:
                   $ref: '#/components/schemas/WebhookSettings'
                 x-content-type: application/json
           description: Successful operation
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         "401":
           content:
             application/json:
@@ -7893,6 +7907,10 @@ paths:
                 $ref: '#/components/schemas/FirewallPolicy'
           description: Firewall was modified
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
         "401":
           content:
@@ -9644,6 +9662,9 @@ components:
       example:
         isValid: true
         name: name
+        group: ''
+        to: account
+        role: owner
         _id: id
         token: token
       properties:
@@ -9655,6 +9676,12 @@ components:
           type: string
         token:
           type: string
+        group:
+          type: string
+        to:
+          type: string
+        role:
+          type: string
         isValid:
           default: true
           type: boolean
@@ -9662,8 +9689,18 @@ components:
     AccessTokenRequest:
       example:
         name: name
+        accessKeyPermissionTo: account
+        accessKeyEntity: 5deaeae628e84b2bac6a4e37
+        accessKeyRole: viewer
+        validityEntity: Default
       properties:
         name:
+          type: string
+        accessKeyPermissionTo:
+          type: string
+        accessKeyEntity:
+          type: string
+        accessKeyRole:
           type: string
         validityEntity:
           type: string
@@ -10103,12 +10140,17 @@ components:
     NotificationsIDPutRequest:
       example:
         status: read
+        resolve: true
       properties:
         status:
           enum:
           - read
           - unread
           type: string
+        resolve:
+          enum:
+            - true
+          type: boolean
     NotificationsPutRequest:
       properties:
         status:
@@ -10116,6 +10158,8 @@ components:
           - read
           - unread
           type: string
+        resolve:
+          type: boolean
         ids:
           items:
             type: string
@@ -10124,12 +10168,23 @@ components:
       example:
         status: unread
         _id: 123
+        eventType: Running router
         title: Router state change
-        time: "2019-12-19T12:10:01.667Z"
-        device: test0
-        deviceId: 61055a03b4832c4a6c365179
-        machineId: "123"
+        createdAt: '2023-09-28T00:32:32.354Z'
+        updatedAt: '2023-09-28T00:33:38.238Z'
+        targets:
+          deviceId: '61055a03b4832c4a6c365179'
+          interfaceId: null
+          tunnelId: null
         details: Router state changed to "Not running"
+        resolved: false
+        severity: 'warning'
+        count: 1
+        emailSent:
+          sendingTime: '2023-09-28T00:33:22.238Z'
+          rateLimitedCount: 0
+        org: 123
+        account: 456
       properties:
         _id:
           maxLength: 24
@@ -10297,11 +10352,21 @@ components:
               $ref: '#/components/schemas/notificationSettingsSchema'
             'Temperature':
               $ref: '#/components/schemas/notificationSettingsSchema'
-            'Policy change':
-              $ref: '#/components/schemas/notificationSettingsSchema'
             'Software update':
               $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link status':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Missing interface ip':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Pending tunnel':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Tunnel connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
             'Internet connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Static route state':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Failed self-healing':
               $ref: '#/components/schemas/notificationSettingsSchema'
       type: object
     NotificationsDeleteRequest:
@@ -10466,11 +10531,15 @@ components:
           gateway: gateway
         deviceSpecificRulesEnabled: true
         firewallRules:
-        - name: name
+        - description: description
+          priority: priority
+          enabled: enabled
           direction: direction
           status: status
           action: action
-        - name: name
+        - description: description
+          priority: priority
+          enabled: enabled
           direction: direction
           status: status
           action: action
@@ -12668,6 +12737,7 @@ components:
           enum:
           - inbound
           - outbound
+          - lanNat
           type: string
         inbound:
           enum:
@@ -12723,6 +12793,7 @@ components:
           enum:
           - inbound
           - outbound
+          - lanNat
           type: string
         inbound:
           enum:
