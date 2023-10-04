@@ -809,7 +809,7 @@ class NotificationsService {
             // If there are user IDs specified for this field, set the update condition
             // If there's only one ID, use it directly. Otherwise, use the $each modifier to specify multiple IDs
             if (userIds.length) {
-              updateFields[field] = userIds.length === 1 ? userIds[0] : { $each: userIds };
+              updateFields[field] = op === '$pull' ? { $in: userIds } : (userIds.length === 1 ? userIds[0] : { $each: userIds });
             }
           });
 
