@@ -509,6 +509,10 @@ class Connections {
                 alerts: devInfo ? devInfo.alerts : ''
               });
 
+              // if the device is reconnected to the same server
+              // the 'waitPause' flag should be cleared
+              deviceQueues.resetWaitPause(machineId);
+
               // set device connection state flag used by other servers
               const connectDeviceKey = `${connectDevicePrefix}:${machineId}`;
               this.redisClient.setex(connectDeviceKey, connectExpireTime, hostId);
@@ -1363,6 +1367,9 @@ class Connections {
           if (this.isSocketAlive(info?.socket)) {
             // the device is connected to this server directly
             info.socket.send(messageToDevice);
+          } else if (jobid !== '') {
+            // do not send the 'job' message, increase attempts in broker instead
+            reject(new Error('Socket Connection Error'));
           } else {
             // publish the message on the `dev:{machineId}` channel
             // another host starts listening to this channel when device is connected
