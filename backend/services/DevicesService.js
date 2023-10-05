@@ -1956,6 +1956,7 @@ class DevicesService {
         // add device id to device request
         const deviceToValidate = {
           ...deviceRequest,
+          org: origDevice.org,
           _id: origDevice._id
         };
         // unspecified 'interfaces' are allowed for backward compatibility of some integrations
@@ -2545,7 +2546,7 @@ class DevicesService {
       let device = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      });
+      }).populate('org', 'tunnelRange');
       if (!device) {
         return Service.rejectResponse('Device not found', 404);
       }

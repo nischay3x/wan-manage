@@ -881,7 +881,7 @@ const isLocalOrBroadcastAddress = (ip, mask) => {
  * @param {Object} route - the added/modified route
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
-const validateStaticRoute = async (device, tunnels, route) => {
+const validateStaticRoute = (device, tunnels, route) => {
   const { ifname, gateway, isPending, redistributeViaBGP, onLink } = route;
   const gatewaySubnet = `${gateway}/32`;
 
@@ -930,7 +930,6 @@ const validateStaticRoute = async (device, tunnels, route) => {
     }
 
     // Don't allow putting static route on a bridged interface
-    await device.populate('org', 'tunnelRange');
     const anotherBridgedIfc = device.interfaces.some(i => {
       return i.devId !== ifc.devId && ifc.IPv4 && i.IPv4 === ifc.IPv4 && i.isAssigned;
     });
