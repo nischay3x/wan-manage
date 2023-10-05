@@ -61,6 +61,7 @@ class DeviceQueues {
     this.unregisterJobErrorCallback = this.unregisterJobErrorCallback.bind(this);
     this.callErrorRegisteredCallback = this.callErrorRegisteredCallback.bind(this);
     this.failedJobs = this.failedJobs.bind(this);
+    this.resetWaitPause = this.resetWaitPause.bind(this);
 
     this.updateSyncState = async (deviceId, job) => {};
     this.removeCallbacks = {};
@@ -158,6 +159,20 @@ class DeviceQueues {
           return done(err, false);
         }
       }
+      // the pending job is completed, the waiting pause queue should be paused immediately
+      if (this.deviceQueues[deviceId].waitPause) {
+        this.deviceQueues[deviceId].context.pause(0, (err) => {
+          if (err) {
+            logger.error('Queue pausing error',
+              { params: { err, deviceId }, queue: this.deviceQueues[deviceId] });
+            return;
+          };
+          logger.debug('Queue paused, succeeded',
+            { params: { deviceId }, queue: this.deviceQueues[deviceId] });
+          this.deviceQueues[deviceId].paused = true;
+          this.deviceQueues[deviceId].waitPause = false;
+        });
+      }
       done(null, job.data.response);
     });
 
@@ -251,6 +266,17 @@ class DeviceQueues {
         }
       });
     });
+  }
+
+  /**
+   * Resets the waitPause flag for a given device ID
+   * should be done before starting the queue, as soon as device is connected.
+   * @param  {string} deviceId UUID of the device
+   */
+  resetWaitPause (deviceId) {
+    if (this.deviceQueues[deviceId]?.waitPause) {
+      this.deviceQueues[deviceId].waitPause = false;
+    }
   }
 
   /**
