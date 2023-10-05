@@ -257,24 +257,32 @@ const validateNotificationField = (eventType, value, unit, errors, minValue, uni
   }
 };
 
-const validateNotificationsSettings = (notificationsRules) => {
-  const notificationsRulesSchema = Joi.object().keys({
-    'Device connection': Joi.object().required(),
-    'Running router': Joi.object().required(),
-    'Link/Tunnel round trip time': Joi.object().required(),
-    'Link/Tunnel default drop rate': Joi.object().required(),
-    'Device memory usage': Joi.object().required(),
-    'Hard drive usage': Joi.object().required(),
-    Temperature: Joi.object().required(),
-    'Software update': Joi.object().required(),
-    'Link status': Joi.object().required(),
-    'Missing interface ip': Joi.object().required(),
-    'Pending tunnel': Joi.object().required(),
-    'Tunnel connection': Joi.object().required(),
-    'Internet connection': Joi.object().required(),
-    'Static route state': Joi.object().required(),
-    'Failed self-healing': Joi.object().required()
-  });
+const validateNotificationsSettings = (notificationsRules, isTunnelSettings = false) => {
+  let notificationsRulesSchema;
+  if (!isTunnelSettings) {
+    notificationsRulesSchema = Joi.object().keys({
+      'Device connection': Joi.object().required(),
+      'Running router': Joi.object().required(),
+      'Link/Tunnel round trip time': Joi.object().required(),
+      'Link/Tunnel default drop rate': Joi.object().required(),
+      'Device memory usage': Joi.object().required(),
+      'Hard drive usage': Joi.object().required(),
+      Temperature: Joi.object().required(),
+      'Software update': Joi.object().required(),
+      'Link status': Joi.object().required(),
+      'Missing interface ip': Joi.object().required(),
+      'Pending tunnel': Joi.object().required(),
+      'Tunnel connection': Joi.object().required(),
+      'Internet connection': Joi.object().required(),
+      'Static route state': Joi.object().required(),
+      'Failed self-healing': Joi.object().required()
+    });
+  } else {
+    notificationsRulesSchema = Joi.object().keys({
+      'Link/Tunnel round trip time': Joi.object().required(),
+      'Link/Tunnel default drop rate': Joi.object().required()
+    });
+  }
 
   const { error } = notificationsRulesSchema.validate(notificationsRules, { abortEarly: false });
   let messages = [];
@@ -282,7 +290,7 @@ const validateNotificationsSettings = (notificationsRules) => {
     messages = error.details.map(detail => detail.message);
   } else {
     for (const [eventType, eventSettings] of Object.entries(notificationsRules)) {
-      const validationMessages = validateNotificationFields(eventType, eventSettings);
+      const validationMessages = validateNotificationFields(eventType, eventSettings, isTunnelSettings);
       if (validationMessages && validationMessages.length) {
         messages = [...messages, ...validationMessages];
       }
@@ -295,44 +303,53 @@ const validateNotificationsSettings = (notificationsRules) => {
   return messages.length > 0 ? messages : null;
 };
 
-const validateNotificationFields = (eventType, notificationSettingsFields) => {
-  // Define general schema
-  const baseSchema = {
-    warningThreshold: Joi.number().required(),
-    criticalThreshold: Joi.number().required(),
-    thresholdUnit: Joi.string().valid('ms', '%', 'C°').required(),
-    severity: Joi.string().valid('critical', 'warning').required(),
-    immediateEmail: Joi.boolean().required(),
-    resolvedAlert: Joi.boolean().required(),
-    sendWebHook: Joi.boolean().required(),
-    type: Joi.string().valid('device', 'tunnel', 'interface').required()
-  };
-  const setNullForFields = (schema, fields) => {
-    fields.forEach(field => {
-      schema[field] = Joi.valid(null).required();
-    });
-    return schema;
-  };
+const validateNotificationFields = (eventType, notificationSettingsFields, isTunnelSettings) => {
+  let baseSchema;
+  if (!isTunnelSettings) {
+    baseSchema = {
+      warningThreshold: Joi.number().required(),
+      criticalThreshold: Joi.number().required(),
+      thresholdUnit: Joi.string().valid('ms', '%', 'C°').required(),
+      severity: Joi.string().valid('critical', 'warning').required(),
+      immediateEmail: Joi.boolean().required(),
+      resolvedAlert: Joi.boolean().required(),
+      sendWebHook: Joi.boolean().required(),
+      type: Joi.string().valid('device', 'tunnel', 'interface').required()
+    };
 
-  const eventTypeConfig = {
-    'Device connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
-    'Running router': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
-    'Link/Tunnel round trip time': ['severity'],
-    'Link/Tunnel default drop rate': ['severity'],
-    'Device memory usage': ['severity'],
-    'Hard drive usage': ['severity'],
-    Temperature: ['warningThreshold', 'criticalThreshold'],
-    'Software update': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert'],
-    'Link status': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
-    'Missing interface ip': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
-    'Pending tunnel': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
-    'Tunnel connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
-    'Internet connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
-    'Static route state': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert'],
-    'Failed self-healing': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert']
-  };
+    const setNullForFields = (schema, fields) => {
+      fields.forEach(field => {
+        schema[field] = Joi.valid(null).required();
+      });
+      return schema;
+    };
 
-  setNullForFields(baseSchema, eventTypeConfig[eventType]);
+    const eventTypeConfig = {
+      'Device connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+      'Running router': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+      'Link/Tunnel round trip time': ['severity'],
+      'Link/Tunnel default drop rate': ['severity'],
+      'Device memory usage': ['severity'],
+      'Hard drive usage': ['severity'],
+      Temperature: ['warningThreshold', 'criticalThreshold'],
+      'Software update': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert'],
+      'Link status': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+      'Missing interface ip': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+      'Pending tunnel': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+      'Tunnel connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+      'Internet connection': ['warningThreshold', 'criticalThreshold', 'thresholdUnit'],
+      'Static route state': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert'],
+      'Failed self-healing': ['warningThreshold', 'criticalThreshold', 'thresholdUnit', 'resolvedAlert']
+    };
+
+    setNullForFields(baseSchema, eventTypeConfig[eventType]);
+  } else {
+    baseSchema = {
+      warningThreshold: Joi.number().required(),
+      criticalThreshold: Joi.number().required(),
+      thresholdUnit: Joi.string().valid('ms', '%', 'C°').required()
+    };
+  }
 
   const schema = Joi.object().keys(baseSchema);
 
