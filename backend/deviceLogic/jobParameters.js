@@ -231,11 +231,12 @@ const transformBGP = async (device) => {
     )
       .populate('deviceA', 'bgp')
       .populate('deviceB', 'bgp')
+      .populate('org', 'tunnelRange')
       .lean();
 
     for (const tunnel of tunnels) {
-      const { num, deviceA, deviceB } = tunnel;
-      const { ip1, ip2 } = generateTunnelParams(num);
+      const { num, deviceA, deviceB, org } = tunnel;
+      const { ip1, ip2 } = generateTunnelParams(num, org.tunnelRange);
       const isDeviceA = deviceA._id.toString() === _id.toString();
 
       const remoteIp = isDeviceA ? ip2 : ip1;

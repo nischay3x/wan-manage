@@ -348,7 +348,7 @@ const validateDevice = async (
       }
     }
 
-    const overlappingSubnets = await validateOverlappingSubnets(device.org._id, subnetsToCheck);
+    const overlappingSubnets = await validateOverlappingSubnets(device.org, subnetsToCheck);
     for (const overlappingSubnet of overlappingSubnets) {
       const { type, subnet, overlappingWith, meta } = overlappingSubnet;
 
@@ -536,11 +536,13 @@ const validateDevice = async (
     }
 
     const neighborIp = bgpNeighbor.ip + '/32';
-    if (cidr.overlap(neighborIp, '10.100.0.0/16')) {
+    if (cidr.overlap(neighborIp, `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`)) {
       return {
         valid: false,
-        err: `The BGP Neighbor ${bgpNeighbor.ip} ` +
-        'overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)'
+        err:
+          `The BGP Neighbor ${bgpNeighbor.ip} ` +
+          'overlaps with the flexiWAN tunnel loopback range ' +
+          `(${org.tunnelRange}/${configs.get('tunnelRangeMask')})`
       };
     }
 
@@ -741,7 +743,7 @@ const validateStaticRoute = (device, tunnels, route) => {
     );
     if (!valid) {
       valid = tunnels.some(tunnel => {
-        const { ip1 } = generateTunnelParams(tunnel.num);
+        const { ip1 } = generateTunnelParams(tunnel.num, device.org.tunnelRange);
         return cidr.overlap(`${ip1}/31`, gatewaySubnet);
       });
     }
@@ -804,14 +806,14 @@ const validateQOSPolicy = (devices) => {
   return { valid: true, err: '' };
 };
 
-const validateOverlappingSubnets = async (orgId, subnets) => {
+const validateOverlappingSubnets = async (org, subnets) => {
   const overlappingSubnets = [];
 
   if (subnets.length === 0) {
     return overlappingSubnets;
   }
 
-  const lanOverlappingSubnets = await checkLanOverlappingWith([orgId], subnets);
+  const lanOverlappingSubnets = await checkLanOverlappingWith([org._id], subnets);
   overlappingSubnets.push(...lanOverlappingSubnets.map(o => ({
     type: 'lanInterface',
     subnet: o.isOverlappingWith,
@@ -824,17 +826,18 @@ const validateOverlappingSubnets = async (orgId, subnets) => {
     }
   })));
 
-  const tunnelOverlappingSubnets = subnets.find(s => cidr.overlap(s, '10.100.0.0/16'));
+  const tunnelRange = `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`;
+  const tunnelOverlappingSubnets = subnets.find(s => cidr.overlap(s, tunnelRange));
   if (tunnelOverlappingSubnets) {
     overlappingSubnets.push({
       type: 'tunnel',
       subnet: tunnelOverlappingSubnets,
-      overlappingWith: '10.100.0.0/16',
+      overlappingWith: tunnelRange,
       meta: {}
     });
   }
 
-  const applicationSubnets = await appsLogic.getApplicationSubnets(orgId);
+  const applicationSubnets = await appsLogic.getApplicationSubnets(org._id);
   for (const subnet of subnets) {
     for (const applicationSubnet of applicationSubnets) {
       if (cidr.overlap(subnet, applicationSubnet.subnet)) {

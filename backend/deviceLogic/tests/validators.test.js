@@ -23,6 +23,7 @@ const maxMetric = 2 * 10 ** 9;
 describe('validateDevice', () => {
   let device;
   const org = {
+    tunnelRange: '10.100.0.0',
     vxlanPort: '4789'
   };
   const successObject = {
@@ -36,6 +37,9 @@ describe('validateDevice', () => {
 
   beforeEach(() => {
     device = {
+      org: {
+        tunnelRange: '10.100.0.0'
+      },
       bgp: {
         neighbors: []
       },
@@ -782,6 +786,9 @@ describe('validateStaticRoute', () => {
 
   beforeEach(() => {
     device = {
+      org: {
+        tunnelRange: '10.100.0.0'
+      },
       interfaces: [{
         name: 'eth0',
         devId: 'pci:0000:00:01.00',

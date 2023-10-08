@@ -503,6 +503,10 @@ paths:
                 type: string
               style: simple
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
         "401":
           content:
@@ -5030,6 +5034,67 @@ paths:
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
+    put:
+      operationId: notificationsConfDefaultPUT
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationsConfDefaultPut'
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/ApplyJobsResponse'
+          description: Successful operation
+        "204":
+          description: Successful operation
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unauthorized
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Forbidden
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: The specified resource was not found
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Internal server error
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Unexpected error
+      security:
+      - apiKey: []
+      - bearerAuth: []
+      summary:  Set notifications settings as the default for a given account
+      tags:
+      - Notifications
+      x-swagger-router-controller: Notifications
+      x-openapi-router-controller: NotificationsController
+      x-openapi-router-service: NotificationsService
   /members:
     get:
       operationId: membersGET
@@ -7903,6 +7968,10 @@ paths:
                 $ref: '#/components/schemas/FirewallPolicy'
           description: Firewall was modified
         "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
           description: Bad Request
         "401":
           content:
@@ -9654,6 +9723,9 @@ components:
       example:
         isValid: true
         name: name
+        group: ''
+        to: account
+        role: owner
         _id: id
         token: token
       properties:
@@ -9665,6 +9737,12 @@ components:
           type: string
         token:
           type: string
+        group:
+          type: string
+        to:
+          type: string
+        role:
+          type: string
         isValid:
           default: true
           type: boolean
@@ -9672,8 +9750,18 @@ components:
     AccessTokenRequest:
       example:
         name: name
+        accessKeyPermissionTo: account
+        accessKeyEntity: 5deaeae628e84b2bac6a4e37
+        accessKeyRole: viewer
+        validityEntity: Default
       properties:
         name:
+          type: string
+        accessKeyPermissionTo:
+          type: string
+        accessKeyEntity:
+          type: string
+        accessKeyRole:
           type: string
         validityEntity:
           type: string
@@ -10113,12 +10201,17 @@ components:
     NotificationsIDPutRequest:
       example:
         status: read
+        resolve: true
       properties:
         status:
           enum:
           - read
           - unread
           type: string
+        resolve:
+          enum:
+            - true
+          type: boolean
     NotificationsPutRequest:
       properties:
         status:
@@ -10126,6 +10219,8 @@ components:
           - read
           - unread
           type: string
+        resolve:
+          type: boolean
         ids:
           items:
             type: string
@@ -10134,12 +10229,23 @@ components:
       example:
         status: unread
         _id: 123
+        eventType: Running router
         title: Router state change
-        time: "2019-12-19T12:10:01.667Z"
-        device: test0
-        deviceId: 61055a03b4832c4a6c365179
-        machineId: "123"
+        createdAt: '2023-09-28T00:32:32.354Z'
+        updatedAt: '2023-09-28T00:33:38.238Z'
+        targets:
+          deviceId: '61055a03b4832c4a6c365179'
+          interfaceId: null
+          tunnelId: null
         details: Router state changed to "Not running"
+        resolved: false
+        severity: 'warning'
+        count: 1
+        emailSent:
+          sendingTime: '2023-09-28T00:33:22.238Z'
+          rateLimitedCount: 0
+        org: 123
+        account: 456
       properties:
         _id:
           maxLength: 24
@@ -10213,7 +10319,15 @@ components:
         org: organizationId,
         account: accountId,
         group: groupName,
-        emailsSigning: emailsSigning
+        emailsSigning:
+          - _id: "64ecbbf8285b366710693965"
+            signedToCritical: true
+            signedToWarning: false
+            signedToDaily: false
+          - _id: "63712196b6c7482ae46ccbc8"
+            signedToCritical: false
+            signedToWarning: true
+            signedToDaily: true
       properties:
         organizationId:
           maxLength: 24
@@ -10250,7 +10364,10 @@ components:
         org: organizationId,
         account: accountId,
         group: groupName,
-        webHookSettings: webHookSettings
+        webHookSettings:
+          webhookURL: "https://localhost:7000/webhook"
+          sendCriticalAlerts: true
+          sendWarningAlerts: false
       properties:
         organizationId:
           maxLength: 24
@@ -10277,8 +10394,142 @@ components:
         org: organizationId,
         account: accountId,
         group: groupName,
-        rules: newRules,
-        setAsDefault: false,
+        rules:
+          'Device connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Running router':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Link/Tunnel round trip time':
+            warningThreshold: 300
+            criticalThreshold: 600
+            thresholdUnit: ms
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Link/Tunnel default drop rate':
+            warningThreshold: 5
+            criticalThreshold: 20
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Device memory usage':
+            warningThreshold: 85
+            criticalThreshold: 95
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Hard drive usage':
+            warningThreshold: 85
+            criticalThreshold: 95
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          Temperature:
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: 'C°'
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Software update':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: warning
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+          'Internet connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Link status':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Missing interface ip':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Pending tunnel':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Tunnel connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Failed self-healing':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+          'Static route state':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device        
       properties:
         organizationId:
           maxLength: 24
@@ -10289,6 +10540,184 @@ components:
           minLength: 24
           type: string
         group:
+          type: string
+        rules:
+          type: object
+          properties:
+            'Device connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Running router':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link/Tunnel round trip time':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link/Tunnel default drop rate':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Device memory usage':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Hard drive usage':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Temperature':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Software update':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Link status':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Missing interface ip':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Pending tunnel':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Tunnel connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Internet connection':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Static route state':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+            'Failed self-healing':
+              $ref: '#/components/schemas/notificationSettingsSchema'
+      type: object
+    NotificationsConfDefaultPut:
+      example:
+        account: accountId
+        rules:
+          'Device connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Running router':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Link/Tunnel round trip time':
+            warningThreshold: 300
+            criticalThreshold: 600
+            thresholdUnit: ms
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Link/Tunnel default drop rate':
+            warningThreshold: 5
+            criticalThreshold: 20
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Device memory usage':
+            warningThreshold: 85
+            criticalThreshold: 95
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Hard drive usage':
+            warningThreshold: 85
+            criticalThreshold: 95
+            thresholdUnit: '%'
+            severity: null
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          Temperature:
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: 'C°'
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: device
+          'Software update':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: warning
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+          'Internet connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Link status':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Missing interface ip':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: interface
+          'Pending tunnel':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Tunnel connection':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: false
+            sendWebHook: false
+            type: tunnel
+          'Failed self-healing':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+          'Static route state':
+            warningThreshold: null
+            criticalThreshold: null
+            thresholdUnit: null
+            severity: critical
+            immediateEmail: false
+            resolvedAlert: null
+            sendWebHook: false
+            type: device
+      properties:
+        accountId:
+          maxLength: 24
+          minLength: 24
           type: string
         rules:
           type: object

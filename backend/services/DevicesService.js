@@ -1949,8 +1949,8 @@ class DevicesService {
         // add device id to device request
         const deviceToValidate = {
           ...deviceRequest,
-          _id: origDevice._id,
-          org: origDevice.org
+          org: origDevice.org,
+          _id: origDevice._id
         };
         // unspecified 'interfaces' are allowed for backward compatibility of some integrations
         if (typeof deviceToValidate.interfaces === 'undefined') {
@@ -2059,7 +2059,7 @@ class DevicesService {
             }
 
             for (const t of incompleteTunnels) {
-              const { ip1, ip2 } = generateTunnelParams(t.num);
+              const { ip1, ip2 } = generateTunnelParams(t.num, origDevice.org.tunnelRange);
               if (ip1 === s.gateway || ip2 === s.gateway) {
                 s.isPending = true;
                 s.pendingType = pendingTypes.tunnelIsPending;
@@ -2537,7 +2537,7 @@ class DevicesService {
       let device = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      });
+      }).populate('org', 'tunnelRange');
       if (!device) {
         return Service.rejectResponse('Device not found', 404);
       }
@@ -2860,6 +2860,7 @@ class DevicesService {
         .populate('deviceB', 'name interfaces machineId')
         .populate('pathlabel')
         .populate('peer')
+        .populate('org', 'tunnelRange')
         .lean();
 
       const tunnelMap = tunnels.map((d) => {

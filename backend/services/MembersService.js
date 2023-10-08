@@ -17,7 +17,12 @@
 
 const Service = require('./Service');
 
-const { membership, permissionMasks, preDefinedPermissions } = require('../models/membership');
+const {
+  membership,
+  permissionMasks,
+  preDefinedPermissions,
+  validatePermissionCombination
+} = require('../models/membership');
 const logger = require('../logging/logging')({ module: module.filename, type: 'req' });
 const mongoose = require('mongoose');
 const configs = require('../configs')();
@@ -36,6 +41,7 @@ const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoConns = require('../mongoConns.js')();
 const NotificationsConf = require('../models/notificationsConf');
 const users = require('../models/users');
+const createError = require('http-errors');
 
 class MembersService {
   /**
@@ -91,21 +97,7 @@ class MembersService {
       !memberRequest.userEntity
     ) { return { status: false, error: 'Invitation Fields Error' }; }
 
-    // Account permissions could be owner, manager or viewer
-    // Group and organization permissions could be manager or viewer
-    if (memberRequest.userRole !== 'owner' &&
-      memberRequest.userRole !== 'manager' &&
-      memberRequest.userRole !== 'viewer') {
-      return { status: false, error: 'Illegal role' };
-    }
-
-    if ((memberRequest.userPermissionTo === 'group' ||
-      memberRequest.userPermissionTo === 'organization') &&
-      memberRequest.userRole !== 'manager' &&
-      memberRequest.userRole !== 'viewer') {
-      return { status: false, error: 'Illegal permission combination' };
-    }
-    return { status: true, error: '' };
+    return validatePermissionCombination(memberRequest.userRole, memberRequest.userPermissionTo);
   };
 
   // check levels and relationships
@@ -315,7 +307,7 @@ class MembersService {
       if (userMembershipInfo && (userMembershipInfo._id.toString()) !== memberRequest._id) {
         const errMsg = `This user already has a role in this ${memberRequest.userPermissionTo},
          please delete or edit the existing role.`;
-        return Service.rejectResponse(errMsg, 400);
+        throw createError(400, errMsg);
       }
 
       // make sure user is only allowed to define membership under his view
@@ -329,8 +321,7 @@ class MembersService {
       );
 
       if (!verified) {
-        return Service.rejectResponse(
-          'No sufficient permissions for this operation', 400);
+        throw createError(403, 'No sufficient permissions for this operation');
       }
 
       // Update
@@ -386,7 +377,10 @@ class MembersService {
           reason: err.message
         }
       });
-      return Service.rejectResponse(err.message, 400);
+      return Service.rejectResponse(
+        err.message || 'Internal Server Error',
+        err.status || 500
+      );
     }
   }
 
