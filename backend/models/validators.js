@@ -61,6 +61,11 @@ const validateIPv4Mask = mask => {
     mask >= 0 && mask <= 32
   );
 };
+const validateIPv4Prefix = (ipWithMask) => {
+  const ip = ipWithMask.split('/')[0];
+  const ipCidr = new IPCidr(ipWithMask);
+  return (ipCidr.start() === ip);
+};
 const validateIPv6Mask = mask => {
   return (
     !isEmpty(mask) &&
@@ -434,6 +439,7 @@ module.exports = {
   validateDHCP,
   validateIPv4,
   validateIPv4WithMask,
+  validateIPv4Prefix,
   validateIPv6,
   validateIPaddr,
   validateTunnelRangeIP,
