@@ -289,6 +289,7 @@ class VrrpService {
                   devId: '$$ifc.devId',
                   name: '$$ifc.name',
                   dhcp: '$$ifc.dhcp',
+                  type: '$$ifc.type',
                   IPv4: { $concat: ['$$ifc.IPv4', '/', '$$ifc.IPv4Mask'] }
                 }
               }
