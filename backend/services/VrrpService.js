@@ -276,7 +276,12 @@ class VrrpService {
                   $filter: {
                     input: '$interfaces',
                     as: 'ifc',
-                    cond: { $eq: ['$$ifc.isAssigned', true] }
+                    cond: {
+                      $and: [
+                        { $eq: ['$$ifc.isAssigned', true] },
+                        { $ne: ['$$ifc.deviceType', 'wifi'] }
+                      ]
+                    }
                   }
                 },
                 as: 'ifc',
@@ -284,6 +289,7 @@ class VrrpService {
                   devId: '$$ifc.devId',
                   name: '$$ifc.name',
                   dhcp: '$$ifc.dhcp',
+                  type: '$$ifc.type',
                   IPv4: { $concat: ['$$ifc.IPv4', '/', '$$ifc.IPv4Mask'] }
                 }
               }
@@ -373,6 +379,28 @@ class VrrpService {
       }
 
       const ifc = interfacesByDevId[vrrpDevice.interface];
+
+      if (!ifc.isAssigned) {
+        return {
+          valid: false,
+          err: `The interface ${ifc.name} is not assigned`
+        };
+      }
+
+      if (ifc.type === 'WAN') {
+        return {
+          valid: false,
+          err: `VRRP cannot be configured on a WAN interface (${ifc.name})`
+        };
+      }
+
+      if (ifc.deviceType === 'wifi') {
+        return {
+          valid: false,
+          err: `VRRP cannot be configured on a WiFi interface (${ifc.name})`
+        };
+      }
+
       const ip = `${ifc.IPv4}/${ifc.IPv4Mask}`;
       if (!cidr.overlap(ip, `${vrrp.virtualIp}/32`)) {
         return {

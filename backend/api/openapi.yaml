@@ -13736,6 +13736,8 @@ components:
                 type: string
               dhcp:
                 type: string
+              type:
+                type: string
       example:
         id: deviceId
         name: Berlin
@@ -13743,6 +13745,7 @@ components:
         - _id: interfaceId
           name: eth1
           IPv4: 172.16.1.1/24
+          type: LAN
     VrrpGroupPutPostResponse:
       type: object
       properties:
