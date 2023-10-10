@@ -25,9 +25,10 @@ const isLanNatSupported = (device) => {
 /**
  * Gets the device LAN NAT info for creating a job
  * @param   {Object} device - the device object where to send LAN NAT parameters
+ * @param   {Boolean} isSync - true if called for generating sync tasks
  * @return  {Object} parameters to include in the job response data
 */
-const getLanNatJobInfo = (device) => {
+const getLanNatJobInfo = (device, isSync = false) => {
   const tasks = [];
   if (!isLanNatSupported(device)) {
     return { tasks };
@@ -47,6 +48,12 @@ const getLanNatJobInfo = (device) => {
       message: 'add-lan-nat-policy',
       params: params
     });
+  } else if (!isSync) {
+    tasks.push({
+      entity: 'agent',
+      message: 'remove-lan-nat-policy',
+      params: null
+    });
   }
   return { tasks };
 };
@@ -58,7 +65,7 @@ const getLanNatJobInfo = (device) => {
 const sync = async (deviceId, org, device) => {
   const callComplete = false;
   // if no firewall policy then device specific rules will be sent
-  const res = getLanNatJobInfo(device);
+  const res = getLanNatJobInfo(device, true);
   return {
     requests: res.tasks,
     callComplete
