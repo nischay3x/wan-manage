@@ -30,7 +30,7 @@ const appComplete = require('./appIdentification').complete;
 const appError = require('./appIdentification').error;
 const appRemove = require('./appIdentification').remove;
 const isEmpty = require('lodash/isEmpty');
-const { validateFirewallRules } = require('../deviceLogic/validators');
+const { validateFirewallRules } = require('../utils/deviceUtils');
 
 /**
  * Gets the device firewall data needed for creating a job

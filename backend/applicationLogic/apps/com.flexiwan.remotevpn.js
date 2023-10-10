@@ -18,7 +18,6 @@
 const Joi = require('joi');
 const pick = require('lodash/pick');
 const omit = require('lodash/omit');
-const cidr = require('cidr-tools');
 const applications = require('../../models/applications');
 const vpnUniqueUsers = require('../../models/vpnUniqueUsers');
 const organizations = require('../../models/organizations');
@@ -203,51 +202,38 @@ class RemoteVpn extends IApplication {
       return `${deviceStartIp}/${mask}`;
     });
 
-    // "getAllOrganizationSubnets" is injected to this class with "registerUtilFunc"
-    const orgSubnets = await this.utils.getAllOrganizationSubnets(app.org);
+    // "validateOverlappingSubnets" is injected to this class with "registerUtilFunc"
+    const overlappingSubnets = await this.utils.validateOverlappingSubnets(
+      app.org, vpnServerNetworks);
 
-    // we don't need to check of network is overlapping with the vpn networks of the selected device
-    const orgToCheck = orgSubnets.filter(o => {
-      if (o.type !== 'application') return true;
-      if (o._id.toString() !== app._id.toString()) return true;
+    for (const overlappingSubnet of overlappingSubnets) {
+      const { type, subnet, overlappingWith, meta } = overlappingSubnet;
 
-      const isSelectedDevice = deviceList.find(d => d._id.toString() === o.deviceId.toString());
-      if (!isSelectedDevice) return true;
+      let errMsg = `VPN network ${subnet} overlaps with `;
 
-      return false;
-    });
-
-    for (const orgSubnet of orgToCheck) {
-      for (const vpnServerNetwork of vpnServerNetworks) {
-        if (cidr.overlap(orgSubnet.subnet, vpnServerNetwork)) {
-          let overlapsWith = 'some network in your organization';
-          if (orgSubnet.type === 'interface') {
-            overlapsWith = `device ${orgSubnet.name}`;
-          } else if (orgSubnet.type === 'tunnel') {
-            overlapsWith = `tunnel #${orgSubnet.num}`;
-          } else if (orgSubnet.type === 'application') {
-            overlapsWith = `application ${orgSubnet.name} in device ${orgSubnet.deviceName}`;
-          }
-
-          return {
-            valid: false,
-            err: `VPN network ${vpnServerNetwork} overlaps
-            with ${orgSubnet.subnet} defined on ${overlapsWith}`
-          };
-        }
+      if (type === 'lanInterface') {
+        errMsg += `address ${overlappingWith} of the LAN interface `;
+        errMsg += `${meta.interfaceName} in device ${meta.deviceName}`;
+        return { valid: false, err: errMsg };
       }
-    }
 
-    // Prevent setting LAN network that overlaps the network we are using for tunnels.
-    const tunnelRangeMask = configs.get('tunnelRangeMask');
-    for (const vpnServerNetwork of vpnServerNetworks) {
-      if (cidr.overlap(vpnServerNetwork, `${app.org.tunnelRange}/${tunnelRangeMask}`)) {
-        return {
-          valid: false,
-          err: `The subnet ${vpnServerNetwork} overlaps
-          with the flexiWAN tunnel loopback range ` +
-          `${app.org.tunnelRange}/${tunnelRangeMask}`
-        };
+      if (type === 'tunnel') {
+        errMsg += `flexiWAN tunnel range (${overlappingWith})`;
+        return { valid: false, err: errMsg };
+      }
+
+      if (type === 'application') {
+        // If the user desires to override the application configuration on a device,
+        // there should be no checking for overlapping with the current configuration.
+        if (meta.appId === app._id.toString()) {
+          if (deviceList.some(d => d._id.toString() === meta.deviceId)) {
+            continue;
+          }
+        }
+
+        errMsg += `address ${overlappingWith} of the application `;
+        errMsg += `${meta.appName} in device ${meta.deviceName}`;
+        return { valid: false, err: errMsg };
       }
     }
 

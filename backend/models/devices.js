@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const validators = require('./validators');
-const { validateConfiguration } = require('../deviceLogic/interfaces');
+const { validateConfiguration } = require('../utils/deviceUtils');
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
@@ -318,6 +318,7 @@ const interfacesSchema = new Schema({
     },
     keyId: {
       type: String,
+      default: '',
       validate: {
         validator: val => val === '' || validators.validateIsInteger(val),
         message: 'keyId should be an integer'
@@ -325,6 +326,7 @@ const interfacesSchema = new Schema({
     },
     key: {
       type: String,
+      default: '',
       maxlength: [16, 'Key length must be at most 16']
     },
     cost: {

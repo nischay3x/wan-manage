@@ -15,8 +15,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+const Joi = require('joi');
 const path = require('path');
 const apnsJson = require(path.join(__dirname, 'mcc_mnc_apn.json'));
+const wifiChannels = require('./wifi-channels');
+const { getOrgDefaultTunnelPort } = require('../utils/tunnelUtils');
 
 /**
  * Get the default gateway of the device
@@ -30,6 +33,13 @@ const getDefaultGateway = device => {
   }, false);
   return !defaultIfc ? device.defaultRoute : defaultIfc.gateway;
 };
+
+/**
+ * Checks whether a value is empty
+ * @param  {string}  val the value to be checked
+ * @return {boolean}     true if the value is empty, false otherwise
+ */
+const isEmpty = (val) => { return val === null || val === undefined || val === ''; };
 
 const mapWifiNames = agentData => {
   const map = {
@@ -197,6 +207,386 @@ const getCpuInfo = cpuInfo => {
   };
 };
 
+const lteConfigurationSchema = Joi.object().keys({
+  enable: Joi.boolean().required(),
+  apn: Joi.string().required(),
+  auth: Joi.string().valid('MSCHAPV2', 'PAP', 'CHAP').allow(null, ''),
+  user: Joi.string().allow(null, ''),
+  password: Joi.string().allow(null, ''),
+  pin: Joi.string().allow(null, '')
+});
+
+const allowedSecurityModes = ['open', 'wpa-psk', 'wpa2-psk'];
+const shared = {
+  enable: Joi.boolean().required(),
+  ssid: Joi.alternatives().conditional('enable', {
+    is: true,
+    then: Joi.string().required(),
+    otherwise: Joi.string().allow(null, '')
+  }).required(),
+  password: Joi.when('enable', {
+    is: true,
+    then: Joi.when('securityMode', {
+      switch: [
+        {
+          is: 'wep',
+          then: Joi.string()
+            .regex(/^([a-z0-9]{5}|[a-z0-9]{13}|[a-z0-9]{16})$/)
+            .error(() => 'Password length must be 5, 13 or 16')
+        },
+        { is: 'open', then: Joi.string().allow(null, '') }
+      ],
+      otherwise: Joi.string().min(8)
+    }).required(),
+    otherwise: Joi.string().allow(null, '')
+  }).required(),
+  operationMode: Joi.when('enable', {
+    is: true,
+    then: Joi.string().required().valid('b', 'g', 'n', 'a', 'ac'),
+    otherwise: Joi.string().allow(null, '')
+  }).required(),
+  channel: Joi.string().regex(/^\d+$/).required().error(errors => {
+    errors.forEach(err => {
+      switch (err.code) {
+        case 'string.pattern.base':
+          err.message = `${err.local.value} is not a valid channel number`;
+          break;
+        default:
+          break;
+      }
+    });
+    return errors;
+  }),
+  bandwidth: Joi.string().valid('20').required(),
+  securityMode: Joi.string().when('enable', {
+    is: true,
+    then: Joi.valid(...allowedSecurityModes),
+    otherwise: Joi.valid(...allowedSecurityModes, '') // allowed empty if band disabled
+  }).required(),
+  hideSsid: Joi.boolean().required(),
+  encryption: Joi.string().valid('aes-ccmp').required(),
+  region: Joi.alternatives().conditional('enable', {
+    is: true,
+    then: Joi.string().required()
+      .regex(/^([A-Z]{2}|other)$/).error(() => 'Region  must be 2 uppercase letters or "other"'),
+    otherwise: Joi.string().allow(null, '')
+  }).required()
+};
+
+const WifiConfigurationSchema = Joi.object({
+  '2.4GHz': shared,
+  '5GHz': shared
+}).or('2.4GHz', '5GHz', { separator: false });
+
+const validateWifiCountryCode = (configurationReq) => {
+  let err = null;
+  for (const band in configurationReq) {
+    if (configurationReq[band].enable === false) {
+      continue;
+    }
+
+    const channel = parseInt(configurationReq[band].channel);
+    if (channel < 0) {
+      err = 'Channel must be greater than or equal to 0';
+      break;
+    }
+
+    const region = configurationReq[band].region;
+
+    if (band === '2.4GHz') {
+      const allowedRegions = ['AU', 'CN', 'DE', 'JP', 'RU', 'TW', 'US'];
+      if (!allowedRegions.includes(region)) {
+        err = `Region ${region} is not valid`;
+        break;
+      }
+
+      if ((region === 'US' || region === 'TW') && channel > 11) {
+        err = 'Channel must be between 0 to 11';
+        break;
+      }
+
+      if (channel > 13) {
+        err = 'Channel must be between 0 to 13';
+        break;
+      }
+    }
+
+    if (band === '5GHz') {
+      const allowedRegions = Object.values(wifiChannels);
+      const exists = allowedRegions.find(r => r.code === region);
+      if (!exists) {
+        err = `Region ${region} is not valid`;
+        break;
+      };
+
+      const validChannels = exists.channels;
+      if (channel > 0 && validChannels.findIndex(c => c === channel) === -1) {
+        err = `Channel ${channel} is not valid number for country ${region}`;
+        break;
+      }
+    }
+  };
+
+  if (err) {
+    return { err: err, valid: false };
+  }
+  return { err: '', valid: true };
+};
+
+/**
+ * Validate dynamic configuration object for different types of interfaces
+ *
+ * @param {*} deviceInterface interface stored in db
+ * @param {*} configurationReq configuration request to save
+ * @returns array of interfaces
+ */
+const validateConfiguration = (deviceInterface, configurationReq) => {
+  const interfacesTypes = {
+    lte: lteConfigurationSchema,
+    wifi: WifiConfigurationSchema
+  };
+
+  const intType = deviceInterface.deviceType;
+
+  if (interfacesTypes[intType]) {
+    const result = interfacesTypes[intType].validate(configurationReq);
+
+    if (result.error) {
+      return {
+        valid: false,
+        err: `${result.error.details[result.error.details.length - 1].message}`
+      };
+    }
+
+    if (intType === 'wifi') {
+      const { err } = validateWifiCountryCode(configurationReq);
+      if (err) {
+        return { valid: false, err: err };
+      }
+    }
+
+    return { valid: true, err: '' };
+  }
+
+  return { valid: false, err: 'You can\'t save configuration for this interface' };
+};
+
+/**
+ * Checks whether firewall rules are valid
+ * @param {array} rules - array of firewall rules to validate
+ * @param {object} org  - organization object
+ * @param {array}  interfaces - interfaces of the device to check for device-specific rules
+ * @return {{valid: boolean, err: string}}  test result + error, if rules are invalid
+ */
+const validateFirewallRules = (rules, org, interfaces = undefined) => {
+  const inboundRuleTypes = ['edgeAccess', 'portForward', 'nat1to1'];
+
+  const tunnelPort = +getOrgDefaultTunnelPort(org);
+  const usedInboundPorts = [];
+  let inboundPortsCount = 0;
+  const enabledRules = rules.filter(r => r.enabled);
+  // Common rules validation
+  for (const rule of enabledRules) {
+    const { direction, inbound, classification } = rule;
+    // Inbound rule type must be specified
+    if (direction === 'inbound' && !inboundRuleTypes.includes(inbound)) {
+      return { valid: false, err: 'Wrong inbound rule type' };
+    }
+    const { destination } = classification;
+    if (direction === 'inbound') {
+      // Destination must be specified for inbound rules
+      if (!destination || !destination.ipProtoPort) {
+        return { valid: false, err: 'Destination must be specified for inbound rules' };
+      }
+      // Ports must be specified in edgeAccess and portForward inbound rules
+      if (inbound !== 'nat1to1' && !destination.ipProtoPort.ports) {
+        return {
+          valid: false,
+          err: 'Ports must be specified in edgeAccess and portForward inbound rules'
+        };
+      }
+      // WAN Interface must be specified in nat1to1 and portForward inbound rules
+      const specifiedInterface = destination.ipProtoPort.interface;
+      if (inbound !== 'edgeAccess' && !specifiedInterface) {
+        return {
+          valid: false,
+          err: 'WAN Interface must be specified in nat1to1 and portForward inbound rules'
+        };
+      }
+      // Inbound rules destination ports can't be overlapped
+      if (direction === 'inbound' && destination.ipProtoPort.ports) {
+        const { ports } = destination.ipProtoPort;
+        let portLow, portHigh;
+        if (ports.includes('-')) {
+          [portLow, portHigh] = ports.split('-').map(p => +p);
+        } else {
+          portLow = portHigh = +ports;
+        }
+        if (+ports === tunnelPort) {
+          return {
+            valid: false,
+            err: `Firewall rule cannot be added, port ${tunnelPort}
+            is reserved for flexiWAN tunnel connectivity.`
+          };
+        }
+        // implicit inbound edge-access rule for tunnel port on all WAN interfaces
+        if (portLow <= tunnelPort && portHigh >= tunnelPort) {
+          return {
+            valid: false,
+            err: `Inbound rule destination ports ${ports} overlapped with port ${tunnelPort}.
+            Firewall rule cannot be added, port ${tunnelPort}
+            is reserved for flexiWAN tunnel connectivity.`
+          };
+        }
+        if (inbound === 'portForward') {
+          // port forward rules overlapping not allowed
+          for (const [usedPortLow, usedPortHigh] of usedInboundPorts) {
+            if ((usedPortLow <= portLow && portLow <= usedPortHigh) ||
+              (usedPortLow <= portHigh && portHigh <= usedPortHigh) ||
+              (portLow <= usedPortLow && usedPortLow <= portHigh) ||
+              (portLow <= usedPortHigh && usedPortHigh <= portHigh)) {
+              return { valid: false, err: `Inbound rule destination ports ${ports} overlapped` };
+            }
+          }
+        }
+        usedInboundPorts.push([portLow, portHigh]);
+        inboundPortsCount += (portHigh - portLow + 1);
+      }
+    }
+    for (const side of ['source', 'destination']) {
+      const { trafficId, trafficTags, ipPort, ipProtoPort, lanNat } = classification[side] || {};
+      // trafficId cannot be empty string or null
+      if (isEmpty(trafficId) && trafficId !== undefined) {
+        return { valid: false, err: 'Traffic name must be specified' };
+      }
+      if (ipPort) {
+        const { ip, ports } = ipPort;
+        if (!ip && !ports) {
+          return { valid: false, err: 'IP or ports range must be specified' };
+        }
+      };
+      if (ipProtoPort && inbound !== 'nat1to1' && !trafficId && !trafficTags) {
+        const { protocols } = ipProtoPort;
+        if (!Array.isArray(protocols) || protocols.length === 0) {
+          return { valid: false, err: 'At least one protocol must be specified' };
+        };
+      };
+      if (trafficTags) {
+        // Traffic Tags not allowed for source
+        if (side === 'source') {
+          return { valid: false, err: 'Traffic Tags not allowed for source' };
+        }
+        const { category, serviceClass, importance } = trafficTags;
+        // Empty Traffic Tags not allowed
+        if (!category && !serviceClass && !importance) {
+          return { valid: false, err: 'Category, service class or importance must be provided' };
+        }
+      }
+      if (direction === 'lanNat') {
+        if (!lanNat) {
+          return { valid: false, err: 'LAN NAT parameters must be set' };
+        }
+        const { match, action, interface: devId } = lanNat;
+        if (side === 'source') {
+          if (!devId) {
+            return { valid: false, err: 'Interface must be set for source' };
+          }
+          const lanIfc = interfaces.find(ifc => ifc.devId === devId);
+          if (!lanIfc || !lanIfc.isAssigned || lanIfc.type !== 'LAN') {
+            return {
+              valid: false,
+              err: 'Only assigned LAN interface can be selected in LAN NAT rule'
+            };
+          }
+          if (!match || !action) {
+            return { valid: false, err: 'Match and Action can not be empty for source' };
+          }
+        }
+        if ((match && !action) || (!match && action)) {
+          return { valid: false, err: 'Match and Action should be both empty or set for ' + side };
+        }
+        if (match) {
+          const [, matchMask] = match.split('/');
+          const [, actionMask] = action.split('/');
+          if (matchMask !== actionMask) {
+            return {
+              valid: false,
+              err: 'The prefix length of Match and Action has to be the same'
+            };
+          }
+        }
+      }
+    }
+  };
+
+  if (inboundPortsCount > 1000) {
+    return { valid: false, err: 'Inbound ports range is limited to 1000' };
+  }
+
+  // Device-specific rules validation
+  if (interfaces) {
+    // Port forward rules validation
+    const forwardedPorts = {};
+    const internalPorts = {};
+    for (const rule of enabledRules.filter(r => r.inbound === 'portForward')) {
+      const { internalIP, internalPortStart, classification } = rule;
+      const { ports: destPorts, interface: devId } = classification.destination.ipProtoPort;
+      if (isEmpty(devId)) {
+        return { valid: false, err: 'WAN interface must be specified in port forward rule' };
+      }
+      const dstIfc = interfaces.find(ifc => ifc.devId === devId);
+      if (!dstIfc || !dstIfc.isAssigned || dstIfc.type !== 'WAN') {
+        return {
+          valid: false,
+          err: 'Only Assigned WAN interface can be selected in port forward rule'
+        };
+      }
+      if (isEmpty(internalIP)) {
+        return { valid: false, err: 'Internal IP address must be specified in port forward rule' };
+      }
+      if (isEmpty(internalPortStart)) {
+        return { valid: false, err: 'Internal start port must be specified in port forward rule' };
+      }
+      if (isEmpty(destPorts)) {
+        return { valid: false, err: 'Destination port must be specified in port forward rule' };
+      }
+      if (!internalPorts[internalIP]) {
+        internalPorts[internalIP] = [];
+      }
+      if (!forwardedPorts[devId]) {
+        forwardedPorts[devId] = [];
+      }
+      if (destPorts.includes('-')) {
+        const [portLow, portHigh] = destPorts.split('-');
+        for (let usedPort = +portLow; usedPort <= +portHigh; usedPort++) {
+          forwardedPorts[devId].push(usedPort);
+          internalPorts[internalIP].push(+internalPortStart + usedPort - portLow);
+        }
+      } else {
+        forwardedPorts[devId].push(+destPorts);
+        internalPorts[internalIP].push(+internalPortStart);
+      }
+    }
+    // Forwarded destination port can be used only once
+    for (const wanIfc of Object.keys(forwardedPorts)) {
+      const destPortsArray = forwardedPorts[wanIfc];
+      const destPortsOverlapped = destPortsArray.length !== new Set(destPortsArray).size;
+      if (destPortsOverlapped) {
+        return { valid: false, err: 'Destination forwarded ports overlapped on ' + wanIfc };
+      }
+    }
+    // Internal port can be used only once for one internal IP
+    for (const internalIP of Object.keys(internalPorts)) {
+      const internalPortsArray = internalPorts[internalIP];
+      const internalOverlapped = internalPortsArray.length !== new Set(internalPortsArray).size;
+      if (internalOverlapped) {
+        return { valid: false, err: 'Internal ports overlap for ' + internalIP };
+      }
+    }
+  }
+  return { valid: true };
+};
+
 // Default exports
 module.exports = {
   getDefaultGateway,
@@ -204,5 +594,8 @@ module.exports = {
   mapLteNames,
   parseLteStatus,
   mapWifiNames,
-  getCpuInfo
+  getCpuInfo,
+  validateConfiguration,
+  validateFirewallRules,
+  isEmpty
 };
