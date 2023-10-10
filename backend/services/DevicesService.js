@@ -1757,6 +1757,12 @@ class DevicesService {
             updIntf.IPv4 = updIntf.IPv4 || '';
             updIntf.IPv4Mask = updIntf.IPv4Mask || '';
             updIntf.gateway = updIntf.gateway || '';
+            // to prevent overlap and other validation issues IPv4 should be empty
+            if (updIntf.isAssigned && updIntf.type === 'TRUNK') {
+              updIntf.IPv4 = '';
+              updIntf.IPv4Mask = '';
+              updIntf.gateway = '';
+            }
 
             if (origIntf) {
               // if the user disabled the STUN for this interface
