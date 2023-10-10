@@ -20,5 +20,6 @@ const appLogic = require('./applications')();
 
 const { validateOverlappingSubnets } = require('../deviceLogic/validators');
 
+appLogic.buildApps();
 // register utils functions for application
 appLogic.registerUtilFunc('validateOverlappingSubnets', validateOverlappingSubnets);

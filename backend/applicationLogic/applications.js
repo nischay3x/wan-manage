@@ -32,7 +32,6 @@ class ApplicationLogic extends IApplication {
     super();
     this.apps = {};
     this.utilFuncs = {};
-    this.buildApps();
   }
 
   registerUtilFunc (key, func) {
