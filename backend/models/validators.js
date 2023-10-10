@@ -158,7 +158,7 @@ const isPort = (val) => {
   return !isEmpty(val) && !(val === '') && validateIsInteger(+val) && val >= 0 && val <= 65535;
 };
 const validatePort = port => port === '' || isPort(port);
-const validateVxlanPort = port => validatePort(port) && port !== '500' && port !== '4500';
+const validateVxlanPort = port => validatePort(port) && port !== '500' && port !== '4500' && port !== '0';
 const validatePortRange = (range) => {
   if (range === '') return true;
   if (!(range || '').includes('-')) return isPort(range);
