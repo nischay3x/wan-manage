@@ -304,25 +304,13 @@ class NotificationsManager {
     return query;
   }
 
-  async increaseCount (eventType, targets, org, resolved = false, severity = null) {
+  async findExistingAlert (eventType, targets, org, resolved = false, severity = null) {
     try {
       const query = await this.getQueryForExitingAlert(eventType, targets, false, severity, org);
-
-      if (resolved) {
-        // If resolved is true, only find the document
-        const alert = await notifications.findOne(query);
-        return alert;
-      } else {
-        // Else, find the document and increase the count
-        const updatedAlert = await notifications.findOneAndUpdate(
-          query,
-          { $inc: { count: 1 } },
-          { new: true }
-        );
-        return updatedAlert;
-      }
+      const existingAlert = await notifications.findOne(query);
+      return existingAlert;
     } catch (err) {
-      logger.warn(`Failed to increase count of the notification ${eventType} in database`, {
+      logger.warn(`Failed to search for notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
       });
     }
@@ -384,7 +372,7 @@ class NotificationsManager {
           currentSeverity = rules[eventType].severity;
           notification.severity = currentSeverity;
         }
-        const existingAlert = await this.increaseCount(
+        const existingAlert = await this.findExistingAlert(
           eventType,
           targets,
           org,
