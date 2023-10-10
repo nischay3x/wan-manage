@@ -82,7 +82,7 @@ const vrrpSchema = new Schema({
   },
   name: {
     type: String,
-    required: false,
+    required: true,
     maxlength: [30, 'Name length must be at most 30']
   },
   virtualRouterId: {
