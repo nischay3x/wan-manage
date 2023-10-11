@@ -16,7 +16,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const Service = require('./Service');
-
+const configs = require('../configs')();
 const mongoose = require('mongoose');
 const Accounts = require('../models/accounts');
 const Devices = require('../models/devices');
@@ -58,6 +58,9 @@ const { transformVxlanConfig } = require('../deviceLogic/jobParameters');
 const { validateFirewallRules } = require('../utils/deviceUtils');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
 const notificationsMgr = require('../notifications/notifications')();
+const { validateOverlappingSubnets } = require('../deviceLogic/validators');
+const { checkOverlapping } = require('../utils/networks');
+const ObjectId = require('mongoose').Types.ObjectId;
 
 class OrganizationsService {
   /**
@@ -309,6 +312,70 @@ class OrganizationsService {
           .populate('policies.firewall.policy', '_id name rules');
 
         validateVxlanPortChange(orgDevices, org);
+      }
+
+      if (isTunnelRangeChanged) {
+        // check that no config used the old range
+        const staticRoutesDevice = await Devices.devices.aggregate([
+          // only device with static routes
+          { $match: { org: ObjectId(id), 'staticroutes.0': { $exists: true } } },
+          { $project: { _id: 1, name: 1, staticroutes: 1 } },
+          {
+            $addFields: {
+              subnets: {
+                $map: {
+                  input: '$staticroutes',
+                  as: 'staticroute',
+                  in: { $concat: ['$$staticroute.gateway', '/', '32'] }
+                }
+              }
+            }
+          },
+          {
+            $addFields: {
+              isOverlapping: {
+                $function: {
+                  body: checkOverlapping.toString(),
+                  args: ['$subnets', [origTunnelRange + '/' + configs.get('tunnelRangeMask')]],
+                  lang: 'js'
+                }
+              }
+            }
+          },
+          { $match: { 'isOverlapping.0': { $exists: true } } },
+          { $unset: ['isOverlapping', 'subnets'] }
+        ]).allowDiskUse(true);
+
+        if (staticRoutesDevice.length > 0) {
+          throw new Error(
+            `Static route is configured on device ${staticRoutesDevice[0].name} ` +
+            `via the old tunnel range (${staticRoutesDevice[0].staticroutes[0].gateway}). ` +
+            'Remove it first');
+        }
+
+        const tunnelRangeWithMask = `${tunnelRange}/${configs.get('tunnelRangeMask')}`;
+        const overlappingSubnets = await validateOverlappingSubnets(org, [tunnelRangeWithMask]);
+        for (const overlappingSubnet of overlappingSubnets) {
+          const { type, overlappingWith, meta } = overlappingSubnet;
+
+          let errMsg = 'The new tunnel range overlaps with ';
+
+          if (type === 'lanInterface') {
+            errMsg += `address ${overlappingWith} of the LAN interface `;
+            errMsg += `${meta.interfaceName} in device ${meta.deviceName}`;
+            throw new Error(errMsg);
+          }
+
+          if (type === 'tunnel') {
+            continue; // we are going to change tunnel range, so no need to validate it
+          }
+
+          if (type === 'application') {
+            errMsg += `address ${overlappingWith} of the application `;
+            errMsg += `${meta.appName} in device ${meta.deviceName}`;
+            throw new Error(errMsg);
+          }
+        }
       }
 
       // now, save
