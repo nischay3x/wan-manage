@@ -327,6 +327,13 @@ const validateDevice = async (
         }
 
         const orig = origInterfacesByDevId[lanIfc.devId];
+
+        // if interface just assigned, check it
+        if (!orig) {
+          subnetsToCheck.push(subnet);
+          continue;
+        }
+
         const origSubnet = orig.IPv4 + '/' + orig.IPv4Mask;
         if (origSubnet === '/') {
           continue;
