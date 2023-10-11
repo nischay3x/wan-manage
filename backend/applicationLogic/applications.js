@@ -23,7 +23,7 @@ const logger = require('../logging/logging')({
   module: module.filename,
   type: 'req'
 });
-const { validateFirewallRules } = require('../deviceLogic/validators');
+const { validateFirewallRules } = require('../utils/deviceUtils');
 
 const IApplication = require('./applicationsInterface');
 
@@ -32,7 +32,6 @@ class ApplicationLogic extends IApplication {
     super();
     this.apps = {};
     this.utilFuncs = {};
-    this.buildApps();
   }
 
   registerUtilFunc (key, func) {
@@ -140,7 +139,6 @@ class ApplicationLogic extends IApplication {
         return {
           _id: app._id,
           deviceId: s.deviceId,
-          type: 'application',
           deviceName: s.deviceName,
           name: app.appStoreApp.name,
           subnet: s.subnet

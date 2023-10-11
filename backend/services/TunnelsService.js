@@ -271,12 +271,12 @@ class TunnelsService {
               notificationsDict[event].thresholdUnit = orgRules[event].thresholdUnit;
             }
 
-            const validNotifications = validateNotificationsSettings(notificationsDict);
-            if (!validNotifications.valid) {
+            const invalidNotifications = validateNotificationsSettings(notificationsDict, true);
+            if (invalidNotifications) {
               throw new CustomError({
                 status: 400,
                 message: 'Invalid notification settings',
-                data: validNotifications.errors
+                data: { error: invalidNotifications }
               });
             }
 

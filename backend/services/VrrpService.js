@@ -28,6 +28,7 @@ const { queue } = require('../deviceLogic/vrrp');
 const cidr = require('cidr-tools');
 const deviceStatus = require('../periodic/deviceStatus')();
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+const { checkOverlapping } = require('../utils/networks');
 const { isLocalOrBroadcastAddress } = require('../deviceLogic/validators');
 
 class VrrpService {
@@ -276,7 +277,12 @@ class VrrpService {
                   $filter: {
                     input: '$interfaces',
                     as: 'ifc',
-                    cond: { $eq: ['$$ifc.isAssigned', true] }
+                    cond: {
+                      $and: [
+                        { $eq: ['$$ifc.isAssigned', true] },
+                        { $ne: ['$$ifc.deviceType', 'wifi'] }
+                      ]
+                    }
                   }
                 },
                 as: 'ifc',
@@ -284,8 +290,20 @@ class VrrpService {
                   devId: '$$ifc.devId',
                   name: '$$ifc.name',
                   dhcp: '$$ifc.dhcp',
+                  type: '$$ifc.type',
                   IPv4: { $concat: ['$$ifc.IPv4', '/', '$$ifc.IPv4Mask'] }
                 }
+              }
+            }
+          }
+        },
+        {
+          $addFields: {
+            subnets: {
+              $map: {
+                input: '$interfaces',
+                as: 'ifc',
+                in: '$$ifc.IPv4'
               }
             }
           }
@@ -295,14 +313,14 @@ class VrrpService {
             isOverlapping: {
               $function: {
                 body: checkOverlapping.toString(),
-                args: ['$interfaces', virtualIp],
+                args: ['$subnets', [virtualIp + '/32']],
                 lang: 'js'
               }
             }
           }
         },
-        { $match: { isOverlapping: true } },
-        { $unset: ['isOverlapping'] },
+        { $match: { 'isOverlapping.0': { $exists: true } } },
+        { $unset: ['isOverlapping', 'subnets'] },
         {
           $addFields: {
             interfaces: {
@@ -373,6 +391,28 @@ class VrrpService {
       }
 
       const ifc = interfacesByDevId[vrrpDevice.interface];
+
+      if (!ifc.isAssigned) {
+        return {
+          valid: false,
+          err: `The interface ${ifc.name} is not assigned`
+        };
+      }
+
+      if (ifc.type === 'WAN') {
+        return {
+          valid: false,
+          err: `VRRP cannot be configured on a WAN interface (${ifc.name})`
+        };
+      }
+
+      if (ifc.deviceType === 'wifi') {
+        return {
+          valid: false,
+          err: `VRRP cannot be configured on a WiFi interface (${ifc.name})`
+        };
+      }
+
       const ip = `${ifc.IPv4}/${ifc.IPv4Mask}`;
       if (!cidr.overlap(ip, `${vrrp.virtualIp}/32`)) {
         return {
@@ -487,38 +527,6 @@ class VrrpService {
       );
     }
   }
-}
-
-function checkOverlapping (interfaces, virtualIP) {
-  function checkSubnetIntersection (subnet1, subnet2) {
-    function u (n) { return n >>> 0; } // convert to unsigned
-    function addr32 (ip) {
-      const m = ip.split('.');
-      return m.reduce((a, o) => { return u(+a << 8) + +o; });
-    }
-    const [address1, mask1] = subnet1.split('/');
-    const [address2, mask2] = subnet2.split('/');
-
-    const binAddress1 = addr32(address1);
-    const binAddress2 = addr32(address2);
-    const binMask1 = u(~0 << (32 - +mask1));
-    const binMask2 = u(~0 << (32 - +mask2));
-
-    const [start1, end1] = [u(binAddress1 & binMask1), u(binAddress1 | ~binMask1)];
-    const [start2, end2] = [u(binAddress2 & binMask2), u(binAddress2 | ~binMask2)];
-
-    return (
-      (start1 >= start2 && start1 <= end2) ||
-      (start2 >= start1 && start2 <= end1)
-    );
-  }
-
-  return interfaces.some(i => {
-    if (i.IPv4 === '/') {
-      return true;
-    }
-    return checkSubnetIntersection(i.IPv4, `${virtualIP}/32`);
-  });
 }
 
 module.exports = VrrpService;

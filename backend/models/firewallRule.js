@@ -20,6 +20,7 @@ const {
   validateFirewallDevId,
   validateIPv4WithMask,
   validateIPv4,
+  validateIPv4Prefix,
   validatePort,
   validatePortRange
 } = require('./validators');
@@ -31,7 +32,7 @@ const lanNat = {
     required: false,
     maxlength: [20, 'IP length must be at most 20'],
     validate: {
-      validator: validateIPv4WithMask,
+      validator: ip => validateIPv4WithMask(ip) && validateIPv4Prefix(ip),
       message: 'Match IP should be a valid IP address'
     }
   },
@@ -40,7 +41,7 @@ const lanNat = {
     required: false,
     maxlength: [20, 'IP length must be at most 20'],
     validate: {
-      validator: validateIPv4WithMask,
+      validator: ip => validateIPv4WithMask(ip) && validateIPv4Prefix(ip),
       message: 'Action IP should be a valid IP address'
     }
   }

@@ -16,7 +16,6 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 const { validateIPv4Address } = require('./validators');
-const wifiChannels = require('../utils/wifi-channels');
 const Joi = require('joi');
 const omitBy = require('lodash/omitBy');
 const omit = require('lodash/omit');
@@ -158,170 +157,6 @@ const buildInterfaces = (deviceInterfaces, globalOSPF, deviceVersion) => {
   return interfaces;
 };
 
-const lteConfigurationSchema = Joi.object().keys({
-  enable: Joi.boolean().required(),
-  apn: Joi.string().required(),
-  auth: Joi.string().valid('MSCHAPV2', 'PAP', 'CHAP').allow(null, ''),
-  user: Joi.string().allow(null, ''),
-  password: Joi.string().allow(null, ''),
-  pin: Joi.string().allow(null, '')
-});
-
-const allowedSecurityModes = ['open', 'wpa-psk', 'wpa2-psk'];
-const shared = {
-  enable: Joi.boolean().required(),
-  ssid: Joi.alternatives().conditional('enable', {
-    is: true,
-    then: Joi.string().required(),
-    otherwise: Joi.string().allow(null, '')
-  }).required(),
-  password: Joi.when('enable', {
-    is: true,
-    then: Joi.when('securityMode', {
-      switch: [
-        {
-          is: 'wep',
-          then: Joi.string()
-            .regex(/^([a-z0-9]{5}|[a-z0-9]{13}|[a-z0-9]{16})$/)
-            .error(() => 'Password length must be 5, 13 or 16')
-        },
-        { is: 'open', then: Joi.string().allow(null, '') }
-      ],
-      otherwise: Joi.string().min(8)
-    }).required(),
-    otherwise: Joi.string().allow(null, '')
-  }).required(),
-  operationMode: Joi.when('enable', {
-    is: true,
-    then: Joi.string().required().valid('b', 'g', 'n', 'a', 'ac'),
-    otherwise: Joi.string().allow(null, '')
-  }).required(),
-  channel: Joi.string().regex(/^\d+$/).required().error(errors => {
-    errors.forEach(err => {
-      switch (err.code) {
-        case 'string.pattern.base':
-          err.message = `${err.local.value} is not a valid channel number`;
-          break;
-        default:
-          break;
-      }
-    });
-    return errors;
-  }),
-  bandwidth: Joi.string().valid('20').required(),
-  securityMode: Joi.string().when('enable', {
-    is: true,
-    then: Joi.valid(...allowedSecurityModes),
-    otherwise: Joi.valid(...allowedSecurityModes, '') // allowed empty if band disabled
-  }).required(),
-  hideSsid: Joi.boolean().required(),
-  encryption: Joi.string().valid('aes-ccmp').required(),
-  region: Joi.alternatives().conditional('enable', {
-    is: true,
-    then: Joi.string().required()
-      .regex(/^([A-Z]{2}|other)$/).error(() => 'Region  must be 2 uppercase letters or "other"'),
-    otherwise: Joi.string().allow(null, '')
-  }).required()
-};
-
-const WifiConfigurationSchema = Joi.object({
-  '2.4GHz': shared,
-  '5GHz': shared
-}).or('2.4GHz', '5GHz', { separator: false });
-
-const validateWifiCountryCode = (configurationReq) => {
-  let err = null;
-  for (const band in configurationReq) {
-    if (configurationReq[band].enable === false) {
-      continue;
-    }
-
-    const channel = parseInt(configurationReq[band].channel);
-    if (channel < 0) {
-      err = 'Channel must be greater than or equal to 0';
-      break;
-    }
-
-    const region = configurationReq[band].region;
-
-    if (band === '2.4GHz') {
-      const allowedRegions = ['AU', 'CN', 'DE', 'JP', 'RU', 'TW', 'US'];
-      if (!allowedRegions.includes(region)) {
-        err = `Region ${region} is not valid`;
-        break;
-      }
-
-      if ((region === 'US' || region === 'TW') && channel > 11) {
-        err = 'Channel must be between 0 to 11';
-        break;
-      }
-
-      if (channel > 13) {
-        err = 'Channel must be between 0 to 13';
-        break;
-      }
-    }
-
-    if (band === '5GHz') {
-      const allowedRegions = Object.values(wifiChannels);
-      const exists = allowedRegions.find(r => r.code === region);
-      if (!exists) {
-        err = `Region ${region} is not valid`;
-        break;
-      };
-
-      const validChannels = exists.channels;
-      if (channel > 0 && validChannels.findIndex(c => c === channel) === -1) {
-        err = `Channel ${channel} is not valid number for country ${region}`;
-        break;
-      }
-    }
-  };
-
-  if (err) {
-    return { err: err, valid: false };
-  }
-  return { err: '', valid: true };
-};
-
-/**
- * Validate dynamic configuration object for different types of interfaces
- *
- * @param {*} deviceInterface interface stored in db
- * @param {*} configurationReq configuration request to save
- * @returns array of interfaces
- */
-const validateConfiguration = (deviceInterface, configurationReq) => {
-  const interfacesTypes = {
-    lte: lteConfigurationSchema,
-    wifi: WifiConfigurationSchema
-  };
-
-  const intType = deviceInterface.deviceType;
-
-  if (interfacesTypes[intType]) {
-    const result = interfacesTypes[intType].validate(configurationReq);
-
-    if (result.error) {
-      return {
-        valid: false,
-        err: `${result.error.details[result.error.details.length - 1].message}`
-      };
-    }
-
-    if (intType === 'wifi') {
-      const { err } = validateWifiCountryCode(configurationReq);
-      if (err) {
-        return { valid: false, err: err };
-      }
-    }
-
-    return { valid: true, err: '' };
-  }
-
-  return { valid: false, err: 'You can\'t save configuration for this interface' };
-};
-
 const lteOperationSchema = Joi.object().keys({
   op: Joi.string().valid('reset', 'pin').required(),
   params: Joi.object().optional()
@@ -375,6 +210,5 @@ const validateOperations = (deviceInterfaces, operationReq) => {
 
 module.exports = {
   buildInterfaces,
-  validateConfiguration,
   validateOperations
 };

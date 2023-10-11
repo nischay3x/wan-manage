@@ -50,7 +50,6 @@ const { validateFQDN } = require('../models/validators');
 const {
   mapLteNames, mapWifiNames, getBridges, parseLteStatus, getCpuInfo
 } = require('../utils/deviceUtils');
-const { getAllOrganizationSubnets, getAllOrganizationBGPDevices } = require('../utils/orgUtils');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { generateTunnelParams } = require('../utils/tunnelUtils');
 const deviceQueues = require('../utils/deviceQueue')(
@@ -1601,12 +1600,6 @@ class DevicesService {
         const devStatus = deviceStatus.getDeviceStatus(origDevice.machineId);
         const isRunning = (devStatus && devStatus.state && devStatus.state === 'running');
 
-        let orgSubnets = [];
-        if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-          orgSubnets = await getAllOrganizationSubnets(orgId);
-        }
-        const orgBgp = await getAllOrganizationBGPDevices(orgId);
-
         const origTunnels = await tunnelsModel.find({
           isActive: true,
           $or: [{ deviceA: origDevice._id }, { deviceB: origDevice._id }]
@@ -1757,6 +1750,12 @@ class DevicesService {
             updIntf.IPv4 = updIntf.IPv4 || '';
             updIntf.IPv4Mask = updIntf.IPv4Mask || '';
             updIntf.gateway = updIntf.gateway || '';
+            // to prevent overlap and other validation issues IPv4 should be empty
+            if (updIntf.isAssigned && updIntf.type === 'TRUNK') {
+              updIntf.IPv4 = '';
+              updIntf.IPv4Mask = '';
+              updIntf.gateway = '';
+            }
 
             if (origIntf) {
               // if the user disabled the STUN for this interface
@@ -1956,6 +1955,7 @@ class DevicesService {
         // add device id to device request
         const deviceToValidate = {
           ...deviceRequest,
+          org: origDevice.org,
           _id: origDevice._id
         };
         // unspecified 'interfaces' are allowed for backward compatibility of some integrations
@@ -2201,12 +2201,10 @@ class DevicesService {
         deviceToValidate.distro = origDevice.distro;
         deviceRequest.cpuInfo = deviceToValidate.cpuInfo;
 
-        const { valid, err, errCode = null } = validateDevice(
+        const { valid, err, errCode = null } = await validateDevice(
           deviceToValidate,
           origDevice.org,
           isRunning,
-          orgSubnets,
-          orgBgp,
           allowOverlapping,
           origDevice
         );
@@ -2545,7 +2543,7 @@ class DevicesService {
       let device = await devices.findOne({
         _id: mongoose.Types.ObjectId(id),
         org: { $in: orgList }
-      });
+      }).populate('org', 'tunnelRange');
       if (!device) {
         return Service.rejectResponse('Device not found', 404);
       }

@@ -29,8 +29,6 @@ const { getRenewBeforeExpireTime } = require('../deviceLogic/IKEv2');
 const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
-const AsyncLock = require('async-lock');
-const lock = new AsyncLock({ maxOccupationTime: 30000, timeout: 20000 });
 const tunnels = require('../models/tunnels');
 
 /***
@@ -403,33 +401,18 @@ class DeviceStatus {
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
-            // Use lock to prevent duplicated alerts for the same tunnel from different devices
-            lock.acquire(
-              'notifications',
-              async () => {
-                if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
-              deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
-                  await this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry);
-                  connections.devices.updateDeviceInfo(
-                    deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
-                  connections.devices.updateDeviceInfo(
-                    deviceID, 'alerts', lastUpdateEntry.alerts);
-                }
-                await this.generateDevStatsNotifications();
-              }
-            ).catch((err) => {
-              logger.warn('Failed to calculate device notifications', {
-                params: { deviceID: deviceID, err: err.message },
-                periodic: { task: this.taskInfo }
-              });
-              // The lock throws time out error if the item in th queue didn't
-              // execute the calculate notifications function. We want to reset the hash in order to
-              // execute the function next time.
-              if (err.message.includes('async-lock timed out in queue')) {
-                connections.devices.updateDeviceInfo(
-                  deviceID, 'notificationsHash', '');
-              }
-            });
+
+            // TBD: Notification lock removed - need to fix
+            if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
+            deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
+              await this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry);
+              connections.devices.updateDeviceInfo(
+                deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
+              connections.devices.updateDeviceInfo(
+                deviceID, 'alerts', lastUpdateEntry.alerts);
+            }
+            await this.generateDevStatsNotifications();
+
             this.updateDeviceSyncStatus(
               deviceInfo.org,
               deviceInfo.deviceObj,

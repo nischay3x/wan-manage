@@ -19,7 +19,6 @@
 const configs = require('../configs')();
 const deviceStatus = require('../periodic/deviceStatus')();
 const { validateDevice } = require('./validators');
-const { getAllOrganizationSubnets } = require('../utils/orgUtils');
 const tunnelsModel = require('../models/tunnels');
 const deviceQueues = require('../utils/deviceQueue')(
   configs.get('kuePrefix'),
@@ -52,17 +51,13 @@ const apply = async (devices, user, data) => {
 
   const errors = [];
   const errorCodes = [];
-  let orgSubnets = [];
-  if (configs.get('forbidLanSubnetOverlaps', 'boolean')) {
-    orgSubnets = await getAllOrganizationSubnets(mongoose.Types.ObjectId(orgId));
-  }
   const applyPromises = [];
   for (const device of opDevices) {
     const { machineId } = device;
     logger.info('Starting device:', { params: { machineId, user, data } });
 
-    const { valid, err, errCode = null } = validateDevice(
-      device.toObject(), device.org, true, orgSubnets, [], allowOverlapping
+    const { valid, err, errCode = null } = await validateDevice(
+      device.toObject(), device.org, true, allowOverlapping
     );
     if (!valid) {
       logger.warn('Start command validation failed', { params: { device, err } });
