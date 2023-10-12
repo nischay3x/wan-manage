@@ -35,7 +35,7 @@ const { getMatchFilters } = require('../utils/filterUtils');
         sa2: number
     }}
  */
-const generateTunnelParams = (tunnelNum, tunnelRange) => {
+function generateTunnelParams (tunnelNum, tunnelRange) {
   const d2h = (d) => (('00' + (+d).toString(16)).substr(-2));
 
   const h = (tunnelNum % 127 + 1) * 2;
