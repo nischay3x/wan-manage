@@ -30,6 +30,8 @@ const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 const tunnels = require('../models/tunnels');
+const { createClient } = require('redis');
+const { getRedisAuthUrl } = require('../utils/httpUtils');
 
 /***
  * This class gets periodic status from all connected devices
@@ -41,7 +43,7 @@ class DeviceStatus {
   constructor () {
     // Holds the status per deviceID
     this.status = {};
-    this.events = [];
+    this.eventsDict = {};
     this.usersDeviceAggregatedStats = {};
     this.statsFieldsMap = new Map([
       ['rx_bytes', 'rx_bps'],
@@ -77,6 +79,22 @@ class DeviceStatus {
     this.getTunnelsStatusByOrg = this.getTunnelsStatusByOrg.bind(this);
     this.clearTunnelsStatusByOrg = this.clearTunnelsStatusByOrg.bind(this);
     this.statusCallback = this.statusCallback.bind(this);
+
+    const { redisAuth, redisUrlNoAuth } = getRedisAuthUrl(configs.get('redisUrl'));
+    this.redisClient = createClient({ url: redisUrlNoAuth });
+    if (redisAuth) this.redisClient.auth(redisAuth);
+
+    this.redisClient.on('connect', () => {
+      logger.info('Connected to Redis');
+    });
+
+    this.redisClient.on('error', (err) => {
+      logger.error('Redis client encountered an error:', err);
+    });
+
+    this.redisClient.on('end', () => {
+      logger.info('Redis client disconnected');
+    });
 
     // register a callback function to be called when a device status is received on channel
     connections.registerStatusCallback(this.statusCallback);
@@ -205,6 +223,31 @@ class DeviceStatus {
     });
   }
 
+  generateAlertKey (eventType, eventTargets, isResolved, orgId) {
+    let targetId;
+
+    // If "tunnelId" is in eventTargets, use it exclusively since we don't want
+    // to get a different key for the same tunnel alert from another device
+    if (eventTargets.tunnelId) {
+      targetId = `tunnelId:${eventTargets.tunnelId}`;
+    } else {
+      targetId = Object.entries(eventTargets)
+        .filter(([key, value]) => value != null)
+        .map(([key, value]) => `${key}:${value}`)
+        .join(':');
+    }
+
+    if (!targetId) {
+      logger.warn('Failed to generate alert key: No valid target ID found', {
+        params: { eventType, eventTargets, orgId }
+      });
+      throw new Error('Unable to generate alert key: No valid target ID found');
+    }
+
+    const alertKey = `${eventType}:${targetId}:${isResolved}:${orgId}`;
+    return alertKey;
+  }
+
   async handleAlert (
     deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelNum = null) {
     let { value, unit, threshold, type } = tunnelNum
@@ -293,31 +336,75 @@ class DeviceStatus {
     }
   }
 
-  createAndPushEvent (
-    deviceInfo, alerts, alertKey,
+  async createAndPushEvent (
+    deviceInfo, alerts, eventName,
     agentAlertsInfo, tunnelId = null, isResolved = false) {
     const { org, deviceObj: deviceId, name } = deviceInfo;
-    const title = isResolved ? `[resolved] ${alertKey}` : alertKey;
-    const details = 'The value of the ' + alertKey + ' in ' + (tunnelId ? 'tunnel ' +
+    const targets = {
+      deviceId,
+      tunnelId,
+      interfaceId: null
+    };
+
+    const notificationKey = this.generateAlertKey(eventName, targets, isResolved, org);
+    const existingEvent = await this.getEventFromRedis(notificationKey);
+
+    if (existingEvent) {
+      return;
+    }
+
+    const title = isResolved ? `[resolved] ${eventName}` : eventName;
+    const details = 'The value of the ' + eventName + ' in ' + (tunnelId ? 'tunnel ' +
     tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
     agentAlertsInfo.threshold + agentAlertsInfo.unit + ')' : 'increased to ' +
     agentAlertsInfo.value + agentAlertsInfo.unit);
-    const severity = tunnelId ? alerts[alertKey][tunnelId].severity : alerts[alertKey].severity;
-
-    this.events.push({
+    const severity = tunnelId ? alerts[eventName][tunnelId].severity : alerts[eventName].severity;
+    const event = {
       org,
       title,
       details,
-      eventType: alertKey,
-      targets: {
-        deviceId,
-        tunnelId,
-        interfaceId: null
-        // policyId: null
-      },
+      eventType: eventName,
+      targets,
       severity,
       resolved: isResolved,
       agentAlertsInfo
+    };
+
+    if (isResolved) {
+      delete this.eventsDict[this.generateAlertKey(eventName, targets, false, org)];
+    } else {
+      delete this.eventsDict[this.generateAlertKey(eventName, targets, true, org)];
+    }
+    this.eventsDict[notificationKey] = event;
+    await this.saveEventToRedis(notificationKey, event);
+  }
+
+  async getEventFromRedis (key) {
+    return new Promise((resolve, reject) => {
+      this.redisClient.get(key, (err, res) => {
+        if (err) {
+          logger.error(`Error fetching key ${key}:`, { params: { error: err } });
+          reject(err);
+        }
+        try {
+          resolve(res ? JSON.parse(res) : res);
+        } catch (parseError) {
+          console.error(`Error parsing JSON for key ${key}:`, parseError);
+          reject(parseError);
+        }
+      });
+    });
+  }
+
+  async saveEventToRedis (key, event) {
+    return new Promise((resolve, reject) => {
+      this.redisClient.set(key, JSON.stringify(event), (err, res) => {
+        if (err) {
+          console.error(`Error saving key ${key}:`, err);
+          reject(err);
+        }
+        resolve(res);
+      });
     });
   }
 
@@ -338,7 +425,7 @@ class DeviceStatus {
     if (deviceInfo.alerts) {
       await this.handleResolvedAlerts(
         deviceInfo.alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo);
-    // There is no memory so we should look after the unresolved alerts in th db
+      // There is no memory so we should look after the unresolved alerts in th db
     } else {
       const previousAlerts = await notifications.find({
         'targets.deviceId': deviceInfo.deviceObj,
@@ -401,10 +488,8 @@ class DeviceStatus {
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
-
-            // TBD: Notification lock removed - need to fix
             if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
-            deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
+                deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
               await this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry);
               connections.devices.updateDeviceInfo(
                 deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
@@ -648,19 +733,35 @@ class DeviceStatus {
     }
     const { org, deviceObj: deviceId, name } = deviceInfo;
     if (!this.status[machineId] || newState !== this.status[machineId].state) {
-      this.events.push({
+      const targets = {
+        deviceId: deviceId,
+        tunnelId: null,
+        interfaceId: null
+      };
+      const resolved = newState === 'running';
+
+      const notificationKey = this.generateAlertKey('Running router', targets, resolved, org);
+      const existingEvent = await this.getEventFromRedis(notificationKey);
+
+      if (existingEvent) {
+        return;
+      }
+      const event = {
         org: org,
         title: newState === 'running' ? '[resolved] Router state change' : 'Router state change',
         details: `Router state changed to ${newState} in the device ${name}`,
         eventType: 'Running router',
-        targets: {
-          deviceId: deviceId,
-          tunnelId: null,
-          interfaceId: null
-          // policyId: null
-        },
-        resolved: newState === 'running'
-      });
+        targets,
+        resolved
+      };
+      if (resolved) {
+        delete this.eventsDict[this.generateAlertKey('Running router', targets, false, org)];
+      } else {
+        delete this.eventsDict[this.generateAlertKey('Running router', targets, true, org)];
+      }
+      this.eventsDict[notificationKey] = event;
+      await this.saveEventToRedis(notificationKey, event);
+
       this.setDevicesStatusByOrg(org, deviceId, newState);
     }
     this.setDeviceStatsField(machineId, 'state', newState);
@@ -806,6 +907,10 @@ class DeviceStatus {
     const devStats = {};
 
     const appStatus = rawStats.application_stats;
+    if (!this.status.hasOwnProperty(machineId)) {
+      this.status[machineId] = {};
+    }
+
     if (rawStats.hasOwnProperty('application_stats') && Object.entries(appStatus).length !== 0) {
       if (!this.status[machineId].applicationStatus) {
         this.status[machineId].applicationStatus = {};
@@ -868,8 +973,9 @@ class DeviceStatus {
       }
 
       // Generate tunnel notifications
-      Object.entries(tunnelStatus).forEach(ent => {
-        const [tunnelID, tunnelState] = ent;
+      const tunnelStatusEntries = Object.entries(tunnelStatus);
+      await Promise.all(tunnelStatusEntries.map(async entry => {
+        const [tunnelID, tunnelState] = entry;
         const firstTunnelUpdate = !this.status[machineId].tunnelStatus[tunnelID];
 
         // Update changed tunnel status in memory by org
@@ -878,29 +984,44 @@ class DeviceStatus {
           this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelState.status);
         }
 
-        // Generate a notification if tunnel status has changed since
-        // the last update
-        if (
-          (firstTunnelUpdate ||
-            tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
-        ) {
-          this.events.push({
-            org: org,
-            title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
-              : 'Tunnel connection change',
-            details: 'Tunnel ' + tunnelID + ' state changed to ' +
-            (tunnelState.status === 'down' ? 'Not connected' : 'Connected'),
-            targets: {
-              deviceId,
-              tunnelId: tunnelID,
-              interfaceId: null
-              // policyId: null
-            },
-            eventType: 'Tunnel connection',
-            resolved: tunnelState.status === 'up'
-          });
+        // Generate a notification if tunnel status has changed since the last update
+        if ((firstTunnelUpdate ||
+           tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)) {
+          const targets = {
+            deviceId,
+            tunnelId: tunnelID,
+            interfaceId: null
+            // policyId: null
+          };
+          const resolved = tunnelState.status === 'up';
+          const notificationKey = this.generateAlertKey(
+            'Tunnel connection', targets, resolved, org);
+          const existingEvent = await this.getEventFromRedis(notificationKey);
+
+          if (!existingEvent) {
+            const event = {
+              org: org,
+              title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
+                : 'Tunnel connection change',
+              details: 'Tunnel ' + tunnelID + ' state changed to ' + (tunnelState.status === 'down'
+                ? 'Not connected' : 'Connected'),
+              targets,
+              eventType: 'Tunnel connection',
+              resolved
+            };
+
+            if (resolved) {
+              delete this.eventsDict[this.generateAlertKey(
+                'Tunnel connection', targets, false, org)];
+            } else {
+              delete this.eventsDict[this.generateAlertKey(
+                'Tunnel connection', targets, true, org)];
+            }
+            this.eventsDict[notificationKey] = event;
+            await this.saveEventToRedis(notificationKey, event);
+          }
         }
-      });
+      }));
       Object.assign(this.status[machineId].tunnelStatus, rawStats.tunnel_stats);
     }
 
@@ -925,10 +1046,11 @@ class DeviceStatus {
     * @return {void}
     */
   async generateDevStatsNotifications () {
+    const eventsArray = Object.values(this.eventsDict);
     // Send notifications if exist
-    if (this.events.length > 0) {
-      await notificationsMgr.sendNotifications([...this.events]);
-      this.events = [];
+    if (eventsArray.length > 0) {
+      await notificationsMgr.sendNotifications(eventsArray);
+      this.eventsDict = {};
     }
   }
 
@@ -1075,7 +1197,7 @@ class DeviceStatus {
      *                           were updated in the database
      */
   getDeviceLastUpdateTime (deviceID) {
-    return !this.status[deviceID].lastUpdateTime
+    return !this.status[deviceID]?.lastUpdateTime
       ? 0 : this.status[deviceID].lastUpdateTime;
   }
 
