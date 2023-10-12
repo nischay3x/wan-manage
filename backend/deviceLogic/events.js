@@ -732,10 +732,10 @@ class Events {
   }
 
   /**
-   * Check if WAN interface lost connectivity
+   * Check if WAN interface connectivity has been changed
    * @param  {object} origIfc  interface from flexiManage DB
    * @param  {object} updatedIfc  incoming interface info from device
-   * @return {boolean} if need to trigger event of internet connectivity lost
+   * @return {boolean} if need to trigger event of internet connectivity change
   */
   isInterfaceConnectivityChanged (origIfc, updatedIfc) {
     if (!origIfc.monitorInternet) {
