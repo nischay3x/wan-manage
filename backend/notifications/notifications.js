@@ -117,7 +117,6 @@ class TunnelStateChangeEventClass extends Event {
   async getTarget (deviceId, interfaceId, tunnelId) {
     return {
       eventType: this.eventName,
-      'targets.deviceId': deviceId,
       'targets.tunnelId': tunnelId
     };
   }
