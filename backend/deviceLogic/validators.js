@@ -27,6 +27,7 @@ const maxMetric = 2 * 10 ** 9;
 const { getAllOrganizationBGPDevices, checkLanOverlappingWith } = require('../utils/orgUtils');
 const appsLogic = require('../applicationLogic/applications')();
 const { getStartEndIp } = require('../utils/networks');
+const Tunnels = require('../models/tunnels');
 
 /**
  * Checks whether a value is a valid IPv4 network mask
@@ -523,6 +524,9 @@ const validateDevice = async (
 
   const routingFilterNames = keyBy(device.routingFilters, 'name');
   const usedNeighborIps = {};
+
+  let allowedLoopbackIps = null;
+
   for (const bgpNeighbor of device.bgp?.neighbors ?? []) {
     const inboundFilter = bgpNeighbor.inboundFilter;
     const outboundFilter = bgpNeighbor.outboundFilter;
@@ -544,13 +548,58 @@ const validateDevice = async (
 
     const neighborIp = bgpNeighbor.ip + '/32';
     if (cidr.overlap(neighborIp, `${org.tunnelRange}/${configs.get('tunnelRangeMask')}`)) {
-      return {
-        valid: false,
-        err:
-          `The BGP Neighbor ${bgpNeighbor.ip} ` +
-          'overlaps with the flexiWAN tunnel loopback range ' +
-          `(${org.tunnelRange}/${configs.get('tunnelRangeMask')})`
-      };
+      // we need to block neighbors  allow BGP tunnel neighbors via peers.
+      // We don't want to query it for each neighbor. Instead
+      // only if there is tunnel overlapping, we query all the peer loopback-s once
+      // and we store it in a dictionary.
+      if (!allowedLoopbackIps) {
+        const peers = await Tunnels.aggregate([
+          { $match: { isActive: true, org: org._id, peer: { $ne: null } } },
+          { $project: { num: 1 } },
+          {
+            $addFields: {
+              params: {
+                $function: {
+                  body: generateTunnelParams,
+                  args: ['$num', org.tunnelRange],
+                  lang: 'js'
+                }
+              }
+            }
+          },
+          { $group: { _id: null, ips: { $push: '$params.ip2' } } },
+          {
+            $project: {
+              ips: {
+                $arrayToObject: {
+                  $map: {
+                    input: '$ips',
+                    in: { k: '$$this', v: '$$this' }
+                  }
+                }
+              }
+            }
+          }
+        ]).allowDiskUse(true);
+
+        if (peers.length > 0) {
+          allowedLoopbackIps = peers[0].ips;
+        } else {
+          // set it to empty to ensure that query will not run again on the next loop iteration
+          // if there are no peers
+          allowedLoopbackIps = {};
+        }
+      }
+
+      if (!(bgpNeighbor.ip in allowedLoopbackIps)) {
+        return {
+          valid: false,
+          err:
+            `The BGP Neighbor ${bgpNeighbor.ip} ` +
+            'overlaps with the flexiWAN tunnel loopback range ' +
+            `(${org.tunnelRange}/${configs.get('tunnelRangeMask')})`
+        };
+      }
     }
 
     if (bgpNeighbor.ip in usedNeighborIps) {
