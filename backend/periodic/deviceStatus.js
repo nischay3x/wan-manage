@@ -43,7 +43,6 @@ class DeviceStatus {
   constructor () {
     // Holds the status per deviceID
     this.status = {};
-    this.eventsDict = {};
     this.usersDeviceAggregatedStats = {};
     this.statsFieldsMap = new Map([
       ['rx_bytes', 'rx_bps'],
@@ -61,7 +60,7 @@ class DeviceStatus {
     this.start = this.start.bind(this);
     this.periodicPollDevices = this.periodicPollDevices.bind(this);
     this.periodicPollOneDevice = this.periodicPollOneDevice.bind(this);
-    this.generateDevStatsNotifications = this.generateDevStatsNotifications.bind(this);
+    this.periodicPollAndSendNotifications = this.periodicPollAndSendNotifications.bind(this);
     this.getDeviceStatus = this.getDeviceStatus.bind(this);
     this.setDeviceStatus = this.setDeviceStatus.bind(this);
     this.setDeviceState = this.setDeviceState.bind(this);
@@ -107,6 +106,10 @@ class DeviceStatus {
       handle: null,
       period: 10000
     };
+
+    setInterval(() => {
+      this.periodicPollAndSendNotifications();
+    }, configs.get('notificationPollingInterval'));
   }
 
   registerSyncUpdateFunc (func) {
@@ -223,8 +226,14 @@ class DeviceStatus {
     });
   }
 
-  generateAlertKey (eventType, eventTargets, isResolved, orgId) {
+  async generateAlertKey (eventType, eventTargets, isResolved, orgId, defaultSeverity = '') {
     let targetId;
+    let severity = defaultSeverity;
+    if (!severity) {
+      const orgNotificationsConf = await notificationsConf.findOne({ org: orgId });
+      const rules = orgNotificationsConf.rules;
+      severity = rules[eventType].severity;
+    }
 
     // If "tunnelId" is in eventTargets, use it exclusively since we don't want
     // to get a different key for the same tunnel alert from another device
@@ -244,7 +253,7 @@ class DeviceStatus {
       throw new Error('Unable to generate alert key: No valid target ID found');
     }
 
-    const alertKey = `${eventType}:${targetId}:${isResolved}:${orgId}`;
+    const alertKey = `${eventType}:${targetId}:${isResolved}::${severity}${orgId}`;
     return alertKey;
   }
 
@@ -345,20 +354,16 @@ class DeviceStatus {
       tunnelId,
       interfaceId: null
     };
+    const severity = tunnelId ? alerts[eventName][tunnelId].severity : alerts[eventName].severity;
 
-    const notificationKey = this.generateAlertKey(eventName, targets, isResolved, org);
-    const existingEvent = await this.getEventFromRedis(notificationKey);
-
-    if (existingEvent) {
-      return;
-    }
+    const notificationKey = await this.generateAlertKey(
+      eventName, targets, isResolved, org, severity);
 
     const title = isResolved ? `[resolved] ${eventName}` : eventName;
     const details = 'The value of the ' + eventName + ' in ' + (tunnelId ? 'tunnel ' +
     tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
     agentAlertsInfo.threshold + agentAlertsInfo.unit + ')' : 'increased to ' +
     agentAlertsInfo.value + agentAlertsInfo.unit);
-    const severity = tunnelId ? alerts[eventName][tunnelId].severity : alerts[eventName].severity;
     const event = {
       org,
       title,
@@ -370,40 +375,34 @@ class DeviceStatus {
       agentAlertsInfo
     };
 
-    if (isResolved) {
-      delete this.eventsDict[this.generateAlertKey(eventName, targets, false, org)];
-    } else {
-      delete this.eventsDict[this.generateAlertKey(eventName, targets, true, org)];
-    }
-    this.eventsDict[notificationKey] = event;
     await this.saveEventToRedis(notificationKey, event);
-  }
-
-  async getEventFromRedis (key) {
-    return new Promise((resolve, reject) => {
-      this.redisClient.get(key, (err, res) => {
-        if (err) {
-          logger.error(`Error fetching key ${key}:`, { params: { error: err } });
-          reject(err);
-        }
-        try {
-          resolve(res ? JSON.parse(res) : res);
-        } catch (parseError) {
-          console.error(`Error parsing JSON for key ${key}:`, parseError);
-          reject(parseError);
-        }
-      });
-    });
   }
 
   async saveEventToRedis (key, event) {
     return new Promise((resolve, reject) => {
-      this.redisClient.set(key, JSON.stringify(event), (err, res) => {
+      // Use HSET to set a field (key) within the notificationsObj
+      this.redisClient.hset('notificationsObj', key, JSON.stringify(event), (err, res) => {
         if (err) {
-          console.error(`Error saving key ${key}:`, err);
-          reject(err);
+          this.redisClient.get('notificationsObj', (getError, notificationsObjValue) => {
+            logger.error(`Error saving key ${key} to notificationsObj: ${err}.
+             notificationsObj: ${notificationsObjValue}`);
+            reject(err);
+          });
         }
         resolve(res);
+      });
+    });
+  }
+
+  async deleteEventsFromRedis () {
+    return new Promise((resolve, reject) => {
+      // Clean the notifications object in Redis
+      this.redisClient.del('notificationsObj', (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
       });
     });
   }
@@ -496,7 +495,6 @@ class DeviceStatus {
               connections.devices.updateDeviceInfo(
                 deviceID, 'alerts', lastUpdateEntry.alerts);
             }
-            await this.generateDevStatsNotifications();
 
             this.updateDeviceSyncStatus(
               deviceInfo.org,
@@ -569,6 +567,7 @@ class DeviceStatus {
           params: { deviceID: deviceID, err: err.message },
           periodic: { task: this.taskInfo }
         });
+        console.error(err.stack);
       });
   }
 
@@ -739,27 +738,18 @@ class DeviceStatus {
         interfaceId: null
       };
       const resolved = newState === 'running';
+      const eventType = 'Running router';
+      const notificationKey = await this.generateAlertKey(eventType, targets, resolved, org);
 
-      const notificationKey = this.generateAlertKey('Running router', targets, resolved, org);
-      const existingEvent = await this.getEventFromRedis(notificationKey);
-
-      if (existingEvent) {
-        return;
-      }
       const event = {
         org: org,
         title: newState === 'running' ? '[resolved] Router state change' : 'Router state change',
         details: `Router state changed to ${newState} in the device ${name}`,
-        eventType: 'Running router',
+        eventType,
         targets,
         resolved
       };
-      if (resolved) {
-        delete this.eventsDict[this.generateAlertKey('Running router', targets, false, org)];
-      } else {
-        delete this.eventsDict[this.generateAlertKey('Running router', targets, true, org)];
-      }
-      this.eventsDict[notificationKey] = event;
+
       await this.saveEventToRedis(notificationKey, event);
 
       this.setDevicesStatusByOrg(org, deviceId, newState);
@@ -991,35 +981,23 @@ class DeviceStatus {
             deviceId,
             tunnelId: tunnelID,
             interfaceId: null
-            // policyId: null
           };
           const resolved = tunnelState.status === 'up';
-          const notificationKey = this.generateAlertKey(
-            'Tunnel connection', targets, resolved, org);
-          const existingEvent = await this.getEventFromRedis(notificationKey);
+          const eventType = 'Tunnel connection';
+          const notificationKey = await this.generateAlertKey(eventType, targets, resolved, org);
 
-          if (!existingEvent) {
-            const event = {
-              org: org,
-              title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
-                : 'Tunnel connection change',
-              details: 'Tunnel ' + tunnelID + ' state changed to ' + (tunnelState.status === 'down'
-                ? 'Not connected' : 'Connected'),
-              targets,
-              eventType: 'Tunnel connection',
-              resolved
-            };
+          const event = {
+            org: org,
+            title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
+              : 'Tunnel connection change',
+            details: 'Tunnel ' + tunnelID + ' state changed to ' + (tunnelState.status === 'down'
+              ? 'Not connected' : 'Connected'),
+            targets,
+            eventType,
+            resolved
+          };
 
-            if (resolved) {
-              delete this.eventsDict[this.generateAlertKey(
-                'Tunnel connection', targets, false, org)];
-            } else {
-              delete this.eventsDict[this.generateAlertKey(
-                'Tunnel connection', targets, true, org)];
-            }
-            this.eventsDict[notificationKey] = event;
-            await this.saveEventToRedis(notificationKey, event);
-          }
+          await this.saveEventToRedis(notificationKey, event);
         }
       }));
       Object.assign(this.status[machineId].tunnelStatus, rawStats.tunnel_stats);
@@ -1041,17 +1019,36 @@ class DeviceStatus {
   }
 
   /**
-    * Generates notifications according to the
-    * events created while processing the device reply.
+    * Read the notifications from redis and
+    * send them to the sendNotifications that writes them to the db
     * @return {void}
     */
-  async generateDevStatsNotifications () {
-    const eventsArray = Object.values(this.eventsDict);
-    // Send notifications if exist
-    if (eventsArray.length > 0) {
-      await notificationsMgr.sendNotifications(eventsArray);
-      this.eventsDict = {};
-    }
+  async periodicPollAndSendNotifications () {
+    // Fetch all events from the notificationsObj hash in Redis
+    this.redisClient.hgetall('notificationsObj', async (err, eventsObj) => {
+      if (err) {
+        logger.error('Error fetching notificationsObj from Redis:', err);
+        return;
+      }
+
+      const eventsArray = eventsObj
+        ? Object.values(eventsObj).map(eventStr => JSON.parse(eventStr)) : [];
+
+      // Send notifications if they exist
+      if (eventsArray.length > 0) {
+        await notificationsMgr.sendNotifications(eventsArray)
+          .then(async () => {
+            // Call the delete function to delete the entire notificationsObj hash
+            // TBD: Remove only notifications that have been successfully
+            // sent (need to change sendNotifications function)
+            await this.deleteEventsFromRedis();
+            logger.info('Successfully sent notifications and cleared notificationsObj in Redis.');
+          })
+          .catch(sendErr => {
+            logger.error('Error sending notifications:', sendErr);
+          });
+      }
+    });
   }
 
   /**
