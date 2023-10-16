@@ -1164,7 +1164,9 @@ const prepareTunnelAddJob = async (
       paramsDeviceA.ikev2 = {
         role: 'initiator',
         'remote-device-id': deviceB.machineId,
-        lifetime: configs.get('ikev2Lifetime', 'number'),
+        lifetime: configs.get('ikev2Lifetime', 'number'), // phase 2
+        ike_lifetime: configs.get('ikev2LifetimePhase1', 'number'), // phase 1
+        pfs: configs.get('ikev2Pfs', 'boolean'),
         ike: {
           'crypto-alg': 'aes-cbc',
           'integ-alg': 'hmac-sha2-256-128',
