@@ -28,6 +28,7 @@ const { getAllOrganizationBGPDevices, checkLanOverlappingWith } = require('../ut
 const appsLogic = require('../applicationLogic/applications')();
 const { getStartEndIp } = require('../utils/networks');
 const Tunnels = require('../models/tunnels');
+const errorCodes = require('../errorCodes');
 
 /**
  * Checks whether a value is a valid IPv4 network mask
@@ -399,18 +400,18 @@ const validateDevice = async (
 
         errMsg += `address ${overlappingWith} of the LAN interface `;
         errMsg += `${meta.interfaceName} in device ${meta.deviceName}`;
-        return { valid: false, err: errMsg, errCode: 'LAN_OVERLAPPING' };
+        return { valid: false, err: errMsg, errCode: errorCodes.LAN_OVERLAPPING };
       }
 
       if (type === 'tunnel') {
         errMsg += `flexiWAN tunnel range (${overlappingWith})`;
-        return { valid: false, err: errMsg, errCode: 'TUNNEL_OVERLAPPING' };
+        return { valid: false, err: errMsg, errCode: errorCodes.TUNNEL_OVERLAPPING };
       }
 
       if (type === 'application') {
         errMsg += `address ${overlappingWith} of the application `;
         errMsg += `${meta.appName} in device ${meta.deviceName}`;
-        return { valid: false, err: errMsg, errCode: 'APPLICATION_OVERLAPPING' };
+        return { valid: false, err: errMsg, errCode: errorCodes.APPLICATION_OVERLAPPING };
       }
     }
   }
