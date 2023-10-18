@@ -1198,6 +1198,8 @@ const deviceSchema = new Schema({
 }
 );
 
+deviceSchema.index({ org: 1 });
+
 // Default exports
 module.exports =
 {
