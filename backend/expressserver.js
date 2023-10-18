@@ -39,8 +39,19 @@ const logger = require('./logging/logging')({ module: module.filename, type: 're
 const { reqLogger, errLogger } = require('./logging/request-logging');
 const serialize = require('serialize-javascript');
 
-var heapdump = require('heapdump');
-heapdump.writeSnapshot();
+const heapdump = require('heapdump');
+setInterval(() => {
+  heapdump.writeSnapshot((err, fileName) => {
+    console.log(`heapdump.write. err: ${err} filename: ${fileName}`);
+  });
+}, 60000 * 15).unref();
+
+const heapProfiler = require('@nearform/heap-profiler');
+setInterval(() => {
+  heapProfiler.generateHeapSamplingProfile((err, fileName) => {
+    console.log(`heapProfile.write. err: ${err} filename: ${fileName}`);
+  });
+}, 60000 * 15).unref();
 
 // periodic tasks
 const deviceStatus = require('./periodic/deviceStatus')();

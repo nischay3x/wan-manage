@@ -9,6 +9,7 @@
     "migrate": "migrate --autosync --config migrate_config.js"
   },
   "dependencies": {
+    "@nearform/heap-profiler": "^2.0.0",
     "assert": "^1.5.0",
     "async": "^3.2.3",
     "async-lock": "^1.4.0",
