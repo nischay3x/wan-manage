@@ -39,6 +39,9 @@ const logger = require('./logging/logging')({ module: module.filename, type: 're
 const { reqLogger, errLogger } = require('./logging/request-logging');
 const serialize = require('serialize-javascript');
 
+var heapdump = require('heapdump');
+heapdump.writeSnapshot();
+
 // periodic tasks
 const deviceStatus = require('./periodic/deviceStatus')();
 const deviceQueues = require('./periodic/deviceQueue')();
