@@ -144,35 +144,85 @@ class TunnelsService {
         await statusesInDb.updateTunnelsStatuses(orgList);
       }
       const detailed = requestParams?.response !== 'summary';
-      const pipeline = getTunnelsPipeline(orgList, filters, detailed);
+      const {
+        matchPipeline,
+        dataPipeline,
+        filterPipeline
+      } = getTunnelsPipeline(orgList, filters, detailed, true);
+
+      const sortByLookupFields = new Set([
+        'deviceA.name',
+        'interfaceADetails.name',
+        'deviceB.name',
+        'interfaceBDetails.name',
+        'pathlabel',
+        'tunnelStatus'
+      ]);
+      let isSortByLookupFields = false;
+      const sortPipeline = [];
       if (sortField) {
         const order = sortOrder.toLowerCase() === 'desc' ? -1 : 1;
-        pipeline.push({
+        isSortByLookupFields = sortByLookupFields.has(sortField);
+        sortPipeline.push({
           $sort: { [sortField]: order }
         });
       };
-      const paginationParams = [];
+
+      const paginationPipeline = [];
       if (offset !== undefined) {
-        paginationParams.push({ $skip: offset > 0 ? +offset : 0 });
+        paginationPipeline.push({ $skip: offset > 0 ? +offset : 0 });
       };
       if (limit !== undefined) {
-        paginationParams.push({ $limit: +limit });
+        paginationPipeline.push({ $limit: +limit });
       };
+
       let dbRecords;
-      if (paginationParams.length > 0) {
-        pipeline.push({
-          $facet: {
-            records: paginationParams,
-            meta: [{ $count: 'total' }]
-          }
-        });
+      if (paginationPipeline.length > 0) {
+        let pipeline = [];
+        if (filterPipeline.length === 0 && !isSortByLookupFields) {
+          // If there are no filters and no sort by fields that require $lookup,
+          // we can do the $limit here and only then do the heavy $lookup pipeline
+          // on small amount of docs,
+          // since we need it only for those docs that are shown in the UI
+          pipeline = [
+            ...matchPipeline,
+            ...sortPipeline,
+            {
+              $facet: {
+                records: [
+                  ...paginationPipeline,
+                  ...dataPipeline
+                ],
+                meta: [{ $count: 'total' }]
+              }
+            }
+          ];
+        } else {
+          pipeline = [
+            ...matchPipeline,
+            ...dataPipeline,
+            ...filterPipeline,
+            ...sortPipeline,
+            {
+              $facet: {
+                records: paginationPipeline,
+                meta: [{ $count: 'total' }]
+              }
+            }
+          ];
+        }
         const paginated = await Tunnels.aggregate(pipeline).allowDiskUse(true);
         if (paginated[0].meta.length > 0) {
           response.setHeader('records-total', paginated[0].meta[0].total);
         };
         dbRecords = paginated[0].records;
       } else {
-        dbRecords = await Tunnels.aggregate(pipeline).allowDiskUse(true);
+        dbRecords = await Tunnels.aggregate([
+          ...matchPipeline,
+          ...dataPipeline,
+          ...filterPipeline,
+          ...sortPipeline
+        ]).allowDiskUse(true);
         response.setHeader('records-total', dbRecords.length);
       }
       const tunnelsMap = dbRecords.map((d) => {

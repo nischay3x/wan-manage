@@ -78,106 +78,109 @@ const generateRandomKeys = () => {
  * Generates a pipeline for mongoose aggregate query to get filtered tunnels
  * @return {Array} an array of query stages
  */
-const getTunnelsPipeline = (orgList, filters, detailed = true) => {
-  const pipeline = [{
+const getTunnelsPipeline = (orgList, filters, detailed = true, splitResponse = false) => {
+  const matchPipeline = [{
     $match: {
       org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) },
       isActive: true
     }
-  },
-  {
-    $lookup: {
-      from: 'devices',
-      localField: 'deviceA',
-      foreignField: '_id',
-      as: 'deviceA'
-    }
-  },
-  { $unwind: '$deviceA' },
-  {
-    $lookup: {
-      from: 'devices',
-      localField: 'deviceB',
-      foreignField: '_id',
-      as: 'deviceB'
-    }
-  },
-  {
-    $unwind: {
-      path: '$deviceB',
-      preserveNullAndEmptyArrays: true // for peers we don't use deviceB
-    }
-  },
-  {
-    $lookup: {
-      from: 'pathlabels',
-      localField: 'pathlabel',
-      foreignField: '_id',
-      as: 'pathlabel'
-    }
-  },
-  {
-    $unwind: {
-      path: '$pathlabel',
-      preserveNullAndEmptyArrays: true
-    }
-  },
-  {
-    $addFields: {
-      interfaceADetails: {
-        $filter: {
-          input: '$deviceA.interfaces',
-          as: 'f',
-          cond: {
-            $eq: ['$$f._id', '$interfaceA']
+  }];
+
+  const dataPipeline = [
+    {
+      $lookup: {
+        from: 'devices',
+        localField: 'deviceA',
+        foreignField: '_id',
+        as: 'deviceA'
+      }
+    },
+    { $unwind: '$deviceA' },
+    {
+      $lookup: {
+        from: 'devices',
+        localField: 'deviceB',
+        foreignField: '_id',
+        as: 'deviceB'
+      }
+    },
+    {
+      $unwind: {
+        path: '$deviceB',
+        preserveNullAndEmptyArrays: true // for peers we don't use deviceB
+      }
+    },
+    {
+      $lookup: {
+        from: 'pathlabels',
+        localField: 'pathlabel',
+        foreignField: '_id',
+        as: 'pathlabel'
+      }
+    },
+    {
+      $unwind: {
+        path: '$pathlabel',
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $addFields: {
+        interfaceADetails: {
+          $filter: {
+            input: '$deviceA.interfaces',
+            as: 'f',
+            cond: {
+              $eq: ['$$f._id', '$interfaceA']
+            }
           }
-        }
-      },
-      interfaceBDetails: {
-        $filter: {
-          input: '$deviceB.interfaces',
-          as: 'f',
-          cond: {
-            $eq: ['$$f._id', '$interfaceB']
+        },
+        interfaceBDetails: {
+          $filter: {
+            input: '$deviceB.interfaces',
+            as: 'f',
+            cond: {
+              $eq: ['$$f._id', '$interfaceB']
+            }
           }
         }
       }
+    },
+    { $unwind: '$interfaceADetails' },
+    {
+      $unwind: {
+        path: '$interfaceBDetails',
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $lookup: {
+        from: 'peers',
+        localField: 'peer',
+        foreignField: '_id',
+        as: 'peer'
+      }
+    },
+    {
+      $unwind: {
+        path: '$peer',
+        preserveNullAndEmptyArrays: true
+      }
+    },
+    {
+      $lookup: {
+        from: 'organizations',
+        localField: 'org',
+        foreignField: '_id',
+        as: 'org'
+      }
+    },
+    {
+      $unwind: {
+        path: '$org'
+      }
     }
-  },
-  { $unwind: '$interfaceADetails' },
-  {
-    $unwind: {
-      path: '$interfaceBDetails',
-      preserveNullAndEmptyArrays: true
-    }
-  },
-  {
-    $lookup: {
-      from: 'peers',
-      localField: 'peer',
-      foreignField: '_id',
-      as: 'peer'
-    }
-  },
-  {
-    $unwind: {
-      path: '$peer',
-      preserveNullAndEmptyArrays: true
-    }
-  },
-  {
-    $lookup: {
-      from: 'organizations',
-      localField: 'org',
-      foreignField: '_id',
-      as: 'org'
-    }
-  },
-  {
-    $unwind: {
-      path: '$org'
-    }
-  }];
+  ];
   const project = {
     $project: {
       num: 1,
@@ -275,18 +278,23 @@ const getTunnelsPipeline = (orgList, filters, detailed = true) => {
     project.$project['org._id'] = 1;
     project.$project['org.vxlanPort'] = 1;
   }
-  pipeline.push(project);
+  dataPipeline.push(project);
 
+  const filterPipeline = [];
   if (filters) {
     const parsedFilters = typeof filters === 'string' ? JSON.parse(filters) : filters;
     const matchFilters = getMatchFilters(parsedFilters);
     if (matchFilters.length > 0) {
-      pipeline.push({
+      filterPipeline.push({
         $match: { $and: matchFilters }
       });
     }
   }
-  return pipeline;
+
+  if (splitResponse) {
+    return { matchPipeline, dataPipeline, filterPipeline };
+  }
+  return [...matchPipeline, ...dataPipeline, ...filterPipeline];
 };
 
 const getOrgDefaultTunnelPort = org => {

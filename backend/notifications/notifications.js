@@ -282,7 +282,7 @@ class NotificationsManager {
 
   async getQueryForExitingAlert (eventType, targets, resolved, severity, org) {
     const query = {
-      eventType: { $regex: eventType, $options: 'i' },
+      eventType: eventType,
       resolved,
       org: mongoose.Types.ObjectId(org),
       severity
