@@ -390,6 +390,13 @@ class NotificationsManager {
           resolved,
           severity || currentSeverity
         );
+        // If this is a resolved alert: resolve the existing notification
+        if (resolved && !isAlwaysResolved && existingAlert) {
+          await this.resolveAnAlert(eventType,
+            targets,
+            severity || currentSeverity,
+            org);
+        }
         // Send an alert only if one of the both is true:
         // 1. This isn't a resolved alert and there is no existing alert
         // 2. This is a resolved alert, there is unresolved alert in the db,
@@ -515,14 +522,6 @@ class NotificationsManager {
           const notificationList = orgsMap.get(key);
           if (!notificationList) orgsMap.set(key, []);
           orgsMap.get(key).push(notification);
-        }
-        // Now resolve the existing notification if needed
-        // (also if we didn't create a resolved alert)
-        if (resolved && !isAlwaysResolved && existingAlert) {
-          await this.resolveAnAlert(eventType,
-            targets,
-            severity || notification.severity,
-            org);
         }
       }
       // Get the accounts of the notifications by the organization
