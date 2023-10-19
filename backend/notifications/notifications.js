@@ -303,7 +303,7 @@ class NotificationsManager {
     return query;
   }
 
-  async findExistingAlert (eventType, targets, org, resolved = false, severity = null) {
+  async findExistingAlert (eventType, targets, org, severity) {
     try {
       const query = await this.getQueryForExitingAlert(eventType, targets, false, severity, org);
       const existingAlert = await notifications.findOne(query);
@@ -375,7 +375,6 @@ class NotificationsManager {
           eventType,
           targets,
           org,
-          resolved,
           severity || currentSeverity
         );
         // Send an alert only if one of the both is true:
