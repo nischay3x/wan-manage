@@ -279,9 +279,10 @@ class DeviceStatus {
     }
   }
 
-  getThresholdInfo (alerts, alertKey, notificationsConfRules, org, tunnelId = null) {
-    const thresholdType = alerts[alertKey].severity === 'warning'
-      ? 'warningThreshold' : 'criticalThreshold';
+  getThresholdInfo (
+    alertKey, notificationsConfRules, severity, org, tunnelId = null) {
+    const thresholdType = (severity === 'warning') ? 'warningThreshold' : 'criticalThreshold';
+
     const thresholdValue = tunnelId
       ? (tunnels.findOne(
         { num: tunnelId, org }, { fields: { notificationsSettings: 1 } }
@@ -308,7 +309,7 @@ class DeviceStatus {
           if ((!lastUpdateEntry.alerts[alertKey] ||
             lastUpdateEntry.alerts[alertKey].severity !== alerts[alertKey].severity)) {
             const agentAlertsInfo = this.getThresholdInfo(
-              alerts, alertKey, notificationsConfRules, deviceInfo.org);
+              alertKey, notificationsConfRules, alerts[alertKey].severity, deviceInfo.org);
             this.createAndPushEvent(
               deviceInfo, alerts, alertKey,
               agentAlertsInfo, null, true);
@@ -337,7 +338,11 @@ class DeviceStatus {
 
       if (shouldResolveTunnelAlert) {
         const agentAlertsInfo = this.getThresholdInfo(
-          alerts, alertKey, notificationsConfRules, deviceInfo.org, tunnelId);
+          alertKey,
+          notificationsConfRules,
+          alerts[alertKey][tunnelId].severity,
+          deviceInfo.org, tunnelId
+        );
         this.createAndPushEvent(
           deviceInfo, alerts, alertKey,
           agentAlertsInfo, tunnelId, true);
