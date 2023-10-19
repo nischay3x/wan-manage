@@ -225,8 +225,6 @@ const configEnv = {
     emailRateLimitPerDevice: 60,
     // Device disconnection time before triggering an alert in milliseconds (1 minute)
     deviceDisconnectionAlertTimeout: 60000,
-    // The time interval (in milliseconds) at which the system checks for new notifications to process and send.
-    notificationPollingInterval: 30000,
     /****************************************************/
     /*         Client Fields                            */
     /****************************************************/
