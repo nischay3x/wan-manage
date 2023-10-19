@@ -1384,10 +1384,24 @@ const addTunnel = async (
     // Options
     { upsert: true, new: true }
   )
-    .populate('deviceA')
-    .populate('deviceB')
+    .populate('deviceA', '_id machineId name hostname versions interfaces IKEv2')
+    .populate('deviceB', '_id machineId name hostname versions interfaces IKEv2')
     .populate('peer')
     .populate('org');
+
+  if (!tunnel.deviceA || (!tunnel.peer && !tunnel.deviceB)) {
+    await tunnelsModel.findOneAndUpdate({
+      org: org, num: tunnelnum
+    }, {
+      isActive: false,
+      deviceAconf: false,
+      deviceBconf: false,
+      pendingTunnelModification: false,
+      status: 'down',
+      tunnelKeys: null
+    });
+    throw new Error('Some devices were removed');
+  }
 
   // don't send jobs for pending tunnels
   if (isPending) {

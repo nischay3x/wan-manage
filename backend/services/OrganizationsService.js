@@ -792,6 +792,7 @@ const getTunnelsPipeline = (id, origVxlanPort) => {
               machineId: 1,
               versions: 1,
               hostname: 1,
+              IKEv2: 1,
               'interfaces._id': 1,
               tunnelInterface: {
                 $arrayElemAt: [
