@@ -1042,6 +1042,13 @@ paths:
         required: false
         schema:
           type: string
+      - description: Indicates if to remove device from VRRP group
+        explode: true
+        in: query
+        name: removeVrrp
+        required: false
+        schema:
+          type: string
       responses:
        "204":
          description: Successful operation
@@ -13689,6 +13696,8 @@ components:
           items:
             $ref: '#/components/schemas/Filter'
           type: array
+        removeVrrp:
+          type: boolean
     Filter:
       example:
         key: name

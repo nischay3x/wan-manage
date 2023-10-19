@@ -75,6 +75,7 @@ const jwt = require('jsonwebtoken');
 const { getAgentBroker } = require('../utils/httpUtils');
 const Joi = require('joi');
 const { getStartEndIp } = require('../utils/networks');
+const errorCodes = require('../errorCodes');
 
 class DevicesService {
   /**
@@ -1355,8 +1356,10 @@ class DevicesService {
    *
    * no response value expected for this operation
    **/
-  static async devicesDELETE ({ org, ...devicesDeleteRequest }, { user }) {
+  static async devicesDELETE ({ org, removeVrrp = false, ...devicesDeleteRequest }, { user }) {
     let orgList;
+    let errorData = null;
+
     try {
       let delDevices;
       let devIds;
@@ -1401,10 +1404,21 @@ class DevicesService {
         }
 
         // remove vrrp that configured on these devices
-        await vrrp.updateMany(
-          { org: { $in: orgList } },
-          { $pull: { devices: { device: { $in: devIds } } } }
+        const vrrpCount = await vrrp.countDocuments(
+          { org: { $in: orgList }, 'devices.device': { $in: devIds } }
         ).session(session);
+
+        if (vrrpCount > 0) {
+          if (!removeVrrp) {
+            errorData = { errorCodes: [errorCodes.VRRP_INSTALLED_ON_DEVICE] };
+            throw createError(400, 'Some devices have VRRP installed');
+          }
+
+          await vrrp.updateMany(
+            { org: { $in: orgList } },
+            { $pull: { devices: { device: { $in: devIds } } } }
+          ).session(session);
+        }
 
         const deviceCount = await devices.countDocuments({
           account: delDevices[0].account
@@ -1449,7 +1463,8 @@ class DevicesService {
       });
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
-        e.status || 500
+        e.status || 500,
+        errorData
       );
     }
   }
@@ -1460,9 +1475,11 @@ class DevicesService {
    * id String Numeric ID of the Device to delete
    * no response value expected for this operation
    **/
-  static async devicesIdDELETE ({ id, org }, { user }) {
+  static async devicesIdDELETE ({ id, org, removeVrrp = 'false' }, { user }) {
     let orgList;
     let delDevice;
+    let errorData = null;
+
     try {
       await mongoConns.mainDBwithTransaction(async (session) => {
         orgList = await getAccessTokenOrgList(user, org, true);
@@ -1489,10 +1506,22 @@ class DevicesService {
         }
 
         // remove vrrp that configured on this device
-        await vrrp.updateMany(
-          { org: { $in: orgList } },
-          { $pull: { devices: { device: mongoose.Types.ObjectId(id) } } }
+        // remove vrrp that configured on these devices
+        const vrrpCount = await vrrp.countDocuments(
+          { org: { $in: orgList }, 'devices.device': id }
         ).session(session);
+
+        if (vrrpCount > 0) {
+          if (removeVrrp !== 'true') {
+            errorData = { errorCodes: [errorCodes.VRRP_INSTALLED_ON_DEVICE] };
+            throw createError(400, 'The selected device has VRRP installed');
+          }
+
+          await vrrp.updateMany(
+            { org: { $in: orgList } },
+            { $pull: { devices: { device: id } } }
+          ).session(session);
+        }
 
         const deviceCount = await devices.countDocuments({
           account: delDevice.account
@@ -1533,7 +1562,8 @@ class DevicesService {
     } catch (e) {
       return Service.rejectResponse(
         e.message || 'Internal Server Error',
-        e.status || 500
+        e.status || 500,
+        errorData
       );
     }
   }

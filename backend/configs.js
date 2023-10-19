@@ -189,8 +189,12 @@ const configEnv = {
     ikev2ExpireDays: 360,
     // Number of days before expiration to renew IKEv2 keys. Default = 30 days
     ikev2RenewBeforeExpireDays: 30,
-    // IKEv2 lifetime parameter in seconds.
+    // IKEv2 phase 2 lifetime parameter in seconds.
     ikev2Lifetime: 3600,
+    // IKEv2 phase 1 lifetime parameter in seconds
+    ikev2LifetimePhase1: 28800,
+    // IKEv2 PFS enabled or not
+    ikev2Pfs: true,
     // Reconfig block time in seconds.
     reconfigErrorBlockTime: 60 * 60, // one hour
     // Public IP/Port block time in seconds.
