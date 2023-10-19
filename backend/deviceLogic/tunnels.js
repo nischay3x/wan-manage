@@ -1141,7 +1141,8 @@ const prepareTunnelAddJob = async (
         esp: {
           'crypto-alg': peer.espCryptoAlg,
           'integ-alg': peer.espIntegAlg,
-          'dh-group': peer.espDhGroup,
+          // 'dh-group': peer.espDhGroup,
+          'dh-group': '', // NOTE - NOT IN USE BY AGENT
           'key-size': parseInt(peer.espKeySize)
         },
         'local-ts': {
@@ -1164,7 +1165,9 @@ const prepareTunnelAddJob = async (
       paramsDeviceA.ikev2 = {
         role: 'initiator',
         'remote-device-id': deviceB.machineId,
-        lifetime: configs.get('ikev2Lifetime', 'number'),
+        lifetime: configs.get('ikev2Lifetime', 'number'), // phase 2
+        ike_lifetime: configs.get('ikev2LifetimePhase1', 'number'), // phase 1
+        pfs: configs.get('ikev2Pfs', 'boolean'),
         ike: {
           'crypto-alg': 'aes-cbc',
           'integ-alg': 'hmac-sha2-256-128',
