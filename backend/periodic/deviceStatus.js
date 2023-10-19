@@ -60,7 +60,6 @@ class DeviceStatus {
     this.start = this.start.bind(this);
     this.periodicPollDevices = this.periodicPollDevices.bind(this);
     this.periodicPollOneDevice = this.periodicPollOneDevice.bind(this);
-    this.periodicPollAndSendNotifications = this.periodicPollAndSendNotifications.bind(this);
     this.getDeviceStatus = this.getDeviceStatus.bind(this);
     this.setDeviceStatus = this.setDeviceStatus.bind(this);
     this.setDeviceState = this.setDeviceState.bind(this);
@@ -106,10 +105,6 @@ class DeviceStatus {
       handle: null,
       period: 10000
     };
-
-    setInterval(() => {
-      this.periodicPollAndSendNotifications();
-    }, configs.get('notificationPollingInterval'));
   }
 
   registerSyncUpdateFunc (func) {
@@ -383,31 +378,62 @@ class DeviceStatus {
     await this.saveEventToRedis(notificationKey, event);
   }
 
-  async saveEventToRedis (key, event) {
-    return new Promise((resolve, reject) => {
-      // Use HSET to set a field (key) within the notificationsObj
-      this.redisClient.hset('notificationsObj', key, JSON.stringify(event), (err, res) => {
-        if (err) {
-          this.redisClient.get('notificationsObj', (getError, notificationsObjValue) => {
-            logger.error(`Error saving key ${key} to notificationsObj: ${err}.
-             notificationsObj: ${notificationsObjValue}`);
-            reject(err);
-          });
-        }
-        resolve(res);
-      });
+  acquireLock (redisClient, key, ttl, cb) {
+    redisClient.set(key, 'LOCK', 'PX', ttl, 'NX', (err, reply) => {
+      if (err) {
+        logger.error('Lock acquisition failed.', { params: { error: err, key } });
+        return cb(err);
+      }
+      if (reply === 'OK') {
+        return cb(null, true);
+      } else {
+        logger.warn('Lock acquisition denied. Key already locked.', { params: { key } });
+        return cb(null, false);
+      }
     });
   }
 
-  async deleteEventsFromRedis () {
+  releaseLock (redisClient, key, cb) {
+    redisClient.del(key, (err) => {
+      if (err) {
+        logger.error('Failed to release lock.', { params: { key, error: err } });
+      }
+      cb(err);
+    });
+  }
+
+  async saveEventToRedis (key, event) {
     return new Promise((resolve, reject) => {
-      // Clean the notifications object in Redis
-      this.redisClient.del('notificationsObj', (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
+      // First, try to acquire the lock
+      this.acquireLock(this.redisClient, key, 30000, (lockErr, acquired) => {
+        if (lockErr || !acquired) {
+          return reject(new Error('Failed to acquire lock or key already exists.'));
         }
+
+        logger.debug('Acquired lock to send alert.', { params: { key, event } });
+
+        // Lock was acquired successfully. Send the notification.
+        notificationsMgr.sendNotifications([event])
+          .then(() => {
+            logger.info('Alert processed. Releasing lock & deleting from Redis.',
+              { params: { key } });
+
+            // Release the lock after sending the notification
+            this.releaseLock(this.redisClient, key, (releaseErr) => {
+              if (releaseErr) {
+                return reject(releaseErr);
+              }
+              resolve('Notification sent and lock released.');
+            });
+          })
+          .catch((sendErr) => {
+            // Even if there's an error sending the notification, release the lock
+            logger.error('Alert processing failed. Releasing lock & deleting from Redis.',
+              { params: { key, error: sendErr } });
+            this.releaseLock(this.redisClient, key, () => {
+              reject(sendErr);
+            });
+          });
       });
     });
   }
@@ -572,7 +598,6 @@ class DeviceStatus {
           params: { deviceID: deviceID, err: err.message },
           periodic: { task: this.taskInfo }
         });
-        console.error(err.stack);
       });
   }
 
@@ -1021,39 +1046,6 @@ class DeviceStatus {
     if (Object.entries(devStats).length !== 0) {
       this.setDeviceStatsField(machineId, 'ifStats', devStats);
     }
-  }
-
-  /**
-    * Read the notifications from redis and
-    * send them to the sendNotifications that writes them to the db
-    * @return {void}
-    */
-  async periodicPollAndSendNotifications () {
-    // Fetch all events from the notificationsObj hash in Redis
-    this.redisClient.hgetall('notificationsObj', async (err, eventsObj) => {
-      if (err) {
-        logger.error('Error fetching notificationsObj from Redis:', err);
-        return;
-      }
-
-      const eventsArray = eventsObj
-        ? Object.values(eventsObj).map(eventStr => JSON.parse(eventStr)) : [];
-
-      // Send notifications if they exist
-      if (eventsArray.length > 0) {
-        await notificationsMgr.sendNotifications(eventsArray)
-          .then(async () => {
-            // Call the delete function to delete the entire notificationsObj hash
-            // TBD: Remove only notifications that have been successfully
-            // sent (need to change sendNotifications function)
-            await this.deleteEventsFromRedis();
-            logger.info('Successfully sent notifications and cleared notificationsObj in Redis.');
-          })
-          .catch(sendErr => {
-            logger.error('Error sending notifications:', sendErr);
-          });
-      }
-    });
   }
 
   /**
