@@ -30,6 +30,7 @@ const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 const tunnels = require('../models/tunnels');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 /***
  * This class gets periodic status from all connected devices
@@ -338,7 +339,7 @@ class DeviceStatus {
     if (deviceInfo.alerts) {
       await this.handleResolvedAlerts(
         deviceInfo.alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo);
-    // There is no memory so we should look after the unresolved alerts in th db
+      // There is no memory so we should look after the unresolved alerts in th db
     } else {
       const previousAlerts = await notifications.find({
         'targets.deviceId': deviceInfo.deviceObj,
@@ -402,9 +403,12 @@ class DeviceStatus {
             this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
 
-            // TBD: Notification lock removed - need to fix
+            // Compare notification hashes between the device and last update.
+            // This code won't executed if the device's version is older than 6.3.X
+            // since deviceInfo won't have the key notificationsHash and lastUpdateEntry
+            // won't have the key alerts_hash
             if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
-            deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
+                deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
               await this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry);
               connections.devices.updateDeviceInfo(
                 deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
@@ -782,6 +786,57 @@ class DeviceStatus {
     delete this?.status?.[machineId]?.vrrp;
   }
 
+  isCustomNotificationsSupported (deviceVersion) {
+    const majorVersion = getMajorVersion(deviceVersion);
+    const minorVersion = getMinorVersion(deviceVersion);
+    return (majorVersion > 6 || (majorVersion === 6 && minorVersion >= 3));
+  };
+
+  async processTunnelNotificationsForOldDevices (
+    eventType, prevValue, currentValue, firstUpdate, deviceInfo, targets, unit,
+    criticalThreshold, warningThreshold) {
+    if (firstUpdate || currentValue !== prevValue) {
+      let resolved = false;
+      let severity = null;
+
+      if (prevValue > criticalThreshold && currentValue < criticalThreshold) {
+        resolved = true;
+        severity = 'critical';
+      } else if (prevValue > warningThreshold && currentValue < warningThreshold) {
+        resolved = true;
+        severity = 'warning';
+      } else if (currentValue > criticalThreshold) {
+        severity = 'critical';
+      } else if (currentValue > warningThreshold) {
+        severity = 'warning';
+      }
+
+      if (severity) {
+        const threshold = severity === 'warning' ? warningThreshold : criticalThreshold;
+        const event = {
+          org: deviceInfo.org,
+          title: eventType,
+          details: resolved ? `
+          ${eventType} has returned to normal in Tunnel ${targets.tunnelId}`
+            : `${eventType} has reached ${parseFloat(currentValue.toFixed(1))}${unit}
+             in Tunnel ${targets.tunnelId}`,
+          targets,
+          eventType,
+          resolved,
+          agentAlertsInfo: {
+            value: parseFloat(currentValue.toFixed(1)),
+            threshold,
+            unit,
+            type: 'tunnel'
+          },
+          severity
+        };
+        // TODO - change after merging the lock fix (use redis)
+        this.events.push(event);
+      }
+    }
+  }
+
   /**
      * @param  {string} machineId  device machine id
      * @param  {Object} deviceInfo device info entry
@@ -868,8 +923,9 @@ class DeviceStatus {
       }
 
       // Generate tunnel notifications
-      Object.entries(tunnelStatus).forEach(ent => {
-        const [tunnelID, tunnelState] = ent;
+      const tunnelStatusEntries = Object.entries(tunnelStatus);
+      await Promise.all(tunnelStatusEntries.map(async entry => {
+        const [tunnelID, tunnelState] = entry;
         const firstTunnelUpdate = !this.status[machineId].tunnelStatus[tunnelID];
 
         // Update changed tunnel status in memory by org
@@ -882,7 +938,7 @@ class DeviceStatus {
         // the last update
         if (
           (firstTunnelUpdate ||
-            tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
+           tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
         ) {
           this.events.push({
             org: org,
@@ -899,8 +955,24 @@ class DeviceStatus {
             eventType: 'Tunnel connection',
             resolved: tunnelState.status === 'up'
           });
+          const isCustomNotificationsSupported = this.isCustomNotificationsSupported(
+            deviceInfo.version);
+          if (!isCustomNotificationsSupported) {
+            const targets = {
+              deviceId,
+              tunnelId: tunnelID,
+              interfaceId: null
+            };
+
+            await this.processTunnelNotificationsForOldDevices('Link/Tunnel default drop rate',
+              this.status[machineId]?.tunnelStatus[tunnelID]?.drop_rate,
+              tunnelState.drop_rate, firstTunnelUpdate, deviceInfo, targets, '%', 5, 20);
+            await this.processTunnelNotificationsForOldDevices('Link/Tunnel round trip time',
+              this.status[machineId]?.tunnelStatus[tunnelID]?.rtt, tunnelState.rtt,
+              firstTunnelUpdate, deviceInfo, targets, 'ms', 300, 600);
+          }
         }
-      });
+      }));
       Object.assign(this.status[machineId].tunnelStatus, rawStats.tunnel_stats);
     }
 
