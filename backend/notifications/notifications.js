@@ -274,7 +274,7 @@ class NotificationsManager {
 
       return new Date();
     } catch (err) {
-      logger.warn('Failed to send an immediate email notification', {
+      logger.error('Failed to send an immediate email notification', {
         params: { err: err.message, alertDetails }
       });
     }
@@ -326,7 +326,7 @@ class NotificationsManager {
       );
       return updatedAlert;
     } catch (err) {
-      logger.warn(`Failed to resolve the notification ${eventType} in database`, {
+      logger.error(`Failed to resolve the notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
       });
     }
@@ -342,10 +342,15 @@ class NotificationsManager {
     orgNotificationsConf.webHookSettings;
     if ((severity === 'warning' && sendWarningAlerts) ||
     (severity === 'critical' && sendCriticalAlerts)) {
-      await webHooks.sendToWebHook(webhookURL,
-        webHookMessage,
-        ''
-      );
+      if (!await webHooks.sendToWebHook(webhookURL, webHookMessage, '')) {
+        logger.error('Failed to send an immediate webhook notification', {
+          params: { message: webHookMessage }
+        });
+      } else {
+        logger.info('An immediate webhook notification has been sent', {
+          params: { message: webHookMessage }
+        });
+      }
     }
   }
 
@@ -395,20 +400,23 @@ class NotificationsManager {
         // and the user has defined to send resolved alerts
         const conditionToSend = ((!resolved && !existingAlert) ||
         (resolved && sendResolvedAlert && (Boolean(existingAlert))));
-        logger.debug(`Result of conditionToSend (before checking parents) : ${conditionToSend}`, {
-          params: {
-            notification,
-            resolved,
-            existingAlert,
-            sendResolvedAlert
+        logger.debug(`Step 1: Initial check for sending alert.
+           Decision: ${conditionToSend ? 'proceed to step 2' : 'do not send'}.`, {
+          details: {
+            'Notification content': notification,
+            'Is it resolved?': resolved,
+            'Is there an existing alert?': existingAlert,
+            'Should resolved alerts be sent?': sendResolvedAlert
           }
         });
+
         // If this is a new notification or a resolved one
         // which we want to notify about it's resolution
         if (conditionToSend) {
           const event = hierarchyMap[eventType];
           // If the event exists in the hierarchy check if there is already a parent event in the db
           if (event) {
+            logger.debug('Step 2: Event exists in hierarchy. Checking for parent notifications.');
             let interfaceId, deviceId;
             if (targets.tunnelId) {
               const tunnel = await tunnels.findOne({
@@ -441,12 +449,13 @@ class NotificationsManager {
               const parentNotification = await notificationsDb.find(
                 { resolved, org, $or: parentsQuery });
               if (parentNotification.length > 0) {
-                logger.debug('Parent notifications found. Skipping notification',
+                logger.debug('Step 3: Parent notifications found. Skipping notification sending.',
                   { params: { notification } });
                 continue; // Ignore since there is a parent event
               }
 
-              logger.debug('No parent notifications found. Sending a Notification',
+              logger.debug(
+                'Step 3: No parent notifications found. Proceeding to send notification.',
                 { params: { notification } });
 
               // Since the RTT and the drop rate remains high for a few mins after the parent alert
@@ -461,6 +470,9 @@ class NotificationsManager {
                 }
               }
             }
+          } else {
+            logger.debug(
+              'Step 2: Event doesn\'t exist in hierarchy. Proceeding to send notification.');
           }
           if (rules[eventType].immediateEmail) {
             // Check if there is already an event like this for the same device(for device alerts)
@@ -479,9 +491,9 @@ class NotificationsManager {
             if (emailSentForPreviousAlert) {
               const emailRateLimitPerDevice = configs.get('emailRateLimitPerDevice');
               const timeSinceLastEmail = new Date() -
-               emailSentForPreviousAlert.emailSent.sendingTime;
+                 emailSentForPreviousAlert.emailSent.sendingTime;
               const timeSinceLastEmailInMinutes = Math.ceil(timeSinceLastEmail / (1000 * 60));
-              // Send an email for the event and device if 60 minutes have passed since the last one
+              // Send an email if 60 minutes have passed since the last one (for the event+device)
               if (emailRateLimitPerDevice < timeSinceLastEmailInMinutes) {
                 shouldSendEmail = true;
               } else {
