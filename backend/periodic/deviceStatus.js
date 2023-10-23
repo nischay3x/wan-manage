@@ -221,6 +221,17 @@ class DeviceStatus {
     });
   }
 
+  /**
+   * Generates a unique notification key based on the provided parameters.
+   *
+   * @param {string} notificationName - The name of the notification.
+   * @param {Object} notificationTargets - Contains targets such as tunnelId, deviceId, etc.
+   * @param {boolean} isResolved - Indicates if the notification relates to a resolved issue.
+   * @param {string} orgId - Organization ID associated with the notification.
+   * @param {string} [defaultSeverity=''] -if empty (not an agent alert), fetch it from DB.
+   * @returns {string} The unique notification key.
+   * @throws {Error} Throws an error if no valid target ID is found.
+   */
   async generateNotificationKey (
     notificationName, notificationTargets, isResolved, orgId, defaultSeverity = '') {
     let targetId;
@@ -255,6 +266,16 @@ class DeviceStatus {
     return notificationKey;
   }
 
+  /**
+   * Processes and handles an alert received by the agent in get-stats.
+   *
+   * @param {string} deviceID - The ID of the device associated with the alert.
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @param {string} alertName - The name of the specific alert being processed.
+   * @param {Object} lastUpdateEntry -  The current alerts of the device (received in get-stats).
+   * @param {number} [tunnelNum=null] - Optional tunnel number if the alert is specific to a tunnel.
+   * @throws {Error} Logs an error if there's a failure in creating or sending the notification.
+   */
   async handleAlert (
     deviceID, deviceInfo, alertName, lastUpdateEntry, tunnelNum = null) {
     let { value, unit, threshold, type } = tunnelNum
@@ -277,6 +298,20 @@ class DeviceStatus {
     }
   }
 
+  /**
+   * Retrieves threshold information based on the provided parameters.
+   *
+   * This function determines the type of threshold (either warning or critical) based on the
+   * given severity. It then fetches the corresponding threshold value and unit.
+   * This function is used for resolved alerts to determine the threshold value
+   * below which the alert is considered resolved.
+   * @param {string} alertKey - The key(name) identifying the specific alert in the alerts object.
+   * @param {Object} notificationsConfRules - Settings object from the db.
+   * @param {string} severity - The severity of the alert (e.g., 'warning' or 'critical').
+   * @param {string} org - Organization ID or name associated with the alert.
+   * @param {number} [tunnelId=null] - tunnel ID to fetch tunnel-specific threshold settings.
+   * @returns {Object} Returns an object containing the threshold value and unit.
+  */
   getThresholdInfo (
     alertKey, notificationsConfRules, severity, org, tunnelId = null) {
     const thresholdType = (severity === 'warning') ? 'warningThreshold' : 'criticalThreshold';
@@ -292,6 +327,22 @@ class DeviceStatus {
     return { threshold: thresholdValue, unit: thresholdUnit };
   }
 
+  /**
+   * Processes and handles resolved alerts for a device based on the given parameters.
+   *
+   * This function first determines if the alert is one of the known 'agent-only' alerts.
+   * For device-specific alerts, it checks if the alert severity has changed since the last update.
+   * If it has, it fetches the relevant threshold information and sends a notification.
+   * For alerts related to tunnels, the function delegates to `resolveTunnelAlerts`.
+   *
+   * @param {Object} alerts - The most recent alerts of the device in the memory (if there is no
+   * memory we fetched it from the db)
+   * @param {Object} lastUpdateEntry -  The current alerts of the device (received in get-stats).
+   * @param {string} deviceID - The ID of the device associated with the alerts.
+   * @param {Object} orgNotificationsConf - Configuration for organization notifications.
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @throws {Error} Logs an error if there's an issue resolving any alert.
+  */
   async handleResolvedAlerts (alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
     try {
       const agentOnlyAlerts = ['Link/Tunnel round trip time',
@@ -325,6 +376,19 @@ class DeviceStatus {
     }
   }
 
+  /**
+   * Processes and resolves tunnel-related alerts based on the given parameters.
+   *
+   * This function iterates over each tunnel alert. For each tunnel, it determines if
+   * the alert exists in the last update and if the severity has changed. If either
+   * condition is met, it fetches the threshold information and sends a resolved notification.
+   *
+   * @param {string} alertKey - The key(name) identifying the specific alert in the alerts object.
+   * @param {Object} alerts - The most recent alerts of the device in the memory.
+   * @param {Object} lastUpdateEntry -  The current alerts of the device (received in get-stats).
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @param {Object} notificationsConfRules - Settings object from the db.
+  */
   resolveTunnelAlerts (alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules) {
     for (const tunnelId in alerts[alertKey]) {
       const alertExistsForTunnel = lastUpdateEntry.alerts[alertKey]?.[tunnelId];
@@ -348,6 +412,15 @@ class DeviceStatus {
     }
   }
 
+  /**
+   * Convert an alert into a notification and send it.
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @param {Object} alerts - All alerts related to the device.
+   * @param {string} alertName - The specific alert's name being processed.
+   * @param {Object} agentAlertsInfo - Contains the threshold, unit, and value of the alert.
+   * @param {string} [tunnelId=null] - Optional tunnel ID if applicable.
+   * @param {boolean} [isResolved=false] - Indicates if the alert has been resolved.
+  */
   async createAndSendNotification (
     deviceInfo, alerts, alertName,
     agentAlertsInfo, tunnelId = null, isResolved = false) {
@@ -381,6 +454,18 @@ class DeviceStatus {
     await this.handleNotificationSending(notificationKey, notification, Boolean(tunnelId));
   }
 
+  /**
+   * Set a notification lock key in Redis with a specified TTL.
+   *
+   * This function utilizes the Redis "SET" command with "PX" and "NX" options to ensure that the
+   * key is set with the specified TTL and that it only gets set if the key doesn't already exist.
+   * This was meant to prevent different servers from processing the same notification.
+   *
+   * @param {Object} redisClient - The Redis client instance.
+   * @param {string} key - The Redis key to be locked (notification key).
+   * @param {number} ttl - The time-to-live for the key in milliseconds.
+   * @param {Function} cb - The callback function to execute upon completion.
+  */
   setNotificationKeyWithTtlLock (redisClient, key, ttl, cb) {
     redisClient.set(key, 'LOCK', 'PX', ttl, 'NX', (err, reply) => {
       if (err) {
@@ -396,6 +481,13 @@ class DeviceStatus {
     });
   }
 
+  /**
+   * Removes a previously set notification lock key from Redis.
+   *
+   * @param {Object} redisClient - The Redis client instance.
+   * @param {string} key - The Redis key to be removed.
+   * @param {Function} cb - The callback function to execute upon completion.
+  */
   removeNotificationKeyLock (redisClient, key, cb) {
     redisClient.del(key, (err) => {
       if (err) {
@@ -405,6 +497,19 @@ class DeviceStatus {
     });
   }
 
+  /**
+   * Handles the logic of sending a notification.
+   *
+   * The function checks if this is a tunnel-specific notification.
+   * If not, it sends the notification directly.
+   * If it is, the function first tries to acquire a lock using the provided key.
+   * Once the lock is acquired, the notification is sent. After sending, the lock is released.
+   *
+   * @param {string} key - The Redis key used for locking.
+   * @param {Object} notification - The notification object to send.
+   * @param {boolean} isTunnel - Indicates if the notification is related to a tunnel.
+   * @returns {Promise} Resolves with a success message or rejects with an error.
+  */
   async handleNotificationSending (key, notification, isTunnel) {
     return new Promise((resolve, reject) => {
       const sendNotification = () => {
@@ -460,6 +565,24 @@ class DeviceStatus {
     });
   }
 
+  /**
+   * Calculates and handles both current and resolved alerts for a given device.
+   *
+   * This function performs the following tasks:
+   * 1. Retrieves the notification configuration for the organization to which the device belongs.
+   * 2. Iterates over the alerts in the last update entry of the device.
+   * If this is a tunnel-specific alert like RTT, the function handles it for each tunnel.
+   * Otherwise, it handles the device-level alert.
+   * 3. If there are alerts present in the device's memory, it handles the resolved alerts.
+   * 4. If the device's memory doesn't contain alerts,
+   * it fetches the unresolved alerts from the database and processes them.
+   *
+   * @async
+   * @param {string} deviceID - The unique identifier for the device.
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @param {Object} lastUpdateEntry -  The current alerts of the device (received in get-stats).
+   * @throws Will throw an error if the notification configuration retrieval / alert handling fails.
+  */
   async calculateNotifications (deviceID, deviceInfo, lastUpdateEntry) {
     const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
     for (const alertName in lastUpdateEntry.alerts) {
