@@ -354,6 +354,7 @@ class NotificationsManager {
       const orgsMap = new Map();
       const orgNotificationsMap = new Map();
       for (const notification of notifications) {
+        logger.debug('Processing notification', { params: { notification } });
         const {
           org, details, eventType, title, severity = null,
           targets, resolved = false, isAlwaysResolved = false
@@ -379,10 +380,14 @@ class NotificationsManager {
         );
         // If this is a resolved alert: resolve the existing notification
         if (resolved && !isAlwaysResolved && existingAlert) {
-          await this.resolveAnAlert(eventType,
+          const resolvedExisting = await this.resolveAnAlert(eventType,
             targets,
             severity || currentSeverity,
             org);
+          if (resolvedExisting) {
+            logger.debug('Resolved existing notification',
+              { params: { idOfResolvedNotification: resolvedExisting._id } });
+          }
         }
         // Send an alert only if one of the both is true:
         // 1. This isn't a resolved alert and there is no existing alert
@@ -390,6 +395,14 @@ class NotificationsManager {
         // and the user has defined to send resolved alerts
         const conditionToSend = ((!resolved && !existingAlert) ||
         (resolved && sendResolvedAlert && (Boolean(existingAlert))));
+        logger.debug(`Result of conditionToSend (before checking parents) : ${conditionToSend}`, {
+          params: {
+            notification,
+            resolved,
+            existingAlert,
+            sendResolvedAlert
+          }
+        });
         // If this is a new notification or a resolved one
         // which we want to notify about it's resolution
         if (conditionToSend) {
@@ -428,8 +441,13 @@ class NotificationsManager {
               const parentNotification = await notificationsDb.find(
                 { resolved, org, $or: parentsQuery });
               if (parentNotification.length > 0) {
+                logger.debug('Parent notifications found. Skipping notification',
+                  { params: { notification } });
                 continue; // Ignore since there is a parent event
               }
+
+              logger.debug('No parent notifications found. Sending a Notification',
+                { params: { notification } });
 
               // Since the RTT and the drop rate remains high for a few mins after the parent alert
               // Has been resolved, we would like to ignore these alerts
