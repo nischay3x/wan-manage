@@ -221,51 +221,54 @@ class DeviceStatus {
     });
   }
 
-  async generateAlertKey (eventType, eventTargets, isResolved, orgId, defaultSeverity = '') {
+  async generateNotificationKey (
+    notificationName, notificationTargets, isResolved, orgId, defaultSeverity = '') {
     let targetId;
     let severity = defaultSeverity;
     if (!severity) {
       const orgNotificationsConf = await notificationsConf.findOne({ org: orgId });
       const rules = orgNotificationsConf.rules;
-      severity = rules[eventType].severity;
+      severity = rules[notificationName].severity;
     }
 
-    // If "tunnelId" is in eventTargets, use it exclusively since we don't want
+    // If "tunnelId" is in notificationTargets, use it exclusively since we don't want
     // to get a different key for the same tunnel alert from another device
-    if (eventTargets.tunnelId) {
-      targetId = `tunnelId:${eventTargets.tunnelId}`;
+    if (notificationTargets.tunnelId) {
+      targetId = `tunnelId:${notificationTargets.tunnelId}`;
     } else {
-      targetId = Object.entries(eventTargets)
+      targetId = Object.entries(notificationTargets)
         .filter(([key, value]) => value != null)
         .map(([key, value]) => `${key}:${value}`)
         .join(':');
     }
 
     if (!targetId) {
-      logger.warn('Failed to generate alert key: No valid target ID found', {
-        params: { eventType, eventTargets, orgId }
+      logger.warn('Failed to generate notification key: No valid target ID found', {
+        params: { notificationName, notificationTargets, orgId }
       });
-      throw new Error('Unable to generate alert key: No valid target ID found');
+      throw new Error('Unable to generate notification key: No valid target ID found');
     }
 
-    const alertKey = `${eventType}:${targetId}:${isResolved}::${severity}${orgId}`;
-    return alertKey;
+    const notificationKey = 'notification-lock:' + notificationName + ':' + targetId + ':' +
+      isResolved + ':' + severity + orgId;
+
+    return notificationKey;
   }
 
   async handleAlert (
-    deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelNum = null) {
+    deviceID, deviceInfo, alertName, lastUpdateEntry, tunnelNum = null) {
     let { value, unit, threshold, type } = tunnelNum
-      ? lastUpdateEntry.alerts[alertKey][tunnelNum]
-      : lastUpdateEntry.alerts[alertKey];
+      ? lastUpdateEntry.alerts[alertName][tunnelNum]
+      : lastUpdateEntry.alerts[alertName];
 
     // Ensure that 'value' has only one digit after the '.'
     value = parseFloat(value.toFixed(1));
     try {
-      this.createAndPushEvent(
-        deviceInfo, lastUpdateEntry.alerts, alertKey,
+      this.createAndSendNotification(
+        deviceInfo, lastUpdateEntry.alerts, alertName,
         { value, threshold, unit, type }, tunnelNum);
     } catch (err) {
-      logger.error(`Failed to add the "${alertKey}" alert for
+      logger.error(`Failed to add the "${alertName}" alert for
        ${tunnelNum ? 'tunnel ' + tunnelNum : 'device ' + deviceInfo.name}`
       , {
         params: { deviceID: deviceID, err: err.message },
@@ -295,23 +298,23 @@ class DeviceStatus {
         'Link/Tunnel default drop rate', 'Device memory usage', 'Hard drive usage', 'Temperature'];
       const notificationsConfRules = orgNotificationsConf.rules;
 
-      for (const alertKey in alerts) {
-        const isAgentAlert = agentOnlyAlerts.includes(alertKey);
+      for (const alertName in alerts) {
+        const isAgentAlert = agentOnlyAlerts.includes(alertName);
         if (!isAgentAlert) {
           continue;
         }
-        if (alerts[alertKey].type === 'device') {
-          if ((!lastUpdateEntry.alerts[alertKey] ||
-            lastUpdateEntry.alerts[alertKey].severity !== alerts[alertKey].severity)) {
+        if (alerts[alertName].type === 'device') {
+          if ((!lastUpdateEntry.alerts[alertName] ||
+            lastUpdateEntry.alerts[alertName].severity !== alerts[alertName].severity)) {
             const agentAlertsInfo = this.getThresholdInfo(
-              alertKey, notificationsConfRules, alerts[alertKey].severity, deviceInfo.org);
-            this.createAndPushEvent(
-              deviceInfo, alerts, alertKey,
+              alertName, notificationsConfRules, alerts[alertName].severity, deviceInfo.org);
+            this.createAndSendNotification(
+              deviceInfo, alerts, alertName,
               agentAlertsInfo, null, true);
           }
         } else {
           this.resolveTunnelAlerts(
-            alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
+            alertName, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
         }
       }
     } catch (error) {
@@ -338,15 +341,15 @@ class DeviceStatus {
           alerts[alertKey][tunnelId].severity,
           deviceInfo.org, tunnelId
         );
-        this.createAndPushEvent(
+        this.createAndSendNotification(
           deviceInfo, alerts, alertKey,
           agentAlertsInfo, tunnelId, true);
       }
     }
   }
 
-  async createAndPushEvent (
-    deviceInfo, alerts, eventName,
+  async createAndSendNotification (
+    deviceInfo, alerts, alertName,
     agentAlertsInfo, tunnelId = null, isResolved = false) {
     const { org, deviceObj: deviceId, name } = deviceInfo;
     const targets = {
@@ -354,46 +357,46 @@ class DeviceStatus {
       tunnelId,
       interfaceId: null
     };
-    const severity = tunnelId ? alerts[eventName][tunnelId].severity : alerts[eventName].severity;
+    const severity = tunnelId ? alerts[alertName][tunnelId].severity : alerts[alertName].severity;
 
-    const notificationKey = await this.generateAlertKey(
-      eventName, targets, isResolved, org, severity);
+    const notificationKey = await this.generateNotificationKey(
+      alertName, targets, isResolved, org, severity);
 
-    const title = isResolved ? `[resolved] ${eventName}` : eventName;
-    const details = 'The value of the ' + eventName + ' in ' + (tunnelId ? 'tunnel ' +
+    const title = isResolved ? `[resolved] ${alertName}` : alertName;
+    const details = 'The value of the ' + alertName + ' in ' + (tunnelId ? 'tunnel ' +
     tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
     agentAlertsInfo.threshold + agentAlertsInfo.unit + ')' : 'increased to ' +
     agentAlertsInfo.value + agentAlertsInfo.unit);
-    const event = {
+    const notification = {
       org,
       title,
       details,
-      eventType: eventName,
+      eventType: alertName,
       targets,
       severity,
       resolved: isResolved,
       agentAlertsInfo
     };
 
-    await this.saveEventToRedis(notificationKey, event);
+    await this.handleNotificationSending(notificationKey, notification, Boolean(tunnelId));
   }
 
-  acquireLock (redisClient, key, ttl, cb) {
+  setNotificationKeyWithTtlLock (redisClient, key, ttl, cb) {
     redisClient.set(key, 'LOCK', 'PX', ttl, 'NX', (err, reply) => {
       if (err) {
-        logger.error('Lock acquisition failed.', { params: { error: err, key } });
+        logger.error('Notification key lock acquisition failed.', { params: { error: err, key } });
         return cb(err);
       }
       if (reply === 'OK') {
         return cb(null, true);
       } else {
-        logger.warn('Lock acquisition denied. Key already locked.', { params: { key } });
+        logger.warn('Notification key lock denied. Key already locked.', { params: { key } });
         return cb(null, false);
       }
     });
   }
 
-  releaseLock (redisClient, key, cb) {
+  removeNotificationKeyLock (redisClient, key, cb) {
     redisClient.del(key, (err) => {
       if (err) {
         logger.error('Failed to release lock.', { params: { key, error: err } });
@@ -402,35 +405,54 @@ class DeviceStatus {
     });
   }
 
-  async saveEventToRedis (key, event) {
+  async handleNotificationSending (key, notification, isTunnel) {
     return new Promise((resolve, reject) => {
+      const sendNotification = () => {
+        notificationsMgr.sendNotifications([notification])
+          .then(() => {
+            logger.info('Notification processed successfully.');
+            resolve('Notification processed successfully.');
+          })
+          .catch((sendErr) => {
+            logger.error('Failed to send notification for processing.',
+              { params: { key, error: sendErr } });
+            reject(sendErr);
+          });
+      };
+
+      // If isTunnel is false, send the notification directly
+      if (!isTunnel) {
+        return sendNotification();
+      }
+
       // First, try to acquire the lock
-      this.acquireLock(this.redisClient, key, 30000, (lockErr, acquired) => {
+      this.setNotificationKeyWithTtlLock(this.redisClient, key, 30000, (lockErr, acquired) => {
         if (lockErr || !acquired) {
-          return reject(new Error('Failed to acquire lock or key already exists.'));
+          return reject(new Error('Failed to acquire notification lock or key already exists.'));
         }
 
-        logger.debug('Acquired lock to send alert.', { params: { key, event } });
+        logger.debug('Acquired lock to send notification for processing.',
+          { params: { key, notification } });
 
         // Lock was acquired successfully. Send the notification.
-        notificationsMgr.sendNotifications([event])
+        notificationsMgr.sendNotifications([notification])
           .then(() => {
-            logger.info('Alert processed. Releasing lock & deleting from Redis.',
+            logger.info('Notification processed. Releasing lock & deleting from Redis.',
               { params: { key } });
 
             // Release the lock after sending the notification
-            this.releaseLock(this.redisClient, key, (releaseErr) => {
+            this.removeNotificationKeyLock(this.redisClient, key, (releaseErr) => {
               if (releaseErr) {
                 return reject(releaseErr);
               }
-              resolve('Notification sent and lock released.');
+              resolve('Notification processed and lock released.');
             });
           })
           .catch((sendErr) => {
             // Even if there's an error sending the notification, release the lock
-            logger.error('Alert processing failed. Releasing lock & deleting from Redis.',
+            logger.error('Notification processing failed. Releasing lock & deleting key from Redis',
               { params: { key, error: sendErr } });
-            this.releaseLock(this.redisClient, key, () => {
+            this.removeNotificationKeyLock(this.redisClient, key, () => {
               reject(sendErr);
             });
           });
@@ -440,15 +462,15 @@ class DeviceStatus {
 
   async calculateNotifications (deviceID, deviceInfo, lastUpdateEntry) {
     const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
-    for (const alertKey in lastUpdateEntry.alerts) {
-      if (alertKey.toLowerCase().includes('tunnel')) {
-        for (const tunnelId in lastUpdateEntry.alerts[alertKey]) {
+    for (const alertName in lastUpdateEntry.alerts) {
+      if (alertName.toLowerCase().includes('tunnel')) {
+        for (const tunnelId in lastUpdateEntry.alerts[alertName]) {
           await this.handleAlert(
-            deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelId);
+            deviceID, deviceInfo, alertName, lastUpdateEntry, tunnelId);
         }
       } else {
         await this.handleAlert(
-          deviceID, deviceInfo, alertKey, lastUpdateEntry);
+          deviceID, deviceInfo, alertName, lastUpdateEntry);
       }
     }
     // handle resolved alerts if needed (exist in the memory but not in the current alerts)
@@ -466,7 +488,7 @@ class DeviceStatus {
         if (previousAlerts[i].severity) {
           if (previousAlerts[i].targets?.tunnelId) {
             const tunnelId = previousAlerts[i].targets.tunnelId;
-            const eventType = previousAlerts[i].eventType;
+            const eventType = previousAlerts[i].eventType; // eventType = alert name
             prevAlertsDict[eventType] = {
               [tunnelId]: {
                 value: previousAlerts[i].agentAlertsInfo.value,
@@ -752,7 +774,7 @@ class DeviceStatus {
    * @return {void}
    */
   async setDeviceState (machineId, newState, needToPublish = true) {
-    // Generate an event if there was a transition in the device's status
+    // Generate a notification if there was a transition in the device's status
     const deviceInfo = connections.getDeviceInfo(machineId);
     if (!deviceInfo) {
       logger.warn('Failed to get device info', {
@@ -768,19 +790,20 @@ class DeviceStatus {
         interfaceId: null
       };
       const resolved = newState === 'running';
-      const eventType = 'Running router';
-      const notificationKey = await this.generateAlertKey(eventType, targets, resolved, org);
+      const notificationName = 'Running router';
+      const notificationKey = await this.generateNotificationKey(
+        notificationName, targets, resolved, org);
 
-      const event = {
+      const notification = {
         org: org,
         title: newState === 'running' ? '[resolved] Router state change' : 'Router state change',
         details: `Router state changed to ${newState} in the device ${name}`,
-        eventType,
+        eventType: notificationName,
         targets,
         resolved
       };
 
-      await this.saveEventToRedis(notificationKey, event);
+      await this.handleNotificationSending(notificationKey, notification, false);
 
       this.setDevicesStatusByOrg(org, deviceId, newState);
     }
@@ -1013,21 +1036,22 @@ class DeviceStatus {
             interfaceId: null
           };
           const resolved = tunnelState.status === 'up';
-          const eventType = 'Tunnel connection';
-          const notificationKey = await this.generateAlertKey(eventType, targets, resolved, org);
+          const notificationName = 'Tunnel connection';
+          const notificationKey = await this.generateNotificationKey(
+            notificationName, targets, resolved, org);
 
-          const event = {
+          const notification = {
             org: org,
             title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
               : 'Tunnel connection change',
             details: 'Tunnel ' + tunnelID + ' state changed to ' + (tunnelState.status === 'down'
               ? 'Not connected' : 'Connected'),
             targets,
-            eventType,
+            eventType: notificationName,
             resolved
           };
 
-          await this.saveEventToRedis(notificationKey, event);
+          await this.handleNotificationSending(notificationKey, notification, true);
         }
       }));
       Object.assign(this.status[machineId].tunnelStatus, rawStats.tunnel_stats);
