@@ -437,7 +437,7 @@ class DeviceStatus {
       notificationKey = await this.generateTunnelNotificationKey(
         alertName, targets, isResolved, org, severity);
     }
-    await this.handleNotificationSending(notification, notificationKey);
+    this.handleNotificationSending(notification, notificationKey);
   }
 
   /**
@@ -447,15 +447,14 @@ class DeviceStatus {
    * key is set with the specified TTL and that it only gets set if the key doesn't already exist.
    * This was meant to prevent different servers from processing the same notification.
    *
-   * @param {Object} redisClient - The Redis client instance.
    * @param {string} key - The Redis key to be locked (notification key).
    * @param {number} ttl - The time-to-live for the key in milliseconds.
    * @param {Function} cb - The callback function to execute upon completion.
   */
-  setNotificationKeyWithTtlLock (redisClient, key, ttl, cb) {
-    redisClient.set(key, 'LOCK', 'PX', ttl, 'NX', (err, reply) => {
+  setNotificationKeyWithTtlLock (key, ttl, cb) {
+    this.redisClient.set(key, 'LOCK', 'PX', ttl, 'NX', (err, reply) => {
       if (err) {
-        logger.error('Notification key lock acquisition failed.', { params: { error: err, key } });
+        logger.error('Notification key lock failed.', { params: { error: err, key } });
         return cb(err);
       }
       if (reply === 'OK') {
@@ -470,87 +469,74 @@ class DeviceStatus {
   /**
    * Removes a previously set notification lock key from Redis.
    *
-   * @param {Object} redisClient - The Redis client instance.
    * @param {string} key - The Redis key to be removed.
-   * @param {Function} cb - The callback function to execute upon completion.
   */
-  removeNotificationKeyLock (redisClient, key, cb) {
-    redisClient.del(key, (err) => {
+  removeNotificationKeyLock (key) {
+    this.redisClient.del(key, (err) => {
       if (err) {
-        logger.error('Failed to release lock.', { params: { key, error: err } });
+        logger.error('Failed to release Redis notification lock.', { params: { key, error: err } });
+      } else {
+        logger.info('The Redis notification lock has been released.', { params: key });
       }
-      cb(err);
     });
   }
 
   /**
    * Handles the logic of sending a notification.
    *
-   * The function checks if this is a tunnel-specific notification.
+   * The function checks if the notificationKey is truthy.
    * If not, it sends the notification directly.
-   * If it is, the function first tries to acquire a lock using the provided key.
-   * Once the lock is acquired, the notification is sent. After sending, the lock is released.
+   * Else, the function first tries to acquire a lock using the provided key.
+   * Once the lock is acquired, the notification is sent for processing and the lock is released.
+   * If the lock cannot be acquired due to an error or if it's already held,
+   * the function returns without sending the notification.
    *
-   * @param {string} key - The Redis key used for locking.
    * @param {Object} notification - The notification object to send.
-   * @param {boolean} isTunnel - Indicates if the notification is related to a tunnel.
-   * @returns {Promise} Resolves with a success message or rejects with an error.
+   * @param {string} notificationKey - The Redis key used for locking
   */
-  async handleNotificationSending (notification, notificationKey = null) {
-    return new Promise((resolve, reject) => {
-      const sendNotification = () => {
+  handleNotificationSending (notification, notificationKey = null) {
+    const sendNotification = () => {
+      notificationsMgr.sendNotifications([notification])
+        .then(() => {
+          logger.info('Notification processed successfully.');
+        })
+        .catch((sendErr) => {
+          logger.error('Failed to send notification for processing.',
+            { params: { notification, error: sendErr } });
+        });
+    };
+
+    if (!notificationKey) {
+      sendNotification();
+      return;
+    }
+
+    // First, try to acquire the lock
+    this.setNotificationKeyWithTtlLock(
+      notificationKey, 30000, (lockErr, acquired) => {
+        if (lockErr || !acquired) {
+          return;
+        }
+
+        logger.debug('Acquired lock to send notification for processing.',
+          { params: { notificationKey, notification } });
+
+        // Lock was acquired successfully. Send the notification.
         notificationsMgr.sendNotifications([notification])
           .then(() => {
-            logger.info('Notification processed successfully.');
-            resolve('Notification processed successfully.');
+            logger.info('Notification processed. Releasing lock & deleting from Redis.',
+              { params: { notificationKey } });
+            this.removeNotificationKeyLock(notificationKey);
           })
           .catch((sendErr) => {
-            logger.error('Failed to send notification for processing.',
-              { params: { notification, error: sendErr } });
-            reject(sendErr);
-          });
-      };
-
-      // If isTunnel is false, send the notification directly
-      if (!notificationKey) {
-        return sendNotification();
-      }
-
-      // First, try to acquire the lock
-      this.setNotificationKeyWithTtlLock(
-        this.redisClient, notificationKey, 30000, (lockErr, acquired) => {
-          if (lockErr || !acquired) {
-            return reject(new Error('Failed to acquire notification lock or key already exists.'));
-          }
-
-          logger.debug('Acquired lock to send notification for processing.',
-            { params: { notificationKey, notification } });
-
-          // Lock was acquired successfully. Send the notification.
-          notificationsMgr.sendNotifications([notification])
-            .then(() => {
-              logger.info('Notification processed. Releasing lock & deleting from Redis.',
-                { params: { notificationKey } });
-
-              // Release the lock after sending the notification
-              this.removeNotificationKeyLock(this.redisClient, notificationKey, (releaseErr) => {
-                if (releaseErr) {
-                  return reject(releaseErr);
-                }
-                resolve('Notification processed and lock released.');
-              });
-            })
-            .catch((sendErr) => {
             // Even if there's an error sending the notification, release the lock
-              logger.error(
-                'Notification processing failed. Releasing lock & deleting key from Redis',
-                { params: { notificationKey, error: sendErr } });
-              this.removeNotificationKeyLock(this.redisClient, notificationKey, () => {
-                reject(sendErr);
+            logger.error(
+              'Notification processing failed. Releasing lock & deleting key from Redis', {
+                params: { notificationKey, error: sendErr }
               });
-            });
-        });
-    });
+            this.removeNotificationKeyLock(notificationKey);
+          });
+      });
   }
 
   /**
@@ -911,7 +897,7 @@ class DeviceStatus {
         resolved
       };
 
-      await this.handleNotificationSending(notification);
+      this.handleNotificationSending(notification);
 
       this.setDevicesStatusByOrg(org, deviceId, newState);
     }
@@ -1159,7 +1145,7 @@ class DeviceStatus {
             resolved
           };
 
-          await this.handleNotificationSending(notification, notificationKey);
+          this.handleNotificationSending(notification, notificationKey);
         }
       }));
       Object.assign(this.status[machineId].tunnelStatus, rawStats.tunnel_stats);
