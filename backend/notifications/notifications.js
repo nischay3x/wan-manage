@@ -415,7 +415,9 @@ class NotificationsManager {
         if (conditionToSend) {
           const event = hierarchyMap[eventType];
           // If the event exists in the hierarchy check if there is already a parent event in the db
-          if (event) {
+          // Exclude resolved alerts, as an unresolved alert is guaranteed to exist,
+          // having been created once its parent alerts were resolved.
+          if (event && !resolved) {
             logger.debug('Step 2: Event exists in hierarchy. Checking for parent notifications.');
             let interfaceId, deviceId;
             if (targets.tunnelId) {
@@ -447,7 +449,7 @@ class NotificationsManager {
               const parentsQuery = await event.getQuery(deviceId || targets.deviceId, interfaceId ||
                    targets.interfaceId, targets.tunnelId);
               const parentNotification = await notificationsDb.find(
-                { resolved, org, $or: parentsQuery });
+                { resolved: false, org, $or: parentsQuery });
               if (parentNotification.length > 0) {
                 logger.debug('Step 3: Parent notifications found. Skipping notification sending.',
                   { params: { notification } });
@@ -460,7 +462,7 @@ class NotificationsManager {
 
               // Since the RTT and the drop rate remains high for a few mins after the parent alert
               // Has been resolved, we would like to ignore these alerts
-              if (!resolved && ['Link/Tunnel round trip time',
+              if (['Link/Tunnel round trip time',
                 'Link/Tunnel default drop rate'].includes(eventType)) {
                 const fiveMinutesAgo = new Date(new Date() - 5 * 60 * 1000);
                 const resolvedParentNotification = await notificationsDb.find(
@@ -471,8 +473,7 @@ class NotificationsManager {
               }
             }
           } else {
-            logger.debug(
-              'Step 2: Event doesn\'t exist in hierarchy. Proceeding to send notification.');
+            logger.debug('Step 2: No need to check hierarchy. Proceeding to send notification.');
           }
           if (rules[eventType].immediateEmail) {
             // Check if there is already an event like this for the same device(for device alerts)
