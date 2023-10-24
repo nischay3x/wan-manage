@@ -400,13 +400,15 @@ class NotificationsManager {
         // and the user has defined to send resolved alerts
         const conditionToSend = ((!resolved && !existingAlert) ||
         (resolved && sendResolvedAlert && (Boolean(existingAlert))));
-        logger.debug(`Step 1: Initial check for sending alert.
-           Decision: ${conditionToSend ? 'proceed to step 2' : 'do not send'}.`, {
-          details: {
-            'Notification content': notification,
-            'Is it resolved?': resolved,
-            'Is there an existing alert?': existingAlert,
-            'Should resolved alerts be sent?': sendResolvedAlert
+        logger.debug('Step 1: Initial check for sending alert. Decision: ' +
+        (conditionToSend ? 'proceed to step 2' : 'do not send'), {
+          params: {
+            details: {
+              'Notification content': notification,
+              'Is it resolved?': resolved,
+              'Is there an existing alert?': Boolean(existingAlert),
+              'Is sending resolved alerts defined for this type?': sendResolvedAlert
+            }
           }
         });
 
