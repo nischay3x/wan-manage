@@ -533,7 +533,13 @@ class DeviceStatus {
             logger.error(
               'Notification processing failed. Releasing lock & deleting key from Redis', {
                 params: { notificationKey, error: sendErr }
+            logger.error(
+              'Notification processing failed. Releasing lock & deleting key from Redis', {
+                params: { notificationKey, error: sendErr }
               });
+            this.removeNotificationKeyLock(notificationKey);
+          });
+      });
             this.removeNotificationKeyLock(notificationKey);
           });
       });
