@@ -405,7 +405,6 @@ class NotificationsManager {
           params: {
             details: {
               'Notification content': notification,
-              'Is it resolved?': resolved,
               'Is there an existing alert?': Boolean(existingAlert),
               'Is sending resolved alerts defined for this type?': sendResolvedAlert
             }
