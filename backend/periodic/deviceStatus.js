@@ -616,11 +616,12 @@ class DeviceStatus {
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
             if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
                 deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
-              await this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry);
-              connections.devices.updateDeviceInfo(
-                deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
-              connections.devices.updateDeviceInfo(
-                deviceID, 'alerts', lastUpdateEntry.alerts);
+              this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry).then(() => {
+                connections.devices.updateDeviceInfo(
+                  deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
+                connections.devices.updateDeviceInfo(
+                  deviceID, 'alerts', lastUpdateEntry.alerts);
+              });
             }
 
             this.updateDeviceSyncStatus(
