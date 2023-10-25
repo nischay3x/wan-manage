@@ -458,7 +458,7 @@ class DeviceStatus {
         return cb(err);
       }
       if (reply === 'OK') {
-        logger.error('Notification key lock acquired.', { params: { key } });
+        logger.info('Notification key lock acquired.', { params: { key } });
         return cb(null, true);
       } else {
         logger.warn('Notification key lock denied. Key already locked.', { params: { key } });
