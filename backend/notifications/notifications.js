@@ -564,10 +564,12 @@ class NotificationsManager {
       ]);
       const bulkWriteOps = [];
 
+      let notificationList;
+
       // Go over all accounts and update all notifications that
       // belong to the organization to which the account belongs.
       orgsWithAccounts.forEach(org => {
-        const notificationList = orgsMap.get(org._id.toString());
+        notificationList = orgsMap.get(org._id.toString());
         const currentTime = new Date();
         notificationList.forEach(notification => {
           notification.account = org.accountID;
@@ -579,7 +581,7 @@ class NotificationsManager {
       if (bulkWriteOps.length > 0) {
         await notificationsDb.bulkWrite(bulkWriteOps);
         // Log notification for logging systems
-        logger.info('New notifications', { params: { notifications: notifications } });
+        logger.info('New notifications', { params: { notifications: notificationList } });
       }
     } catch (err) {
       logger.error('Failed to store notifications in database', {
