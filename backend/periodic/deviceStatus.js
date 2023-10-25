@@ -458,6 +458,7 @@ class DeviceStatus {
         return cb(err);
       }
       if (reply === 'OK') {
+        logger.error('Notification key lock acquired.', { params: { key } });
         return cb(null, true);
       } else {
         logger.warn('Notification key lock denied. Key already locked.', { params: { key } });
@@ -488,26 +489,13 @@ class DeviceStatus {
    * If not, it sends the notification directly.
    * Else, the function first tries to acquire a lock using the provided key.
    * Once the lock is acquired, the notification is sent for processing and the lock is released.
-   * If the lock cannot be acquired due to an error or if it's already held,
-   * the function returns without sending the notification.
    *
    * @param {Object} notification - The notification object to send.
    * @param {string} notificationKey - The Redis key used for locking
   */
   handleNotificationSending (notification, notificationKey = null) {
-    const sendNotification = () => {
-      notificationsMgr.sendNotifications([notification])
-        .then(() => {
-          logger.info('Notification processed successfully.');
-        })
-        .catch((sendErr) => {
-          logger.error('Failed to send notification for processing.',
-            { params: { notification, error: sendErr } });
-        });
-    };
-
     if (!notificationKey) {
-      sendNotification();
+      notificationsMgr.sendNotifications([notification]);
       return;
     }
 
@@ -518,22 +506,11 @@ class DeviceStatus {
           return;
         }
 
-        logger.debug('Acquired lock to send notification for processing.',
-          { params: { notificationKey, notification } });
-
         // Lock was acquired successfully. Send the notification.
         notificationsMgr.sendNotifications([notification])
           .then(() => {
-            logger.info('Notification processed. Releasing lock & deleting from Redis.',
+            logger.info('Releasing tunnel notification lock & deleting from Redis.',
               { params: { notificationKey } });
-            this.removeNotificationKeyLock(notificationKey);
-          })
-          .catch((sendErr) => {
-            // Even if there's an error sending the notification, release the lock
-            logger.error(
-              'Notification processing failed. Releasing lock & deleting key from Redis', {
-                params: { notificationKey, error: sendErr }
-              });
             this.removeNotificationKeyLock(notificationKey);
           });
       });
