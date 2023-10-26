@@ -280,7 +280,7 @@ class NotificationsManager {
     }
   }
 
-  async getQueryForExitingAlert (eventType, targets, resolved, severity, org) {
+  async getQueryForExistingAlert (eventType, targets, resolved, severity, org) {
     const query = {
       eventType: { $regex: eventType, $options: 'i' },
       resolved,
@@ -303,21 +303,22 @@ class NotificationsManager {
     return query;
   }
 
-  async findExistingAlert (eventType, targets, org, severity) {
+  async checkAlertExistence (eventType, targets, org, severity) {
     try {
-      const query = await this.getQueryForExitingAlert(eventType, targets, false, severity, org);
-      const existingAlert = await notifications.findOne(query).lean();
-      return existingAlert;
+      const query = await this.getQueryForExistingAlert(eventType, targets, false, severity, org);
+      const count = await notifications.countDocuments(query);
+      return count > 0;
     } catch (err) {
       logger.warn(`Failed to search for notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
       });
+      return false;
     }
   }
 
   async resolveAnAlert (eventType, targets, severity, org) {
     try {
-      const query = await this.getQueryForExitingAlert(
+      const query = await this.getQueryForExistingAlert(
         eventType, targets, false, severity, org);
       const updatedAlert = await notifications.findOneAndUpdate(
         query,
@@ -359,8 +360,8 @@ class NotificationsManager {
   async sendNotifications (notifications) {
     try {
       const parentsQueryToNotification = new Map();
-      const existingAlertCache = new Map();
-      const tunnelDataCache = new Map();
+      const existingAlertSet = new Set();
+      const tunnelsDataMap = new Map();
 
       const orgsMap = new Map();
       const orgNotificationsMap = new Map();
@@ -383,19 +384,21 @@ class NotificationsManager {
           currentSeverity = rules[eventType].severity;
           notification.severity = currentSeverity;
         }
-        let existingAlert;
+        let existingUnresolvedAlert;
         const alertUniqueKey = eventType + '_' + org + '_' + JSON.stringify(targets) +
-         '_' + severity;
-        if (existingAlertCache.has(alertUniqueKey)) {
-          existingAlert = existingAlertCache.get(alertUniqueKey);
+              '_' + severity;
+        if (existingAlertSet.has(alertUniqueKey)) {
+          existingUnresolvedAlert = true;
         } else {
-          existingAlert = await this.findExistingAlert(
+          existingUnresolvedAlert = await this.checkAlertExistence(
             eventType, targets, org, severity || currentSeverity);
-          existingAlertCache.set(alertUniqueKey, existingAlert);
+          if (existingUnresolvedAlert) {
+            existingAlertSet.add(alertUniqueKey);
+          }
         }
 
         // If this is a resolved alert: resolve the existing notification
-        if (resolved && !isAlwaysResolved && existingAlert) {
+        if (resolved && !isAlwaysResolved && existingUnresolvedAlert) {
           this.resolveAnAlert(eventType, targets, severity || currentSeverity, org);
         }
 
@@ -403,14 +406,14 @@ class NotificationsManager {
         // 1. This isn't a resolved alert and there is no existing alert
         // 2. This is a resolved alert, there is unresolved alert in the db,
         // and the user has defined to send resolved alerts
-        const conditionToSend = ((!resolved && !existingAlert) ||
-        (resolved && sendResolvedAlert && (Boolean(existingAlert))));
+        const conditionToSend = ((!resolved && !existingUnresolvedAlert) ||
+              (resolved && sendResolvedAlert && (Boolean(existingUnresolvedAlert))));
         logger.debug('Step 1: Initial check for sending alert. Decision: ' +
-        (conditionToSend ? 'proceed to step 2' : 'do not send'), {
+              (conditionToSend ? 'proceed to step 2' : 'do not send'), {
           params: {
             details: {
               'Notification content': notification,
-              'Is there an existing alert?': Boolean(existingAlert),
+              'Is there an existing alert?': existingUnresolvedAlert,
               'Is sending resolved alerts defined for this type?': sendResolvedAlert
             }
           }
@@ -429,8 +432,8 @@ class NotificationsManager {
             if (targets.tunnelId) {
               let tunnel;
               const tunnelKey = org + '_' + targets.tunnelId + '_' + targets.deviceId;
-              if (tunnelDataCache.has(tunnelKey)) {
-                tunnel = tunnelDataCache.get(tunnelKey);
+              if (tunnelsDataMap.has(tunnelKey)) {
+                tunnel = tunnelsDataMap.get(tunnelKey);
               } else {
                 tunnel = await tunnels.findOne({
                   org,
@@ -441,7 +444,7 @@ class NotificationsManager {
                   ],
                   isActive: true
                 }).lean();
-                tunnelDataCache.set(tunnelKey, tunnel);
+                tunnelsDataMap.set(tunnelKey, tunnel);
               }
               if (tunnel) {
                 const interfaces = [tunnel.interfaceA];
