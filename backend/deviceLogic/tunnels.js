@@ -1387,8 +1387,8 @@ const addTunnel = async (
     // Options
     { upsert: true, new: true }
   )
-    .populate('deviceA', '_id machineId name hostname versions interfaces IKEv2')
-    .populate('deviceB', '_id machineId name hostname versions interfaces IKEv2')
+    .populate('deviceA', '_id machineId name hostname versions interfaces IKEv2 bgp')
+    .populate('deviceB', '_id machineId name hostname versions interfaces IKEv2 bgp')
     .populate('peer')
     .populate('org');
 
