@@ -268,7 +268,7 @@ class NotificationsManager {
         emailBody
       );
 
-      logger.info('An immediate notification email has been sent', {
+      logger.debug('An immediate notification email has been sent', {
         params: { emailAddresses, notificationDetails: emailBody, org: orgNotificationsConf.org }
       });
 
@@ -306,7 +306,7 @@ class NotificationsManager {
   async findExistingAlert (eventType, targets, org, severity) {
     try {
       const query = await this.getQueryForExitingAlert(eventType, targets, false, severity, org);
-      const existingAlert = await notifications.findOne(query);
+      const existingAlert = await notifications.findOne(query).lean();
       return existingAlert;
     } catch (err) {
       logger.warn(`Failed to search for notification ${eventType} in database`, {
@@ -324,7 +324,9 @@ class NotificationsManager {
         { $set: { resolved: true } },
         { new: true }
       );
-      return updatedAlert;
+      logger.debug('Resolved existing notification',
+        { params: { idOfResolvedNotification: updatedAlert._id } });
+      return;
     } catch (err) {
       logger.error(`Failed to resolve the notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
@@ -347,7 +349,7 @@ class NotificationsManager {
           params: { message: webHookMessage }
         });
       } else {
-        logger.info('An immediate webhook notification has been sent', {
+        logger.debug('An immediate webhook notification has been sent', {
           params: { message: webHookMessage }
         });
       }
@@ -356,6 +358,10 @@ class NotificationsManager {
 
   async sendNotifications (notifications) {
     try {
+      const parentsQueryToNotification = new Map();
+      const existingAlertCache = new Map();
+      const tunnelDataCache = new Map();
+
       const orgsMap = new Map();
       const orgNotificationsMap = new Map();
       for (const notification of notifications) {
@@ -366,7 +372,7 @@ class NotificationsManager {
         } = notification;
         let orgNotificationsConf = orgNotificationsMap.get(org);
         if (!orgNotificationsConf) {
-          orgNotificationsConf = await notificationsConf.findOne({ org: org });
+          orgNotificationsConf = await notificationsConf.findOne({ org: org }).lean();
           orgNotificationsMap.set(org, orgNotificationsConf);
         }
 
@@ -377,23 +383,22 @@ class NotificationsManager {
           currentSeverity = rules[eventType].severity;
           notification.severity = currentSeverity;
         }
-        const existingAlert = await this.findExistingAlert(
-          eventType,
-          targets,
-          org,
-          severity || currentSeverity
-        );
+        let existingAlert;
+        const alertUniqueKey = eventType + '_' + org + '_' + JSON.stringify(targets) +
+         '_' + severity;
+        if (existingAlertCache.has(alertUniqueKey)) {
+          existingAlert = existingAlertCache.get(alertUniqueKey);
+        } else {
+          existingAlert = await this.findExistingAlert(
+            eventType, targets, org, severity || currentSeverity);
+          existingAlertCache.set(alertUniqueKey, existingAlert);
+        }
+
         // If this is a resolved alert: resolve the existing notification
         if (resolved && !isAlwaysResolved && existingAlert) {
-          const resolvedExisting = await this.resolveAnAlert(eventType,
-            targets,
-            severity || currentSeverity,
-            org);
-          if (resolvedExisting) {
-            logger.debug('Resolved existing notification',
-              { params: { idOfResolvedNotification: resolvedExisting._id } });
-          }
+          this.resolveAnAlert(eventType, targets, severity || currentSeverity, org);
         }
+
         // Send an alert only if one of the both is true:
         // 1. This isn't a resolved alert and there is no existing alert
         // 2. This is a resolved alert, there is unresolved alert in the db,
@@ -422,15 +427,22 @@ class NotificationsManager {
             logger.debug('Step 2: Event exists in hierarchy. Checking for parent notifications.');
             let interfaceId, deviceId;
             if (targets.tunnelId) {
-              const tunnel = await tunnels.findOne({
-                org,
-                num: targets.tunnelId,
-                $or: [
-                  { deviceA: targets.deviceId },
-                  { deviceB: targets.deviceId }
-                ],
-                isActive: true
-              });
+              let tunnel;
+              const tunnelKey = org + '_' + targets.tunnelId + '_' + targets.deviceId;
+              if (tunnelDataCache.has(tunnelKey)) {
+                tunnel = tunnelDataCache.get(tunnelKey);
+              } else {
+                tunnel = await tunnels.findOne({
+                  org,
+                  num: targets.tunnelId,
+                  $or: [
+                    { deviceA: targets.deviceId },
+                    { deviceB: targets.deviceId }
+                  ],
+                  isActive: true
+                }).lean();
+                tunnelDataCache.set(tunnelKey, tunnel);
+              }
               if (tunnel) {
                 const interfaces = [tunnel.interfaceA];
                 if (!tunnel.peer) {
@@ -449,8 +461,17 @@ class NotificationsManager {
             if (eventParents.length > 0) {
               const parentsQuery = await event.getQuery(deviceId || targets.deviceId, interfaceId ||
                    targets.interfaceId, targets.tunnelId);
-              const parentNotification = await notificationsDb.find(
-                { resolved: false, org, $or: parentsQuery });
+              const queryKey = JSON.stringify({ org, parentsQuery });
+              let parentNotification;
+
+              if (parentsQueryToNotification.has(queryKey)) {
+                parentNotification = parentsQueryToNotification.get(queryKey);
+              } else {
+                parentNotification = await notificationsDb.find(
+                  { resolved: false, org, $or: parentsQuery });
+                parentsQueryToNotification.set(queryKey, parentNotification);
+              }
+
               if (parentNotification.length > 0) {
                 logger.debug('Step 3: Parent notifications found. Skipping notification sending.',
                   { params: { notification } });
@@ -487,7 +508,7 @@ class NotificationsManager {
                 'targets.interfaceId': null,
                 // 'targets.policyId': null,
                 'emailSent.sendingTime': { $exists: true, $ne: null }
-              });
+              }).lean();
 
             let shouldSendEmail = false;
             if (emailSentForPreviousAlert) {
@@ -509,7 +530,7 @@ class NotificationsManager {
                     'emailSent.sendingTime': { $exists: true, $ne: null }
                   },
                   { $inc: { 'emailSent.rateLimitedCount': 1 } }
-                );
+                ).lean();
               }
             } else {
               shouldSendEmail = true;
@@ -545,7 +566,7 @@ class NotificationsManager {
       }
       // Get the accounts of the notifications by the organization
       // Since we can have notification with different organization IDs
-      // We have to fist create a map that maps an organization to all
+      // We have to first create a map that maps an organization to all
       // the notifications that belongs to it, which we'll use later
       // to add the proper account ID to each of the notifications.
       // Create an array of org ID and account ID pairs
@@ -607,7 +628,7 @@ class NotificationsManager {
     // Notify users only if there are unread notifications
     for (const orgID of orgIDs) {
       try {
-        const orgNotificationsConf = await notificationsConf.findOne({ org: orgID });
+        const orgNotificationsConf = await notificationsConf.findOne({ org: orgID }).lean();
         if (!orgNotificationsConf) continue;
 
         const emailAddresses = await this.getUsersEmail(orgNotificationsConf.signedToDaily);
