@@ -9,7 +9,6 @@
     "migrate": "migrate --autosync --config migrate_config.js"
   },
   "dependencies": {
-    "@nearform/heap-profiler": "^2.0.0",
     "assert": "^1.5.0",
     "async": "^3.2.3",
     "async-lock": "^1.4.0",
@@ -33,7 +32,6 @@
     "form-data": "^2.5.1",
     "geoip-lite": "^1.4.5",
     "google-libphonenumber": "^3.2.27",
-    "heapdump": "^0.3.15",
     "http-errors": "~1.6.2",
     "isemail": "^3.2.0",
     "joi": "^17.8.3",
