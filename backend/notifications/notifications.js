@@ -282,7 +282,7 @@ class NotificationsManager {
 
   async getQueryForExistingAlert (eventType, targets, resolved, severity, org) {
     const query = {
-      eventType: { $regex: eventType, $options: 'i' },
+      eventType,
       resolved,
       org: mongoose.Types.ObjectId(org),
       severity
