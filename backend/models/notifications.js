@@ -166,6 +166,11 @@ notificationsSchema.index(
 notificationsSchema.index({ org: 1 });
 notificationsSchema.index({ account: 1 });
 notificationsSchema.index({ status: 1 });
+notificationsSchema.index({ eventType: 1, org: 1 }); // helps in an heavy queries of notifications
+notificationsSchema.index({ org: 1, resolved: 1 }); // helps in an heavy queries of notifications
+notificationsSchema.index({ org: 1, resolved: 1, eventType: 1 });
+notificationsSchema.index({ org: 1, eventType: 1, targets: 1 });
+notificationsSchema.index({ org: 1, eventType: 1, 'targets.tunnelId': 1 });
 
 // Default exports
 module.exports = mongoConns.getAnalyticsDB().model('notifications', notificationsSchema);
