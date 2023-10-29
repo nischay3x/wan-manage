@@ -31,6 +31,8 @@ const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 const tunnels = require('../models/tunnels');
 const { getMajorVersion, getMinorVersion } = require('../versioning');
+const { createClient } = require('redis');
+const { getRedisAuthUrl } = require('../utils/httpUtils');
 
 /***
  * This class gets periodic status from all connected devices
@@ -42,7 +44,6 @@ class DeviceStatus {
   constructor () {
     // Holds the status per deviceID
     this.status = {};
-    this.events = [];
     this.usersDeviceAggregatedStats = {};
     this.statsFieldsMap = new Map([
       ['rx_bytes', 'rx_bps'],
@@ -60,7 +61,6 @@ class DeviceStatus {
     this.start = this.start.bind(this);
     this.periodicPollDevices = this.periodicPollDevices.bind(this);
     this.periodicPollOneDevice = this.periodicPollOneDevice.bind(this);
-    this.generateDevStatsNotifications = this.generateDevStatsNotifications.bind(this);
     this.getDeviceStatus = this.getDeviceStatus.bind(this);
     this.setDeviceStatus = this.setDeviceStatus.bind(this);
     this.setDeviceState = this.setDeviceState.bind(this);
@@ -78,6 +78,22 @@ class DeviceStatus {
     this.getTunnelsStatusByOrg = this.getTunnelsStatusByOrg.bind(this);
     this.clearTunnelsStatusByOrg = this.clearTunnelsStatusByOrg.bind(this);
     this.statusCallback = this.statusCallback.bind(this);
+
+    const { redisAuth, redisUrlNoAuth } = getRedisAuthUrl(configs.get('redisUrl'));
+    this.redisClient = createClient({ url: redisUrlNoAuth });
+    if (redisAuth) this.redisClient.auth(redisAuth);
+
+    this.redisClient.on('connect', () => {
+      logger.info('Connected to Redis');
+    });
+
+    this.redisClient.on('error', (err) => {
+      logger.error('Redis client encountered an error:', err);
+    });
+
+    this.redisClient.on('end', () => {
+      logger.info('Redis client disconnected');
+    });
 
     // register a callback function to be called when a device status is received on channel
     connections.registerStatusCallback(this.statusCallback);
@@ -206,20 +222,59 @@ class DeviceStatus {
     });
   }
 
+  /**
+   * Generates a unique notification key based on the provided parameters.
+   *
+   * @param {string} notificationName - The name of the notification.
+   * @param {Object} notificationTargets - Contains targets such as tunnelId, deviceId, etc.
+   * @param {boolean} isResolved - Indicates if the notification relates to a resolved issue.
+   * @param {string} orgId - Organization ID associated with the notification.
+   * @param {string} severity - Optional: The severity of the notification
+   * (relevant only to agent alerts)
+   * @returns {string} The unique notification key.
+   * @throws {Error} Throws an error if no valid target ID is found.
+   */
+  async generateTunnelNotificationKey (
+    notificationName, notificationTargets, isResolved, orgId, severity) {
+    if (!notificationTargets.tunnelId) {
+      logger.warn('Failed to generate notification key: No valid tunnel ID found', {
+        params: { notificationName, notificationTargets, orgId }
+      });
+      throw new Error('Unable to generate notification key: No valid target ID found');
+    }
+
+    const tunnelId = `tunnelId:${notificationTargets.tunnelId}`;
+    const notificationKey = severity ? 'notification-lock:' + notificationName + ':' +
+    tunnelId + ':' + isResolved + ':' + severity + orgId
+      : 'notification-lock:' + notificationName + ':' + tunnelId + ':' + isResolved + ':' + orgId;
+
+    return notificationKey;
+  }
+
+  /**
+   * Processes and handles an alert received by the agent in get-stats.
+   *
+   * @param {string} deviceID - The ID of the device associated with the alert.
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @param {string} alertName - The name of the specific alert being processed.
+   * @param {Object} lastUpdateEntry -  The current alerts of the device (received in get-stats).
+   * @param {number} [tunnelNum=null] - Optional tunnel number if the alert is specific to a tunnel.
+   * @throws {Error} Logs an error if there's a failure in creating or sending the notification.
+   */
   async handleAlert (
-    deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelNum = null) {
+    deviceID, deviceInfo, alertName, lastUpdateEntry, tunnelNum = null) {
     let { value, unit, threshold, type } = tunnelNum
-      ? lastUpdateEntry.alerts[alertKey][tunnelNum]
-      : lastUpdateEntry.alerts[alertKey];
+      ? lastUpdateEntry.alerts[alertName][tunnelNum]
+      : lastUpdateEntry.alerts[alertName];
 
     // Ensure that 'value' has only one digit after the '.'
     value = parseFloat(value.toFixed(1));
     try {
-      this.createAndPushEvent(
-        deviceInfo, lastUpdateEntry.alerts, alertKey,
+      this.createAndSendNotification(
+        deviceInfo, lastUpdateEntry.alerts, alertName,
         { value, threshold, unit, type }, tunnelNum);
     } catch (err) {
-      logger.error(`Failed to add the "${alertKey}" alert for
+      logger.error(`Failed to add the "${alertName}" alert for
        ${tunnelNum ? 'tunnel ' + tunnelNum : 'device ' + deviceInfo.name}`
       , {
         params: { deviceID: deviceID, err: err.message },
@@ -228,9 +283,24 @@ class DeviceStatus {
     }
   }
 
-  getThresholdInfo (alerts, alertKey, notificationsConfRules, org, tunnelId = null) {
-    const thresholdType = alerts[alertKey].severity === 'warning'
-      ? 'warningThreshold' : 'criticalThreshold';
+  /**
+   * Retrieves threshold information based on the provided parameters.
+   *
+   * This function determines the type of threshold (either warning or critical) based on the
+   * given severity. It then fetches the corresponding threshold value and unit.
+   * This function is used for resolved alerts to determine the threshold value
+   * below which the alert is considered resolved.
+   * @param {string} alertKey - The key(name) identifying the specific alert in the alerts object.
+   * @param {Object} notificationsConfRules - Settings object from the db.
+   * @param {string} severity - The severity of the alert (e.g., 'warning' or 'critical').
+   * @param {string} org - Organization ID or name associated with the alert.
+   * @param {number} [tunnelId=null] - tunnel ID to fetch tunnel-specific threshold settings.
+   * @returns {Object} Returns an object containing the threshold value and unit.
+  */
+  getThresholdInfo (
+    alertKey, notificationsConfRules, severity, org, tunnelId = null) {
+    const thresholdType = (severity === 'warning') ? 'warningThreshold' : 'criticalThreshold';
+
     const thresholdValue = tunnelId
       ? (tunnels.findOne(
         { num: tunnelId, org }, { fields: { notificationsSettings: 1 } }
@@ -242,29 +312,45 @@ class DeviceStatus {
     return { threshold: thresholdValue, unit: thresholdUnit };
   }
 
+  /**
+   * Processes and handles resolved alerts for a device based on the given parameters.
+   *
+   * This function first determines if the alert is one of the known 'agent-only' alerts.
+   * For device-specific alerts, it checks if the alert severity has changed since the last update.
+   * If it has, it fetches the relevant threshold information and sends a notification.
+   * For alerts related to tunnels, the function delegates to `resolveTunnelAlerts`.
+   *
+   * @param {Object} alerts - The most recent alerts of the device in the memory (if there is no
+   * memory we fetched it from the db)
+   * @param {Object} lastUpdateEntry -  The current alerts of the device (received in get-stats).
+   * @param {string} deviceID - The ID of the device associated with the alerts.
+   * @param {Object} orgNotificationsConf - Configuration for organization notifications.
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @throws {Error} Logs an error if there's an issue resolving any alert.
+  */
   async handleResolvedAlerts (alerts, lastUpdateEntry, deviceID, orgNotificationsConf, deviceInfo) {
     try {
       const agentOnlyAlerts = ['Link/Tunnel round trip time',
         'Link/Tunnel default drop rate', 'Device memory usage', 'Hard drive usage', 'Temperature'];
       const notificationsConfRules = orgNotificationsConf.rules;
 
-      for (const alertKey in alerts) {
-        const isAgentAlert = agentOnlyAlerts.includes(alertKey);
+      for (const alertName in alerts) {
+        const isAgentAlert = agentOnlyAlerts.includes(alertName);
         if (!isAgentAlert) {
           continue;
         }
-        if (alerts[alertKey].type === 'device') {
-          if ((!lastUpdateEntry.alerts[alertKey] ||
-            lastUpdateEntry.alerts[alertKey].severity !== alerts[alertKey].severity)) {
+        if (alerts[alertName].type === 'device') {
+          if ((!lastUpdateEntry.alerts[alertName] ||
+            lastUpdateEntry.alerts[alertName].severity !== alerts[alertName].severity)) {
             const agentAlertsInfo = this.getThresholdInfo(
-              alerts, alertKey, notificationsConfRules, deviceInfo.org);
-            this.createAndPushEvent(
-              deviceInfo, alerts, alertKey,
+              alertName, notificationsConfRules, alerts[alertName].severity, deviceInfo.org);
+            this.createAndSendNotification(
+              deviceInfo, alerts, alertName,
               agentAlertsInfo, null, true);
           }
         } else {
           this.resolveTunnelAlerts(
-            alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
+            alertName, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules);
         }
       }
     } catch (error) {
@@ -275,6 +361,19 @@ class DeviceStatus {
     }
   }
 
+  /**
+   * Processes and resolves tunnel-related alerts based on the given parameters.
+   *
+   * This function iterates over each tunnel alert. For each tunnel, it determines if
+   * the alert exists in the last update and if the severity has changed. If either
+   * condition is met, it fetches the threshold information and sends a resolved notification.
+   *
+   * @param {string} alertKey - The key(name) identifying the specific alert in the alerts object.
+   * @param {Object} alerts - The most recent alerts of the device in the memory.
+   * @param {Object} lastUpdateEntry -  The current alerts of the device (received in get-stats).
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @param {Object} notificationsConfRules - Settings object from the db.
+  */
   resolveTunnelAlerts (alertKey, alerts, lastUpdateEntry, deviceInfo, notificationsConfRules) {
     for (const tunnelId in alerts[alertKey]) {
       const alertExistsForTunnel = lastUpdateEntry.alerts[alertKey]?.[tunnelId];
@@ -286,53 +385,167 @@ class DeviceStatus {
 
       if (shouldResolveTunnelAlert) {
         const agentAlertsInfo = this.getThresholdInfo(
-          alerts, alertKey, notificationsConfRules, deviceInfo.org, tunnelId);
-        this.createAndPushEvent(
+          alertKey,
+          notificationsConfRules,
+          alerts[alertKey][tunnelId].severity,
+          deviceInfo.org, tunnelId
+        );
+        this.createAndSendNotification(
           deviceInfo, alerts, alertKey,
           agentAlertsInfo, tunnelId, true);
       }
     }
   }
 
-  createAndPushEvent (
-    deviceInfo, alerts, alertKey,
+  /**
+   * Convert an alert into a notification and send it.
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @param {Object} alerts - All alerts related to the device.
+   * @param {string} alertName - The specific alert's name being processed.
+   * @param {Object} agentAlertsInfo - Contains the threshold, unit, and value of the alert.
+   * @param {string} [tunnelId=null] - Optional tunnel ID if applicable.
+   * @param {boolean} [isResolved=false] - Indicates if the alert has been resolved.
+  */
+  async createAndSendNotification (
+    deviceInfo, alerts, alertName,
     agentAlertsInfo, tunnelId = null, isResolved = false) {
     const { org, deviceObj: deviceId, name } = deviceInfo;
-    const title = isResolved ? `[resolved] ${alertKey}` : alertKey;
-    const details = 'The value of the ' + alertKey + ' in ' + (tunnelId ? 'tunnel ' +
+    const targets = {
+      deviceId,
+      tunnelId,
+      interfaceId: null
+    };
+    const severity = tunnelId ? alerts[alertName][tunnelId].severity : alerts[alertName].severity;
+
+    const title = isResolved ? `[resolved] ${alertName}` : alertName;
+    const details = 'The value of the ' + alertName + ' in ' + (tunnelId ? 'tunnel ' +
     tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
     agentAlertsInfo.threshold + agentAlertsInfo.unit + ')' : 'increased to ' +
     agentAlertsInfo.value + agentAlertsInfo.unit);
-    const severity = tunnelId ? alerts[alertKey][tunnelId].severity : alerts[alertKey].severity;
-
-    this.events.push({
+    const notification = {
       org,
       title,
       details,
-      eventType: alertKey,
-      targets: {
-        deviceId,
-        tunnelId,
-        interfaceId: null
-        // policyId: null
-      },
+      eventType: alertName,
+      targets,
       severity,
       resolved: isResolved,
       agentAlertsInfo
+    };
+
+    let notificationKey;
+    if (tunnelId) {
+      notificationKey = await this.generateTunnelNotificationKey(
+        alertName, targets, isResolved, org, severity);
+    }
+    this.handleNotificationSending(notification, notificationKey);
+  }
+
+  /**
+   * Set a notification lock key in Redis with a specified TTL.
+   *
+   * This function utilizes the Redis "SET" command with "PX" and "NX" options to ensure that the
+   * key is set with the specified TTL and that it only gets set if the key doesn't already exist.
+   * This was meant to prevent different servers from processing the same notification.
+   *
+   * @param {string} key - The Redis key to be locked (notification key).
+   * @param {number} ttl - The time-to-live for the key in milliseconds.
+   * @param {Function} cb - The callback function to execute upon completion.
+  */
+  setNotificationKeyWithTtlLock (key, ttl, cb) {
+    this.redisClient.set(key, 'LOCK', 'PX', ttl, 'NX', (err, reply) => {
+      if (err) {
+        logger.error('Notification key lock failed.', { params: { error: err, key } });
+        return cb(err);
+      }
+      if (reply === 'OK') {
+        logger.info('Notification key lock acquired.', { params: { key } });
+        return cb(null, true);
+      } else {
+        logger.warn('Notification key lock denied. Key already locked.', { params: { key } });
+        return cb(null, false);
+      }
     });
   }
 
+  /**
+   * Removes a previously set notification lock key from Redis.
+   *
+   * @param {string} key - The Redis key to be removed.
+  */
+  removeNotificationKeyLock (key) {
+    this.redisClient.del(key, (err) => {
+      if (err) {
+        logger.error('Failed to release Redis notification lock.', { params: { key, error: err } });
+      } else {
+        logger.info('The Redis notification lock has been released.', { params: key });
+      }
+    });
+  }
+
+  /**
+   * Handles the logic of sending a notification.
+   *
+   * The function checks if the notificationKey is truthy.
+   * If not, it sends the notification directly.
+   * Else, the function first tries to acquire a lock using the provided key.
+   * Once the lock is acquired, the notification is sent for processing and the lock is released.
+   *
+   * @param {Object} notification - The notification object to send.
+   * @param {string} notificationKey - The Redis key used for locking
+  */
+  handleNotificationSending (notification, notificationKey = null) {
+    if (!notificationKey) {
+      notificationsMgr.sendNotifications([notification]);
+      return;
+    }
+
+    // First, try to acquire the lock
+    this.setNotificationKeyWithTtlLock(
+      notificationKey, 30000, (lockErr, acquired) => {
+        if (lockErr || !acquired) {
+          return;
+        }
+
+        // Lock was acquired successfully. Send the notification.
+        notificationsMgr.sendNotifications([notification])
+          .then(() => {
+            logger.info('Releasing tunnel notification lock & deleting from Redis.',
+              { params: { notificationKey } });
+            this.removeNotificationKeyLock(notificationKey);
+          });
+      });
+  }
+
+  /**
+   * Calculates and handles both current and resolved alerts for a given device.
+   *
+   * This function performs the following tasks:
+   * 1. Retrieves the notification configuration for the organization to which the device belongs.
+   * 2. Iterates over the alerts in the last update entry of the device.
+   * If this is a tunnel-specific alert like RTT, the function handles it for each tunnel.
+   * Otherwise, it handles the device-level alert.
+   * 3. If there are alerts present in the device's memory, it handles the resolved alerts.
+   * 4. If the device's memory doesn't contain alerts,
+   * it fetches the unresolved alerts from the database and processes them.
+   *
+   * @async
+   * @param {string} deviceID - The unique identifier for the device.
+   * @param {Object} deviceInfo - Detailed information about the device in memory.
+   * @param {Object} lastUpdateEntry -  The current alerts of the device (received in get-stats).
+   * @throws Will throw an error if the notification configuration retrieval / alert handling fails.
+  */
   async calculateNotifications (deviceID, deviceInfo, lastUpdateEntry) {
     const orgNotificationsConf = await notificationsConf.findOne({ org: deviceInfo.org });
-    for (const alertKey in lastUpdateEntry.alerts) {
-      if (alertKey.toLowerCase().includes('tunnel')) {
-        for (const tunnelId in lastUpdateEntry.alerts[alertKey]) {
+    for (const alertName in lastUpdateEntry.alerts) {
+      if (alertName.toLowerCase().includes('tunnel')) {
+        for (const tunnelId in lastUpdateEntry.alerts[alertName]) {
           await this.handleAlert(
-            deviceID, deviceInfo, alertKey, lastUpdateEntry, tunnelId);
+            deviceID, deviceInfo, alertName, lastUpdateEntry, tunnelId);
         }
       } else {
         await this.handleAlert(
-          deviceID, deviceInfo, alertKey, lastUpdateEntry);
+          deviceID, deviceInfo, alertName, lastUpdateEntry);
       }
     }
     // handle resolved alerts if needed (exist in the memory but not in the current alerts)
@@ -350,7 +563,7 @@ class DeviceStatus {
         if (previousAlerts[i].severity) {
           if (previousAlerts[i].targets?.tunnelId) {
             const tunnelId = previousAlerts[i].targets.tunnelId;
-            const eventType = previousAlerts[i].eventType;
+            const eventType = previousAlerts[i].eventType; // eventType = alert name
             prevAlertsDict[eventType] = {
               [tunnelId]: {
                 value: previousAlerts[i].agentAlertsInfo.value,
@@ -409,13 +622,13 @@ class DeviceStatus {
             // won't have the key alerts_hash
             if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
                 deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
-              await this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry);
-              connections.devices.updateDeviceInfo(
-                deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
-              connections.devices.updateDeviceInfo(
-                deviceID, 'alerts', lastUpdateEntry.alerts);
+              this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry).then(() => {
+                connections.devices.updateDeviceInfo(
+                  deviceID, 'notificationsHash', lastUpdateEntry.alerts_hash);
+                connections.devices.updateDeviceInfo(
+                  deviceID, 'alerts', lastUpdateEntry.alerts);
+              });
             }
-            await this.generateDevStatsNotifications();
 
             this.updateDeviceSyncStatus(
               deviceInfo.org,
@@ -642,7 +855,7 @@ class DeviceStatus {
    * @return {void}
    */
   async setDeviceState (machineId, newState, needToPublish = true) {
-    // Generate an event if there was a transition in the device's status
+    // Generate a notification if there was a transition in the device's status
     const deviceInfo = connections.getDeviceInfo(machineId);
     if (!deviceInfo) {
       logger.warn('Failed to get device info', {
@@ -652,19 +865,24 @@ class DeviceStatus {
     }
     const { org, deviceObj: deviceId, name } = deviceInfo;
     if (!this.status[machineId] || newState !== this.status[machineId].state) {
-      this.events.push({
+      const targets = {
+        deviceId: deviceId,
+        tunnelId: null,
+        interfaceId: null
+      };
+      const resolved = newState === 'running';
+
+      const notification = {
         org: org,
-        title: newState === 'running' ? '[resolved] Router state change' : 'Router state change',
+        title: resolved ? '[resolved] Router state change' : 'Router state change',
         details: `Router state changed to ${newState} in the device ${name}`,
         eventType: 'Running router',
-        targets: {
-          deviceId: deviceId,
-          tunnelId: null,
-          interfaceId: null
-          // policyId: null
-        },
-        resolved: newState === 'running'
-      });
+        targets,
+        resolved
+      };
+
+      this.handleNotificationSending(notification);
+
       this.setDevicesStatusByOrg(org, deviceId, newState);
     }
     this.setDeviceStatsField(machineId, 'state', newState);
@@ -813,7 +1031,10 @@ class DeviceStatus {
 
       if (severity) {
         const threshold = severity === 'warning' ? warningThreshold : criticalThreshold;
-        const event = {
+        const notificationKey = await this.generateTunnelNotificationKey(
+          eventType, targets, resolved, deviceInfo.org
+        );
+        const notification = {
           org: deviceInfo.org,
           title: eventType,
           details: resolved ? `
@@ -831,8 +1052,7 @@ class DeviceStatus {
           },
           severity
         };
-        // TODO - change after merging the lock fix (use redis)
-        this.events.push(event);
+        this.handleNotificationSending(notification, notificationKey);
       }
     }
   }
@@ -940,30 +1160,33 @@ class DeviceStatus {
           (firstTunnelUpdate ||
            tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
         ) {
-          this.events.push({
+          const targets = {
+            deviceId,
+            tunnelId: tunnelID,
+            interfaceId: null
+          };
+          const resolved = tunnelState.status === 'up';
+          const notificationName = 'Tunnel connection';
+          const notificationKey = await this.generateTunnelNotificationKey(
+            notificationName, targets, resolved, org);
+
+          const notification = {
             org: org,
             title: tunnelState.status === 'up' ? '[resolved] Tunnel connection change'
               : 'Tunnel connection change',
-            details: 'Tunnel ' + tunnelID + ' state changed to ' +
-            (tunnelState.status === 'down' ? 'Not connected' : 'Connected'),
-            targets: {
-              deviceId,
-              tunnelId: tunnelID,
-              interfaceId: null
-              // policyId: null
-            },
-            eventType: 'Tunnel connection',
-            resolved: tunnelState.status === 'up'
-          });
+            details: 'Tunnel ' + tunnelID + ' state changed to ' + (tunnelState.status === 'down'
+              ? 'Not connected' : 'Connected'),
+            targets,
+            eventType: notificationName,
+            resolved
+          };
+
+          this.handleNotificationSending(notification, notificationKey);
+
+          // Make sure to send notifications for old devices as before (only RTT and Drop rate)
           const isCustomNotificationsSupported = this.isCustomNotificationsSupported(
             deviceInfo.version);
           if (!isCustomNotificationsSupported) {
-            const targets = {
-              deviceId,
-              tunnelId: tunnelID,
-              interfaceId: null
-            };
-
             await this.processTunnelNotificationsForOldDevices('Link/Tunnel default drop rate',
               this.status[machineId]?.tunnelStatus[tunnelID]?.drop_rate,
               tunnelState.drop_rate, firstTunnelUpdate, deviceInfo, targets, '%', 5, 20);
@@ -988,19 +1211,6 @@ class DeviceStatus {
 
     if (Object.entries(devStats).length !== 0) {
       this.setDeviceStatsField(machineId, 'ifStats', devStats);
-    }
-  }
-
-  /**
-    * Generates notifications according to the
-    * events created while processing the device reply.
-    * @return {void}
-    */
-  async generateDevStatsNotifications () {
-    // Send notifications if exist
-    if (this.events.length > 0) {
-      await notificationsMgr.sendNotifications([...this.events]);
-      this.events = [];
     }
   }
 
