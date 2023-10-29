@@ -109,7 +109,8 @@ class NotificationsService {
             count: 1,
             emailSent: 1,
             resolved: 1,
-            org: 1
+            org: 1,
+            isInfo: 1
           }
         }
       ] : [];
