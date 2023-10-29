@@ -97,7 +97,8 @@ async function down () {
             targets: '',
             severity: '',
             agentAlertsInfo: '',
-            emailSent: ''
+            emailSent: '',
+            isInfo: ''
           }
         }
       );

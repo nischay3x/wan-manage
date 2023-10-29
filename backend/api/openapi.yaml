@@ -10251,6 +10251,7 @@ components:
         emailSent:
           sendingTime: '2023-09-28T00:33:22.238Z'
           rateLimitedCount: 0
+        isInfo: false
         org: 123
         account: 456
       properties:
