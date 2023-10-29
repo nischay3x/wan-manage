@@ -47,7 +47,8 @@ async function up () {
                 rateLimitedCount: 0
               }
             ]
-          }
+          },
+          isInfo: false
         }
       },
       {
