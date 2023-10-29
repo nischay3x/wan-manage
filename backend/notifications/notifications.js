@@ -431,7 +431,7 @@ class NotificationsManager {
             let interfaceId, deviceId;
             if (targets.tunnelId) {
               let tunnel;
-              const tunnelKey = org + '_' + targets.tunnelId + '_' + targets.deviceId;
+              const tunnelKey = org + '_' + targets.tunnelId;
               if (tunnelsDataMap.has(tunnelKey)) {
                 tunnel = tunnelsDataMap.get(tunnelKey);
               } else {
