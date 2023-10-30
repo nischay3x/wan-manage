@@ -306,8 +306,8 @@ class NotificationsManager {
   async checkAlertExistence (eventType, targets, org, severity) {
     try {
       const query = await this.getQueryForExistingAlert(eventType, targets, false, severity, org);
-      const count = await notifications.countDocuments(query);
-      return count > 0;
+      const existingAlert = await notifications.findOne(query);
+      return Boolean(existingAlert);
     } catch (err) {
       logger.warn(`Failed to search for notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
@@ -327,7 +327,6 @@ class NotificationsManager {
       );
       logger.debug('Resolved existing notification',
         { params: { idOfResolvedNotification: updatedAlert._id } });
-      return;
     } catch (err) {
       logger.error(`Failed to resolve the notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
@@ -384,7 +383,7 @@ class NotificationsManager {
           currentSeverity = rules[eventType].severity;
           notification.severity = currentSeverity;
         }
-        let existingUnresolvedAlert;
+        let existingUnresolvedAlert = false;
         const alertUniqueKey = eventType + '_' + org + '_' + JSON.stringify(targets) +
               '_' + severity;
         if (existingAlertSet.has(alertUniqueKey)) {
@@ -399,7 +398,7 @@ class NotificationsManager {
 
         // If this is a resolved alert: resolve the existing notification
         if (resolved && !isAlwaysResolved && existingUnresolvedAlert) {
-          this.resolveAnAlert(eventType, targets, severity || currentSeverity, org);
+          await this.resolveAnAlert(eventType, targets, severity || currentSeverity, org);
         }
 
         // Send an alert only if one of the both is true:
@@ -407,7 +406,7 @@ class NotificationsManager {
         // 2. This is a resolved alert, there is unresolved alert in the db,
         // and the user has defined to send resolved alerts
         const conditionToSend = ((!resolved && !existingUnresolvedAlert) ||
-              (resolved && sendResolvedAlert && (Boolean(existingUnresolvedAlert))));
+              (resolved && sendResolvedAlert && existingUnresolvedAlert));
         logger.debug('Step 1: Initial check for sending alert. Decision: ' +
               (conditionToSend ? 'proceed to step 2' : 'do not send'), {
           params: {
@@ -533,7 +532,7 @@ class NotificationsManager {
                     'emailSent.sendingTime': { $exists: true, $ne: null }
                   },
                   { $inc: { 'emailSent.rateLimitedCount': 1 } }
-                ).lean();
+                );
               }
             } else {
               shouldSendEmail = true;
