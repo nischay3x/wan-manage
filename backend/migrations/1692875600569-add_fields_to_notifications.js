@@ -47,7 +47,8 @@ async function up () {
                 rateLimitedCount: 0
               }
             ]
-          }
+          },
+          isInfo: false
         }
       },
       {
@@ -97,7 +98,8 @@ async function down () {
             targets: '',
             severity: '',
             agentAlertsInfo: '',
-            emailSent: ''
+            emailSent: '',
+            isInfo: ''
           }
         }
       );

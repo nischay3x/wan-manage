@@ -362,7 +362,7 @@ class NotificationsManager {
         logger.debug('Processing notification', { params: { notification } });
         const {
           org, details, eventType, title, severity = null,
-          targets, resolved = false, isAlwaysResolved = false
+          targets, resolved = false, isInfo = false
         } = notification;
         let orgNotificationsConf = orgNotificationsMap.get(org);
         if (!orgNotificationsConf) {
@@ -384,7 +384,7 @@ class NotificationsManager {
           severity || currentSeverity
         );
         // If this is a resolved alert: resolve the existing notification
-        if (resolved && !isAlwaysResolved && existingAlert) {
+        if (resolved && !isInfo && existingAlert) {
           const resolvedExisting = await this.resolveAnAlert(eventType,
             targets,
             severity || currentSeverity,

@@ -122,12 +122,11 @@ const notificationsSchema = new Schema({
   resolved:
   {
     type: Boolean,
-    required: false,
     default: false
   },
   targets: {
     type: targetsSchema,
-    required: false
+    required: true
   },
   severity: {
     type: String,
@@ -137,19 +136,21 @@ const notificationsSchema = new Schema({
   },
   agentAlertsInfo: {
     type: alertInfoSchema,
-    required: false,
     default: {}
   },
   emailSent: {
     sendingTime: {
       type: Date,
-      required: false,
       default: null
     },
     rateLimitedCount: {
       type: Number,
       default: 0
     }
+  },
+  isInfo: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

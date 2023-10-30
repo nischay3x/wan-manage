@@ -117,7 +117,7 @@ class ApplicationsUpdateManager {
               },
               eventType: 'Software update',
               resolved: true,
-              isAlwaysResolved: true
+              isInfo: true
             });
           });
 
