@@ -78,7 +78,7 @@ const generateRandomKeys = () => {
  * Generates a pipeline for mongoose aggregate query to get filtered tunnels
  * @return {Array} an array of query stages
  */
-const getTunnelsPipeline = (orgList, filters, detailed = true, splitResponse = false) => {
+const getTunnelsPipeline = (orgList, filters, detailed = true) => {
   const matchPipeline = [{
     $match: {
       org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) },
@@ -291,10 +291,7 @@ const getTunnelsPipeline = (orgList, filters, detailed = true, splitResponse = f
     }
   }
 
-  if (splitResponse) {
-    return { matchPipeline, dataPipeline, filterPipeline };
-  }
-  return [...matchPipeline, ...dataPipeline, ...filterPipeline];
+  return { matchPipeline, dataPipeline, filterPipeline };
 };
 
 const getOrgDefaultTunnelPort = org => {

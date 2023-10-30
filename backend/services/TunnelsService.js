@@ -148,7 +148,7 @@ class TunnelsService {
         matchPipeline,
         dataPipeline,
         filterPipeline
-      } = getTunnelsPipeline(orgList, filters, detailed, true);
+      } = getTunnelsPipeline(orgList, filters, detailed);
 
       const sortByLookupFields = new Set([
         'deviceA.name',
