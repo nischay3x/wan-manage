@@ -1520,7 +1520,12 @@ const applyTunnelDel = async (devices, user, data) => {
       await statusesInDb.updateDevicesStatuses([data.org]);
       await statusesInDb.updateTunnelsStatuses([data.org]);
     }
-    const pipeline = getTunnelsPipeline([data.org], filters);
+    const {
+      matchPipeline,
+      dataPipeline,
+      filterPipeline
+    } = getTunnelsPipeline([data.org], filters);
+    const pipeline = [...matchPipeline, ...dataPipeline, ...filterPipeline];
     tunnelsArray = await tunnelsModel.aggregate(pipeline).allowDiskUse(true);
   }
 

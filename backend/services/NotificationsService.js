@@ -141,9 +141,7 @@ class NotificationsService {
       // If there are no device filters, fetch all devices to make sure we will get only existing devices notifications
       if (!devicesArray) {
         devicesArray = await NotificationsService.getDevicesFromFilters(orgList);
-        pipeline.push({
-          $match: { 'targets.deviceId': { $in: [...devicesArray.map(d => d._id), null] } } // We allow null, assuming not all notifications include deviceId
-        });
+        pipeline[0].$match['targets.deviceId'] = { $in: [...devicesArray.map(d => d._id), null] }; // We allow null, assuming not all notifications include deviceId
       }
 
       if (sortField) {
