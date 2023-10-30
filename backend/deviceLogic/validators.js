@@ -615,16 +615,10 @@ const validateDevice = async (
 
   if (device.bgp?.enable) {
     const routerId = device.bgp.routerId;
-    const localASN = device.bgp.localASN;
     let errMsg = '';
     const orgBgp = await getAllOrganizationBGPDevices(device.org._id);
     const routerIdExists = orgBgp.find(d => {
       if (d._id.toString() === device._id.toString()) return false;
-
-      if (d.bgp.localASN === localASN) {
-        errMsg = `Device ${d.name} already configured the requests BGP local ASN`;
-        return true;
-      }
 
       if (!routerId || routerId === '') {
         // allow multiple routerIds to be empty string or undefined
