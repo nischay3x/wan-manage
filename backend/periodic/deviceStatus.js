@@ -32,6 +32,7 @@ const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 const tunnels = require('../models/tunnels');
 const { createClient } = require('redis');
 const { getRedisAuthUrl } = require('../utils/httpUtils');
+const POLL_PERIOD = 15000;
 
 /***
  * This class gets periodic status from all connected devices
@@ -104,7 +105,7 @@ class DeviceStatus {
       name: 'poll_status',
       func: this.periodicPollDevices,
       handle: null,
-      period: 10000
+      period: POLL_PERIOD
     };
   }
 
@@ -704,7 +705,10 @@ class DeviceStatus {
         });
       })
       .finally(() => {
-        connections.devices.updateDeviceInfo(deviceID, 'statsSentTime', undefined, false);
+        setTimeout(() => {
+          // if the process takes less than 1 sec, then the message will be sent every 15 second
+          connections.devices.updateDeviceInfo(deviceID, 'statsSentTime', undefined, false);
+        }, POLL_PERIOD - 1000);
       });
   }
 
