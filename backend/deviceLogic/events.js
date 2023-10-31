@@ -72,7 +72,9 @@ class Events {
         tunnelId: null,
         interfaceId: null
         // policyId: null
-      }
+      },
+      resolved: true,
+      isInfo: true
     }]);
   }
 

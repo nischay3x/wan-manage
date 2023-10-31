@@ -122,12 +122,11 @@ const notificationsSchema = new Schema({
   resolved:
   {
     type: Boolean,
-    required: false,
     default: false
   },
   targets: {
     type: targetsSchema,
-    required: false
+    required: true
   },
   severity: {
     type: String,
@@ -137,19 +136,21 @@ const notificationsSchema = new Schema({
   },
   agentAlertsInfo: {
     type: alertInfoSchema,
-    required: false,
     default: {}
   },
   emailSent: {
     sendingTime: {
       type: Date,
-      required: false,
       default: null
     },
     rateLimitedCount: {
       type: Number,
       default: 0
     }
+  },
+  isInfo: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true
@@ -166,8 +167,8 @@ notificationsSchema.index(
 notificationsSchema.index({ org: 1 });
 notificationsSchema.index({ account: 1 });
 notificationsSchema.index({ status: 1 });
-notificationsSchema.index({ eventType: 1, org: 1 }); // helps in an heavy queries of notifications
-notificationsSchema.index({ org: 1, resolved: 1 }); // helps in an heavy queries of notifications
+notificationsSchema.index({ eventType: 1, org: 1 }); // helps in heavy queries of notifications
+notificationsSchema.index({ org: 1, resolved: 1 }); // helps in heavy queries of notifications
 notificationsSchema.index({ org: 1, resolved: 1, eventType: 1 });
 notificationsSchema.index({ org: 1, eventType: 1, targets: 1 });
 notificationsSchema.index({ org: 1, eventType: 1, 'targets.tunnelId': 1 });

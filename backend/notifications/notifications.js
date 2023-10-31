@@ -57,26 +57,26 @@ class Event {
     return [...parentNames];
   }
 
-  async getTarget (deviceId, interfaceId, tunnelId) {
+  getTarget (deviceId, interfaceId, tunnelId) {
     // MUST BE IMPLEMENTED IN CHILD CLASSES
   }
 
-  async getQuery (deviceId, interfaceId, tunnelId) {
+  getQuery (deviceId, interfaceId, tunnelId) {
     const query = [];
     const parentNames = this.getAllParents();
     if (parentNames.length === 0) {
-      query.push(await this.getTarget(deviceId, interfaceId, tunnelId));
+      query.push(this.getTarget(deviceId, interfaceId, tunnelId));
     }
     for (const parentName of parentNames) {
       const parent = hierarchyMap[parentName]; // Get the instance of the parent event
-      query.push(await parent.getTarget(deviceId, interfaceId, tunnelId));
+      query.push(parent.getTarget(deviceId, interfaceId, tunnelId));
     }
     return query;
   }
 }
 
 class DeviceConnectionEventClass extends Event {
-  async getTarget (deviceId, interfaceId, tunnelId) {
+  getTarget (deviceId, interfaceId, tunnelId) {
     return {
       eventType: this.eventName,
       'targets.deviceId': deviceId
@@ -85,7 +85,7 @@ class DeviceConnectionEventClass extends Event {
 }
 
 class RunningRouterEventClass extends Event {
-  async getTarget (deviceId, interfaceId, tunnelId) {
+  getTarget (deviceId, interfaceId, tunnelId) {
     return {
       eventType: this.eventName,
       'targets.deviceId': deviceId
@@ -94,7 +94,7 @@ class RunningRouterEventClass extends Event {
 }
 
 class InternetConnectionEventClass extends Event {
-  async getTarget (deviceId, interfaceId, tunnelId) {
+  getTarget (deviceId, interfaceId, tunnelId) {
     return {
       eventType: this.eventName,
       'targets.deviceId': deviceId,
@@ -104,7 +104,7 @@ class InternetConnectionEventClass extends Event {
 }
 
 class MissingInterfaceIPEventClass extends Event {
-  async getTarget (deviceId, interfaceId, tunnelId) {
+  getTarget (deviceId, interfaceId, tunnelId) {
     return {
       eventType: this.eventName,
       'targets.deviceId': deviceId,
@@ -114,7 +114,7 @@ class MissingInterfaceIPEventClass extends Event {
 }
 
 class TunnelStateChangeEventClass extends Event {
-  async getTarget (deviceId, interfaceId, tunnelId) {
+  getTarget (deviceId, interfaceId, tunnelId) {
     return {
       eventType: this.eventName,
       'targets.tunnelId': tunnelId
@@ -123,7 +123,7 @@ class TunnelStateChangeEventClass extends Event {
 }
 
 class LinkStatusEventClass extends Event {
-  async getTarget (deviceId, interfaceId, tunnelId) {
+  getTarget (deviceId, interfaceId, tunnelId) {
     return {
       eventType: this.eventName,
       'targets.deviceId': deviceId,
@@ -368,7 +368,7 @@ class NotificationsManager {
         logger.debug('Processing notification', { params: { notification } });
         const {
           org, details, eventType, title, severity = null,
-          targets, resolved = false, isAlwaysResolved = false
+          targets, resolved = false, isInfo = false
         } = notification;
         let orgNotificationsConf = orgNotificationsMap.get(org);
         if (!orgNotificationsConf) {
@@ -397,7 +397,7 @@ class NotificationsManager {
         }
 
         // If this is a resolved alert: resolve the existing notification
-        if (resolved && !isAlwaysResolved && existingUnresolvedAlert) {
+        if (resolved && !isInfo && existingUnresolvedAlert) {
           await this.resolveAnAlert(eventType, targets, severity || currentSeverity, org);
         }
 
@@ -459,9 +459,9 @@ class NotificationsManager {
                 };
               }
             }
-            const eventParents = await event.getAllParents();
+            const eventParents = event.getAllParents();
             if (eventParents.length > 0) {
-              const parentsQuery = await event.getQuery(deviceId || targets.deviceId, interfaceId ||
+              const parentsQuery = event.getQuery(deviceId || targets.deviceId, interfaceId ||
                    targets.interfaceId, targets.tunnelId);
               const queryKey = JSON.stringify({ org, parentsQuery });
               let parentNotification;
