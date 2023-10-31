@@ -53,6 +53,8 @@ const configEnv = {
     jobTimeout: 180000,
     // The time to wait for deviceSendMessage response before declaring the req as timeout
     directMessageTimeout: 15000,
+    // Period to send get-device-stats message to all connected devices, in msec
+    statsPollPeriod: 15000,
     // The time to wait processing of the get-device-stats message until the next will be sent, in msec
     statsTimeout: 60000,
     // The time to retain jobs until deleted from the database, in msec
