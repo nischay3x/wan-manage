@@ -605,11 +605,15 @@ class DeviceStatus {
       return;
     }
     const now = Date.now();
-    if (deviceInfo.statsSentTime && (now - deviceInfo.statsSentTime < this.statsTimeout)) {
+    const { statsSentTime, statsCompleteTime } = deviceInfo;
+    if ((statsSentTime && now - statsSentTime < this.statsTimeout) ||
+      (statsCompleteTime && now - statsCompleteTime < this.statsPollPeriod / 2)) {
       // wait until the previous 'get-device-stats' processing is finished
+      // skip one if the process took more than half of the poll period
       return;
     }
     connections.devices.updateDeviceInfo(deviceID, 'statsSentTime', now, false);
+    connections.devices.updateDeviceInfo(deviceID, 'statsCompleteTime', undefined, false);
     connections.deviceSendMessage(null, deviceID,
       { entity: 'agent', message: 'get-device-stats' }, undefined, '', this.validateDevStatsMessage)
       .then(async (msg) => {
@@ -705,10 +709,8 @@ class DeviceStatus {
         });
       })
       .finally(() => {
-        setTimeout(() => {
-          // if the process takes less than 1 sec, then the message will be sent every 15 second
-          connections.devices.updateDeviceInfo(deviceID, 'statsSentTime', undefined, false);
-        }, this.statsPollPeriod - 1000);
+        connections.devices.updateDeviceInfo(deviceID, 'statsSentTime', undefined, false);
+        connections.devices.updateDeviceInfo(deviceID, 'statsCompleteTime', Date.now(), false);
       });
   }
 
