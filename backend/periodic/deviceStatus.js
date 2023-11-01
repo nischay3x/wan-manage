@@ -56,6 +56,8 @@ class DeviceStatus {
       ['drop_rate', 'drop_rate']
     ]);
     this.lastApplicationsStatusTime = {};
+    this.statsPollPeriod = configs.get('statsPollPeriod', 'number');
+    this.statsTimeout = configs.get('statsTimeout', 'number');
 
     this.start = this.start.bind(this);
     this.periodicPollDevices = this.periodicPollDevices.bind(this);
@@ -103,7 +105,7 @@ class DeviceStatus {
       name: 'poll_status',
       func: this.periodicPollDevices,
       handle: null,
-      period: 10000
+      period: this.statsPollPeriod
     };
   }
 
@@ -594,6 +596,24 @@ class DeviceStatus {
      * @return {void}
      */
   periodicPollOneDevice (deviceID) {
+    const deviceInfo = connections.getDeviceInfo(deviceID);
+    if (!deviceInfo) {
+      logger.warn('Failed to get device info', {
+        params: { deviceID: deviceID },
+        periodic: { task: this.taskInfo }
+      });
+      return;
+    }
+    const now = Date.now();
+    const { statsSentTime, statsCompleteTime } = deviceInfo;
+    if ((statsSentTime && now - statsSentTime < this.statsTimeout) ||
+      (statsCompleteTime && now - statsCompleteTime < this.statsPollPeriod / 2)) {
+      // wait until the previous 'get-device-stats' processing is finished
+      // skip one if the process took more than half of the poll period
+      return;
+    }
+    connections.devices.updateDeviceInfo(deviceID, 'statsSentTime', now, false);
+    connections.devices.updateDeviceInfo(deviceID, 'statsCompleteTime', undefined, false);
     connections.deviceSendMessage(null, deviceID,
       { entity: 'agent', message: 'get-device-stats' }, undefined, '', this.validateDevStatsMessage)
       .then(async (msg) => {
@@ -602,14 +622,6 @@ class DeviceStatus {
             if (msg.message.length === 0) return;
             // Update device status according to the last update entry in the list
             const lastUpdateEntry = msg.message[msg.message.length - 1];
-            const deviceInfo = connections.getDeviceInfo(deviceID);
-            if (!deviceInfo) {
-              logger.warn('Failed to get device info', {
-                params: { deviceID: deviceID, message: msg },
-                periodic: { task: this.taskInfo }
-              });
-              return;
-            }
             await this.setDeviceStatus(deviceID, deviceInfo, lastUpdateEntry);
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
@@ -695,6 +707,10 @@ class DeviceStatus {
           params: { deviceID: deviceID, err: err.message },
           periodic: { task: this.taskInfo }
         });
+      })
+      .finally(() => {
+        connections.devices.updateDeviceInfo(deviceID, 'statsSentTime', undefined, false);
+        connections.devices.updateDeviceInfo(deviceID, 'statsCompleteTime', Date.now(), false);
       });
   }
 
