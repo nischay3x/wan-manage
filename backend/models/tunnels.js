@@ -186,6 +186,7 @@ const tunnelSchema = new Schema({
 
 // tunnel number per org must be unique
 tunnelSchema.index({ num: 1, org: 1 }, { unique: true });
+tunnelSchema.index({ org: 1 });
 
 // Default exports
 module.exports = mongoConns.getMainDB().model('tunnels', tunnelSchema);

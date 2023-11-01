@@ -905,7 +905,9 @@ class Connections {
                 interfaceId: null
                 // policyId: null
               },
-              details: 'Unsuccessful updating device data. Please contact flexiWAN support'
+              details: 'Unsuccessful updating device data. Please contact flexiWAN support',
+              isInfo: true,
+              resolved: true
             }]);
           }
 

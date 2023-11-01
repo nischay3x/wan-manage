@@ -368,6 +368,7 @@ class DevicesService {
       if (filters) {
         parsedFilters = JSON.parse(filters);
       }
+      const hasFilters = parsedFilters.length > 0;
 
       const pipeline = [
         {
@@ -375,56 +376,66 @@ class DevicesService {
             org: { $in: orgList.map(o => mongoose.Types.ObjectId(o)) }
           }
         },
-        {
-          $lookup: {
-            from: 'multilinkpolicies',
-            localField: 'policies.multilink.policy',
-            foreignField: '_id',
-            as: 'policies.multilink.policy'
+        ...hasFilters ? ([
+          {
+            $lookup: {
+              from: 'multilinkpolicies',
+              localField: 'policies.multilink.policy',
+              foreignField: '_id',
+              as: 'policies.multilink.policy'
+            }
+          },
+          {
+            $unwind: {
+              path: '$policies.multilink.policy',
+              preserveNullAndEmptyArrays: true
+            }
+          },
+          {
+            $lookup: {
+              from: 'firewallpolicies',
+              localField: 'policies.firewall.policy',
+              foreignField: '_id',
+              as: 'policies.firewall.policy'
+            }
+          },
+          {
+            $unwind: {
+              path: '$policies.firewall.policy',
+              preserveNullAndEmptyArrays: true
+            }
+          },
+          {
+            $lookup: {
+              from: 'qospolicies',
+              localField: 'policies.qos.policy',
+              foreignField: '_id',
+              as: 'policies.qos.policy'
+            }
+          },
+          {
+            $unwind: {
+              path: '$policies.qos.policy',
+              preserveNullAndEmptyArrays: true
+            }
+          },
+          {
+            $lookup: {
+              from: 'pathlabels',
+              localField: 'interfaces.pathlabels',
+              foreignField: '_id',
+              as: 'pathlabels'
+            }
+          },
+          {
+            $lookup: {
+              from: 'vrrps',
+              localField: '_id',
+              foreignField: 'devices.device',
+              as: 'vrrp'
+            }
           }
-        },
-        {
-          $unwind: {
-            path: '$policies.multilink.policy',
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $lookup: {
-            from: 'firewallpolicies',
-            localField: 'policies.firewall.policy',
-            foreignField: '_id',
-            as: 'policies.firewall.policy'
-          }
-        },
-        {
-          $unwind: {
-            path: '$policies.firewall.policy',
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $lookup: {
-            from: 'qospolicies',
-            localField: 'policies.qos.policy',
-            foreignField: '_id',
-            as: 'policies.qos.policy'
-          }
-        },
-        {
-          $unwind: {
-            path: '$policies.qos.policy',
-            preserveNullAndEmptyArrays: true
-          }
-        },
-        {
-          $lookup: {
-            from: 'pathlabels',
-            localField: 'interfaces.pathlabels',
-            foreignField: '_id',
-            as: 'pathlabels'
-          }
-        },
+        ]) : [],
         {
           $lookup: {
             from: 'organizations',
@@ -436,14 +447,6 @@ class DevicesService {
         {
           $unwind: {
             path: '$org'
-          }
-        },
-        {
-          $lookup: {
-            from: 'vrrps',
-            localField: '_id',
-            foreignField: 'devices.device',
-            as: 'vrrp'
           }
         },
         {
