@@ -25,6 +25,7 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'j
 const { differenceWith, isEqual, keyBy } = require('lodash');
 const { transformVrrp, transformDHCP } = require('./jobParameters');
 const Vrrp = require('../models/vrrp');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 
 /**
  * Creates and queues the add/remove job.
@@ -354,6 +355,12 @@ const sync = async (deviceId, org) => {
       // Send vrrp job for the device that is should be synced only.
       // Hence, filter out other devices in the vrrp group.
       if (vrrpGroupDevice.device._id.toString() !== deviceId.toString()) {
+        continue;
+      }
+
+      const majorVersion = getMajorVersion(vrrpGroupDevice.device.versions.device);
+      const minorVersion = getMinorVersion(vrrpGroupDevice.device.versions.device);
+      if (majorVersion < 6 || (majorVersion === 6 && minorVersion <= 2)) {
         continue;
       }
 
