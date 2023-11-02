@@ -30,6 +30,7 @@ const orgModel = require('../models/organizations');
 const { reconfigErrorsLimiter } = require('../limiters/reconfigErrors');
 const { parseLteStatus, mapWifiNames } = require('../utils/deviceUtils');
 const tunnels = require('../models/tunnels');
+const { getMajorVersion, getMinorVersion } = require('../versioning');
 const { createClient } = require('redis');
 const { getRedisAuthUrl } = require('../utils/httpUtils');
 
@@ -626,6 +627,11 @@ class DeviceStatus {
             this.updateAnalyticsInterfaceStats(deviceID, deviceInfo, msg.message);
             this.updateAnalyticsApplicationsStats(deviceID, deviceInfo, msg.message);
             this.updateUserDeviceStats(deviceInfo.org, deviceID, msg.message);
+
+            // Compare notification hashes between the device and last update.
+            // This code won't executed if the device's version is older than 6.3.X
+            // since deviceInfo won't have the key notificationsHash and lastUpdateEntry
+            // won't have the key alerts_hash
             if ((!deviceInfo.notificationsHash && lastUpdateEntry.alerts_hash) ||
                 deviceInfo.notificationsHash !== lastUpdateEntry.alerts_hash) {
               this.calculateNotifications(deviceID, deviceInfo, lastUpdateEntry).then(() => {
@@ -1014,6 +1020,59 @@ class DeviceStatus {
     delete this?.status?.[machineId]?.vrrp;
   }
 
+  isCustomNotificationsSupported (deviceVersion) {
+    const majorVersion = getMajorVersion(deviceVersion);
+    const minorVersion = getMinorVersion(deviceVersion);
+    return (majorVersion > 6 || (majorVersion === 6 && minorVersion >= 3));
+  };
+
+  async processTunnelNotificationsForOldDevices (
+    eventType, prevValue, currentValue, firstUpdate, deviceInfo, targets, unit,
+    criticalThreshold, warningThreshold) {
+    if (firstUpdate || currentValue !== prevValue) {
+      let resolved = false;
+      let severity = null;
+
+      if (prevValue > criticalThreshold && currentValue < criticalThreshold) {
+        resolved = true;
+        severity = 'critical';
+      } else if (prevValue > warningThreshold && currentValue < warningThreshold) {
+        resolved = true;
+        severity = 'warning';
+      } else if (currentValue > criticalThreshold) {
+        severity = 'critical';
+      } else if (currentValue > warningThreshold) {
+        severity = 'warning';
+      }
+
+      if (severity) {
+        const threshold = severity === 'warning' ? warningThreshold : criticalThreshold;
+        const notificationKey = await this.generateTunnelNotificationKey(
+          eventType, targets, resolved, deviceInfo.org
+        );
+        const notification = {
+          org: deviceInfo.org,
+          title: eventType,
+          details: resolved ? `
+          ${eventType} has returned to normal in Tunnel ${targets.tunnelId}`
+            : `${eventType} has reached ${parseFloat(currentValue.toFixed(1))}${unit}
+             in Tunnel ${targets.tunnelId}`,
+          targets,
+          eventType,
+          resolved,
+          agentAlertsInfo: {
+            value: parseFloat(currentValue.toFixed(1)),
+            threshold,
+            unit,
+            type: 'tunnel'
+          },
+          severity
+        };
+        this.handleNotificationSending(notification, notificationKey);
+      }
+    }
+  }
+
   /**
      * @param  {string} machineId  device machine id
      * @param  {Object} deviceInfo device info entry
@@ -1038,10 +1097,6 @@ class DeviceStatus {
     const devStats = {};
 
     const appStatus = rawStats.application_stats;
-    if (!this.status.hasOwnProperty(machineId)) {
-      this.status[machineId] = {};
-    }
-
     if (rawStats.hasOwnProperty('application_stats') && Object.entries(appStatus).length !== 0) {
       if (!this.status[machineId].applicationStatus) {
         this.status[machineId].applicationStatus = {};
@@ -1115,9 +1170,12 @@ class DeviceStatus {
           this.setTunnelsStatusByOrg(org, tunnelID, machineId, tunnelState.status);
         }
 
-        // Generate a notification if tunnel status has changed since the last update
-        if ((firstTunnelUpdate ||
-           tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)) {
+        // Generate a notification if tunnel status has changed since
+        // the last update
+        if (
+          (firstTunnelUpdate ||
+           tunnelState.status !== this.status[machineId].tunnelStatus[tunnelID].status)
+        ) {
           const targets = {
             deviceId,
             tunnelId: tunnelID,
@@ -1140,6 +1198,18 @@ class DeviceStatus {
           };
 
           this.handleNotificationSending(notification, notificationKey);
+
+          // Make sure to send notifications for old devices as before (only RTT and Drop rate)
+          const isCustomNotificationsSupported = this.isCustomNotificationsSupported(
+            deviceInfo.version);
+          if (!isCustomNotificationsSupported) {
+            await this.processTunnelNotificationsForOldDevices('Link/Tunnel default drop rate',
+              this.status[machineId]?.tunnelStatus[tunnelID]?.drop_rate,
+              tunnelState.drop_rate, firstTunnelUpdate, deviceInfo, targets, '%', 5, 20);
+            await this.processTunnelNotificationsForOldDevices('Link/Tunnel round trip time',
+              this.status[machineId]?.tunnelStatus[tunnelID]?.rtt, tunnelState.rtt,
+              firstTunnelUpdate, deviceInfo, targets, 'ms', 300, 600);
+          }
         }
       }));
       Object.assign(this.status[machineId].tunnelStatus, rawStats.tunnel_stats);
@@ -1303,7 +1373,7 @@ class DeviceStatus {
      *                           were updated in the database
      */
   getDeviceLastUpdateTime (deviceID) {
-    return !this.status[deviceID]?.lastUpdateTime
+    return !this.status[deviceID].lastUpdateTime
       ? 0 : this.status[deviceID].lastUpdateTime;
   }
 
