@@ -718,6 +718,49 @@ class NotificationsManager {
       });
     }
   }
+
+  /**
+ * Asynchronously resolves notifications associated with deleted devices/tunnels.
+ * It updates notifications by setting their 'resolved' field to true.
+ *
+ * @param {Array} entityIds - The identifiers of the deleted entities (tunnels/devices).
+ * @param {String} orgId - Organization id.
+ * @param {Boolean} isTunnel - Flag indicating whether the deleted entities are tunnels or devices.
+ * @returns {Promise<void>} - A promise that resolves when the operation is complete.
+ *
+ * @throws Will throw an error if the database operation fails.
+ */
+  async resolveNotificationsOfDeletedEntities (entityIds, orgId, isTunnel) {
+    const fieldName = isTunnel ? 'targets.tunnelId' : 'targets.deviceId';
+
+    const bulkOperations = entityIds.map(id => ({
+      updateOne: {
+        filter: {
+          [fieldName]: id,
+          org: orgId,
+          resolved: false
+        },
+        update: { $set: { resolved: true } }
+      }
+    }));
+
+    try {
+      const updateResult = await notifications.bulkWrite(bulkOperations);
+
+      if (updateResult.nModified > 0) {
+        logger.debug(`Resolved notifications of deleted ${isTunnel ? 'tunnels' : 'devices'}`, {
+          params: { count: updateResult.nModified }
+        });
+      } else {
+        logger.debug('No notifications found to resolve');
+      }
+    } catch (err) {
+      logger.error(`Failed to resolve notifications in database of deleted
+       ${isTunnel ? 'tunnels' : 'devices'}`, {
+        params: { error: err.message, ids: entityIds }
+      });
+    }
+  }
 }
 
 let notificationsMgr = null;

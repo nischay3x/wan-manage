@@ -46,6 +46,7 @@ const defaultTunnelOspfCost = configs.get('defaultTunnelOspfCost', 'number');
 const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
 const { transformBGP } = require('./jobParameters');
 const organizations = require('../models/organizations');
+const notificationsMgr = require('../notifications/notifications')();
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -1601,6 +1602,13 @@ const applyTunnelDel = async (devices, user, data) => {
       message = `${message} ${Array.from(reasons).join(' ')}`;
     }
 
+    const deletedTunnelNumbers = fulfilled.flat().map(
+      job => job.data.message.tasks[0].params['tunnel-id'].toString());
+
+    // resolve tunnel notifications
+    await notificationsMgr.resolveNotificationsOfDeletedEntities(
+      deletedTunnelNumbers, data.org, true);
+
     return { ids: fulfilled.flat().map(job => job.id), status, message };
   } else {
     logger.error('Delete tunnels failed. No tunnels\' ids provided or no devices found',
@@ -1619,7 +1627,7 @@ const applyTunnelDel = async (devices, user, data) => {
 const delTunnel = async (tunnel, user, org, updateOps) => {
   const { _id, isPending, num, deviceA, deviceB, peer } = tunnel;
 
-  // Check is tunnel used by any static route
+  // Check if tunnel used by any static route
   // const organization = await organizations.findOne({ _id: org }).lean();
   const { ip1, ip2 } = generateTunnelParams(num, org.tunnelRange);
   const tunnelUsedByStaticRoute =
