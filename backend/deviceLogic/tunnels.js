@@ -1606,7 +1606,7 @@ const applyTunnelDel = async (devices, user, data) => {
       job => job.data.message.tasks[0].params['tunnel-id'].toString());
 
     // resolve tunnel notifications
-    await notificationsMgr.resolveNotificationsOfDeletedEntities(
+    await notificationsMgr.resolveNotificationsOfDeletedTunnels(
       deletedTunnelNumbers, data.org, true);
 
     return { ids: fulfilled.flat().map(job => job.id), status, message };

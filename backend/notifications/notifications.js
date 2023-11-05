@@ -720,23 +720,20 @@ class NotificationsManager {
   }
 
   /**
- * Asynchronously resolves notifications associated with deleted devices/tunnels.
+ * Asynchronously resolves notifications associated with deleted tunnels.
  * It updates notifications by setting their 'resolved' field to true.
  *
- * @param {Array} entityIds - The identifiers of the deleted entities (tunnels/devices).
+ * @param {Array} entityIds - The identifiers of the deleted tunnels (tunnel numbers).
  * @param {String} orgId - Organization id.
- * @param {Boolean} isTunnel - Flag indicating whether the deleted entities are tunnels or devices.
  * @returns {Promise<void>} - A promise that resolves when the operation is complete.
  *
  * @throws Will throw an error if the database operation fails.
  */
-  async resolveNotificationsOfDeletedEntities (entityIds, orgId, isTunnel) {
-    const fieldName = isTunnel ? 'targets.tunnelId' : 'targets.deviceId';
-
-    const bulkOperations = entityIds.map(id => ({
+  async resolveNotificationsOfDeletedTunnels (tunnelIds, orgId) {
+    const bulkOperations = tunnelIds.map(id => ({
       updateOne: {
         filter: {
-          [fieldName]: id,
+          'targets.tunnelId': id,
           org: orgId,
           resolved: false
         },
@@ -748,16 +745,15 @@ class NotificationsManager {
       const updateResult = await notifications.bulkWrite(bulkOperations);
 
       if (updateResult.nModified > 0) {
-        logger.debug(`Resolved notifications of deleted ${isTunnel ? 'tunnels' : 'devices'}`, {
+        logger.debug('Resolved notifications of deleted tunnels', {
           params: { count: updateResult.nModified }
         });
       } else {
         logger.debug('No notifications found to resolve');
       }
     } catch (err) {
-      logger.error(`Failed to resolve notifications in database of deleted
-       ${isTunnel ? 'tunnels' : 'devices'}`, {
-        params: { error: err.message, ids: entityIds }
+      logger.error('Failed to resolve notifications in database of deleted tunnels', {
+        params: { error: err.message, ids: tunnelIds }
       });
     }
   }
