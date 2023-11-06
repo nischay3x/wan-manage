@@ -17,7 +17,6 @@
 
 const Service = require('./Service');
 const Tunnels = require('../models/tunnels');
-const mongoose = require('mongoose');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const deviceStatus = require('../periodic/deviceStatus')();
 const statusesInDb = require('../periodic/statusesInDb')();
@@ -89,38 +88,6 @@ class TunnelsService {
       }
     }
     return notificationsDict;
-  }
-
-  /**
-   * Retrieve device tunnels information
-   *
-   * id String Numeric ID of the Device to fetch tunnel information about
-   * offset Integer The number of items to skip before starting to collect the result set (optional)
-   * limit Integer The numbers of items to return (optional)
-   * returns List
-   **/
-  static async tunnelsIdDELETE ({ id, org, offset, limit }, { user }) {
-    try {
-      const orgList = await getAccessTokenOrgList(user, org, true);
-      const resp = await Tunnels.findOneAndUpdate(
-        // Query
-        { _id: mongoose.Types.ObjectId(id), org: { $in: orgList } },
-        // Update
-        { isActive: false },
-        // Options
-        { upsert: false, new: true });
-
-      if (resp != null) {
-        return Service.successResponse(null, 204);
-      } else {
-        return Service.rejectResponse(404);
-      }
-    } catch (e) {
-      return Service.rejectResponse(
-        e.message || 'Internal Server Error',
-        e.status || 500
-      );
-    }
   }
 
   /**
