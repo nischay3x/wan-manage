@@ -130,10 +130,10 @@ class Events {
 
     if (isPending) {
       this.pendingTunnels.add(tunnel._id.toString());
-      await this.tunnelSetToPending(tunnel, device, reason);
+      await this.tunnelSetToPending(tunnel, device, reason, true);
     } else {
       this.activeTunnels.add(tunnel._id.toString());
-      await this.tunnelSetToActive(tunnel, device);
+      await this.tunnelSetToActive(tunnel, device, true);
     }
   };
 
@@ -349,7 +349,7 @@ class Events {
         await this.updatePendingTunnelReason(tunnel.num, tunnel.org, reason, pendingType);
       }
 
-      await this.tunnelSetToPending(tunnel, device, reason, false);
+      await this.tunnelSetToPending(tunnel, device, reason);
       return;
     }
 
@@ -470,7 +470,7 @@ class Events {
    * @param  {string} reason indicate why tunnel should be pending
    * @param  {boolean} notify indicate if need to notify
   */
-  async tunnelSetToPending (tunnel, device, reason, notify = true) {
+  async tunnelSetToPending (tunnel, device, reason, notify = false) {
     if (notify) {
       await notificationsMgr.sendNotifications([{
         org: tunnel.org,
@@ -501,21 +501,25 @@ class Events {
   /**
    * Handle event: tunnel configured as a active
    * @param  {object} tunnel tunnel object
+   * @param  {object} device tunnel object
+   * @param  {boolean} notify indicate if need to notify
   */
-  async tunnelSetToActive (tunnel, device) {
-    await notificationsMgr.sendNotifications([{
-      org: tunnel.org,
-      title: '[resolved] Tunnel state changed',
-      eventType: 'Pending tunnel',
-      details: `Tunnel number ${tunnel.num} has become active again`,
-      targets: {
-        deviceId: device._id,
-        tunnelId: tunnel.num,
-        interfaceId: null
-        // policyId: null
-      },
-      resolved: true
-    }]);
+  async tunnelSetToActive (tunnel, device, notify = false) {
+    if (notify) {
+      await notificationsMgr.sendNotifications([{
+        org: tunnel.org,
+        title: '[resolved] Tunnel state changed',
+        eventType: 'Pending tunnel',
+        details: `Tunnel number ${tunnel.num} has become active again`,
+        targets: {
+          deviceId: device._id,
+          tunnelId: tunnel.num,
+          interfaceId: null
+          // policyId: null
+        },
+        resolved: true
+      }]);
+    }
 
     // get tunnel static routes
     const dependedDevices = await getTunnelConfigDependencies(tunnel, true);
