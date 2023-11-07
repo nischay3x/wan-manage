@@ -155,6 +155,7 @@ class AppIdentificationsService {
       // identifications collection, then locate and update the entry within the
       // appIdentifications array
       const orgList = await getAccessTokenOrgList(user, org, true);
+      appIdentification.id = id;
 
       AppIdentificationsService.validateAppIdentification(appIdentification);
 
