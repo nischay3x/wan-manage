@@ -4524,7 +4524,7 @@ paths:
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
-  /notifications-conf:
+  /notificationsConf:
     get:
       operationId: notificationsConfGET
       parameters:
@@ -4658,7 +4658,7 @@ paths:
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
-  /notifications-conf/emails:
+  /notificationsConf/emails:
     get:
       operationId: notificationsConfEmailsGET
       parameters:
@@ -4787,7 +4787,7 @@ paths:
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
-  /notifications-conf/webhooks:
+  /notificationsConf/webhooks:
     get:
       operationId: notificationsConfWebhookGET
       parameters:
@@ -4921,7 +4921,7 @@ paths:
       x-swagger-router-controller: Notifications
       x-openapi-router-controller: NotificationsController
       x-openapi-router-service: NotificationsService
-  /notifications-conf/default:
+  /notificationsConf/default:
     get:
       operationId: notificationsConfDefaultGET
       parameters:

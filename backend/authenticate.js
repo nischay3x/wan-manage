@@ -350,6 +350,7 @@ exports.verifyPermissionEx = function (serviceName, { method, user, openapi }) {
     case 'accountsIdSubscriptionStatusGET':
     case 'organizationsSelectPOST':
     case 'configurationRestServersGET':
+    case 'notificationsConfEmailsPUT':
       return true;
   }
 
