@@ -3681,7 +3681,7 @@ class DevicesService {
           }
 
           return Service.successResponse({
-            ...response,
+            message: response.message,
             deviceStatus: 'connected',
             error: null
           }, 200);
