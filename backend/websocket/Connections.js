@@ -573,10 +573,10 @@ class Connections {
     deviceInfo.socket = socket;
 
     // Initialize to alive connection, with 3 retries
-    socket.isAlive = 7;
+    socket.isAlive = 4;
     socket.on('pong', () => {
       // Pong received, reset retries
-      socket.isAlive = 7;
+      socket.isAlive = 4;
       // update device connection state flag used by other hosts
       const connectDeviceKey = `${connectDevicePrefix}:${machineId}`;
       this.redisClient.setex(connectDeviceKey, connectExpireTime, hostId);
