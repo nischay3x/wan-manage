@@ -309,7 +309,7 @@ const interfacesSchema = new Schema({
   ospf: {
     area: {
       type: Schema.Types.Mixed,
-      default: 0,
+      default: '0',
       required: true,
       validate: {
         validator: validators.validateOSPFArea,
