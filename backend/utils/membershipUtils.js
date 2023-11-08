@@ -103,7 +103,8 @@ const getUserOrgByID = async (user, orgId) => {
  *  Check if user is allowed to access the orgs specified for view or modify
  *  User (or access token) has permissions, check if they are sufficient to access
  */
-const validateOrgAccess = async (user, to = 'organization', entity = null, modify = false) => {
+const validateOrgAccess = async (user, to = 'organization', entity = null, modify = false,
+  shouldAllowViewerToModify) => {
   if (entity === null) throw new Error('Access entity is not specified');
   // get all permissions for the user
   let userPermissions = [];
@@ -120,7 +121,9 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
   }
 
   const roles = ['manager', 'owner']; // roles for any modify value
-  if (!modify) roles.push('viewer'); // if view operation, we can add viewer permission
+  if (!modify || shouldAllowViewerToModify) {
+    roles.push('viewer'); // add viewer permission if view operation/user modifications allowed
+  }
   // Start with the simple and more common options:
   // If user has an account permission, or exact permission,
   // he can access all entities under it
@@ -197,10 +200,12 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
  * @param {String} accountId - if access to the account is required
  * @param {String} group - if access to specific group is required
  * @param {Boolean} isModify - if the operation is for view (false) or modification (true)
+ * @param {Boolean} shouldAllowViewerToModify - if we should allow viewer to modify
  * @returns {List} List of organizations (as strings)
  */
 const getAccessTokenOrgList = async (
-  user, orgId, orgIdRequired = false, accountId = null, group = '', isModify = false) => {
+  user, orgId, orgIdRequired = false, accountId = null, group = '', isModify = false,
+  shouldAllowViewerToModify = false) => {
   /*
    * If orgIdRequired, a single organization must be specified - taken from the query or user
    * Otherwise multiple organization can be accessed.
@@ -269,7 +274,8 @@ const getAccessTokenOrgList = async (
         throw new Error('Organization query parameter must be specified for this operation');
       } else {
         // return org after validation for modify/view
-        return await validateOrgAccess(user, 'organization', orgId, isModify);
+        return await validateOrgAccess(
+          user, 'organization', orgId, isModify, shouldAllowViewerToModify);
       }
     } else {
       if (!orgId) {
@@ -287,16 +293,18 @@ const getAccessTokenOrgList = async (
       const orgs = await validateOrgAccess(user, user.tokenTo,
         user.tokenTo === 'organization' ? user.tokenOrganization
           : user.tokenTo === 'group' ? user.tokenGroup
-            : user.defaultAccount._id.toString(), false);
+            : user.defaultAccount._id.toString(), false, shouldAllowViewerToModify);
       return orgs;
     } else {
       let orgs;
       if (accountId) {
-        orgs = await validateOrgAccess(user, 'account', accountId, isModify);
+        orgs = await validateOrgAccess(
+          user, 'account', accountId, isModify, shouldAllowViewerToModify);
       } else if (group) {
-        orgs = await validateOrgAccess(user, 'group', group, isModify);
+        orgs = await validateOrgAccess(user, 'group', group, isModify, shouldAllowViewerToModify);
       } else {
-        orgs = await validateOrgAccess(user, 'organization', orgId, isModify);
+        orgs = await validateOrgAccess(
+          user, 'organization', orgId, isModify, shouldAllowViewerToModify);
       }
       return orgs;
     }

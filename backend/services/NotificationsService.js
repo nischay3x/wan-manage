@@ -360,7 +360,7 @@ class NotificationsService {
   * user: Object
   * returns Notification
   **/
-  static async validateParams (org, account, group, user, setAsDefault = false, get = false) {
+  static async validateParams (org, account, group, user, setAsDefault = false, get = false, isViewerAllowedToModify = false) {
     if (setAsDefault) {
       const orgList = await getAccessTokenOrgList(user, null, false);
 
@@ -393,7 +393,7 @@ class NotificationsService {
       // If group is given send it without account, else send org / account (one of them will be undefined,
       // since they can't be used together)
       // The function getAccessTokenOrgList allows only one of: org/account/group
-      const orgList = group ? await getAccessTokenOrgList(user, null, false, null, group, !get) : await getAccessTokenOrgList(user, org, false, account, '', !get);
+      const orgList = group ? await getAccessTokenOrgList(user, null, false, null, group, !get, isViewerAllowedToModify) : await getAccessTokenOrgList(user, org, false, account, '', !get, isViewerAllowedToModify);
       if (!orgList.length || (org && !orgList.includes(org))) {
         throw createError(403, `You don't have a permission to ${get ? 'access' : 'modify'} the settings`);
       }
@@ -679,9 +679,16 @@ class NotificationsService {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
       let response = [];
       const uniqueUsers = new Set();
-      const processOrganization = async (orgId) => {
+      const isViewer = await NotificationsService.checkIfUserIsViewer(
+        user,
+        account,
+        group,
+        org
+      );
+
+      const processOrganization = async (orgId, isViewer = false) => {
         const orgData = await Organizations.find({ _id: orgId });
-        const members = await membership.find({
+        const members = isViewer ? [{ user: user._id }] : await membership.find({
           $or: [
             { to: 'organization', organization: orgId },
             { to: 'account', account: orgData[0].account },
@@ -733,10 +740,10 @@ class NotificationsService {
         }
       };
       if (org) {
-        await processOrganization(org);
+        await processOrganization(org, isViewer);
       } else {
         for (const orgId of orgIds) {
-          await processOrganization(orgId);
+          await processOrganization(orgId, isViewer);
         }
         response = response.filter(user => user.count >= orgIds.length).map(({ count, ...user }) => user);
       }
@@ -746,6 +753,62 @@ class NotificationsService {
         code: e.status || 500,
         message: e.message || 'Internal Server Error'
       });
+    }
+  }
+
+  /**
+   * Checks if there are any memberships for a specific user where the user's role is not 'viewer'.
+   * This function filters memberships based on the provided user details and optional parameters: account,
+   * group, and organization. When an organization is provided, the search will include additional conditions
+   * specific to that organization. If an organization is not provided, the function will filter memberships by
+   * account and/or group (one of them must be given if org is not provided).
+   *
+   * @param {object} user - The user object
+   * @param {string} [account] - The account ID to filter the memberships by (optional).
+   * @param {string} [group] - The group name to filter the memberships by (optional).
+   * @param {boolean} [organization] - The organization ID to filter the memberships by (optional)
+   * @returns {Promise<boolean>} A promise that resolves to a boolean value indicating whether non-viewer memberships
+   *   exist for the user based on the provided criteria. `true` if no such memberships exist, `false` otherwise.
+   *   If an error occurs, the promise is rejected with the error object.
+   */
+  static async checkIfUserIsViewer (user, account, group, organization) {
+    try {
+      if (user.accessToken) {
+        return user.role === 'viewer';
+      }
+      let membershipQuery;
+      if (organization) {
+        const organizationDetails = await Organizations.findOne({ _id: organization });
+        membershipQuery = {
+          user: user._id,
+          $or: [
+            { $and: [{ to: 'organization' }, { org: organization }] },
+            {
+              $and: [{ to: 'group' }, { group: organizationDetails.group }],
+              account: organizationDetails.account
+            },
+            { $and: [{ to: 'account' }, { account: organizationDetails.account }] }
+          ],
+          role: { $ne: 'viewer' }
+        };
+      // account/group is given
+      } else {
+        membershipQuery = {
+          user: user._id,
+          account: account,
+          $or: [
+            { $and: [{ to: 'group' }, { group }] },
+            { $and: [{ to: 'account' }, { account }] }
+          ],
+          role: { $ne: 'viewer' }
+        };
+      }
+
+      const userMemberships = await membership.find(membershipQuery);
+      return userMemberships.length === 0; // if length is 0 the user is a viewer
+    } catch (error) {
+      logger.error('Error finding user memberships:', error);
+      throw error;
     }
   }
 
@@ -760,7 +823,7 @@ class NotificationsService {
 
   static async notificationsConfEmailsPUT ({ org, account, group, emailsSigning }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, false, true);
 
       const areEmailSigningFieldsMissing = validateEmailNotifications(emailsSigning, !org);
       if (areEmailSigningFieldsMissing) {
@@ -786,6 +849,28 @@ class NotificationsService {
 
       const orgUpdates = {};
 
+      const isViewer = await NotificationsService.checkIfUserIsViewer(
+        user,
+        account,
+        group,
+        org
+      );
+
+      // The user has only viewer permissions
+      if (isViewer) {
+        if (userIds.length > 1 || userIds[0] !== user._id.toString()) {
+          const errorMsg = 'Viewers can only modify their own email notifications settings';
+          logger.warn('Error in email subscription', {
+            params: {
+              err: `user id ${user._id} can only modify his own email notifications in the ${
+                org ? `org ${org}` : account ? `account ${account}` : `group ${group}`
+              }`
+            }
+          });
+          return Service.rejectResponse(errorMsg, 403);
+        }
+      }
+
       // Loop through each user and update their email notification settings for the provided organizations.
       // If any user doesn't have access to a given organization, log an error and reject the request.
       // Update operations are batched and executed at the end of the process.
@@ -795,7 +880,7 @@ class NotificationsService {
         const userOrgAccess = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
 
         for (const org of orgIds) {
-          if (!(org in userOrgAccess)) {
+          if (!isViewer && !(org in userOrgAccess)) {
             const errorMsg = org ? 'One of the users does not have permission to access the organization'
               : `All the users must be authorized to each one of the organizations under the ${group ? 'group' : 'account'}`;
             logger.warn('Error in email subscription', { params: { err: `user id ${userData._id} is not authorized for the organization: ${org}` } });
