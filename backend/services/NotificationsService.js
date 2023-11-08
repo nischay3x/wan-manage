@@ -679,7 +679,7 @@ class NotificationsService {
       const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
       let response = [];
       const uniqueUsers = new Set();
-      const isViewer = await NotificationsService.checkIfUserIsViewer(
+      const isViewer = await NotificationsService.checkIfViewer(
         user,
         account,
         group,
@@ -771,7 +771,7 @@ class NotificationsService {
    *   exist for the user based on the provided criteria. `true` if no such memberships exist, `false` otherwise.
    *   If an error occurs, the promise is rejected with the error object.
    */
-  static async checkIfUserIsViewer (user, account, group, organization) {
+  static async checkIfViewer (user, account, group, organization) {
     try {
       if (user.accessToken) {
         return user.role === 'viewer';
@@ -849,7 +849,7 @@ class NotificationsService {
 
       const orgUpdates = {};
 
-      const isViewer = await NotificationsService.checkIfUserIsViewer(
+      const isViewer = await NotificationsService.checkIfViewer(
         user,
         account,
         group,
