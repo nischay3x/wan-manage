@@ -751,10 +751,10 @@ class NotificationsService {
       }
       return Service.successResponse(response);
     } catch (e) {
-      return Service.rejectResponse({
-        code: e.status || 500,
-        message: e.message || 'Internal Server Error'
-      });
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
