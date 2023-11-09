@@ -104,7 +104,7 @@ const getUserOrgByID = async (user, orgId) => {
  *  User (or access token) has permissions, check if they are sufficient to access
  */
 const validateOrgAccess = async (user, to = 'organization', entity = null, modify = false,
-  shouldAllowViewerToModify) => {
+  shouldAllowViewerToModify = false) => {
   if (entity === null) throw new Error('Access entity is not specified');
   // get all permissions for the user
   let userPermissions = [];

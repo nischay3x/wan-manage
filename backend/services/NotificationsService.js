@@ -688,6 +688,8 @@ class NotificationsService {
 
       const processOrganization = async (orgId, isViewer = false) => {
         const orgData = await Organizations.find({ _id: orgId });
+        // Viewers are restricted to access only their own user details.
+        // Since these details are already available in the 'user' object, we avoid making a redundant database call
         const members = isViewer ? [{ user: user._id }] : await membership.find({
           $or: [
             { to: 'organization', organization: orgId },
