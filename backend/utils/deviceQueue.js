@@ -149,7 +149,10 @@ class DeviceQueues {
       }
       try {
         // Call to process current job, using the processor callback function
-        await processor(job);
+        const resolved = await processor(job);
+        // not resolved means that the websocket message was not sent
+        // the job is set as inactive and will be processed on the next connection
+        if (!resolved) return;
       } catch (err) {
         logger.debug('Failed to process job', {
           params: { job: job, deviceId: deviceId, err: err.message },
@@ -345,7 +348,6 @@ class DeviceQueues {
       throw new Error('DeviceQueues: Trying to resume an undefined queue, deviceID=' + deviceId);
     }
     this.deviceQueues[deviceId].waitPause = false;
-    if (!this.deviceQueues[deviceId].paused) return; // Already resumed
     if (!this.deviceQueues[deviceId].context) {
       throw new Error('DeviceQueues: Resuming a queue with no context, deviceID=' + deviceId);
     }
