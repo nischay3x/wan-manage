@@ -353,26 +353,17 @@ class NotificationsService {
   }
 
   /**
-  * Validate notifications conf request params and return the list of organizations according to the param
+  * Validate notifications conf request params
   * @param org String organization ID
   * @param account String account ID
   * @param group String group name (must be sent with account ID)
-  * user: Object
-  * returns Notification
+  * @param setAsDefault Boolean if this is a set as default request
   **/
-  static async validateParams (org, account, group, user, setAsDefault = false, get = false, isViewerAllowedToModify = false) {
+  static async validateParams (org, account, group, setAsDefault = false) {
     if (setAsDefault) {
-      const orgList = await getAccessTokenOrgList(user, null, false);
-
-      if (orgList.length === 0) {
-        throw createError(403, 'You do not have permission to set as account default.');
-      }
-
       if (!account) {
         throw createError(400, 'Please specify the account id');
       }
-
-      return [];
     } else {
     // Validate parameters
       if (!org && !account && !group) {
@@ -389,16 +380,43 @@ class NotificationsService {
       if (account && org) {
         throw createError(400, 'Invalid parameter: account should be used alone or with group(for modifying the group)');
       }
-
-      // If group is given send it without account, else send org / account (one of them will be undefined,
-      // since they can't be used together)
-      // The function getAccessTokenOrgList allows only one of: org/account/group
-      const orgList = group ? await getAccessTokenOrgList(user, null, false, null, group, !get, isViewerAllowedToModify) : await getAccessTokenOrgList(user, org, false, account, '', !get, isViewerAllowedToModify);
-      if (!orgList.length || (org && !orgList.includes(org))) {
-        throw createError(403, `You don't have a permission to ${get ? 'access' : 'modify'} the settings`);
-      }
-      return orgList;
     }
+  }
+
+  /**
+   * Fetch the list of organizations the user is allowed to access/modify according to the params
+  * @param user Object the user's object
+  * @param org String organization ID
+  * @param account String account ID
+  * @param group String group name (must be sent with account ID)
+  * @param setAsDefault Boolean is this setAsDefault API (get default / set as default)
+  * @param get Boolean is this a get request
+  * @param allowEmptyOrgList Boolean should we allow empty organization list or throw an error
+  * returns list of organizations
+  **/
+  static async fetchOrgList (user, org, account, group, setAsDefault = false, get = false, allowEmptyOrgList = false) {
+    if (setAsDefault) {
+      const orgList = await getAccessTokenOrgList(user, null, false);
+
+      if (orgList.length === 0) {
+        throw createError(403, "You don't have permission to set the settings as the account default.");
+      }
+      return [];
+    }
+
+    // If group is given send it without account, else send org / account (one of them will be undefined,
+    // since they can't be used together)
+    // The function getAccessTokenOrgList allows only one of: org/account/group
+    const orgList = group ? await getAccessTokenOrgList(user, null, false, null, group, !get) : await getAccessTokenOrgList(user, org, false, account, '', !get);
+
+    if (orgList.length === 0 && !allowEmptyOrgList) {
+      throw createError(403, `You don't have permission to ${get ? 'access' : 'modify'} the settings`);
+    }
+    if (orgList.length > 0 && org && !orgList.includes(org)) {
+      throw createError(403, `You don't have permission to ${get ? 'access' : 'modify'} the settings`);
+    }
+
+    return orgList;
   }
 
   /**
@@ -411,7 +429,8 @@ class NotificationsService {
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
+      await NotificationsService.validateParams(org, account, group);
+      const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true, false);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }).lean();
       if (org) {
         const sortedRules = Object.fromEntries(
@@ -486,10 +505,8 @@ class NotificationsService {
   **/
   static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(orgId, account, group, user);
-      if (orgIds && orgIds.error) {
-        return orgIds;
-      }
+      await NotificationsService.validateParams(orgId, account, group);
+      const orgIds = await NotificationsService.fetchOrgList(user, orgId, account, group);
 
       // A map to save the updated notifications for each organization in order to use it in the job
       // Note that the newRules input isn't always applicable as the updated settings since it may contain "varies" in some fields.
@@ -628,10 +645,9 @@ class NotificationsService {
    **/
   static async notificationsConfDefaultPUT ({ account, rules }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(null, account, null, user, true);
-      if (orgIds && orgIds.error) {
-        return orgIds;
-      }
+      await NotificationsService.validateParams(null, account, null, true);
+      await NotificationsService.fetchOrgList(user, null, account, null, true); // we don't use the list but have to call the function to verify permissions
+
       const accountOwners = await membership.find({
         account,
         to: 'account',
@@ -676,15 +692,17 @@ class NotificationsService {
 
   static async notificationsConfEmailsGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
+      await NotificationsService.validateParams(org, account, group);
+      // Fetch orgIds using 'get=false', as we need to first verify put access and then get access to determine if the user is a viewer
+      let orgIds;
+      orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, false, true);
+      let isViewer;
+      if (orgIds.length === 0) {
+        orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true, false); // try again with get = true and don't allow empty org list
+        isViewer = true; // if fetchOrgList didn't throw an error the list is not empty and we know the user has "get" access but not "put" - so he is a viewer
+      }
       let response = [];
       const uniqueUsers = new Set();
-      const isViewer = await NotificationsService.checkIfViewer(
-        user,
-        account,
-        group,
-        org
-      );
 
       const processOrganization = async (orgId, isViewer = false) => {
         const orgData = await Organizations.find({ _id: orgId });
@@ -759,62 +777,6 @@ class NotificationsService {
   }
 
   /**
-   * Checks if there are any memberships for a specific user where the user's role is not 'viewer'.
-   * This function filters memberships based on the provided user details and optional parameters: account,
-   * group, and organization. When an organization is provided, the search will include additional conditions
-   * specific to that organization. If an organization is not provided, the function will filter memberships by
-   * account and/or group (one of them must be given if org is not provided).
-   *
-   * @param {object} user - The user object
-   * @param {string} [account] - The account ID to filter the memberships by (optional).
-   * @param {string} [group] - The group name to filter the memberships by (optional).
-   * @param {boolean} [organization] - The organization ID to filter the memberships by (optional)
-   * @returns {Promise<boolean>} A promise that resolves to a boolean value indicating whether non-viewer memberships
-   *   exist for the user based on the provided criteria. `true` if no such memberships exist, `false` otherwise.
-   *   If an error occurs, the promise is rejected with the error object.
-   */
-  static async checkIfViewer (user, account, group, organization) {
-    try {
-      if (user.accessToken) {
-        return user.role === 'viewer';
-      }
-      let membershipQuery;
-      if (organization) {
-        const organizationDetails = await Organizations.findOne({ _id: organization });
-        membershipQuery = {
-          user: user._id,
-          $or: [
-            { $and: [{ to: 'organization' }, { org: organization }] },
-            {
-              $and: [{ to: 'group' }, { group: organizationDetails.group }],
-              account: organizationDetails.account
-            },
-            { $and: [{ to: 'account' }, { account: organizationDetails.account }] }
-          ],
-          role: { $ne: 'viewer' }
-        };
-      // account/group is given
-      } else {
-        membershipQuery = {
-          user: user._id,
-          account: account,
-          $or: [
-            { $and: [{ to: 'group' }, { group }] },
-            { $and: [{ to: 'account' }, { account }] }
-          ],
-          role: { $ne: 'viewer' }
-        };
-      }
-
-      const userMemberships = await membership.find(membershipQuery);
-      return userMemberships.length === 0; // if length is 0 the user is a viewer
-    } catch (error) {
-      logger.error('Error finding user memberships:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Modify email notifications settings of a given organization/account/group
    * @param org  String organization ID
    * @param account  String account ID
@@ -825,7 +787,7 @@ class NotificationsService {
 
   static async notificationsConfEmailsPUT ({ org, account, group, emailsSigning }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, false, true);
+      await NotificationsService.validateParams(org, account, group);
 
       const areEmailSigningFieldsMissing = validateEmailNotifications(emailsSigning, !org);
       if (areEmailSigningFieldsMissing) {
@@ -851,12 +813,13 @@ class NotificationsService {
 
       const orgUpdates = {};
 
-      const isViewer = await NotificationsService.checkIfViewer(
-        user,
-        account,
-        group,
-        org
-      );
+      let isViewer = false;
+      let orgIds;
+      orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, false, true);
+      if (orgIds.length === 0) {
+        orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true, false); // try again with get=true
+        isViewer = true; // if fetchOrgList didn't throw an error the list is not empty and we know the user has "get" access but not "put" - so he is a viewer
+      }
 
       // The user has only viewer permissions
       if (isViewer) {
@@ -955,7 +918,8 @@ class NotificationsService {
 
   static async notificationsConfWebhookGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
+      await NotificationsService.validateParams(org, account, group);
+      const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
       if (org) {
         const webHookSettings = { ...response[0].webHookSettings };
@@ -995,10 +959,7 @@ class NotificationsService {
    **/
   static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(orgId, account, group, user);
-      if (orgIds && orgIds.error) {
-        return orgIds;
-      }
+      await NotificationsService.validateParams(orgId, account, group);
 
       const invalidWebHookSettings = validateWebhookSettings(webHookSettings, !orgId);
       if (invalidWebHookSettings) {
@@ -1008,6 +969,8 @@ class NotificationsService {
           data: invalidWebHookSettings
         });
       }
+
+      const orgIds = await NotificationsService.fetchOrgList(user, orgId, account, group);
 
       const updateData = { $set: {} };
       Object.entries(webHookSettings).forEach(([field, value]) => {
