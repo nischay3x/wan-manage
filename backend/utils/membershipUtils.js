@@ -120,9 +120,7 @@ const validateOrgAccess = async (user, to = 'organization', entity = null, modif
   }
 
   const roles = ['manager', 'owner']; // roles for any modify value
-  if (!modify) {
-    roles.push('viewer'); // add viewer permission if view operation
-  }
+  if (!modify) roles.push('viewer'); // if view operation, we can add viewer permission
   // Start with the simple and more common options:
   // If user has an account permission, or exact permission,
   // he can access all entities under it
@@ -271,8 +269,7 @@ const getAccessTokenOrgList = async (
         throw new Error('Organization query parameter must be specified for this operation');
       } else {
         // return org after validation for modify/view
-        return await validateOrgAccess(
-          user, 'organization', orgId, isModify);
+        return await validateOrgAccess(user, 'organization', orgId, isModify);
       }
     } else {
       if (!orgId) {
@@ -295,13 +292,11 @@ const getAccessTokenOrgList = async (
     } else {
       let orgs;
       if (accountId) {
-        orgs = await validateOrgAccess(
-          user, 'account', accountId, isModify);
+        orgs = await validateOrgAccess(user, 'account', accountId, isModify);
       } else if (group) {
         orgs = await validateOrgAccess(user, 'group', group, isModify);
       } else {
-        orgs = await validateOrgAccess(
-          user, 'organization', orgId, isModify);
+        orgs = await validateOrgAccess(user, 'organization', orgId, isModify);
       }
       return orgs;
     }
