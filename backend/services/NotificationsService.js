@@ -389,21 +389,11 @@ class NotificationsService {
   * @param org String organization ID
   * @param account String account ID
   * @param group String group name (must be sent with account ID)
-  * @param setAsDefault Boolean is this setAsDefault API (get default / set as default)
   * @param get Boolean is this a get request
   * @param allowEmptyOrgList Boolean should we allow empty organization list or throw an error
   * returns list of organizations
   **/
-  static async fetchOrgList (user, org, account, group, setAsDefault = false, get = false, allowEmptyOrgList = false) {
-    if (setAsDefault) {
-      const orgList = await getAccessTokenOrgList(user, null, false);
-
-      if (orgList.length === 0) {
-        throw createError(403, "You don't have permission to set the settings as the account default.");
-      }
-      return [];
-    }
-
+  static async fetchOrgList (user, org, account, group, get = false, allowEmptyOrgList = false) {
     // If group is given send it without account, else send org / account (one of them will be undefined,
     // since they can't be used together)
     // The function getAccessTokenOrgList allows only one of: org/account/group
@@ -430,7 +420,7 @@ class NotificationsService {
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
       await NotificationsService.validateParams(org, account, group);
-      const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true, false);
+      const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }).lean();
       if (org) {
         const sortedRules = Object.fromEntries(
@@ -646,7 +636,11 @@ class NotificationsService {
   static async notificationsConfDefaultPUT ({ account, rules }, { user }) {
     try {
       await NotificationsService.validateParams(null, account, null, true);
-      await NotificationsService.fetchOrgList(user, null, account, null, true); // we don't use the list but have to call the function to verify permissions
+      const orgList = await getAccessTokenOrgList(user, null, false);
+
+      if (orgList.length === 0) {
+        throw createError(403, "You don't have permission to set default account settings");
+      }
 
       const accountOwners = await membership.find({
         account,
@@ -695,10 +689,10 @@ class NotificationsService {
       await NotificationsService.validateParams(org, account, group);
       // Fetch orgIds using 'get=false', as we need to first verify put access and then get access to determine if the user is a viewer
       let orgIds;
-      orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, false, true);
+      orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true);
       let isViewer;
       if (orgIds.length === 0) {
-        orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true, false); // try again with get = true and don't allow empty org list
+        orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true); // try again with get = true and don't allow empty org list
         isViewer = true; // if fetchOrgList didn't throw an error the list is not empty and we know the user has "get" access but not "put" - so he is a viewer
       }
       let response = [];
@@ -815,9 +809,9 @@ class NotificationsService {
 
       let isViewer = false;
       let orgIds;
-      orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, false, true);
+      orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true);
       if (orgIds.length === 0) {
-        orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true, false); // try again with get=true
+        orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true); // try again with get=true
         isViewer = true; // if fetchOrgList didn't throw an error the list is not empty and we know the user has "get" access but not "put" - so he is a viewer
       }
 
@@ -919,7 +913,7 @@ class NotificationsService {
   static async notificationsConfWebhookGET ({ org, account, group }, { user }) {
     try {
       await NotificationsService.validateParams(org, account, group);
-      const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true);
+      const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
       if (org) {
         const webHookSettings = { ...response[0].webHookSettings };
