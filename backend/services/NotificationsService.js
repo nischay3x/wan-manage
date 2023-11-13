@@ -390,7 +390,10 @@ class NotificationsService {
   * @param account String account ID
   * @param group String group name (must be sent with account ID)
   * @param get Boolean is this a get request
-  * @param allowEmptyOrgList Boolean should we allow empty organization list or throw an error
+  * @param allowEmptyOrgList (Boolean): Determines whether an empty organization list is permissible.
+  * Utilized in email notification PUT & GET functions to ascertain a user's permission level.
+  * When true, checks if the user can modify (initial check). If an empty list is returned, a second check is performed with get = true and allowEmptyOrgList = false.
+  * If an empty list is received again, an error is thrown; otherwise, the user is deemed a viewer.
   * returns list of organizations
   **/
   static async fetchOrgList (user, org, account, group, get = false, allowEmptyOrgList = false) {
