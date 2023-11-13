@@ -135,7 +135,7 @@ const setUserPerms = async (user, jwtPayload, token = null) => {
     if (jwtPayload.type === 'app_access_key') {
       user.perms = token.permissions;
       user.tokenTo = token.to;
-      user.tokenOrganization = token.organization;
+      user.tokenOrganization = token?.organization?.toString();
       user.tokenGroup = token.group;
       user.role = token.role;
     }
