@@ -405,9 +405,6 @@ class NotificationsService {
     if (orgList.length === 0 && !allowEmptyOrgList) {
       throw createError(403, `You don't have permission to ${get ? 'access' : 'modify'} the settings`);
     }
-    if (orgList.length > 0 && org && !orgList.includes(org)) {
-      throw createError(403, `You don't have permission to ${get ? 'access' : 'modify'} the settings`);
-    }
 
     return orgList;
   }
