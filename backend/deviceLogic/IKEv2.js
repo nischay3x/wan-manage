@@ -121,9 +121,14 @@ const queueCreateIKEv2Jobs = (devices, user, org) => {
  * @return {Promise}
  */
 const setIKEv2QueuedFlag = async (deviceIDs, flag) => {
+  const $set = { 'IKEv2.jobQueued': flag };
+  if (flag) {
+    // clear the certificate when a new generate certificate job is queued
+    $set['IKEv2.certificate'] = '';
+  };
   const result = await devices.updateMany(
     { _id: { $in: deviceIDs } },
-    { $set: { 'IKEv2.jobQueued': flag } },
+    { $set: $set },
     { upsert: false }
   );
   logger.debug('IKEv2 jobQueued flag set', { params: { deviceIDs, flag, result } });
@@ -141,23 +146,13 @@ const apply = async (devicesIn, user, data) => {
   // If the apply method was called for multiple devices, extract
   // only the devices that appear in the body. If it was called for
   // a single device, simply used the first device in the devices array.
-  let opDevices;
-  if (data.devices) {
-    const selectedDevices = data.devices;
-    opDevices = (devicesIn && selectedDevices)
-      ? devicesIn.filter((device) => {
-        const inSelected = selectedDevices.hasOwnProperty(device._id);
-        return !!inSelected;
-      }) : [];
-  } else {
-    opDevices = devicesIn;
-  }
+  const deviceIds = data.devices ? Object.keys(data.devices) : devicesIn.map(d => d._id);
 
   // Filter out devices (ver.4+) that already have
   // a pending IKEv2 job in the queue.
-  opDevices = await devices.find({
+  const opDevices = await devices.find({
     $and: [
-      { _id: { $in: opDevices } },
+      { _id: { $in: deviceIds } },
       { 'IKEv2.jobQueued': { $ne: true } },
       { 'versions.device': { $regex: /[4-9]\d?\.\d+\.\d+/ } }
     ]
@@ -329,7 +324,7 @@ const complete = async (jobId, res) => {
 const error = async (jobId, res) => {
   logger.warn('Device IKEv2 job failed', { params: { result: res, jobId: jobId } });
   try {
-    await setIKEv2QueuedFlag([res.device], false);
+    await setIKEv2QueuedFlag([res.deviceId], false);
   } catch (err) {
     logger.warn('Failed to update IKEv2 jobQueued field in database', {
       params: { result: res, jobId: jobId }
@@ -349,8 +344,8 @@ const remove = async (job) => {
   if (['inactive', 'delayed', 'active'].includes(job._state)) {
     logger.info('Device IKEv2 job removed', { params: { jobId: job.id } });
     try {
-      const { device } = job.data.response.data;
-      await setIKEv2QueuedFlag([device], false);
+      const { deviceId } = job.data.response.data;
+      await setIKEv2QueuedFlag([deviceId], false);
     } catch (err) {
       logger.error('Failed to update jobQueued field in database', {
         params: { jobId: job.id, err: err.message }
