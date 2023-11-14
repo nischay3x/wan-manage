@@ -380,8 +380,8 @@ class NotificationsService {
       if (account && org) {
         throw createError(400, 'Invalid parameter: account should be used alone or with group(for modifying the group)');
       }
-      if (account && account !== user.defaultAccount._id.toString()) {
-        throw createError(403, 'This account has not been set as your default account');
+      if (!user?.defaultAccount?._id || (account && account !== user.defaultAccount._id.toString())) {
+        throw createError(403, 'This account does not match the one you are working with');
       }
     }
   }
