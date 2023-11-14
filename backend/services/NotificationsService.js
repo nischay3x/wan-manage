@@ -594,7 +594,7 @@ class NotificationsService {
    **/
   static async notificationsConfDefaultGET ({ account = null }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, null, false);
+      const orgList = await getAccessTokenOrgList(user, null);
       if (orgList.length === 0) {
         return Service.rejectResponse(
           'You do not have permission for this operation', 403);
@@ -611,6 +611,8 @@ class NotificationsService {
 
         const orgsInAccount = accountObj.organizations.map(orgId => orgId.toString());
 
+        // Check if the user has access to at least one organization within the specified account.
+        // Deny operation if no matching organization is found in the user's access list.
         if (!orgsInAccount.some(org => orgList.includes(org))) {
           return Service.rejectResponse(
             'You do not have permission for this operation',
@@ -636,12 +638,14 @@ class NotificationsService {
   static async notificationsConfDefaultPUT ({ account, rules }, { user }) {
     try {
       await NotificationsService.validateParams(null, account, null, true);
-      const orgList = await getAccessTokenOrgList(user, null, false);
+      const orgList = await getAccessTokenOrgList(user, null, false, account); // make sure the user has access to all the organizations under the account
 
       if (orgList.length === 0) {
         throw createError(403, "You don't have permission to set default account settings");
       }
 
+      // Verifying user permissions for organizations under the account is insufficient in this case.
+      // This operation requires confirmation that the user holds an 'account owner' role
       const accountOwners = await membership.find({
         account,
         to: 'account',
@@ -690,7 +694,7 @@ class NotificationsService {
       // Fetch orgIds using 'get=false', as we need to first verify put access and then get access to determine if the user is a viewer
       let orgIds;
       orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true);
-      let isViewer;
+      let isViewer = false;
       if (orgIds.length === 0) {
         orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true); // try again with get = true and don't allow empty org list
         isViewer = true; // if fetchOrgList didn't throw an error the list is not empty and we know the user has "get" access but not "put" - so he is a viewer
@@ -698,7 +702,7 @@ class NotificationsService {
       let response = [];
       const uniqueUsers = new Set();
 
-      const processOrganization = async (orgId, isViewer = false) => {
+      const processOrganization = async (orgId, isViewer) => {
         const orgData = await Organizations.find({ _id: orgId });
         // Viewers are restricted to access only their own user details.
         // Since these details are already available in the 'user' object, we avoid making a redundant database call
