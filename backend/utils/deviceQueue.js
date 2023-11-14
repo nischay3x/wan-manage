@@ -319,8 +319,8 @@ class DeviceQueues {
             };
             logger.debug('Queue paused, succeeded',
               { params: { deviceId: deviceId }, queue: this.deviceQueues[deviceId] });
-            this.deviceQueues[deviceId].paused = true;
           });
+          this.deviceQueues[deviceId].paused = true;
           this.deviceQueues[deviceId].waitPause = false;
         }
         return resolve();
