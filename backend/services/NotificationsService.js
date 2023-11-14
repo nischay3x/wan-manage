@@ -359,7 +359,7 @@ class NotificationsService {
   * @param group String group name (must be sent with account ID)
   * @param setAsDefault Boolean if this is a set as default request
   **/
-  static async validateParams (org, account, group, setAsDefault = false) {
+  static async validateParams (user, org, account, group, setAsDefault = false) {
     if (setAsDefault) {
       if (!account) {
         throw createError(400, 'Please specify the account id');
@@ -379,6 +379,9 @@ class NotificationsService {
       }
       if (account && org) {
         throw createError(400, 'Invalid parameter: account should be used alone or with group(for modifying the group)');
+      }
+      if (account && account !== user.defaultAccount._id.toString()) {
+        throw createError(403, 'This account has not been set as your default account');
       }
     }
   }
@@ -419,7 +422,7 @@ class NotificationsService {
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
-      await NotificationsService.validateParams(org, account, group);
+      await NotificationsService.validateParams(user, org, account, group);
       const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }).lean();
       if (org) {
@@ -495,7 +498,7 @@ class NotificationsService {
   **/
   static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules }, { user }) {
     try {
-      await NotificationsService.validateParams(orgId, account, group);
+      await NotificationsService.validateParams(user, orgId, account, group);
       const orgIds = await NotificationsService.fetchOrgList(user, orgId, account, group);
 
       // A map to save the updated notifications for each organization in order to use it in the job
@@ -637,7 +640,7 @@ class NotificationsService {
    **/
   static async notificationsConfDefaultPUT ({ account, rules }, { user }) {
     try {
-      await NotificationsService.validateParams(null, account, null, true);
+      await NotificationsService.validateParams(user, null, account, null, true);
       const orgList = await getAccessTokenOrgList(user, null, false, account); // make sure the user has access to all the organizations under the account
 
       if (orgList.length === 0) {
@@ -690,7 +693,7 @@ class NotificationsService {
 
   static async notificationsConfEmailsGET ({ org, account, group }, { user }) {
     try {
-      await NotificationsService.validateParams(org, account, group);
+      await NotificationsService.validateParams(user, org, account, group);
       // Fetch orgIds using 'get=false', as we need to first verify put access and then get access to determine if the user is a viewer
       let orgIds;
       orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true);
@@ -785,7 +788,7 @@ class NotificationsService {
 
   static async notificationsConfEmailsPUT ({ org, account, group, emailsSigning }, { user }) {
     try {
-      await NotificationsService.validateParams(org, account, group);
+      await NotificationsService.validateParams(user, org, account, group);
 
       const areEmailSigningFieldsMissing = validateEmailNotifications(emailsSigning, !org);
       if (areEmailSigningFieldsMissing) {
@@ -916,7 +919,7 @@ class NotificationsService {
 
   static async notificationsConfWebhookGET ({ org, account, group }, { user }) {
     try {
-      await NotificationsService.validateParams(org, account, group);
+      await NotificationsService.validateParams(user, org, account, group);
       const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
       if (org) {
@@ -957,7 +960,7 @@ class NotificationsService {
    **/
   static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings }, { user }) {
     try {
-      await NotificationsService.validateParams(orgId, account, group);
+      await NotificationsService.validateParams(user, orgId, account, group);
 
       const invalidWebHookSettings = validateWebhookSettings(webHookSettings, !orgId);
       if (invalidWebHookSettings) {
