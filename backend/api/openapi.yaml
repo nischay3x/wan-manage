@@ -12851,6 +12851,7 @@ components:
       anyOf:
       - $ref: '#/components/schemas/MLClassPrefix'
       - $ref: '#/components/schemas/MLClassApp'
+      - $ref: '#/components/schemas/MLClassCategory'
       type: object
     MLAction:
       example:
@@ -12934,6 +12935,13 @@ components:
           properties:
             appId:
               type: string
+          required:
+          - appId
+          type: object
+    MLClassCategory:
+      properties:
+        application:
+          properties:
             category:
               type: string
             serviceClass:
@@ -12946,7 +12954,6 @@ components:
               - low
               type: string
           required:
-          - appId
           - category
           - serviceClass
           - importance
