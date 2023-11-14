@@ -20,7 +20,6 @@ const Service = require('./Service');
 
 const notificationsDb = require('../models/notifications');
 const { devices } = require('../models/devices');
-const accounts = require('../models/accounts');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoose = require('mongoose');
@@ -603,24 +602,8 @@ class NotificationsService {
           'You do not have permission for this operation', 403);
       }
       if (account) {
-        const accountObj = await accounts.findOne({ _id: account }).lean();
-
-        if (!accountObj) {
-          return Service.rejectResponse(
-            'Account not found.',
-            404
-          );
-        }
-
-        const orgsInAccount = accountObj.organizations.map(orgId => orgId.toString());
-
-        // Check if the user has access to at least one organization within the specified account.
-        // Deny operation if no matching organization is found in the user's access list.
-        if (!orgsInAccount.some(org => orgList.includes(org))) {
-          return Service.rejectResponse(
-            'You do not have permission for this operation',
-            403
-          );
+        if (!user?.defaultAccount?._id || account !== user.defaultAccount._id.toString()) {
+          throw createError(403, 'This account does not match the one you are working with');
         }
       }
       const defaultSettings = await notificationsMgr.getDefaultNotificationsSettings(account);
