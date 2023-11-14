@@ -253,7 +253,9 @@ const configEnv = {
     // VPN portal URL
     vpnBaseUrl: ['https://localvpn.flexiwan.com:8000'],
     // Post registration redirect URL
-    registerRedirectUrl: ''
+    registerRedirectUrl: '',
+    // GTM tag in the format of GTM-XXXXXXX
+    gtmTag: ''
   },
   // Override for development environment, default environment if not specified
   development: {
@@ -509,7 +511,8 @@ class Configs {
       removeBranding: this.get('removeBranding', 'boolean'),
       qualifiedAccountsURL: this.get('qualifiedAccountsURL'),
       vpnBaseUrl: vpnBaseUrl + '/',
-      registerRedirectUrl: this.get('registerRedirectUrl')
+      registerRedirectUrl: this.get('registerRedirectUrl'),
+      gtmTag: this.get('gtmTag')
     };
   }
 }
