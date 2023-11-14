@@ -92,12 +92,17 @@ const deviceProcessor = async (job) => {
         // Call error callback only if the job reached maximal retries
         // We check if the remaining attempts are less than 1 instead of 0
         // since this code runs before the number of attempts is decreased.
-        const { made, remaining, max } = job.toJSON().attempts;
-        if (error.message === 'Socket Connection Error' && made === 0) {
-          // the message was not sent, increase attempts to send the job on the next broker start
-          job.attempts(max + 1);
-          logger.info('Job attempts increased',
-            { params: { attempts: job.toJSON().attempts }, job: job });
+        const { remaining } = job.toJSON().attempts;
+        const sendAttempts = job.data.metadata.sendAttempts ?? 0;
+        if (error.message === 'Socket Connection Error' && sendAttempts < 3) {
+          // the device message is not sent, set the job state as pending
+          // it will be processed on the next connection
+          job.data.metadata.sendAttempts = sendAttempts + 1;
+          job.state('inactive');
+          job.save();
+          logger.info('The device message is not sent, the job state set as pending',
+            { params: { sendAttempts }, job: job });
+          return resolve(false);
         } else if (remaining <= 1) {
           dispatcher.error(job.id, job.data.response);
         }
@@ -159,7 +164,7 @@ const deviceProcessor = async (job) => {
         }
         // Clear unsuccessful attempts errors
         job.error('');
-        resolve();
+        resolve(true);
       }
     });
   });
