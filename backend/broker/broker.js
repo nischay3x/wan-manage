@@ -94,7 +94,7 @@ const deviceProcessor = async (job) => {
         // since this code runs before the number of attempts is decreased.
         const { remaining } = job.toJSON().attempts;
         const sendAttempts = job.data.metadata.sendAttempts ?? 0;
-        if (error.message === 'Socket Connection Error' && sendAttempts < 8) {
+        if (error.message === 'Socket Connection Error' && sendAttempts < 3) {
           // the device message is not sent, set the job state as pending
           // it will be processed on the next connection
           job.data.metadata.sendAttempts = sendAttempts + 1;
