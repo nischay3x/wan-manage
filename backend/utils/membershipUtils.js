@@ -28,9 +28,11 @@ const logger = require('../logging/logging')({ module: module.filename, type: 'r
  * @param {Object} user - user DB object
  * @param {Integer} offset The number of items to skip (optional)
  * @param {Integer} limit The numbers of items to return (optional)
+ * @param {String} accountId account identifier (optional)
  */
 const getUserOrganizations = async (user, offset = 0, limit = 0, accountId = null) => {
-  if (!user.defaultAccount || !user.defaultAccount._id || !user._id) return [];
+  if ((!accountId && !user.defaultAccount) || (!accountId && !user.defaultAccount._id) ||
+   !user._id) return [];
 
   /* Organizations permitted are:
        - If user has account permissions, get all account organizations
