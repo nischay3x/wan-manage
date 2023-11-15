@@ -1,3 +1,4 @@
+/* eslint-disable max-len */
 // flexiWAN SD-WAN software - flexiEdge, flexiManage.
 // For more information go to https://flexiwan.com
 // Copyright (C) 2019  flexiWAN Ltd.
@@ -17,8 +18,39 @@
 
 const { ObjectId } = require('mongoose').Types;
 const { validateDevice, validateModifyDeviceMsg, validateStaticRoute } = require('../validators');
-const { validateConfiguration } = require('../interfaces');
+const { validateConfiguration } = require('../../utils/deviceUtils');
 const maxMetric = 2 * 10 ** 9;
+const { devices } = require('../../models/devices');
+
+let deviceResponse = [];
+// let expectedQuery = {};
+
+const setResponse = (response) => {
+  deviceResponse = response;
+};
+
+beforeAll(async () => {
+  // Override organizations aggregate
+  delete devices.aggregate;
+  devices.aggregate = function () {
+    // expect(query).toEqual(expectedQuery);
+    return deviceResponse;
+  };
+  module.exports = devices;
+
+  // setQuery({
+  //   _id: {
+  //     $in: [
+  //       ObjectId('5ef0b7a657344d1ad6187100'),
+  //       ObjectId('5ef0b7a657344d1ad6187101'),
+  //       ObjectId('5ef0b7a657344d1ad6187102')
+  //     ]
+  //   },
+  //   group: 'Default'
+  // }, [
+  //   ObjectId('5ef0b7a657344d1ad6187100'), ObjectId('5ef0b7a657344d1ad6187101')
+  // ]);
+});
 
 describe('validateDevice', () => {
   let device;
@@ -36,6 +68,8 @@ describe('validateDevice', () => {
   };
 
   beforeEach(() => {
+    setResponse([]);
+
     device = {
       org: {
         tunnelRange: '10.100.0.0'
@@ -113,12 +147,12 @@ describe('validateDevice', () => {
   });
 
   // Happy path
-  it('Should be a valid device', () => {
-    const result = validateDevice(device, org);
+  it('Should be a valid device', async () => {
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should ignore unassigned interfaces', () => {
+  it('Should ignore unassigned interfaces', async () => {
     device.interfaces.push({
       name: 'eth0',
       devId: '00:02.01',
@@ -133,106 +167,106 @@ describe('validateDevice', () => {
       routing: 'None',
       type: 'invalid-type'
     });
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an invalid device if it has zero assigned LAN interfaces', () => {
+  it('Should be an invalid device if it has zero assigned LAN interfaces', async () => {
     device.interfaces[0].type = 'Not-LAN';
     failureObject.err = 'There should be at least one LAN and one WAN interfaces';
-    const result = validateDevice(device, org, true);
+    const result = await validateDevice(device, org, true);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if it has zero assigned WAN interfaces', () => {
+  it('Should be an invalid device if it has zero assigned WAN interfaces', async () => {
     device.interfaces[1].type = 'Not-WAN';
     failureObject.err = 'There should be at least one LAN and one WAN interfaces';
-    const result = validateDevice(device, org, true);
+    const result = await validateDevice(device, org, true);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN IPv4 address is null', () => {
+  it('Should be an invalid device if LAN IPv4 address is null', async () => {
     device.interfaces[0].IPv4 = null;
     failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN IPv4 address is empty', () => {
+  it('Should be an invalid device if LAN IPv4 address is empty', async () => {
     device.interfaces[0].IPv4 = '';
     failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN IPv4 mask is empty', () => {
+  it('Should be an invalid device if LAN IPv4 mask is empty', async () => {
     device.interfaces[0].IPv4Mask = '';
     failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 mask`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if both LAN IPv4 address and mask are empty', () => {
+  it('Should be an invalid device if both LAN IPv4 address and mask are empty', async () => {
     device.interfaces[0].IPv4 = '';
     device.interfaces[0].IPv4Mask = '';
     failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN IPv4 address ends with .0', () => {
+  it('Should be an invalid device if LAN IPv4 address ends with .0', async () => {
     device.interfaces[0].IPv4 = '192.168.111.0';
     device.interfaces[0].IPv4Mask = '24';
     failureObject.err = `[${device.interfaces[0].name}]: ` +
     'IP (192.168.111.0/24) cannot be Local or Broadcast address';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN IPv4 address ends with .255', () => {
+  it('Should be an invalid device if LAN IPv4 address ends with .255', async () => {
     device.interfaces[0].IPv4 = '192.168.111.255';
     device.interfaces[0].IPv4Mask = '24';
     failureObject.err = `[${device.interfaces[0].name}]: ` +
     'IP (192.168.111.255/24) cannot be Local or Broadcast address';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be a valid device if valid IP address is set on interface', () => {
+  it('Should be a valid device if valid IP address is set on interface', async () => {
     device.interfaces[1].IPv4 = '95.217.233.255';
     device.interfaces[1].IPv4Mask = '15';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an invalid device if broadcast address is set on interface', () => {
+  it('Should be an invalid device if broadcast address is set on interface', async () => {
     device.interfaces[1].IPv4 = '95.217.255.255';
     device.interfaces[1].IPv4Mask = '15';
     failureObject.err = `[${device.interfaces[1].name}]: ` +
     'IP (95.217.255.255/15) cannot be Local or Broadcast address';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if network address is set on interface', () => {
+  it('Should be an invalid device if network address is set on interface', async () => {
     device.interfaces[1].IPv4 = '95.216.0.0';
     device.interfaces[1].IPv4Mask = '15';
     failureObject.err = `[${device.interfaces[1].name}]: ` +
     'IP (95.216.0.0/15) cannot be Local or Broadcast address';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be a valid device if network/broadcast with /31 mask is set on interface', () => {
+  it('Should be a valid device if network/broadcast with /31 mask is set on interface', async () => {
     device.interfaces[0].IPv4 = '197.234.116.204';
     device.interfaces[0].IPv4Mask = '31';
     device.interfaces[1].IPv4 = '197.234.117.205';
     device.interfaces[1].IPv4Mask = '31';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an invalid device if Public IP has an overlap with another WAN interface', () => {
+  it('Should be an invalid device if Public IP has an overlap with another WAN interface', async () => {
     device.interfaces[0].IPv4 = '192.168.1.1';
     device.interfaces[0].IPv4Mask = '24';
     device.interfaces[0].PublicIP = '1.1.1.1';
@@ -243,169 +277,166 @@ describe('validateDevice', () => {
     device.interfaces[1].IPv4Mask = '32';
     failureObject.err = `IP address of [${device.interfaces[1].name}]` +
       ` has an overlap with Public IP of [${device.interfaces[0].name}]`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if WAN IPv4 address is null', () => {
+  it('Should be an invalid device if WAN IPv4 address is null', async () => {
     device.interfaces[0].IPv4 = null;
     failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if WAN IPv4 address is empty', () => {
+  it('Should be an invalid device if WAN IPv4 address is empty', async () => {
     device.interfaces[0].IPv4 = '';
     failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if WAN IPv4 mask is empty', () => {
+  it('Should be an invalid device if WAN IPv4 mask is empty', async () => {
     device.interfaces[0].IPv4Mask = '';
     failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 mask`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if both WAN IPv4 address and mask are empty', () => {
+  it('Should be an invalid device if both WAN IPv4 address and mask are empty', async () => {
     device.interfaces[0].IPv4 = '';
     device.interfaces[0].IPv4Mask = '';
     failureObject.err = `[${device.interfaces[0].name}]: Interface does not have an IPv4 address`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if assigned interfaces are on the same subnet', () => {
+  it('Should be an invalid device if assigned interfaces are on the same subnet', async () => {
     device.interfaces[0].IPv4 = '10.0.0.1';
     device.interfaces[1].IPv4 = '10.0.0.2';
     failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN and WAN have the same ip', () => {
+  it('Should be an invalid device if LAN and WAN have the same ip', async () => {
     device.interfaces[0].IPv4 = '10.0.0.1';
     device.interfaces[1].IPv4 = '10.0.0.1';
     failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be a valid device if LAN assigned interfaces have the same ip', () => {
+  it('Should be a valid device if LAN assigned interfaces have the same ip', async () => {
     device.interfaces[0].IPv4 = '10.0.0.1';
     device.interfaces[2].IPv4 = '10.0.0.1';
     device.interfaces[2].isAssigned = true;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(successObject);
   });
 
-  it('Should be an invalid device if LAN assigned interfaces have overlapping', () => {
+  it('Should be an invalid device if LAN assigned interfaces have overlapping', async () => {
     device.interfaces[0].IPv4 = '10.0.0.1';
     device.interfaces[2].IPv4 = '10.0.0.2';
     device.interfaces[2].isAssigned = true;
     failureObject.err = 'IP addresses of the assigned interfaces have an overlap';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
   it('Should be a valid device if WAN and default GW IP addresses are not on the same subnet',
-    () => {
+    async () => {
       device.interfaces[1].IPv4 = '10.0.0.2';
       // failureObject.err = 'WAN and default route IP addresses are not on the same subnet';
-      const result = validateDevice(device, org);
+      const result = await validateDevice(device, org);
       expect(result).toMatchObject(successObject);
     });
 
-  it('Should be an invalid device if OSPF is configured on the WAN interface', () => {
+  it('Should be an invalid device if OSPF is configured on the WAN interface', async () => {
     device.interfaces[1].routing = 'OSPF';
     failureObject.err = 'OSPF should not be configured on WAN interface';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if it has a LAN subnets overlap with other devices', () => {
+  it('Should be an invalid device if it has a LAN subnets overlap with other devices', async () => {
     device.name = 'Device 1';
     device._id = '123456';
-    const organizationLanSubnets = [
-      { _id: '987', name: 'Device 2', subnet: '192.168.100.3/24', type: 'interface' }
-    ];
 
     const deviceSubnet = `${device.interfaces[0].IPv4}/${device.interfaces[0].IPv4Mask}`;
-    const overlapsDeviceName = organizationLanSubnets[0].name;
-    failureObject.err =
-    // eslint-disable-next-line max-len
-    `The LAN subnet ${deviceSubnet} overlaps with a LAN subnet (${organizationLanSubnets[0].subnet}) of device ${overlapsDeviceName}`;
 
-    const result = validateDevice(device, org, true, organizationLanSubnets);
+    // simulate response of the "checkLanOverlappingWith" function
+    const dbReply = {
+      _id: 1,
+      deviceName: 'deviceName2',
+      interfaceName: 'eth3',
+      interfaceDevId: 'pci:test_dev_id',
+      interfaceSubnet: '192.168.100.3/24',
+      isOverlappingWith: deviceSubnet
+    };
+    setResponse([dbReply]);
+
+    failureObject.err =
+    `The interface network ${deviceSubnet} overlaps with address ${dbReply.interfaceSubnet} of the LAN interface ${dbReply.interfaceName} in device ${dbReply.deviceName}`;
+
+    const result = await validateDevice(device, org, true, false);
     expect(result).toMatchObject(failureObject);
+
+    // now check when "allowOverlapping" is true
+    const resultWithAllow = await validateDevice(device, org, true, true);
+    expect(resultWithAllow).toMatchObject(successObject);
   });
 
-  it('Should be an invalid device if it has a LAN subnets overlap tunnel dedicated network', () => {
+  it('Should be an invalid device if it has a LAN subnets overlap tunnel dedicated network', async () => {
     device.name = 'Device 1';
     device._id = '123456';
     device.interfaces[0].IPv4 = '10.100.0.1';
     device.interfaces[0].IPv4Mask = '24';
 
-    const organizationLanSubnets = [
-      { _id: '987', name: 'Device 2', subnet: '192.168.100.3/24', type: 'interface' }
-    ];
-
     const deviceSubnet = '10.100.0.1/24';
     failureObject.err =
     // eslint-disable-next-line max-len
-    `The subnet ${deviceSubnet} overlaps with the flexiWAN tunnel loopback range (10.100.0.0/16)`;
+    `The interface network ${deviceSubnet} overlaps with flexiWAN tunnel range (10.100.0.0/16)`;
 
-    const result = validateDevice(device, org, true, organizationLanSubnets);
+    const result = await validateDevice(device, org, true, false);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be a valid device if it doesn\'t have a LAN subnets overlap', () => {
-    device.name = 'Device 1';
-    device._id = '123456';
-    const organizationLanSubnets = [
-      { _id: '987', name: 'Device 2', subnet: '192.168.88.3/24' }
-    ];
-    const result = validateDevice(device, org, true, organizationLanSubnets);
-    expect(result).toMatchObject(successObject);
-  });
-
-  it('Should be an invalid device if WAN interface is not assigned a GW', () => {
+  it('Should be an invalid device if WAN interface is not assigned a GW', async () => {
     delete device.interfaces[1].gateway;
     failureObject.err = 'All WAN interfaces should be assigned a default GW';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if WAN interface\'s GW is invalid', () => {
+  it('Should be an invalid device if WAN interface\'s GW is invalid', async () => {
     device.interfaces[1].gateway = 'invalid-ip-address';
     failureObject.err = 'All WAN interfaces should be assigned a default GW';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN interface is assigned a GW', () => {
+  it('Should be an invalid device if LAN interface is assigned a GW', async () => {
     device.interfaces[0].gateway = '10.0.0.100';
     failureObject.err = 'LAN interfaces should not be assigned a default GW';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if LAN interface has path labels', () => {
+  it('Should be an invalid device if LAN interface has path labels', async () => {
     device.interfaces[0].pathlabels = [ObjectId('5e65290fbe66a2335718e081')];
     failureObject.err = 'Path Labels are not allowed on LAN interfaces';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if metric is higher than maxMetric', () => {
+  it('Should be an invalid device if metric is higher than maxMetric', async () => {
     device.interfaces[1].metric = maxMetric + 1;
     failureObject.err = `Metric should be lower than ${maxMetric}`;
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if metric on WAN VPP interfaces is duplicated', () => {
+  it('Should be an invalid device if metric on WAN VPP interfaces is duplicated', async () => {
     device.interfaces[0].pathlabels = [];
     device.interfaces.push({
       name: 'eth2',
@@ -427,14 +458,14 @@ describe('validateDevice', () => {
       pathlabels: []
     });
     failureObject.err = 'Duplicated metrics are not allowed on WAN interfaces';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be an invalid device if interfaces are not of the array type', () => {
+  it('Should be an invalid device if interfaces are not of the array type', async () => {
     device.interfaces = null;
     failureObject.err = 'There should be at least two interfaces';
-    const result = validateDevice(device, org);
+    const result = await validateDevice(device, org);
     expect(result).toMatchObject(failureObject);
   });
 });
