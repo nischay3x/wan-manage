@@ -20,7 +20,6 @@ const Service = require('./Service');
 
 const notificationsDb = require('../models/notifications');
 const { devices } = require('../models/devices');
-const accounts = require('../models/accounts');
 const { getAccessTokenOrgList } = require('../utils/membershipUtils');
 const { getUserOrganizations } = require('../utils/membershipUtils');
 const mongoose = require('mongoose');
@@ -353,26 +352,17 @@ class NotificationsService {
   }
 
   /**
-  * Validate notifications conf request params and return the list of organizations according to the param
+  * Validate notifications conf request params
   * @param org String organization ID
   * @param account String account ID
   * @param group String group name (must be sent with account ID)
-  * user: Object
-  * returns Notification
+  * @param setAsDefault Boolean if this is a set as default request
   **/
-  static async validateParams (org, account, group, user, setAsDefault = false, get = false) {
+  static async validateParams (user, org, account, group, setAsDefault = false) {
     if (setAsDefault) {
-      const orgList = await getAccessTokenOrgList(user, null, false);
-
-      if (orgList.length === 0) {
-        throw createError(403, 'You do not have permission to set as account default.');
-      }
-
       if (!account) {
         throw createError(400, 'Please specify the account id');
       }
-
-      return [];
     } else {
     // Validate parameters
       if (!org && !account && !group) {
@@ -389,16 +379,36 @@ class NotificationsService {
       if (account && org) {
         throw createError(400, 'Invalid parameter: account should be used alone or with group(for modifying the group)');
       }
-
-      // If group is given send it without account, else send org / account (one of them will be undefined,
-      // since they can't be used together)
-      // The function getAccessTokenOrgList allows only one of: org/account/group
-      const orgList = group ? await getAccessTokenOrgList(user, null, false, null, group, !get) : await getAccessTokenOrgList(user, org, false, account, '', !get);
-      if (!orgList.length || (org && !orgList.includes(org))) {
-        throw createError(403, `You don't have a permission to ${get ? 'access' : 'modify'} the settings`);
+      if (!user?.defaultAccount?._id || (account && account !== user.defaultAccount._id.toString())) {
+        throw createError(403, 'This account does not match the one you are working with');
       }
-      return orgList;
     }
+  }
+
+  /**
+   * Fetch the list of organizations the user is allowed to access/modify according to the params
+  * @param user Object the user's object
+  * @param org String organization ID
+  * @param account String account ID
+  * @param group String group name (must be sent with account ID)
+  * @param get Boolean is this a get request
+  * @param allowEmptyOrgList (Boolean): Determines whether an empty organization list is permissible.
+  * Utilized in email notification PUT & GET functions to ascertain a user's permission level.
+  * When true, checks if the user can modify (initial check). If an empty list is returned, a second check is performed with get = true and allowEmptyOrgList = false.
+  * If an empty list is received again, an error is thrown; otherwise, the user is deemed a viewer.
+  * returns list of organizations
+  **/
+  static async fetchOrgList (user, org, account, group, get = false, allowEmptyOrgList = false) {
+    // If group is given send it without account, else send org / account (one of them will be undefined,
+    // since they can't be used together)
+    // The function getAccessTokenOrgList allows only one of: org/account/group
+    const orgList = group ? await getAccessTokenOrgList(user, null, false, null, group, !get) : await getAccessTokenOrgList(user, org, false, account, '', !get);
+
+    if (orgList.length === 0 && !allowEmptyOrgList) {
+      throw createError(403, `You don't have permission to ${get ? 'access' : 'modify'} the settings`);
+    }
+
+    return orgList;
   }
 
   /**
@@ -411,7 +421,8 @@ class NotificationsService {
    **/
   static async notificationsConfGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
+      await NotificationsService.validateParams(user, org, account, group);
+      const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }).lean();
       if (org) {
         const sortedRules = Object.fromEntries(
@@ -486,10 +497,8 @@ class NotificationsService {
   **/
   static async notificationsConfPUT ({ org: orgId, account, group, rules: newRules }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(orgId, account, group, user);
-      if (orgIds && orgIds.error) {
-        return orgIds;
-      }
+      await NotificationsService.validateParams(user, orgId, account, group);
+      const orgIds = await NotificationsService.fetchOrgList(user, orgId, account, group);
 
       // A map to save the updated notifications for each organization in order to use it in the job
       // Note that the newRules input isn't always applicable as the updated settings since it may contain "varies" in some fields.
@@ -587,28 +596,14 @@ class NotificationsService {
    **/
   static async notificationsConfDefaultGET ({ account = null }, { user }) {
     try {
-      const orgList = await getAccessTokenOrgList(user, null, false);
+      const orgList = await getAccessTokenOrgList(user, null);
       if (orgList.length === 0) {
         return Service.rejectResponse(
           'You do not have permission for this operation', 403);
       }
       if (account) {
-        const accountObj = await accounts.findOne({ _id: account }).lean();
-
-        if (!accountObj) {
-          return Service.rejectResponse(
-            'Account not found.',
-            404
-          );
-        }
-
-        const orgsInAccount = accountObj.organizations.map(orgId => orgId.toString());
-
-        if (!orgsInAccount.some(org => orgList.includes(org))) {
-          return Service.rejectResponse(
-            'You do not have permission for this operation',
-            403
-          );
+        if (!user?.defaultAccount?._id || account !== user.defaultAccount._id.toString()) {
+          throw createError(403, 'This account does not match the one you are working with');
         }
       }
       const defaultSettings = await notificationsMgr.getDefaultNotificationsSettings(account);
@@ -628,10 +623,15 @@ class NotificationsService {
    **/
   static async notificationsConfDefaultPUT ({ account, rules }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(null, account, null, user, true);
-      if (orgIds && orgIds.error) {
-        return orgIds;
+      await NotificationsService.validateParams(user, null, account, null, true);
+      const orgList = await getAccessTokenOrgList(user, null, false, account); // make sure the user has access to all the organizations under the account
+
+      if (orgList.length === 0) {
+        throw createError(403, "You don't have permission to set default account settings");
       }
+
+      // Verifying user permissions for organizations under the account is insufficient in this case.
+      // This operation requires confirmation that the user holds an 'account owner' role
       const accountOwners = await membership.find({
         account,
         to: 'account',
@@ -676,12 +676,23 @@ class NotificationsService {
 
   static async notificationsConfEmailsGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
+      await NotificationsService.validateParams(user, org, account, group);
+      // Fetch orgIds using 'get=false', as we need to first verify put access and then get access to determine if the user is a viewer
+      let orgIds;
+      orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true);
+      let isViewer = false;
+      if (orgIds.length === 0) {
+        orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true); // try again with get = true and don't allow empty org list
+        isViewer = true; // if fetchOrgList didn't throw an error the list is not empty and we know the user has "get" access but not "put" - so he is a viewer
+      }
       let response = [];
       const uniqueUsers = new Set();
-      const processOrganization = async (orgId) => {
+
+      const processOrganization = async (orgId, isViewer) => {
         const orgData = await Organizations.find({ _id: orgId });
-        const members = await membership.find({
+        // Viewers are restricted to access only their own user details.
+        // Since these details are already available in the 'user' object, we avoid making a redundant database call
+        const members = isViewer ? [{ user: user._id }] : await membership.find({
           $or: [
             { to: 'organization', organization: orgId },
             { to: 'account', account: orgData[0].account },
@@ -733,19 +744,19 @@ class NotificationsService {
         }
       };
       if (org) {
-        await processOrganization(org);
+        await processOrganization(org, isViewer);
       } else {
         for (const orgId of orgIds) {
-          await processOrganization(orgId);
+          await processOrganization(orgId, isViewer);
         }
         response = response.filter(user => user.count >= orgIds.length).map(({ count, ...user }) => user);
       }
       return Service.successResponse(response);
     } catch (e) {
-      return Service.rejectResponse({
-        code: e.status || 500,
-        message: e.message || 'Internal Server Error'
-      });
+      return Service.rejectResponse(
+        e.message || 'Internal Server Error',
+        e.status || 500
+      );
     }
   }
 
@@ -760,7 +771,7 @@ class NotificationsService {
 
   static async notificationsConfEmailsPUT ({ org, account, group, emailsSigning }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user);
+      await NotificationsService.validateParams(user, org, account, group);
 
       const areEmailSigningFieldsMissing = validateEmailNotifications(emailsSigning, !org);
       if (areEmailSigningFieldsMissing) {
@@ -786,6 +797,29 @@ class NotificationsService {
 
       const orgUpdates = {};
 
+      let isViewer = false;
+      let orgIds;
+      orgIds = await NotificationsService.fetchOrgList(user, org, account, group, false, true);
+      if (orgIds.length === 0) {
+        orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true); // try again with get=true
+        isViewer = true; // if fetchOrgList didn't throw an error the list is not empty and we know the user has "get" access but not "put" - so he is a viewer
+      }
+
+      // The user has only viewer permissions
+      if (isViewer) {
+        if (userIds.length > 1 || userIds[0] !== user._id.toString()) {
+          const errorMsg = 'Viewers can only modify their own email notifications settings';
+          logger.warn('Error in email subscription', {
+            params: {
+              err: `user id ${user._id} can only modify his own email notifications in the ${
+                org ? `org ${org}` : account ? `account ${account}` : `group ${group}`
+              }`
+            }
+          });
+          return Service.rejectResponse(errorMsg, 403);
+        }
+      }
+
       // Loop through each user and update their email notification settings for the provided organizations.
       // If any user doesn't have access to a given organization, log an error and reject the request.
       // Update operations are batched and executed at the end of the process.
@@ -795,7 +829,7 @@ class NotificationsService {
         const userOrgAccess = await getUserOrganizations(userData, undefined, undefined, user.defaultAccount._id);
 
         for (const org of orgIds) {
-          if (!(org in userOrgAccess)) {
+          if (!isViewer && !(org in userOrgAccess)) {
             const errorMsg = org ? 'One of the users does not have permission to access the organization'
               : `All the users must be authorized to each one of the organizations under the ${group ? 'group' : 'account'}`;
             logger.warn('Error in email subscription', { params: { err: `user id ${userData._id} is not authorized for the organization: ${org}` } });
@@ -868,7 +902,8 @@ class NotificationsService {
 
   static async notificationsConfWebhookGET ({ org, account, group }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(org, account, group, user, false, true);
+      await NotificationsService.validateParams(user, org, account, group);
+      const orgIds = await NotificationsService.fetchOrgList(user, org, account, group, true);
       const response = await notificationsConf.find({ org: { $in: orgIds.map(orgId => new ObjectId(orgId)) } }, { webHookSettings: 1, _id: 0 }).lean();
       if (org) {
         const webHookSettings = { ...response[0].webHookSettings };
@@ -908,10 +943,7 @@ class NotificationsService {
    **/
   static async notificationsConfWebhookPUT ({ org: orgId, account, group, webHookSettings }, { user }) {
     try {
-      const orgIds = await NotificationsService.validateParams(orgId, account, group, user);
-      if (orgIds && orgIds.error) {
-        return orgIds;
-      }
+      await NotificationsService.validateParams(user, orgId, account, group);
 
       const invalidWebHookSettings = validateWebhookSettings(webHookSettings, !orgId);
       if (invalidWebHookSettings) {
@@ -921,6 +953,8 @@ class NotificationsService {
           data: invalidWebHookSettings
         });
       }
+
+      const orgIds = await NotificationsService.fetchOrgList(user, orgId, account, group);
 
       const updateData = { $set: {} };
       Object.entries(webHookSettings).forEach(([field, value]) => {
