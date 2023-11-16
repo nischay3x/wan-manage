@@ -1162,13 +1162,30 @@ const prepareTunnelAddJob = async (
         }
       };
     } else {
+      const isSupportPfs = versions => {
+        const majorVersion = getMajorVersion(versions);
+        const minorVersion = getMinorVersion(versions);
+        return majorVersion > 6 || (majorVersion === 6 && minorVersion >= 3);
+      };
+
+      let pfs = false;
+      let lifetime = 3600; // phase 2
+      let ikeLifetime = 0; // phase 1
+
+      // Only if both devices support, if can be true.
+      if (isSupportPfs(deviceA.versions.agent) && isSupportPfs(deviceB.versions.agent)) {
+        lifetime = configs.get('ikev2Lifetime', 'number'); // phase 2
+        ikeLifetime = configs.get('ikev2LifetimePhase1', 'number'); // phase 1
+        pfs = configs.get('ikev2Pfs', 'boolean');
+      }
+
       // construct IKEv2 tunnel
       paramsDeviceA.ikev2 = {
         role: 'initiator',
         'remote-device-id': deviceB.machineId,
-        lifetime: configs.get('ikev2Lifetime', 'number'), // phase 2
-        ike_lifetime: configs.get('ikev2LifetimePhase1', 'number'), // phase 1
-        pfs: configs.get('ikev2Pfs', 'boolean'),
+        lifetime: lifetime, // phase 2
+        ike_lifetime: ikeLifetime, // phase 1
+        pfs: pfs,
         ike: {
           'crypto-alg': 'aes-cbc',
           'integ-alg': 'hmac-sha2-256-128',
