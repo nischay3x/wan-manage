@@ -426,7 +426,7 @@ const validateWebhookSettings = (webhookNotificationsSettings, allowNull) => {
         messages.push('Invalid Webhook URL');
       }
 
-      if (webhookURL.length > 100) {
+      if (webhookURL.length > 256) {
         messages.push('Webhook URL is too long');
       }
     }
