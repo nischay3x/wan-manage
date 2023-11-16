@@ -35,7 +35,10 @@ const ruleSchema = new Schema({
 }, { _id: false });
 
 const webHookSchema = new Schema({
-  webhookURL: { type: String },
+  webhookURL: {
+    type: String,
+    maxlength: [256, 'Webhook URL cannot be longer than 256 characters']
+  },
   sendCriticalAlerts: { type: Boolean, default: true },
   sendWarningAlerts: { type: Boolean, default: false }
 }, { _id: false });
