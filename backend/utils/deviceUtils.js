@@ -438,7 +438,7 @@ const validateFirewallRules = (rules, org, interfaces = undefined) => {
             is reserved for flexiWAN tunnel connectivity.`
           };
         }
-        if (inbound === 'portForward') {
+        if (inbound === 'portForward' || inbound === 'edgeAccess') {
           // port forward rules overlapping not allowed
           for (const [usedPortLow, usedPortHigh] of usedInboundPorts) {
             if ((usedPortLow <= portLow && portLow <= usedPortHigh) ||
