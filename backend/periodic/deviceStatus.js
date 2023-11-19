@@ -419,7 +419,7 @@ class DeviceStatus {
     };
     const severity = tunnelId ? alerts[alertName][tunnelId].severity : alerts[alertName].severity;
 
-    const title = isResolved ? `[resolved] ${alertName}` : `${alertName}`;
+    const title = isResolved ? `[resolved] ${alertName}` : alertName;
     const details = 'The value of the ' + alertName + ' in ' +
       (tunnelId ? 'tunnel ' + tunnelId : 'device ' + name) +
       ' has ' + (isResolved ? 'returned to normal (under ' +
@@ -891,7 +891,7 @@ class DeviceStatus {
 
       const notification = {
         org: org,
-        title: resolved ? '[resolved] Router state change' : 'Router state change in device',
+        title: resolved ? '[resolved] Router state change' : 'Router state change',
         details: `Router state changed to ${newState} in the device ${name}`,
         eventType: 'Running router',
         targets,
