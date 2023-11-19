@@ -10018,6 +10018,7 @@ components:
         group: group
         encryptionMethod: ikev2
         vxlanPort: 4789
+        tunnelRange: 10.100.0.0
       required:
         - name
         - group
@@ -10037,6 +10038,8 @@ components:
           type: string
         vxlanPort:
           type: string
+        tunnelRange:
+          type: string
       type: object
     Organization:
       example:
@@ -10047,6 +10050,7 @@ components:
         group: group
         encryptionMethod: ikev2
         vxlanPort: 4789
+        tunnelRange: 10.100.0.0
       properties:
         _id:
           maxLength: 24
@@ -10067,6 +10071,8 @@ components:
           - ikev2
           type: string
         vxlanPort:
+          type: string
+        tunnelRange: 
           type: string
       type: object
     OrganizationSummary:
