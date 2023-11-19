@@ -104,16 +104,17 @@ class SwVersionUpdateManager {
 
       for (const orgDevices of orgDevicesList) {
         for (const device of orgDevices.devices) {
-          const deviceInfo = connections.getDeviceInfo(device._id);
+          const deviceInfo = connections.getDeviceInfo(device.machineId);
+          const { name } = deviceInfo;
           notifications.push({
             org: orgDevices._id,
-            title: 'Device upgrade',
-            details: `The device ${deviceInfo.name} requires upgrade to version ${versions.device}`,
+            title: `Device ${name} needs an upgrade`,
+            details: 'The device ' + name + '(UUID: ' + device.machineId +
+             ') requires an upgrade to version ' + versions.device,
             targets: {
               deviceId: device._id,
               tunnelId: null,
               interfaceId: null
-              // policyId: null
             },
             eventType: 'Software update',
             resolved: true,
