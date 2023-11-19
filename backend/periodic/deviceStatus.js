@@ -420,11 +420,10 @@ class DeviceStatus {
     const severity = tunnelId ? alerts[alertName][tunnelId].severity : alerts[alertName].severity;
 
     const title = isResolved ? `[resolved] ${alertName}` : alertName;
-    const details = 'The value of the ' + alertName + ' in ' +
-      (tunnelId ? 'tunnel ' + tunnelId : 'device ' + name) +
-      ' has ' + (isResolved ? 'returned to normal (under ' +
-      agentAlertsInfo.threshold + ' ' + agentAlertsInfo.unit + ')' : 'increased to ' +
-      agentAlertsInfo.value + ' ' + agentAlertsInfo.unit);
+    const details = 'The value of the ' + alertName + ' in ' + (tunnelId ? 'tunnel ' +
+    tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
+    agentAlertsInfo.threshold + agentAlertsInfo.unit + ')' : 'increased to ' +
+    agentAlertsInfo.value + agentAlertsInfo.unit);
     const notification = {
       org,
       title,

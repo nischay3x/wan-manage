@@ -614,7 +614,7 @@ class Connections {
         {
           org: org,
           title: '[resolved] Device connection',
-          details: `Device ${name} reconnected to management.`,
+          details: `Device ${name} reconnected to management`,
           eventType: 'Device connection',
           targets: {
             deviceId: deviceObj,
