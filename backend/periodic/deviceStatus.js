@@ -411,7 +411,7 @@ class DeviceStatus {
   async createAndSendNotification (
     deviceInfo, alerts, alertName,
     agentAlertsInfo, tunnelId = null, isResolved = false) {
-    const { org, deviceObj: deviceId, name } = deviceInfo;
+    const { org, deviceObj: deviceId, name, machineId } = deviceInfo;
     const targets = {
       deviceId,
       tunnelId,
@@ -419,11 +419,13 @@ class DeviceStatus {
     };
     const severity = tunnelId ? alerts[alertName][tunnelId].severity : alerts[alertName].severity;
 
-    const title = isResolved ? `[resolved] ${alertName}` : alertName;
-    const details = 'The value of the ' + alertName + ' in ' + (tunnelId ? 'tunnel ' +
-    tunnelId : 'device ' + name) + ' has ' + (isResolved ? 'returned to normal (under ' +
-    agentAlertsInfo.threshold + agentAlertsInfo.unit + ')' : 'increased to ' +
-    agentAlertsInfo.value + agentAlertsInfo.unit);
+    const title = isResolved ? `[resolved] ${alertName} in device ${name}`
+      : `${alertName} in device ${name}`;
+    const details = 'The value of the ' + alertName + ' in ' +
+      (tunnelId ? 'tunnel ' + tunnelId : 'device ' + name + ' (UUID: ' + machineId + ')') +
+      ' has ' + (isResolved ? 'returned to normal (under ' +
+      agentAlertsInfo.threshold + ' ' + agentAlertsInfo.unit + ')' : 'increased to ' +
+      agentAlertsInfo.value + ' ' + agentAlertsInfo.unit);
     const notification = {
       org,
       title,
@@ -890,8 +892,9 @@ class DeviceStatus {
 
       const notification = {
         org: org,
-        title: resolved ? '[resolved] Router state change' : 'Router state change',
-        details: `Router state changed to ${newState} in the device ${name}`,
+        title: resolved ? `[resolved] Router state change in device ${name}`
+          : `Router state change in device ${name}`,
+        details: `Router state changed to ${newState} in the device ${name} (UUID: ${machineId})`,
         eventType: 'Running router',
         targets,
         resolved
