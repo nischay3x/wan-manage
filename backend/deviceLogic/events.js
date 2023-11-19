@@ -61,17 +61,17 @@ class Events {
    * @param  {string} reason  notification reason
   */
   async staticRouteSetToPending (route, device, reason) {
-    const { org, name, _id } = device;
+    const { org, name, _id, machineId } = device;
     await notificationsMgr.sendNotifications([{
       org,
       title: `Static route via ${route.gateway} in device ${name} is in pending state`,
       eventType: 'Static route state',
-      details: reason,
+      details: 'Static route to ' + route.gateway + ' in device ' + name + ' (UUID: ' +
+      machineId + ') is pending. Reason: ' + reason,
       targets: {
         deviceId: _id,
         tunnelId: null,
         interfaceId: null
-        // policyId: null
       },
       resolved: true,
       isInfo: true
@@ -172,8 +172,9 @@ class Events {
     logger.info(`Internet connectivity changed to ${stateTxt}`, { params: { origIfc } });
     await notificationsMgr.sendNotifications([{
       org: device.org,
-      title: resolved ? '[resolved] Internet connection changed' : 'Internet connection changed',
-      details: `Interface ${origIfc.name} state changed to "${stateTxt}"`,
+      title: resolved ? `[resolved] Internet connection changed in device ${device.name}`
+        : `Internet connection changed in device ${device.name}`,
+      details: `Interface ${origIfc.name} state changed to ${stateTxt} in device ${device.name}`,
       eventType: 'Internet connection',
       targets: {
         deviceId: device._id,
@@ -192,11 +193,13 @@ class Events {
    * @param  {object} ifc updated interface object
   */
   async interfaceIpExists (device, origIfc, ifc) {
+    const { hasIpOnDevice, name, _id: interfaceId } = origIfc;
+    const { machineId, _id: deviceId, name: deviceName } = device;
     // no need to print it every time
-    if (origIfc.hasIpOnDevice === false && ifc.hasIpOnDevice) {
+    if (hasIpOnDevice === false && ifc.hasIpOnDevice) {
       logger.info('Interface IP restored', {
         params: {
-          deviceId: device._id,
+          deviceId,
           origIp: origIfc.IPv4,
           updatedIp: ifc.IPv4
         }
@@ -205,14 +208,14 @@ class Events {
       // only at the first time - send a notification
       await notificationsMgr.sendNotifications([{
         org: device.org,
-        title: '[resolved] Missing interface ip',
+        title: `[resolved] Missing interface ip in device ${deviceName}`,
         eventType: 'Missing interface ip',
-        details: `The IP address of Interface ${origIfc.name} has been restored`,
+        details: 'The IP address of Interface ' + name + 'has been restored in device ' +
+         deviceName + ' (UUID: ' + machineId + ').',
         targets: {
-          deviceId: device._id,
+          deviceId,
           tunnelId: null,
-          interfaceId: origIfc._id
-          // policyId: null
+          interfaceId
         },
         resolved: true
       }]);
@@ -278,19 +281,21 @@ class Events {
    * @param  {object} ifc updated ifc from the device
   */
   async interfaceIpMissing (device, origIfc, ifc) {
+    const { name: ifcName, _id: interfaceId } = origIfc;
+    const { machineId, _id: deviceId, name: deviceName } = device;
     // only at the first time - send notification
     if (origIfc.hasIpOnDevice) {
-      logger.info('Interface IP missing', { params: { origIfc, ifc } });
+      logger.info(`Interface IP missing in device ${deviceName}`, { params: { origIfc, ifc } });
       await notificationsMgr.sendNotifications([{
         org: device.org,
-        title: 'Interface IP missing',
+        title: `Interface IP missing in device ${deviceName}`,
         eventType: 'Missing interface ip',
-        details: `The interface ${origIfc.name} has no IP address`,
+        details: 'The interface ' + ifcName + 'has no IP address in device ' +
+         deviceName + ' (UUID: ' + machineId + ').',
         targets: {
-          deviceId: device._id,
+          deviceId,
           tunnelId: null,
-          interfaceId: origIfc._id
-          // policyId: null
+          interfaceId
         }
       }]);
     }
