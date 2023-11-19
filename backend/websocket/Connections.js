@@ -733,14 +733,14 @@ class Connections {
             (updatedConfig.link === 'down' && i.linkStatus !== 'down');
             // send a notification if the link's status has been changed
           if (linkStatusChanged) {
-            const link = (updatedConfig.link).toUpperCase();
+            const linkStatus = (updatedConfig.link).toUpperCase();
             const resolved = updatedConfig.link === 'up' && i.linkStatus !== 'up';
             logger.info(`Link status changed to ${updatedConfig.link} in device ${name}`,
               { params: { interface: i } });
             await notificationsMgr.sendNotifications([{
               org: org,
               title: resolved ? '[resolved] Link status change' : 'Link status change',
-              details: `Link ${i.name} ${i.IPv4} is ${link} in device ${name}`,
+              details: `Link ${i.name} ${i.IPv4} is ${linkStatus} in device ${name}`,
               eventType: 'Link status',
               targets: {
                 deviceId,
