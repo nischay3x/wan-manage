@@ -131,6 +131,7 @@ class SwVersionUpdateManager {
       );
     }
     // Send new release emails
+    // TODO - remove after fixing the bug in the infrastructure
     try {
       // eslint-disable-next-line no-template-curly-in-string
       const emailUrl = this.notificationEmailUri.replace('${version}', versions.device);
