@@ -620,7 +620,6 @@ class Connections {
             deviceId: deviceObj,
             tunnelId: null,
             interfaceId: null
-            // policyId: null
           },
           resolved: true
         }
@@ -729,24 +728,24 @@ class Connections {
             interfaces.push(i.toObject());
             return;
           }
-          const { org, _id: deviceId } = origDevice;
+          const { org, _id: deviceId, name } = origDevice;
           const linkStatusChanged = (updatedConfig.link === 'up' && i.linkStatus !== 'up') ||
             (updatedConfig.link === 'down' && i.linkStatus !== 'down');
             // send a notification if the link's status has been changed
           if (linkStatusChanged) {
+            const linkStatus = (updatedConfig.link).toUpperCase();
             const resolved = updatedConfig.link === 'up' && i.linkStatus !== 'up';
-            logger.info(`Link status changed to ${updatedConfig.link}`,
+            logger.info(`Link status changed to ${updatedConfig.link} in device ${name}`,
               { params: { interface: i } });
             await notificationsMgr.sendNotifications([{
               org: org,
               title: resolved ? '[resolved] Link status change' : 'Link status change',
-              details: `Link ${i.name} ${i.IPv4} is ${(updatedConfig.link).toUpperCase()}`,
+              details: `Link ${i.name} ${i.IPv4} is ${linkStatus} in device ${name}`,
               eventType: 'Link status',
               targets: {
-                deviceId: deviceId,
+                deviceId,
                 tunnelId: null,
                 interfaceId: i._id
-                // policyId: null
               },
               resolved
             }]);
@@ -895,17 +894,17 @@ class Connections {
           const { allowed, blockedNow } = await reconfigErrorsLimiter.use(deviceId);
           if (!allowed && blockedNow) {
             logger.error('Reconfig errors rate-limit exceeded', { params: { deviceId } });
+            const { org, name } = origDevice;
             await notificationsMgr.sendNotifications([{
-              org: origDevice.org,
+              org,
               title: 'Unsuccessful self-healing operations',
               eventType: 'Failed self-healing',
               targets: {
-                deviceId: deviceId,
+                deviceId,
                 tunnelId: null,
                 interfaceId: null
-                // policyId: null
               },
-              details: 'Unsuccessful updating device data. Please contact flexiWAN support',
+              details: `Unsuccessful updating device ${name} data. Please contact flexiWAN support`,
               isInfo: true,
               resolved: true
             }]);
@@ -1191,7 +1190,6 @@ class Connections {
               deviceId: deviceObj,
               tunnelId: null,
               interfaceId: null
-              // policyId: null
             }
           }
         ]);

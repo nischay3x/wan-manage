@@ -104,16 +104,16 @@ class SwVersionUpdateManager {
 
       for (const orgDevices of orgDevicesList) {
         for (const device of orgDevices.devices) {
-          const deviceInfo = connections.getDeviceInfo(device._id);
+          const deviceInfo = connections.getDeviceInfo(device.machineId);
+          const { name } = deviceInfo;
           notifications.push({
             org: orgDevices._id,
             title: 'Device upgrade',
-            details: `The device ${deviceInfo.name} requires upgrade to version ${versions.device}`,
+            details: `The device ${name} requires an upgrade to version ${versions.device}`,
             targets: {
               deviceId: device._id,
               tunnelId: null,
               interfaceId: null
-              // policyId: null
             },
             eventType: 'Software update',
             resolved: true,
@@ -130,6 +130,7 @@ class SwVersionUpdateManager {
       );
     }
     // Send new release emails
+    // TODO - remove after fixing the bug in the notifications infrastructure
     try {
       // eslint-disable-next-line no-template-curly-in-string
       const emailUrl = this.notificationEmailUri.replace('${version}', versions.device);
