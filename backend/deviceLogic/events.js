@@ -61,13 +61,13 @@ class Events {
    * @param  {string} reason  notification reason
   */
   async staticRouteSetToPending (route, device, reason) {
-    const { org, name, _id, machineId } = device;
+    const { org, name, _id } = device;
     await notificationsMgr.sendNotifications([{
       org,
-      title: `Static route via ${route.gateway} in device ${name} is in pending state`,
+      title: `Static route via ${route.gateway} is in pending state`,
       eventType: 'Static route state',
-      details: 'Static route to ' + route.gateway + ' in device ' + name + ' (UUID: ' +
-      machineId + ') is pending. Reason: ' + reason,
+      details: 'Static route to ' + route.gateway + ' in device ' + name +
+       ' is pending. Reason: ' + reason,
       targets: {
         deviceId: _id,
         tunnelId: null,
@@ -172,15 +172,13 @@ class Events {
     logger.info(`Internet connectivity changed to ${stateTxt}`, { params: { origIfc } });
     await notificationsMgr.sendNotifications([{
       org: device.org,
-      title: resolved ? `[resolved] Internet connection changed in device ${device.name}`
-        : `Internet connection changed in device ${device.name}`,
+      title: resolved ? '[resolved] Internet connection changed' : 'Internet connection changed',
       details: `Interface ${origIfc.name} state changed to ${stateTxt} in device ${device.name}`,
       eventType: 'Internet connection',
       targets: {
         deviceId: device._id,
         tunnelId: null,
         interfaceId: origIfc._id
-        // policyId: null
       },
       resolved: resolved
     }]);
@@ -194,7 +192,7 @@ class Events {
   */
   async interfaceIpExists (device, origIfc, ifc) {
     const { hasIpOnDevice, name, _id: interfaceId } = origIfc;
-    const { machineId, _id: deviceId, name: deviceName } = device;
+    const { _id: deviceId, name: deviceName } = device;
     // no need to print it every time
     if (hasIpOnDevice === false && ifc.hasIpOnDevice) {
       logger.info('Interface IP restored', {
@@ -208,10 +206,9 @@ class Events {
       // only at the first time - send a notification
       await notificationsMgr.sendNotifications([{
         org: device.org,
-        title: `[resolved] Missing interface ip in device ${deviceName}`,
+        title: '[resolved] Missing interface ip',
         eventType: 'Missing interface ip',
-        details: 'The IP address of Interface ' + name + 'has been restored in device ' +
-         deviceName + ' (UUID: ' + machineId + ').',
+        details: `The IP address of interface ${name} has been restored in device ${deviceName}`,
         targets: {
           deviceId,
           tunnelId: null,
@@ -282,16 +279,15 @@ class Events {
   */
   async interfaceIpMissing (device, origIfc, ifc) {
     const { name: ifcName, _id: interfaceId } = origIfc;
-    const { machineId, _id: deviceId, name: deviceName } = device;
+    const { _id: deviceId, name: deviceName } = device;
     // only at the first time - send notification
     if (origIfc.hasIpOnDevice) {
       logger.info(`Interface IP missing in device ${deviceName}`, { params: { origIfc, ifc } });
       await notificationsMgr.sendNotifications([{
         org: device.org,
-        title: `Interface IP missing in device ${deviceName}`,
+        title: 'Interface IP missing',
         eventType: 'Missing interface ip',
-        details: 'The interface ' + ifcName + 'has no IP address in device ' +
-         deviceName + ' (UUID: ' + machineId + ').',
+        details: `The interface ${ifcName} has no IP address in device ${deviceName}`,
         targets: {
           deviceId,
           tunnelId: null,

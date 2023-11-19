@@ -613,8 +613,8 @@ class Connections {
       await notificationsMgr.sendNotifications([
         {
           org: org,
-          title: `[resolved] Device ${name} connection`,
-          details: `Device ${name} (UUID: ${machineId}) reconnected to management.`,
+          title: '[resolved] Device connection',
+          details: `Device ${name} reconnected to management.`,
           eventType: 'Device connection',
           targets: {
             deviceId: deviceObj,
@@ -739,9 +739,8 @@ class Connections {
               { params: { interface: i } });
             await notificationsMgr.sendNotifications([{
               org: org,
-              title: resolved ? `[resolved] Link status change in device ${name}`
-                : `Link status change in device ${name}`,
-              details: `Link ${i.name} ${i.IPv4} is ${link} in device ${name} (UUID: ${machineId})`,
+              title: resolved ? '[resolved] Link status change' : 'Link status change',
+              details: `Link ${i.name} ${i.IPv4} is ${link} in device ${name}`,
               eventType: 'Link status',
               targets: {
                 deviceId,
@@ -898,15 +897,14 @@ class Connections {
             const { org, name } = origDevice;
             await notificationsMgr.sendNotifications([{
               org,
-              title: `Unsuccessful self-healing operations in device ${name}`,
+              title: 'Unsuccessful self-healing operations',
               eventType: 'Failed self-healing',
               targets: {
                 deviceId,
                 tunnelId: null,
                 interfaceId: null
               },
-              details: 'Unsuccessful updating device ' + name + 'data (UUID: ' +
-              machineId + ').Please contact flexiWAN support',
+              details: `Unsuccessful updating device ${name} data. Please contact flexiWAN support`,
               isInfo: true,
               resolved: true
             }]);
@@ -1181,12 +1179,12 @@ class Connections {
     for (const [device, deviceInfo] of Object.entries(this.disconnectedDevices)) {
       if (currentTime - deviceInfo.timeFirstUnresponsive >=
         configs.get('deviceDisconnectionAlertTimeout')) {
-        const { org, deviceObj, name, machineId } = deviceInfo;
+        const { org, deviceObj, name } = deviceInfo;
         await notificationsMgr.sendNotifications([
           {
             org: org,
-            title: `Device ${name} disconnection`,
-            details: `Device ${name} (UUID: ${machineId}) disconnected from management`,
+            title: 'Device disconnection',
+            details: `Device ${name} disconnected from management`,
             eventType: 'Device connection',
             targets: {
               deviceId: deviceObj,

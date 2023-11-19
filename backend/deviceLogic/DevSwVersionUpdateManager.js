@@ -108,9 +108,8 @@ class SwVersionUpdateManager {
           const { name } = deviceInfo;
           notifications.push({
             org: orgDevices._id,
-            title: `Device ${name} needs an upgrade`,
-            details: 'The device ' + name + '(UUID: ' + device.machineId +
-             ') requires an upgrade to version ' + versions.device,
+            title: 'Device needs an upgrade',
+            details: `The device ${name} requires an upgrade to version ${versions.device}`,
             targets: {
               deviceId: device._id,
               tunnelId: null,
