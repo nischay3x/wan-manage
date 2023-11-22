@@ -34,6 +34,12 @@ const webHooks = require('../utils/webhooks')();
 
 /**
  * Notification events hierarchy class
+ * Represents a general event with a name and associated parent events.
+ * It includes methods to retrieve all parent names and construct queries based on event targets.
+ * This class is intended to be extended by specific event types.
+ *
+ * @param {string} eventName - The name of the event.
+ * @param {array} parents - An array of parent events.
  */
 // Initialize the events hierarchy
 const hierarchyMap = {};
@@ -161,6 +167,14 @@ const DropRateEvent = new Event('Link/Tunnel default drop rate',
  * Notification Manager class
  */
 class NotificationsManager {
+  /**
+   * Retrieves default notification settings for a specified account. If the account does not have
+   * specific settings, it retrieves the system's default notification settings.
+   *
+   * @param {String} account - The account identifier for which to retrieve notification settings.
+   * @returns {Object} - An object containing sorted notification rules
+   *  for the specified account or the system default settings.
+  */
   async getDefaultNotificationsSettings (account) {
     let response;
     if (account) {
@@ -184,11 +198,24 @@ class NotificationsManager {
     }
   }
 
+  /**
+   * Fetches email addresses for a given list of user IDs.
+   *
+   * @param {Array} userIds - An array of user IDs for which email addresses are to be retrieved.
+   * @returns {Array} - An array of email addresses corresponding to the provided user IDs.
+  */
   async getUsersEmail (userIds) {
     const usersData = await users.find({ _id: { $in: userIds } });
     return usersData.map(u => u.email);
   }
 
+  /**
+   * Retrieves organization details along with associated account information
+   * for a given organization ID.
+   *
+   * @param {String} orgId - The ID of the organization for which details are needed.
+   * @returns {Object} - An object containing organization details and associated account info.
+  */
   async getOrgWithAccount (orgId) {
     const orgDetails = await organizations.aggregate([
       {
@@ -214,6 +241,12 @@ class NotificationsManager {
     return orgDetails;
   }
 
+  /**
+   * Compiles information necessary for constructing an email.
+   *
+   * @param {String} orgId - The ID of the organization for which the email information is required.
+   * @returns {Object} - An object containing server, organization, and account info for the email.
+  */
   async getInfoForEmail (orgId) {
     const uiServerUrl = configs.get('uiServerUrl', 'list');
 
@@ -229,6 +262,14 @@ class NotificationsManager {
     return { serverInfo, orgInfo, accountInfo };
   }
 
+  /**
+   * Sends an email notification based on given parameters
+   * @param {String} title - The title of the notification.
+   * @param {Object} orgNotificationsConf - The notifications settings of the organization
+   * @param {String} severity - The severity level of the alert (e.g., 'warning', 'critical').
+   * @param {String} alertDetails - The detailed information about the alert.
+   * @returns {Date} - The date and time when the email was sent, or null if no email was sent.
+  */
   async sendEmailNotification (title, orgNotificationsConf, severity, alertDetails) {
     try {
       const uiServerUrl = configs.get('uiServerUrl', 'list');
@@ -273,6 +314,16 @@ class NotificationsManager {
     }
   }
 
+  /**
+   * Constructs a query to find an existing alert based on given parameters.
+   *
+   * @param {String} eventType - The name of the alert.
+   * @param {Object} targets - The targets of the alert (deviceId, tunnelId etc.)
+   * @param {Boolean} resolved - The resolution status of the alert.
+   * @param {String} severity - The severity level of the event.
+   * @param {String} org - The organization associated with the alert.
+   * @returns {Object} - A query object for searching the alert in the database.
+  */
   async getQueryForExistingAlert (eventType, targets, resolved, severity, org) {
     const query = {
       eventType,
@@ -296,6 +347,16 @@ class NotificationsManager {
     return query;
   }
 
+  /**
+  * Checks the existence of an alert in the database based on specific criteria
+  *
+  * @param {String} eventType - The name of the notification.
+  * @param {Object} targets - The targets of the notification (deviceId, tunnelId etc.)
+  * @param {String} org - The organization associated with the notification.
+  * @param {String} severity - The severity level of the event.
+  * @param {Boolean} [resolved=false] - The resolution status of the alert to be searched.
+  * @returns {Boolean} - True if the alert exists, false otherwise.
+  */
   async checkAlertExistence (eventType, targets, org, severity, resolved = false) {
     try {
       const query = await this.getQueryForExistingAlert(
@@ -352,6 +413,14 @@ class NotificationsManager {
     }
   }
 
+  /**
+   * Resolves a notification in the db
+   *
+   * @param {String} eventType - The name of the notification.
+   * @param {Object} targets - The targets of the notification (deviceId, tunnelId etc.)
+   * @param {String} org - The organization associated with the notification.
+   * @param {String} severity - The severity level of the event.
+  */
   async resolveAnAlert (eventType, targets, severity, org) {
     try {
       const query = await this.getQueryForExistingAlert(
@@ -370,6 +439,17 @@ class NotificationsManager {
     }
   }
 
+  /**
+   * Sends a webhook notification with provided details if needed.
+   * It checks the organization's notification configuration to determine if a webhook
+   * should be sent based on the severity of the event.
+   *
+   * @param {String} title - The title of the notification.
+   * @param {String} details - The details of the notification.
+   * @param {String} severity - The severity level of the event (e.g., 'warning', 'critical').
+   * @param {object} orgNotificationsConf - The organization's notification configuration
+   *  (including webhook settings).
+ */
   async sendWebHook (title, details, severity, orgNotificationsConf) {
     const webHookMessage = {
       title,
@@ -392,6 +472,13 @@ class NotificationsManager {
     }
   }
 
+  /**
+   * Processes and sends notifications based on a set of rules and conditions.
+   * This function handles a variety of tasks including checking for existing alerts,
+   * resolving alerts, sending webhooks and emails, and storing notifications in the database.
+   *
+   * @param {Array} notifications - An array of notification objects to be processed.
+  */
   async sendNotifications (notifications) {
     try {
       const parentsQueryToNotification = new Map();
@@ -658,7 +745,7 @@ class NotificationsManager {
   }
 
   /**
-     * Sends emails to notify users with
+     * Sends daily emails to notify subscribed users with
      * pending unread notifications.
      * @async
      * @return {void}
