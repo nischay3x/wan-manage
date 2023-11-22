@@ -161,13 +161,6 @@ const DropRateEvent = new Event('Link/Tunnel default drop rate',
  * Notification Manager class
  */
 class NotificationsManager {
-  /**
-     * Saves notifications in the database
-     * @async
-     * @param  {Array} notifications an array of notification objects
-     * @return {void}
-     */
-
   async getDefaultNotificationsSettings (account) {
     let response;
     if (account) {
@@ -303,15 +296,58 @@ class NotificationsManager {
     return query;
   }
 
-  async checkAlertExistence (eventType, targets, org, severity) {
+  async checkAlertExistence (eventType, targets, org, severity, resolved = false) {
     try {
-      const query = await this.getQueryForExistingAlert(eventType, targets, false, severity, org);
+      const query = await this.getQueryForExistingAlert(
+        eventType, targets, resolved, severity, org);
       const existingAlert = await notifications.findOne(query);
       return Boolean(existingAlert);
     } catch (err) {
       logger.warn(`Failed to search for notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
       });
+      return false;
+    }
+  }
+
+  /**
+ * Increases the count of notification if the last resolved notification has been created
+ * within the cool down period.
+ * It also deletes any corresponding [resolved] alert (in case the user has asked to get a separate
+ * alert in case of resolution).
+ *
+ * @param {String} eventType - The name of the notification.
+ * @param {Object} targets - The targets of the notification (deviceId, tunnelId etc.)
+ * @param {String} org - The organization associated with the notification.
+ * @param {String} severity - The severity level of the event.
+ *
+ * @returns {Promise<boolean>} - Returns true if the count was increased, false otherwise.
+ */
+  async increaseCountIfNeeded (eventType, targets, org, severity) {
+    const notificationWindowStart = new Date(
+      Date.now() - configs.get('notificationCoolDownPeriod'));
+
+    try {
+      const query = await this.getQueryForExistingAlert(eventType, targets, true, severity, org);
+      query.createdAt = { $gte: notificationWindowStart };
+      query.title = { $not: /^(\[resolved\])/i };
+      const update = {
+        $set: { resolved: false },
+        $inc: { count: 1 }
+      };
+
+      const increasedCount = await notifications.findOneAndUpdate(query, update, { lean: true });
+
+      if (increasedCount) {
+        // Since the query object is already constructed, modify it for deletion of the
+        // corresponding [resolved] alert
+        query.title = /^\[resolved\]/i;
+        await notifications.deleteOne(query);
+      }
+
+      return Boolean(increasedCount);
+    } catch (error) {
+      logger.error('Error in increasing count process:', error);
       return false;
     }
   }
@@ -393,6 +429,15 @@ class NotificationsManager {
             eventType, targets, org, severity || currentSeverity);
           if (existingUnresolvedAlert) {
             existingAlertSet.add(alertUniqueKey);
+          } else if (!resolved) {
+            const shouldContinue = await this.increaseCountIfNeeded(
+              eventType, targets, org, severity || currentSeverity);
+            if (shouldContinue) {
+              logger.debug(
+                'Found, activate and increased count of the last resolved notification. Continue.',
+                { params: { notification } });
+              continue; // Continue to process the next notification
+            }
           }
         }
 
