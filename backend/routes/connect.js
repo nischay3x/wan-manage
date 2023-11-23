@@ -328,7 +328,8 @@ connectRouter.route('/register')
                         };
                         if (!await webHooks.sendToWebHook(configs.get('webHookRegisterDeviceUrl'),
                           webHookMessage,
-                          configs.get('webHookRegisterDeviceSecret'))) {
+                          configs.get('webHookRegisterDeviceSecret'),
+                          `New registered device in ${configs.get('companyName')}: `)) {
                           logger.error('Web hook call failed for registered device',
                             { params: { message: webHookMessage } });
                         }

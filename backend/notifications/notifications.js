@@ -344,7 +344,8 @@ class NotificationsManager {
     orgNotificationsConf.webHookSettings;
     if ((severity === 'warning' && sendWarningAlerts) ||
     (severity === 'critical' && sendCriticalAlerts)) {
-      if (!await webHooks.sendToWebHook(webhookURL, webHookMessage, '')) {
+      if (!await webHooks.sendToWebHook(webhookURL, webHookMessage, '',
+       `New ${configs.get('companyName')} notification: `)) {
         logger.error('Failed to send an immediate webhook notification', {
           params: { message: webHookMessage }
         });

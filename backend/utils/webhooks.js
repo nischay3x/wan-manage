@@ -18,18 +18,19 @@ class WebHooks {
      * @param  {string}         url     url to send the message to
      * @param  {Object}         message JSON object to send in body
      * @param  {string}         secret  secret key to send in the message (secret field)
+     * @param  {string}         summary A string describing the type of the message,
+     * such as notification, user invitation, etc.
      * @return {boolean|Object}         false if send failed, response object otherwise
      */
-  async sendToWebHook (url, message, secret) {
+  async sendToWebHook (url, message, secret, summary) {
     // For an empty url (development), return true
     if (url === '') return Promise.resolve(true);
     let data;
-    const identifier = 'Message from FlexiWAN: ';
 
     // Check if the URL belongs to Slack or MS Teams
     if (url.includes('hooks.slack.com')) {
     // Format the message for Slack
-      const formattedMessage = identifier + Object.keys(message).map(
+      const formattedMessage = summary + Object.keys(message).map(
         key => `${key}: ${message[key]}`).join('\n');
       const slackMessage = { text: formattedMessage };
       data = JSON.stringify({ ...slackMessage, secret });
@@ -39,15 +40,15 @@ class WebHooks {
       const teamsMessage = {
         '@type': 'MessageCard',
         '@context': 'http://schema.org/extensions',
-        summary: identifier,
+        summary,
         sections: [{
-          text: identifier + JSON.stringify(message, null, 2)
+          text: summary + JSON.stringify(message, null, 2)
         }]
       };
       data = JSON.stringify({ ...teamsMessage, secret });
     } else {
     // Default formatting with identifier for other webhooks
-      data = JSON.stringify({ ...message, secret, identifier });
+      data = JSON.stringify({ summary, ...message, secret });
     }
 
     const headers = {

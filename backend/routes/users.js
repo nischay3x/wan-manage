@@ -220,7 +220,8 @@ router.route('/register')
         };
         if (!await webHooks.sendToWebHook(configs.get('webHookAddUserUrl'),
           webHookMessage,
-          configs.get('webHookAddUserSecret'))) {
+          configs.get('webHookAddUserSecret'),
+          `New registered user in ${configs.get('companyName')}: `)) {
           logger.error('Web hook call failed', { params: { message: webHookMessage } });
         }
         // Always resolve
