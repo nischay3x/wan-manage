@@ -620,7 +620,8 @@ class DeviceQueues {
       'active'
     ]) {
       await this.iterateJobs(state, (job) => {
-        count += 1;
+        // the actual state may differ from that returned by rangeByType
+        if (['inactive', 'active'].includes(job._state)) count += 1;
       }, deviceId, 0, -1, 'asc');
     }
     return count;
