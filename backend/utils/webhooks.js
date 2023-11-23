@@ -39,7 +39,7 @@ class WebHooks {
       const teamsMessage = {
         '@type': 'MessageCard',
         '@context': 'http://schema.org/extensions',
-        summary: identifier + 'flexiWAN message',
+        summary: identifier,
         sections: [{
           text: identifier + JSON.stringify(message, null, 2)
         }]
