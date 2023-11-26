@@ -218,7 +218,7 @@ router.route('/register')
           companyDesc: '',
           state: 'unverified'
         };
-        const title = `New registered user in ${configs.get('companyName')}: `;
+        const title = `New registered user in ${configs.get('companyName')}`;
         if (!await webHooks.sendToWebHook(configs.get('webHookAddUserUrl'),
           webHookMessage,
           configs.get('webHookAddUserSecret'),
