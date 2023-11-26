@@ -30,26 +30,27 @@ class WebHooks {
     // Check if the URL belongs to Slack or MS Teams
     if (url.includes('hooks.slack.com')) {
     // Format the message for Slack
-      const formattedMessage = `**${msgTitle}**\n` + Object.keys(message).map(
+      const formattedMessage = `*${msgTitle}*\n` + Object.keys(message).map(
         key => `${key}: ${message[key]}`).join('\n');
       const slackMessage = { text: formattedMessage };
       data = JSON.stringify({ ...slackMessage, secret });
     } else if (url.includes('.office.com')) {
     // Format the message for MS teams
     // TODO identify MS teams in a more specific way since this check is not specific enough
+      const formattedMsg = Object.keys(message).map(
+        key => `${key}: ${message[key]}`).join('<br>');
       const teamsMessage = {
         '@type': 'MessageCard',
         '@context': 'http://schema.org/extensions',
         summary: msgTitle,
         sections: [{
-          text: `**${msgTitle}**\n` + JSON.stringify(message, null, 2)
+          text: `**${msgTitle}**<br>${formattedMsg}`
         }]
       };
       data = JSON.stringify({ ...teamsMessage, secret });
     } else {
-      // Default formatting with identifier for other webhooks
       data = JSON.stringify(
-        { title: `**${msgTitle}**`, message: '\n' + JSON.stringify(message, null, 2), secret });
+        { title: `**${msgTitle}**`, message, secret });
     }
 
     const headers = {
