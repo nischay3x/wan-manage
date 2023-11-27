@@ -229,7 +229,7 @@ class NotificationsManager {
     const urlToDisplay = `${urlSchema.protocol}//${urlSchema.hostname}`;
 
     const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
-      <a href="${uiServerUrl[0]}">${urlToDisplay}</a></p>`;
+      <a href="${uiServerUrl[0]}/notifications">${urlToDisplay}</a></p>`;
     const orgWithAccount = await this.getOrgWithAccount(orgId);
     const orgInfo = `<p><b>Organization:</b> ${orgWithAccount[0].name}</p>`;
     const accountInfo = `<p><b>Account:</b> ${orgWithAccount[0].accountDetails.name}</p>`;
