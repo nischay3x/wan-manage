@@ -226,7 +226,7 @@ class NotificationsManager {
 
     // Use the URL object to extract the domain from the URL, excluding the port.
     const urlSchema = new URL(uiServerUrl[0]);
-    const urlToDisplay = `${urlSchema.protocol}//${urlSchema.hostname}`;
+    const urlToDisplay = `${urlSchema.protocol}//${urlSchema.hostname}/notifications`;
 
     const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
       <a href="${uiServerUrl[0]}/notifications">${urlToDisplay}</a></p>`;
