@@ -22,36 +22,43 @@ class WebHooks {
      * such as notification, user invitation, etc.
      * @return {boolean|Object}         false if send failed, response object otherwise
      */
-  async sendToWebHook (url, message, secret, msgTitle) {
+  async sendToWebHook (url, message, secret = null, msgTitle = null) {
     // For an empty url (development), return true
     if (url === '') return Promise.resolve(true);
-    let data;
+    let messageObject;
 
     // Check if the URL belongs to Slack or MS Teams
     if (url.includes('hooks.slack.com')) {
-    // Format the message for Slack
-      const formattedMessage = `*${msgTitle}*\n` + Object.keys(message).map(
+      // Format the message for Slack
+      let formattedMsgForSlack = Object.keys(message).map(
         key => `${key}: ${message[key]}`).join('\n');
-      const slackMessage = { text: formattedMessage };
-      data = JSON.stringify({ ...slackMessage, secret });
-    } else if (url.includes('.office.com')) {
-    // Format the message for MS teams
+      if (msgTitle) {
+        formattedMsgForSlack = `*${msgTitle}*\n` + formattedMsgForSlack;
+      }
+      messageObject = { text: formattedMsgForSlack };
     // TODO identify MS teams in a more specific way since this check is not specific enough
-      const formattedMsg = Object.keys(message).map(
+    } else if (url.includes('.office.com')) {
+      // Format the message for MS teams
+      let formattedMsgForTeams = Object.keys(message).map(
         key => `${key}: ${message[key]}`).join('<br>');
-      const teamsMessage = {
+      if (msgTitle) {
+        formattedMsgForTeams = `**${msgTitle}**<br>${formattedMsgForTeams}`;
+      }
+      messageObject = {
         '@type': 'MessageCard',
         '@context': 'http://schema.org/extensions',
-        summary: msgTitle,
-        sections: [{
-          text: `**${msgTitle}**<br>${formattedMsg}`
-        }]
+        summary: msgTitle || 'FlexiWAN message',
+        sections: [{ text: formattedMsgForTeams }]
       };
-      data = JSON.stringify({ ...teamsMessage, secret });
     } else {
-      data = JSON.stringify(
-        { title: `**${msgTitle}**`, message, secret });
+      if (msgTitle) {
+        message = { subject: msgTitle, ...message };
+      }
+      messageObject = message;
     }
+
+    messageObject = { ...messageObject, ...(secret && secret !== '' && { secret: secret }) };
+    const data = JSON.stringify(messageObject);
 
     const headers = {
       'Content-Type': 'application/json',
