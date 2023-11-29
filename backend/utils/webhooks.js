@@ -57,7 +57,7 @@ class WebHooks {
       messageObject = message;
     }
 
-    messageObject = { ...messageObject, ...(secret && secret !== '' && { secret: secret }) };
+    messageObject = { ...messageObject, ...(secret && { secret: secret }) };
     const data = JSON.stringify(messageObject);
 
     const headers = {
