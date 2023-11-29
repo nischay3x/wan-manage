@@ -290,6 +290,8 @@ class NotificationsManager {
         ${serverInfo}
         ${accountInfo}
         ${orgInfo}
+        <b>Note: This event will not be reported again unless
+         it remains unobserved for at least 1 hour.</b>
         <p>To make changes to the notification settings in flexiManage,
         please access the ${notificationLink} page in your flexiMange account.</p>
       `;
