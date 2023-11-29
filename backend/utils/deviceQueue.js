@@ -796,7 +796,7 @@ class DeviceQueues {
        */
   callErrorRegisteredCallback (name, job) {
     if (this.errorCallbacks.hasOwnProperty(name)) {
-      return this.errorCallbacks[name](job);
+      return this.errorCallbacks[name](job.id, job.data.response);
     }
   }
 
