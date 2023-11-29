@@ -326,11 +326,9 @@ connectRouter.route('/register')
                           account: decoded.account,
                           org: decoded.org
                         };
-                        const title = `New registered device in ${configs.get('companyName')}`;
                         if (!await webHooks.sendToWebHook(configs.get('webHookRegisterDeviceUrl'),
                           webHookMessage,
-                          configs.get('webHookRegisterDeviceSecret'),
-                          title)) {
+                          configs.get('webHookRegisterDeviceSecret'))) {
                           logger.error('Web hook call failed for registered device',
                             { params: { message: webHookMessage } });
                         }

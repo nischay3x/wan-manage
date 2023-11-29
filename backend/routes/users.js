@@ -218,11 +218,9 @@ router.route('/register')
           companyDesc: '',
           state: 'unverified'
         };
-        const title = `New registered user in ${configs.get('companyName')}`;
         if (!await webHooks.sendToWebHook(configs.get('webHookAddUserUrl'),
           webHookMessage,
-          configs.get('webHookAddUserSecret'),
-          title)) {
+          configs.get('webHookAddUserSecret'))) {
           logger.error('Web hook call failed', { params: { message: webHookMessage } });
         }
         // Always resolve

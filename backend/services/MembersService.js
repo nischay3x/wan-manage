@@ -693,11 +693,9 @@ class MembersService {
           companyDesc: '',
           state: (existingUser) ? existingUser.state : 'unverified'
         };
-        const title = `New invited user in ${configs.get('companyName')}`;
         if (!await webHooks.sendToWebHook(configs.get('webHookAddUserUrl'),
           webHookMessage,
-          configs.get('webHookAddUserSecret'),
-          title)) {
+          configs.get('webHookAddUserSecret'))) {
           logger.error('Web hook call failed', { params: { message: webHookMessage } });
         }
       } else {
