@@ -328,6 +328,8 @@ class DeviceQueues {
       this.getCount('active', deviceId).then((count) => {
         this.deviceQueues[deviceId].waitPause = true;
         if (count > 0) {
+          logger.debug('Active jobs exist, queue pause is delayed',
+            { params: { deviceId, count }, count, queue: this.deviceQueues[deviceId] });
           setTimeout(pause, jobTimeout);
         } else {
           pause();
