@@ -325,6 +325,7 @@ class DeviceQueues {
         }
         return resolve();
       };
+      this.deviceQueues[deviceId].waitPause = false;
       this.getCount('active', deviceId).then((count) => {
         this.deviceQueues[deviceId].waitPause = true;
         if (count > 0) {
