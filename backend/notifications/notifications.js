@@ -228,12 +228,12 @@ class NotificationsManager {
     const urlSchema = new URL(uiServerUrl[0]);
     const urlToDisplay = `${urlSchema.protocol}//${urlSchema.hostname}/notifications`;
 
-    const serverInfo = uiServerUrl.length > 1 ? '' : `<p><b>Server:</b>
+    const notificationsPageInfo = uiServerUrl.length > 1 ? '' : `<p><b>Notifications page:</b>
       <a href="${uiServerUrl[0]}/notifications">${urlToDisplay}</a></p>`;
     const orgWithAccount = await this.getOrgWithAccount(orgId);
     const orgInfo = `<p><b>Organization:</b> ${orgWithAccount[0].name}</p>`;
     const accountInfo = `<p><b>Account:</b> ${orgWithAccount[0].accountDetails.name}</p>`;
-    return { serverInfo, orgInfo, accountInfo };
+    return { notificationsPageInfo, orgInfo, accountInfo };
   }
 
   async sendEmailNotification (title, orgNotificationsConf, severity, alertDetails) {
@@ -244,7 +244,7 @@ class NotificationsManager {
       const emailAddresses = await this.getUsersEmail(userIds);
       if (emailAddresses.length === 0) return null;
 
-      const { serverInfo, orgInfo, accountInfo } = await this.getInfoForEmail(
+      const { notificationsPageInfo, orgInfo, accountInfo } = await this.getInfoForEmail(
         orgNotificationsConf.org);
 
       const notificationLink = uiServerUrl.length > 1 ? ' Notifications '
@@ -253,7 +253,7 @@ class NotificationsManager {
       const emailBody = `
         <h2>${configs.get('companyName')} new notification</h2>
         <p><b>Notification details:</b> ${alertDetails}</p>
-        ${serverInfo}
+        ${notificationsPageInfo}
         ${accountInfo}
         ${orgInfo}
         <p>To make changes to the notification settings in flexiManage,
@@ -647,7 +647,7 @@ class NotificationsManager {
         const existingDevicesMessages = messages.filter(message => message.targets.deviceId);
 
         const uiServerUrl = configs.get('uiServerUrl', 'list');
-        const { serverInfo, orgInfo, accountInfo } = await this.getInfoForEmail(
+        const { notificationsPageInfo, orgInfo, accountInfo } = await this.getInfoForEmail(
           orgID);
 
         const emailBody = `
@@ -665,7 +665,7 @@ class NotificationsManager {
               `).join('')}
             </ul>
           </small></i>
-          ${serverInfo}
+          ${notificationsPageInfo}
           ${accountInfo}
           ${orgInfo}
           <p style="font-size:16px"> Further to this email,
