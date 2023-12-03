@@ -303,7 +303,7 @@ class NotificationsManager {
     return query;
   }
 
-  async checkAlertExistence (eventType, targets, org, severity) {
+  async checkUnresolvedAlertExistence (eventType, targets, org, severity) {
     try {
       const query = await this.getQueryForExistingAlert(eventType, targets, false, severity, org);
       const existingAlert = await notifications.findOne(query);
@@ -387,11 +387,11 @@ class NotificationsManager {
         }
         let existingUnresolvedAlert = false;
         const alertUniqueKey = eventType + '_' + org + '_' + JSON.stringify(targets) +
-              '_' + severity;
+          '_' + severity;
         if (existingAlertSet.has(alertUniqueKey)) {
           existingUnresolvedAlert = true;
         } else {
-          existingUnresolvedAlert = await this.checkAlertExistence(
+          existingUnresolvedAlert = await this.checkUnresolvedAlertExistence(
             eventType, targets, org, severity || currentSeverity);
           if (existingUnresolvedAlert) {
             existingAlertSet.add(alertUniqueKey);
@@ -407,10 +407,12 @@ class NotificationsManager {
         // 1. This isn't a resolved alert and there is no existing alert
         // 2. This is a resolved alert, there is unresolved alert in the db,
         // and the user has defined to send resolved alerts
+        // 3. This is an info alert
         const conditionToSend = ((!resolved && !existingUnresolvedAlert) ||
-              (resolved && sendResolvedAlert && existingUnresolvedAlert));
+          (resolved && sendResolvedAlert && existingUnresolvedAlert) ||
+          (isInfo));
         logger.debug('Step 1: Initial check for sending alert. Decision: ' +
-              (conditionToSend ? 'proceed to step 2' : 'do not send'), {
+          (conditionToSend ? 'proceed to step 2' : 'do not send'), {
           params: {
             details: {
               'Notification content': notification,
