@@ -303,10 +303,9 @@ class NotificationsManager {
     return query;
   }
 
-  async checkAlertExistence (eventType, targets, org, severity, resolved = false) {
+  async checkUnresolvedAlertExistence (eventType, targets, org, severity) {
     try {
-      const query = await this.getQueryForExistingAlert(
-        eventType, targets, resolved, severity, org);
+      const query = await this.getQueryForExistingAlert(eventType, targets, false, severity, org);
       const existingAlert = await notifications.findOne(query);
       return Boolean(existingAlert);
     } catch (err) {
@@ -388,11 +387,11 @@ class NotificationsManager {
         }
         let existingUnresolvedAlert = false;
         const alertUniqueKey = eventType + '_' + org + '_' + JSON.stringify(targets) +
-                '_' + severity;
+          '_' + severity;
         if (existingAlertSet.has(alertUniqueKey)) {
           existingUnresolvedAlert = true;
         } else {
-          existingUnresolvedAlert = await this.checkAlertExistence(
+          existingUnresolvedAlert = await this.checkUnresolvedAlertExistence(
             eventType, targets, org, severity || currentSeverity);
           if (existingUnresolvedAlert) {
             existingAlertSet.add(alertUniqueKey);
