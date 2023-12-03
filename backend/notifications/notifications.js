@@ -385,21 +385,15 @@ class NotificationsManager {
           notification.severity = currentSeverity;
         }
         let existingUnresolvedAlert = false;
-        let existingInfoAlert = false;
-        if (isInfo) {
-          existingInfoAlert = await this.checkAlertExistence(
-            eventType, targets, org, severity || currentSeverity, true);
-        } else {
-          const alertUniqueKey = eventType + '_' + org + '_' + JSON.stringify(targets) +
+        const alertUniqueKey = eventType + '_' + org + '_' + JSON.stringify(targets) +
                 '_' + severity;
-          if (existingAlertSet.has(alertUniqueKey)) {
-            existingUnresolvedAlert = true;
-          } else {
-            existingUnresolvedAlert = await this.checkAlertExistence(
-              eventType, targets, org, severity || currentSeverity);
-            if (existingUnresolvedAlert) {
-              existingAlertSet.add(alertUniqueKey);
-            }
+        if (existingAlertSet.has(alertUniqueKey)) {
+          existingUnresolvedAlert = true;
+        } else {
+          existingUnresolvedAlert = await this.checkAlertExistence(
+            eventType, targets, org, severity || currentSeverity);
+          if (existingUnresolvedAlert) {
+            existingAlertSet.add(alertUniqueKey);
           }
         }
 
@@ -412,16 +406,16 @@ class NotificationsManager {
         // 1. This isn't a resolved alert and there is no existing alert
         // 2. This is a resolved alert, there is unresolved alert in the db,
         // and the user has defined to send resolved alerts
-        // 3. This is an info alert and there is no existing info alert
+        // 3. This is an info alert
         const conditionToSend = ((!resolved && !existingUnresolvedAlert) ||
           (resolved && sendResolvedAlert && existingUnresolvedAlert) ||
-          (isInfo && !existingInfoAlert));
+          (isInfo));
         logger.debug('Step 1: Initial check for sending alert. Decision: ' +
           (conditionToSend ? 'proceed to step 2' : 'do not send'), {
           params: {
             details: {
               'Notification content': notification,
-              'Is there an existing alert?': isInfo ? existingInfoAlert : existingUnresolvedAlert,
+              'Is there an existing alert?': existingUnresolvedAlert,
               'Is sending resolved alerts defined for this type?': sendResolvedAlert
             }
           }
