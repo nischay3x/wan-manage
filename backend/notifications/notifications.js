@@ -326,13 +326,18 @@ class NotificationsManager {
    * @param {String} org - The organization associated with the alert.
    * @returns {Object} - A query object for searching the alert in the database.
   */
-  async getQueryForExistingAlert (eventType, targets, resolved, severity, org) {
+  async getQueryForExistingAlert (
+    eventType, targets, resolved, severity, org, includeResolved = true) {
     const query = {
       eventType,
-      resolved,
       org: mongoose.Types.ObjectId(org),
       severity
     };
+
+    if (includeResolved) {
+      query.resolved = resolved;
+    }
+
     // Different devices can trigger an alert for the same tunnel
     // So we want to include only the tunnelId and organization when searching for tunnel alerts
     if (targets.tunnelId) {
@@ -358,12 +363,39 @@ class NotificationsManager {
   * @param {String} severity - The severity level of the event.
   * @returns {Boolean} - True if the alert exists, false otherwise.
   */
-  async checkUnresolvedAlertExistence (eventType, targets, org, severity) {
+  async checkAlertExistence (eventType, targets, org, severity) {
     try {
-      const query = await this.getQueryForExistingAlert(
-        eventType, targets, false, severity, org);
+      let query = await this.getQueryForExistingAlert(
+        eventType, targets, false, severity, org, false);
+      // Extend query to include recently resolved notifications
+      const notificationWindowStart = new Date(
+        Date.now() - configs.get('notificationCoolDownPeriod'));
+      query = {
+        ...query,
+        $or: [
+          { resolved: false },
+          {
+            resolved: true,
+            lastResolvedStatusChange: { $gte: notificationWindowStart },
+            title: { $not: /^(\[resolved\])/i }
+          }
+        ]
+      };
+
+      // The query searches for alerts that are either unresolved or have been recently resolved.
+      // It is assumed that under normal circumstances, there won't be two documents
+      // that meet these criteria. This is the reason for using 'findOne' instead of 'find'.
+      // If future requirements demand handling scenarios where
+      // both an unresolved alert and a recently resolved alert match the criteria,
+      // this can be addressed by replacing 'findOne' with 'find' and applying 'limit(2)'.
+      // This adjustment will resolve the issue, as we know that the first condition in the "or",
+      // combined with the query conditions, can only match one document in the DB at a given time.
       const existingAlert = await notifications.findOne(query);
-      return Boolean(existingAlert);
+      if (existingAlert) {
+        const { _id, resolved, count } = existingAlert;
+        return { exists: true, resolved, _id, count };
+      }
+      return { exists: false };
     } catch (err) {
       logger.warn(`Failed to search for notification ${eventType} in database`, {
         params: { notifications: notifications, err: err.message }
@@ -373,39 +405,21 @@ class NotificationsManager {
   }
 
   /**
- * Increases the count of notification if the last resolved notification has been created
- * within the cool down period.
- * It also deletes any corresponding [resolved] alert (in case the user has asked to get a separate
- * alert in case of resolution).
+ * Activate and Increases the count of a given notification
  *
- * @param {String} eventType - The name of the notification.
- * @param {Object} targets - The targets of the notification (deviceId, tunnelId etc.)
- * @param {String} org - The organization associated with the notification.
- * @param {String} severity - The severity level of the event.
- *
+ * @param {String} notificationId - The notification to activate and increase count
  * @returns {Promise<boolean>} - Returns true if the count was increased, false otherwise.
  */
-  async increaseCountIfNeeded (eventType, targets, org, severity) {
-    const notificationWindowStart = new Date(
-      Date.now() - configs.get('notificationCoolDownPeriod'));
-
+  async increaseCount (notificationId) {
     try {
-      const query = await this.getQueryForExistingAlert(eventType, targets, true, severity, org);
-      query.createdAt = { $gte: notificationWindowStart };
-      query.title = { $not: /^(\[resolved\])/i };
       const update = {
         $set: { resolved: false },
-        $inc: { count: 1 }
+        $inc: { count: 1 },
+        lastResolvedStatusChange: Date.now()
       };
 
-      const increasedCount = await notifications.findOneAndUpdate(query, update, { lean: true });
-
-      if (increasedCount) {
-        // Since the query object is already constructed, modify it for deletion of the
-        // corresponding [resolved] alert
-        query.title = /^\[resolved\]/i;
-        await notifications.deleteOne(query);
-      }
+      const increasedCount = await notifications.updateOne(
+        { _id: notificationId }, update, { lean: true });
 
       return Boolean(increasedCount);
     } catch (error) {
@@ -428,7 +442,7 @@ class NotificationsManager {
         eventType, targets, false, severity, org);
       const updatedAlert = await notifications.findOneAndUpdate(
         query,
-        { $set: { resolved: true } },
+        { $set: { resolved: true, lastResolvedStatusChange: Date.now() } },
         { new: true }
       );
       logger.debug('Resolved existing notification',
@@ -509,24 +523,27 @@ class NotificationsManager {
           currentSeverity = rules[eventType].severity;
           notification.severity = currentSeverity;
         }
+        let existingAlert;
         let existingUnresolvedAlert = false;
         const alertUniqueKey = eventType + '_' + org + '_' + JSON.stringify(targets) +
           '_' + severity;
         if (existingAlertSet.has(alertUniqueKey)) {
           existingUnresolvedAlert = true;
         } else {
-          existingUnresolvedAlert = await this.checkUnresolvedAlertExistence(
+          existingAlert = await this.checkAlertExistence(
             eventType, targets, org, severity || currentSeverity);
-          if (existingUnresolvedAlert) {
-            existingAlertSet.add(alertUniqueKey);
-          } else if (!resolved) {
-            const shouldContinue = await this.increaseCountIfNeeded(
-              eventType, targets, org, severity || currentSeverity);
-            if (shouldContinue) {
-              logger.debug(
-                'Found, activate and increased count of the last resolved notification. Continue.',
-                { params: { notification } });
-              continue; // Continue to process the next notification
+          if (existingAlert?.exists) {
+            if (!existingAlert.resolved) {
+              existingUnresolvedAlert = true;
+              existingAlertSet.add(alertUniqueKey);
+            } else if (!resolved && existingAlert.resolved) {
+              const activatedLastResolved = await this.increaseCount(existingAlert._id);
+              if (activatedLastResolved) {
+                logger.debug(
+                  'Found, activated and increased count of the last resolved notification',
+                  { params: { notification } });
+                continue;
+              }
             }
           }
         }
@@ -538,11 +555,11 @@ class NotificationsManager {
 
         // Send an alert only if one of the both is true:
         // 1. This isn't a resolved alert and there is no existing alert
-        // 2. This is a resolved alert, there is unresolved alert in the db,
-        // and the user has defined to send resolved alerts
+        // 2. This is a resolved alert, there was an unresolved alert in the db,
+        // the user has defined to send resolved alerts and the unresolved alert's count = 1
         // 3. This is an info alert
         const conditionToSend = ((!resolved && !existingUnresolvedAlert) ||
-          (resolved && sendResolvedAlert && existingUnresolvedAlert) ||
+          (resolved && sendResolvedAlert && existingUnresolvedAlert && existingAlert.count === 1) ||
           (isInfo));
         logger.debug('Step 1: Initial check for sending alert. Decision: ' +
           (conditionToSend ? 'proceed to step 2' : 'do not send'), {
