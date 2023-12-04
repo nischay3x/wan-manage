@@ -154,7 +154,7 @@ const notificationsSchema = new Schema({
   },
   lastResolvedStatusChange: {
     type: Date,
-    default: null
+    default: new Date()
   }
 }, {
   timestamps: true
