@@ -47,7 +47,7 @@ const transformInterfaces = (interfaces, globalOSPF, deviceVersion) => {
       useFixedPublicPort: ifc.useFixedPublicPort,
       type: ifc.type,
       isAssigned: ifc.isAssigned,
-      pathlabels: ifc.pathlabels,
+      pathlabels: ifc.pathlabels?.map(pl => pl.toObject()), // convert from CoreMongooseArray
       configuration: ifc.configuration,
       deviceType: ifc.deviceType
     };
