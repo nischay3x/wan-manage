@@ -402,6 +402,35 @@ const transformNotificationsSettings = (notificationsSettings, relevantEventType
   return notificationsObject;
 };
 
+const transformStaticRoute = route => {
+  const params = {
+    addr: route.destination,
+    via: route.gateway,
+    dev_id: route.ifname || undefined,
+    metric: route.metric ? parseInt(route.metric, 10) : undefined,
+    redistributeViaOSPF: route.redistributeViaOSPF,
+    redistributeViaBGP: route.redistributeViaBGP,
+    onLink: route.onLink
+  };
+
+  if (route?.conditions?.length > 0) {
+    params.condition = {
+      addr: route.conditions[0].destination,
+      type: route.conditions[0].type,
+      via: {}
+    };
+
+    const { devId, tunnelId } = route.conditions[0].via;
+    if (devId) {
+      params.condition.via.dev_id = devId;
+    } else if (tunnelId) {
+      params.condition.via['tunnel-id'] = tunnelId;
+    }
+  }
+
+  return params;
+};
+
 module.exports = {
   transformInterfaces,
   transformRoutingFilters,
@@ -411,5 +440,6 @@ module.exports = {
   transformVxlanConfig,
   transformLte,
   transformVrrp,
-  transformNotificationsSettings
+  transformNotificationsSettings,
+  transformStaticRoute
 };

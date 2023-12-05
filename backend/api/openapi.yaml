@@ -12251,6 +12251,11 @@ components:
         gateway: gateway
         metric: metric
         redistributeViaOSPF: true
+        redistributeViaBGP: false
+        conditions:
+          destination: 5.5.5.5/5
+          via:
+            devId: devId
       properties:
         _id:
           maxLength: 24
@@ -12271,9 +12276,30 @@ components:
           description: Route metric
           type: string
         redistributeViaOSPF:
-          description: Indicates whether the path is redistributed using OSPF. 
+          description: Indicates whether the route should be redistributed via OSPF.
             Note that the "true" value will return if in the OSPF Global Settings, the redistribution option is enabled for all static routes
           type: boolean
+        redistributeViaBGP:
+          description: Indicates whether the route should be redistributed via BGP
+          type: boolean
+        conditions:
+          type: object
+          properties:
+            destination:
+              type: string
+            type:
+              type: string
+              enum:
+                - ''
+                - route-exist
+                - route-not-exist
+            via:
+              type: object
+              properties:
+                devId:
+                  type: string
+                tunnelId:
+                  type: number
       type: object
     StaticRoute:
       example:
@@ -12283,6 +12309,11 @@ components:
         metric: metric
         status: "completed"
         redistributeViaOSPF: true
+        redistributeViaBGP: false
+        conditions:
+          destination: 5.5.5.5/5
+          via:
+            devId: devId
       properties:
         _id:
           type: string
@@ -12305,9 +12336,26 @@ components:
           description: Route status
           type: string
         redistributeViaOSPF:
-          description: Indicates whether the path is redistributed using OSPF.
+          description: Indicates whether the route should be redistributed via OSPF.
             Note that the "true" value will return if in the OSPF Global Settings, the redistribution option is enabled for all static routes
           type: boolean
+        redistributeViaBGP:
+          description: Indicates whether the route should be redistributed via BGP
+          type: boolean
+        conditions:
+          type: array
+          items:
+            type: object
+            properties:
+              destination:
+                type: string
+              via:
+                type: object
+                properties:
+                  devId:
+                    type: string
+                  tunnelId:
+                    type: number
       type: object
     DhcpMacAssign:
       example:

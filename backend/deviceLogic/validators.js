@@ -681,7 +681,7 @@ const validateModifyDeviceMsg = (modifyDeviceMsg) => {
   return { valid: true, err: '' };
 };
 
-const validateIPv4Address = (ip, mask) => {
+const validateIPv4Address = (ip, mask, allowLocalOrBroadcast = false) => {
   if (!ip) {
     return {
       valid: false,
@@ -706,7 +706,7 @@ const validateIPv4Address = (ip, mask) => {
       err: `IPv4 mask ${ip}/${mask} is not valid`
     };
   };
-  if (mask < 31) {
+  if (mask < 31 && !allowLocalOrBroadcast) {
     // Based on RFC-3021, /31 point-to-point network doesn't use local and broadcast addresses
     if (isLocalOrBroadcastAddress(ip, mask)) {
       return {
@@ -721,6 +721,109 @@ const validateIPv4Address = (ip, mask) => {
 const isLocalOrBroadcastAddress = (ip, mask) => {
   const [start, end] = getStartEndIp(ip, mask);
   return ip === start || ip === end;
+};
+
+const isNullOrEmpty = val => {
+  return val !== undefined && val !== null && val !== '';
+};
+
+const validateStaticRouteConditions = (route, device, tunnels) => {
+  const { gateway, conditions = [] } = route;
+
+  if (!conditions) {
+    return { valid: true, err: null };
+  }
+
+  if (conditions && !Array.isArray(conditions)) {
+    return {
+      valid: false,
+      err: 'Static route conditions must be an array'
+    };
+  }
+
+  if (conditions.length === 0) {
+    return { valid: true, err: null };
+  }
+
+  // "conditions" = [{ destination: 1.1.1.1/32, via: { via: { devId: devId | tunnelId: 3 } } }]
+  if (conditions.length > 1) {
+    return {
+      valid: false,
+      err: 'Multiple conditions for static route is not supported yet'
+    };
+  }
+
+  // Condition is optional so all the fields can be empty.
+  // Partial configuration is not allowed.
+  const destinationProvided = isNullOrEmpty(conditions[0].destination);
+  const typeProvided = isNullOrEmpty(conditions[0].type);
+  const devIdProvided = isNullOrEmpty(conditions[0].via?.devId);
+  const tunnelProvided = isNullOrEmpty(conditions[0].via?.tunnelId);
+
+  // allow all values to be empty
+  if (!destinationProvided && !typeProvided && !devIdProvided && !tunnelProvided) {
+    return { valid: true, err: null };
+  };
+
+  // We now that not all values are empty. So check if one of them is not provided
+  if (!destinationProvided || !typeProvided || (!devIdProvided && !tunnelProvided)) {
+    return {
+      valid: false,
+      err: 'Partial configuration for the Conditions section of the static route ' +
+      `(${route.destination} via ${gateway}) is not allowed`
+    };
+  };
+
+  // check if multiple types of "via"" provided
+  if (devIdProvided && tunnelProvided) {
+    return {
+      valid: false,
+      err: 'The configuration for the Conditions section of the static route ' +
+      `(${route.destination} via ${gateway}) has unsupported "via" value`
+    };
+  }
+
+  const { destination, via } = conditions[0];
+
+  // check that "destination" is IPv4 - 172.16.1.0/24
+  const [ip, mask] = destination.split('/');
+  const isIpv4Valid = validateIPv4Address(ip, mask, true);
+  if (!isIpv4Valid.valid) {
+    return {
+      valid: false,
+      err: 'The "destination" in the Conditions section of the static route ' +
+      `(${route.destination} via ${gateway}) is invalid IP address`
+    };
+  }
+
+  const { devId, tunnelId } = via;
+  // check that "dev.devId" exists.
+  if (devId) {
+    const ifc = device.interfaces.some(i => i.isAssigned && i.devId === devId);
+    if (!ifc) {
+      return {
+        valid: false,
+        err: `Interface devId ${devId} is not found. ` +
+        'Check the Conditions section of the static route ' +
+        `(${route.destination} via ${gateway})`
+      };
+    };
+  }
+
+  // check that "dev.tunnelId" exists and active.
+  if (tunnelId) {
+    const tunnelIdFound = tunnels.some(t => t.num === tunnelId);
+    if (!tunnelIdFound) {
+      return {
+        valid: false,
+        err: `Tunnel number ${tunnelId} is not found. ` +
+        'Check the Conditions section of the static route ' +
+        `(${route.destination} via ${gateway})`
+      };
+    }
+  };
+
+  return { valid: true, err: null };
 };
 
 /**
@@ -805,6 +908,12 @@ const validateStaticRoute = (device, tunnels, route) => {
       };
     }
   }
+
+  const { valid, err } = validateStaticRouteConditions(route, device, tunnels);
+  if (!valid) {
+    return { valid, err };
+  }
+
   return { valid: true, err: '' };
 };
 

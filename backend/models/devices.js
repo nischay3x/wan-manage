@@ -427,7 +427,33 @@ const staticroutesSchema = new Schema({
     type: Boolean,
     default: false
   },
-  ...pendingSchema
+  ...pendingSchema,
+  conditions: [{
+    destination: {
+      type: String,
+      validate: {
+        validator: val => !val || validators.validateIPv4WithMask(val),
+        message: 'Monitoring destination should be a valid ipv4 with mask type'
+      }
+    },
+    type: {
+      type: String,
+      enum: ['', 'route-not-exist', 'route-exist']
+    },
+    via: {
+      devId: {
+        type: String,
+        maxlength: [50, 'devId length must be at most 50'],
+        validate: {
+          validator: validators.validateDevId,
+          message: 'devId should be a valid devId address'
+        }
+      },
+      tunnelId: {
+        type: Number
+      }
+    }
+  }]
 }, {
   timestamps: true
 });

@@ -63,7 +63,8 @@ const {
   transformVxlanConfig,
   transformBGP,
   transformDHCP,
-  transformLte
+  transformLte,
+  transformStaticRoute
 } = require('./jobParameters');
 
 const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
@@ -277,52 +278,26 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
   }
 
   if (has(messageParams, 'modify_routes')) {
-    const routeRequests = messageParams.modify_routes.routes.flatMap(item => {
-      let items = [];
-      if (item.old_route !== '') {
-        items.push({
+    const { remove, add } = messageParams.modify_routes;
+
+    if (remove.length > 0) {
+      requests.push(...remove.map(params => {
+        return {
           entity: 'agent',
           message: 'remove-route',
-          params: {
-            addr: item.addr,
-            via: item.old_route,
-            dev_id: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined,
-            redistributeViaOSPF: item.redistributeViaOSPF,
-            redistributeViaBGP: item.redistributeViaBGP,
-            onLink: item.onLink
-          }
-        });
-      }
-      if (item.new_route !== '') {
-        items.push({
+          params: params
+        };
+      }));
+    }
+
+    if (add.length > 0) {
+      requests.push(...add.map(params => {
+        return {
           entity: 'agent',
           message: 'add-route',
-          params: {
-            addr: item.addr,
-            via: item.new_route,
-            dev_id: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined,
-            redistributeViaOSPF: item.redistributeViaOSPF,
-            redistributeViaBGP: item.redistributeViaBGP,
-            onLink: item.onLink
-          }
-        });
-      }
-
-      items = items.map((item) => {
-        if (item.params && item.params.devId) {
-          item.params.dev_id = item.params.devId;
-          delete item.params.devId;
-        }
-        return item;
-      });
-
-      return items;
-    });
-
-    if (routeRequests) {
-      requests.push(...routeRequests);
+          params: params
+        };
+      }));
     }
   }
 
@@ -863,35 +838,16 @@ const setTunnelsPendingInDB = (tunnelIDs, org, flag) => {
  * @return {Object}            an object containing an array of routes
  */
 const prepareModifyRoutes = (origDevice, newDevice) => {
-  // Handle changes in default route
-  const routes = [];
-
   // Handle changes in static routes
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
 
     newDevice.staticroutes.filter(r => !r.isPending).map(route => {
-      return ({
-        destination: route.destination,
-        gateway: route.gateway,
-        ifname: route.ifname,
-        metric: route.metric,
-        redistributeViaOSPF: route.redistributeViaOSPF,
-        redistributeViaBGP: route.redistributeViaBGP,
-        onLink: route.onLink
-      });
+      return transformStaticRoute(route);
     }),
 
     origDevice.staticroutes.filter(r => !r.isPending).map(route => {
-      return ({
-        destination: route.destination,
-        gateway: route.gateway,
-        ifname: route.ifname,
-        metric: route.metric,
-        redistributeViaOSPF: route.redistributeViaOSPF,
-        redistributeViaBGP: route.redistributeViaBGP,
-        onLink: route.onLink
-      });
+      return transformStaticRoute(route);
     })
   ];
 
@@ -899,7 +855,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
   // Add all static routes that do not exist in the
   // original routes array and remove all static routes
   // that do not appear in the new routes array
-  const [routesToAdd, routesToRemove] = [
+  const [addStaticRoutes, removeStaticRoutes] = [
     differenceWith(
       newStaticRoutes,
       origStaticRoutes,
@@ -916,32 +872,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
     )
   ];
 
-  routesToRemove.forEach(route => {
-    routes.push({
-      addr: route.destination,
-      old_route: route.gateway,
-      new_route: '',
-      devId: route.ifname || undefined,
-      metric: route.metric || undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP,
-      onLink: route.onLink
-    });
-  });
-  routesToAdd.forEach(route => {
-    routes.push({
-      addr: route.destination,
-      new_route: route.gateway,
-      old_route: '',
-      devId: route.ifname || undefined,
-      metric: route.metric || undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP,
-      onLink: route.onLink
-    });
-  });
-
-  return { routes: routes };
+  return { add: addStaticRoutes, remove: removeStaticRoutes };
 };
 
 /**
@@ -1166,8 +1097,10 @@ const apply = async (device, user, data) => {
   data.ignoreTasks ??= [];
 
   // Create the default/static routes modification parameters
-  const modifyRoutes = prepareModifyRoutes(device[0], data.newDevice);
-  if (modifyRoutes.routes.length > 0) modifyParams.modify_routes = modifyRoutes;
+  const { remove: removeRoutes, add: addRoutes } = prepareModifyRoutes(device[0], data.newDevice);
+  if (removeRoutes.length > 0 || addRoutes.length > 0) {
+    modifyParams.modify_routes = { remove: removeRoutes, add: addRoutes };
+  }
 
   // Create DHCP modification parameters
   const modifyDHCP = await prepareModifyDHCP(device[0], data.newDevice);
@@ -1673,27 +1606,15 @@ const sync = async (deviceId, orgId) => {
 
   // Prepare add-route message
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
-    const { ifname, gateway, destination, metric, isPending } = route;
-
     // skip pending routes
-    if (isPending) {
+    if (route.isPending) {
       return;
     }
-
-    const params = {
-      addr: destination,
-      via: gateway,
-      dev_id: ifname || undefined,
-      metric: metric ? parseInt(metric, 10) : undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP,
-      onLink: route.onLink
-    };
 
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-route',
-      params: params
+      params: transformStaticRoute(route)
     });
   });
 
