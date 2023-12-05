@@ -185,7 +185,7 @@ const transformCustomRouting = custom => {
 };
 
 /**
- * Creates a add|remove-advanced-routing-config object
+ * Creates a add|remove-routing-config object
  * @param  {Object} advancedRouting device advancedRouting object
  * @return {Object} an object containing the global FRR parameters
  */

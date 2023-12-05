@@ -284,7 +284,7 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
     if (remove) {
       requests.push({
         entity: 'agent',
-        message: 'remove-advanced-routing-config',
+        message: 'remove-routing-config',
         params: { ...remove }
       });
     }
@@ -292,7 +292,7 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
     if (add) {
       requests.push({
         entity: 'agent',
-        message: 'add-advanced-routing-config',
+        message: 'add-routing-config',
         params: { ...add }
       });
     }
@@ -997,7 +997,7 @@ const prepareModifyOSPF = (origDevice, newDevice) => {
 };
 
 /**
- * Creates add/remove-advanced-routing-config jobs
+ * Creates add/remove-routing-config jobs
  * @param  {Object} origDevice device object before changes in the database
  * @param  {Object} newDevice  device object after changes in the database
  * @return {Object}            an object containing add and remove ospf parameters
@@ -1012,18 +1012,18 @@ const prepareModifyAdvancedRouting = (origDevice, newDevice) => {
     return { remove: null, add: null };
   }
 
-  // if newAdvancedRouting is with empty values - send only remove-advanced-routing-config
+  // if newAdvancedRouting is with empty values - send only remove-routing-config
   if (!Object.keys(omitBy(origDevice, val => val === '')).length) {
     return { remove: origAdvancedRouting, add: null };
   }
 
-  // if origAdvancedRouting is with empty values - send only add-advanced-routing-config
+  // if origAdvancedRouting is with empty values - send only add-routing-config
   if (!Object.keys(omitBy(origAdvancedRouting, val => val === '')).length) {
     return { remove: null, add: newAdvancedRouting };
   }
 
   // if there is a change,
-  // send pair of remove-advanced-routing-config and add-advanced-routing-config
+  // send pair of remove-routing-config and add-routing-config
   return { remove: origAdvancedRouting, add: newAdvancedRouting };
 };
 
@@ -1650,7 +1650,7 @@ const sync = async (deviceId, orgId) => {
   if (!isEmpty(advancedRoutingData)) {
     deviceConfRequests.push({
       entity: 'agent',
-      message: 'add-advanced-routing-config',
+      message: 'add-routing-config',
       params: advancedRoutingData
     });
   }
