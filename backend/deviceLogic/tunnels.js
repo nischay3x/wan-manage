@@ -233,7 +233,8 @@ const handleTunnels = async (
               if (ifcALabels.size === 0 && ifcBLabels.size === 0) {
                 // If a tunnel already exists, skip the configuration
                 const tunnelKey = `${wanIfcA._id}:${wanIfcB._id}:`;
-                if (tunnelExists[tunnelKey]) {
+                const tunnelKey2 = `${wanIfcB._id}:${wanIfcA._id}:`;
+                if (tunnelExists[tunnelKey] || tunnelExists[tunnelKey2]) {
                   logger.debug('Found tunnel', { params: { tunnelKey } });
                   reasons.add('Some tunnels exist already.');
                 } else if ((tunnelsPerDevice[deviceA._id] ?? 0) > MAX_TUNNELS_PER_DEVICE - 1) {
@@ -269,7 +270,8 @@ const handleTunnels = async (
                 }
                 // If a tunnel already exists, skip the configuration
                 const tunnelKey = `${wanIfcA._id}:${wanIfcB._id}:${label}`;
-                if (tunnelExists[tunnelKey]) {
+                const tunnelKey2 = `${wanIfcB._id}:${wanIfcA._id}:${label}`;
+                if (tunnelExists[tunnelKey] || tunnelExists[tunnelKey2]) {
                   logger.debug('Found tunnel', { params: { tunnelKey } });
                   reasons.add('Some tunnels exist already.');
                   continue;
