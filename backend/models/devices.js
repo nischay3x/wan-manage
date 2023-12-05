@@ -34,6 +34,12 @@ const statusEnums = [
   'uninstallation failed'
 ];
 
+const FrrCustom = {
+  type: String,
+  default: '',
+  required: false
+};
+
 /**
  * Interfaces Database Schema
  */
@@ -715,7 +721,8 @@ const deviceRoutingFilterRuleSchema = new Schema({
   priority: {
     type: Number,
     required: true
-  }
+  },
+  custom: FrrCustom
 });
 
 /**
@@ -903,7 +910,8 @@ const BGPNeighborSchema = new Schema({
     default: 1,
     min: [1, 'multiHop should be a number between 1 - 255'],
     max: [255, 'multiHop should be a number between 1 - 255']
-  }
+  },
+  custom: FrrCustom
 }, {
   timestamps: true
 });
@@ -1132,6 +1140,7 @@ const deviceSchema = new Schema({
       type: Boolean,
       default: true
     },
+    custom: FrrCustom,
     neighbors: [BGPNeighborSchema]
   },
   ospf: {
@@ -1162,7 +1171,11 @@ const deviceSchema = new Schema({
     redistributeBgp: {
       type: Boolean,
       default: true
-    }
+    },
+    custom: FrrCustom
+  },
+  advancedRouting: {
+    custom: FrrCustom
   },
   routingFilters: {
     type: [deviceRoutingFiltersSchema]

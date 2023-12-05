@@ -176,7 +176,8 @@ class DevicesService {
       'bgp',
       'routingFilters',
       'cpuInfo',
-      'distro'
+      'distro',
+      'advancedRouting'
     ]);
 
     retDevice.isConnected = connections.isConnected(retDevice.machineId);
@@ -254,7 +255,8 @@ class DevicesService {
           'redistributeViaBGP',
           'isPending',
           'pendingReason',
-          'onLink'
+          'onLink',
+          'conditions'
         ]);
         retRoute._id = retRoute._id.toString();
         return retRoute;

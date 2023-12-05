@@ -135,7 +135,8 @@ const transformRoutingFilters = (routingFilters, deviceVersion) => {
           route: r.route,
           action: r.action,
           nextHop: r.nextHop,
-          priority: r.priority
+          priority: r.priority,
+          custom: transformCustomRouting(r?.custom)
         };
       })
     };
@@ -153,7 +154,8 @@ const transformOSPF = (ospf, bgp) => {
   // The rest fields are per interface and sent to device via add/modify-interface jobs
   // const globalFields = ['routerId', 'redistributeBgp'];
   const ospfParams = {
-    routerId: ospf.routerId
+    routerId: ospf.routerId,
+    custom: transformCustomRouting(ospf?.custom)
   };
 
   // if bgp is disabled, send this field as false to the device.
@@ -164,6 +166,37 @@ const transformOSPF = (ospf, bgp) => {
   }
 
   return ospfParams;
+};
+
+const transformCustomRouting = custom => {
+  if (!custom) {
+    return [];
+  }
+
+  const res = [];
+  for (const cmd of custom.split('\n')) {
+    const noSpaces = cmd.trim();
+    if (noSpaces !== '') {
+      res.push(noSpaces);
+    }
+  }
+
+  return res;
+};
+
+/**
+ * Creates a add|remove-advanced-routing-config object
+ * @param  {Object} advancedRouting device advancedRouting object
+ * @return {Object} an object containing the global FRR parameters
+ */
+const transformAdvancedRoutingConfig = (advancedRouting) => {
+  const advancedRoutingParams = {};
+  const custom = transformCustomRouting(advancedRouting?.custom);
+  if (custom.length > 0) {
+    advancedRoutingParams.custom = custom;
+  }
+
+  return advancedRoutingParams;
 };
 
 /**
@@ -202,11 +235,16 @@ const transformBGP = async (device) => {
       inboundFilter: n.inboundFilter || '',
       outboundFilter: n.outboundFilter || '',
       holdInterval: bgp.holdInterval,
-      keepaliveInterval: bgp.keepaliveInterval
+      keepaliveInterval: bgp.keepaliveInterval,
+      custom: transformCustomRouting(n?.custom)
     };
 
     if (sendCommunityAndBestPath) {
       neighbor.sendCommunity = n.sendCommunity;
+    }
+
+    if (sendMultiHop) {
+      neighbor.multiHop = n.multiHop ? n.multiHop : 1; // 1 is the BGP default
     }
 
     if (sendMultiHop) {
@@ -268,7 +306,8 @@ const transformBGP = async (device) => {
     localAsn: bgp.localASN,
     neighbors: neighbors,
     redistributeOspf: bgp.redistributeOspf,
-    networks: networks
+    networks: networks,
+    custom: transformCustomRouting(bgp?.custom)
   };
 
   if (sendCommunityAndBestPath) {
@@ -441,5 +480,6 @@ module.exports = {
   transformLte,
   transformVrrp,
   transformNotificationsSettings,
+  transformAdvancedRoutingConfig,
   transformStaticRoute
 };

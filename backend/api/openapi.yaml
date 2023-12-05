@@ -10908,6 +10908,8 @@ components:
             outboundFilter: routingFilterName
             sendCommunity: both
             multiHop: 1
+          custom:
+           - command: ip route add
         cpuInfo:
           powerSaving: true
           vppCores: 3
@@ -10955,6 +10957,11 @@ components:
           type: array
         bgp:
           $ref: '#/components/schemas/BgpConfigs'
+        advancedRouting:
+          type: object
+          properties:
+            custom:
+              $ref: '#/components/schemas/FrrCustom'
         routingFilters:
           items:
             $ref: '#/components/schemas/RoutingFilter'
@@ -11573,7 +11580,12 @@ components:
           type: string
         priority:
           type: integer
+        custom:
+          $ref: '#/components/schemas/FrrCustom'
       type: object
+    FrrCustom:
+      example: redistribute static
+      type: string
     BgpConfigs:
       example:
         enable: true
@@ -11610,6 +11622,8 @@ components:
           items:
             $ref: '#/components/schemas/BgpNeighbor'
           type: array
+        custom:
+          $ref: '#/components/schemas/FrrCustom'
       type: object
     BgpNeighbor:
       example:
@@ -11647,6 +11661,8 @@ components:
           type: number
           minimum: 1
           maximum: 255
+        custom:
+          $ref: '#/components/schemas/FrrCustom'
       type: object
     OspfConfigs:
       example:
@@ -11667,6 +11683,8 @@ components:
         redistributeBgp:
           type: boolean
           description: If to redistribute to OSPF routes that learned by BGP
+        custom:
+          $ref: '#/components/schemas/FrrCustom'
       type: object
     CoordsConfigs:
       example:
