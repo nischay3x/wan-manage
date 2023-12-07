@@ -750,6 +750,7 @@ class NotificationsManager {
         notificationList.forEach(notification => {
           notification.account = org.accountID;
           notification.time = currentTime;
+          notification.lastResolvedStatusChange = currentTime;
           bulkWriteOps.push({ insertOne: { document: notification } });
         });
       });
