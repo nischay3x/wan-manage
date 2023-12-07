@@ -1636,17 +1636,19 @@ const delTunnel = async (tunnel, user, org, updateOps) => {
   // Check if tunnel used by any static route
   // const organization = await organizations.findOne({ _id: org }).lean();
   const { ip1, ip2 } = generateTunnelParams(num, org.tunnelRange);
-  const tunnelUsedByStaticRoute =
-    (Array.isArray(deviceA.staticroutes) &&
-    deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
-    (!peer && (Array.isArray(deviceB.staticroutes) &&
-    deviceB.staticroutes.some(s => [ip1, ip2].includes(s.gateway))));
+  [...(deviceA?.staticroutes ?? []), ...(deviceB?.staticroutes ?? [])].forEach(s => {
+    if ([ip1, ip2].includes(s.gateway)) {
+      throw new Error(
+        'Some static routes defined via removed tunnel, please remove static routes first'
+      );
+    }
 
-  if (tunnelUsedByStaticRoute) {
-    throw new Error(
-      'Some static routes defined via removed tunnel, please remove static routes first'
-    );
-  };
+    if ((s.conditions ?? []).some(c => c?.via?.tunnelId === tunnel.num)) {
+      throw new Error(
+        'A conditional static routes defined via removed tunnel, please remove static routes first'
+      );
+    }
+  });
 
   updateOps.push({
     updateOne: {
