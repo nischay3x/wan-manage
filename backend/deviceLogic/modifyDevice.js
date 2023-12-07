@@ -1013,7 +1013,7 @@ const prepareModifyAdvancedRouting = (origDevice, newDevice) => {
   }
 
   // if newAdvancedRouting is with empty values - send only remove-routing-config
-  if (!Object.keys(omitBy(origDevice, val => val === '')).length) {
+  if (!Object.keys(omitBy(newAdvancedRouting, val => val === '')).length) {
     return { remove: origAdvancedRouting, add: null };
   }
 
