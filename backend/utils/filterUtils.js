@@ -52,7 +52,7 @@ const getFilterExpression = ({ key, op, val }) => {
     };
   }
   // Special case for dates filtering
-  if (['time', 'date', 'created_at'].includes(key)) {
+  if (['time', 'date', 'created_at', 'lastResolvedStatusChange'].includes(key)) {
     const date1 = new Date(val);
     const date2 = new Date(val);
     date2.setDate(date1.getDate() + 1); // beginning of the next day
