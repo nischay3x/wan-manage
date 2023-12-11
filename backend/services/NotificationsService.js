@@ -109,7 +109,8 @@ class NotificationsService {
             emailSent: 1,
             resolved: 1,
             org: 1,
-            isInfo: 1
+            isInfo: 1,
+            lastResolvedStatusChange: 1
           }
         }
       ] : [];
@@ -213,6 +214,7 @@ class NotificationsService {
             ...element,
             _id: element._id.toString(),
             time: element.time.toISOString(),
+            lastResolvedStatusChange: element.lastResolvedStatusChange.toISOString(),
             targets: { ...element.targets, deviceId: deviceObj, interfaceId: interfaceObj }
           };
         });
