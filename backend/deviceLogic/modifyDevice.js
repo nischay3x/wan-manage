@@ -284,7 +284,7 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
     if (remove) {
       requests.push({
         entity: 'agent',
-        message: 'remove-routing-config',
+        message: 'remove-routing-general',
         params: { ...remove }
       });
     }
@@ -292,7 +292,7 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
     if (add) {
       requests.push({
         entity: 'agent',
-        message: 'add-routing-config',
+        message: 'add-routing-general',
         params: { ...add }
       });
     }
@@ -997,7 +997,7 @@ const prepareModifyOSPF = (origDevice, newDevice) => {
 };
 
 /**
- * Creates add/remove-routing-config jobs
+ * Creates add/remove-routing-general jobs
  * @param  {Object} origDevice device object before changes in the database
  * @param  {Object} newDevice  device object after changes in the database
  * @return {Object}            an object containing add and remove ospf parameters
@@ -1012,18 +1012,18 @@ const prepareModifyAdvancedRouting = (origDevice, newDevice) => {
     return { remove: null, add: null };
   }
 
-  // if newAdvancedRouting is with empty values - send only remove-routing-config
+  // if newAdvancedRouting is with empty values - send only remove-routing-general
   if (!Object.keys(omitBy(newAdvancedRouting, val => val === '')).length) {
     return { remove: origAdvancedRouting, add: null };
   }
 
-  // if origAdvancedRouting is with empty values - send only add-routing-config
+  // if origAdvancedRouting is with empty values - send only add-routing-general
   if (!Object.keys(omitBy(origAdvancedRouting, val => val === '')).length) {
     return { remove: null, add: newAdvancedRouting };
   }
 
   // if there is a change,
-  // send pair of remove-routing-config and add-routing-config
+  // send pair of remove-routing-general and add-routing-general
   return { remove: origAdvancedRouting, add: newAdvancedRouting };
 };
 
@@ -1167,11 +1167,14 @@ const apply = async (device, user, data) => {
     modifyParams.modify_ospf = { remove: removeOSPF, add: addOSPF };
   }
 
-  // Create FRR modification parameters
-  const { remove: removeFRRConf, add: addFRRConf } =
+  // Create general routing modification parameters
+  const { remove: removeGeneralRoutingConf, add: addGeneralRoutingConf } =
     prepareModifyAdvancedRouting(device[0], data.newDevice);
-  if (removeFRRConf || addFRRConf) {
-    modifyParams.modify_advanced_routing_config = { remove: removeFRRConf, add: addFRRConf };
+  if (removeGeneralRoutingConf || addGeneralRoutingConf) {
+    modifyParams.modify_advanced_routing_config = {
+      remove: removeGeneralRoutingConf,
+      add: addGeneralRoutingConf
+    };
   }
 
   // Create BGP modification parameters
@@ -1650,7 +1653,7 @@ const sync = async (deviceId, orgId) => {
   if (!isEmpty(advancedRoutingData)) {
     deviceConfRequests.push({
       entity: 'agent',
-      message: 'add-routing-config',
+      message: 'add-routing-general',
       params: advancedRoutingData
     });
   }

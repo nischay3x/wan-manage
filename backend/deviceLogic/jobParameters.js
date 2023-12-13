@@ -168,7 +168,7 @@ const transformOSPF = (ospf, bgp) => {
   return ospfParams;
 };
 
-const transformCustomRouting = custom => {
+const transformCustomRouting = (custom) => {
   if (!custom) {
     return [];
   }
@@ -185,18 +185,13 @@ const transformCustomRouting = custom => {
 };
 
 /**
- * Creates a add|remove-routing-config object
+ * Creates a add|remove-routing-general object
  * @param  {Object} advancedRouting device advancedRouting object
  * @return {Object} an object containing the global FRR parameters
  */
 const transformAdvancedRoutingConfig = (advancedRouting) => {
-  const advancedRoutingParams = {};
   const custom = transformCustomRouting(advancedRouting?.custom);
-  if (custom.length > 0) {
-    advancedRoutingParams.custom = custom;
-  }
-
-  return advancedRoutingParams;
+  return { ...(custom.length > 0 && { custom }) };
 };
 
 /**
@@ -441,7 +436,7 @@ const transformNotificationsSettings = (notificationsSettings, relevantEventType
   return notificationsObject;
 };
 
-const transformStaticRoute = route => {
+const transformStaticRoute = (route) => {
   const params = {
     addr: route.destination,
     via: route.gateway,

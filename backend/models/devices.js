@@ -34,7 +34,7 @@ const statusEnums = [
   'uninstallation failed'
 ];
 
-const FrrCustom = {
+const RoutingCommandsCli = {
   type: String,
   default: '',
   required: false
@@ -319,7 +319,7 @@ const interfacesSchema = new Schema({
       required: true,
       validate: {
         validator: validators.validateOSPFArea,
-        message: 'area should be a valid number'
+        message: 'Area should be a valid number'
       }
     },
     keyId: {
@@ -722,7 +722,7 @@ const deviceRoutingFilterRuleSchema = new Schema({
     type: Number,
     required: true
   },
-  custom: FrrCustom
+  custom: RoutingCommandsCli
 });
 
 /**
@@ -911,7 +911,7 @@ const BGPNeighborSchema = new Schema({
     min: [1, 'multiHop should be a number between 1 - 255'],
     max: [255, 'multiHop should be a number between 1 - 255']
   },
-  custom: FrrCustom
+  custom: RoutingCommandsCli
 }, {
   timestamps: true
 });
@@ -1140,7 +1140,7 @@ const deviceSchema = new Schema({
       type: Boolean,
       default: true
     },
-    custom: FrrCustom,
+    custom: RoutingCommandsCli,
     neighbors: [BGPNeighborSchema]
   },
   ospf: {
@@ -1172,10 +1172,10 @@ const deviceSchema = new Schema({
       type: Boolean,
       default: true
     },
-    custom: FrrCustom
+    custom: RoutingCommandsCli
   },
   advancedRouting: {
-    custom: FrrCustom
+    custom: RoutingCommandsCli
   },
   routingFilters: {
     type: [deviceRoutingFiltersSchema]

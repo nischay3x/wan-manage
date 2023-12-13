@@ -753,6 +753,7 @@ const validateStaticRouteConditions = (route, device, tunnels) => {
     };
   }
 
+  const staticRouteDescr = `${route.destination} via ${gateway}`;
   // Condition is optional so all the fields can be empty.
   // Partial configuration is not allowed.
   const destinationProvided = isNullOrEmpty(conditions[0].destination);
@@ -765,12 +766,11 @@ const validateStaticRouteConditions = (route, device, tunnels) => {
     return { valid: true, err: null };
   };
 
-  // We now that not all values are empty. So check if one of them is not provided
+  // We know that not all values are empty. So check if one of them is not provided
   if (!destinationProvided || !typeProvided || (!devIdProvided && !tunnelProvided)) {
     return {
       valid: false,
-      err: 'Partial configuration for the Conditions section of the static route ' +
-      `(${route.destination} via ${gateway}) is not allowed`
+      err: `Partial condition for static route (${staticRouteDescr}) is not allowed`
     };
   };
 
@@ -778,8 +778,7 @@ const validateStaticRouteConditions = (route, device, tunnels) => {
   if (devIdProvided && tunnelProvided) {
     return {
       valid: false,
-      err: 'The configuration for the Conditions section of the static route ' +
-      `(${route.destination} via ${gateway}) has unsupported "via" value`
+      err: `Static route (${staticRouteDescr}) condition unsupported "via" value`
     };
   }
 
@@ -791,8 +790,7 @@ const validateStaticRouteConditions = (route, device, tunnels) => {
   if (!isIpv4Valid.valid) {
     return {
       valid: false,
-      err: 'The "destination" in the Conditions section of the static route ' +
-      `(${route.destination} via ${gateway}) is invalid IP address`
+      err: `Static route (${staticRouteDescr}) condition "destination" has invalid IP address`
     };
   }
 
@@ -803,9 +801,7 @@ const validateStaticRouteConditions = (route, device, tunnels) => {
     if (!ifc) {
       return {
         valid: false,
-        err: `Interface devId ${devId} is not found. ` +
-        'Check the Conditions section of the static route ' +
-        `(${route.destination} via ${gateway})`
+        err: `Static route (${staticRouteDescr}) condition interface ${devId} is not found`
       };
     };
   }
@@ -816,9 +812,7 @@ const validateStaticRouteConditions = (route, device, tunnels) => {
     if (!tunnelIdFound) {
       return {
         valid: false,
-        err: `Tunnel number ${tunnelId} is not found. ` +
-        'Check the Conditions section of the static route ' +
-        `(${route.destination} via ${gateway})`
+        err: `Static route (${staticRouteDescr}) condition tunnel number ${tunnelId} is not found`
       };
     }
   };
@@ -834,13 +828,27 @@ const validateStaticRouteConditions = (route, device, tunnels) => {
  * @return {{valid: boolean, err: string}}  test result + error, if device is invalid
  */
 const validateStaticRoute = (device, tunnels, route) => {
-  const { ifname, gateway, isPending, redistributeViaBGP, onLink } = route;
+  const { destination, ifname, gateway, isPending, redistributeViaBGP, onLink } = route;
   const gatewaySubnet = `${gateway}/32`;
 
   if (redistributeViaBGP && !device.bgp.enable) {
     return {
       valid: false,
       err: 'Cannot redistribute static route via BGP. Please enable BGP first'
+    };
+  }
+
+  if (!gateway) {
+    return {
+      valid: false,
+      err: 'Gateway is required in a static route'
+    };
+  }
+
+  if (!destination) {
+    return {
+      valid: false,
+      err: 'Destination is required in a static route'
     };
   }
 
