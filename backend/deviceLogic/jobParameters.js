@@ -135,7 +135,8 @@ const transformRoutingFilters = (routingFilters, deviceVersion) => {
           route: r.route,
           action: r.action,
           nextHop: r.nextHop,
-          priority: r.priority
+          priority: r.priority,
+          custom: transformCustomRouting(r?.custom)
         };
       })
     };
@@ -153,7 +154,8 @@ const transformOSPF = (ospf, bgp) => {
   // The rest fields are per interface and sent to device via add/modify-interface jobs
   // const globalFields = ['routerId', 'redistributeBgp'];
   const ospfParams = {
-    routerId: ospf.routerId
+    routerId: ospf.routerId,
+    custom: transformCustomRouting(ospf?.custom)
   };
 
   // if bgp is disabled, send this field as false to the device.
@@ -164,6 +166,32 @@ const transformOSPF = (ospf, bgp) => {
   }
 
   return ospfParams;
+};
+
+const transformCustomRouting = (custom) => {
+  if (!custom) {
+    return [];
+  }
+
+  const res = [];
+  for (const cmd of custom.split('\n')) {
+    const noSpaces = cmd.trim();
+    if (noSpaces !== '') {
+      res.push(noSpaces);
+    }
+  }
+
+  return res;
+};
+
+/**
+ * Creates a add|remove-routing-general object
+ * @param  {Object} advancedRouting device advancedRouting object
+ * @return {Object} an object containing the global FRR parameters
+ */
+const transformAdvancedRoutingConfig = (advancedRouting) => {
+  const custom = transformCustomRouting(advancedRouting?.custom);
+  return { ...(custom.length > 0 && { custom }) };
 };
 
 /**
@@ -202,11 +230,16 @@ const transformBGP = async (device) => {
       inboundFilter: n.inboundFilter || '',
       outboundFilter: n.outboundFilter || '',
       holdInterval: bgp.holdInterval,
-      keepaliveInterval: bgp.keepaliveInterval
+      keepaliveInterval: bgp.keepaliveInterval,
+      custom: transformCustomRouting(n?.custom)
     };
 
     if (sendCommunityAndBestPath) {
       neighbor.sendCommunity = n.sendCommunity;
+    }
+
+    if (sendMultiHop) {
+      neighbor.multiHop = n.multiHop ? n.multiHop : 1; // 1 is the BGP default
     }
 
     if (sendMultiHop) {
@@ -268,7 +301,8 @@ const transformBGP = async (device) => {
     localAsn: bgp.localASN,
     neighbors: neighbors,
     redistributeOspf: bgp.redistributeOspf,
-    networks: networks
+    networks: networks,
+    custom: transformCustomRouting(bgp?.custom)
   };
 
   if (sendCommunityAndBestPath) {
@@ -402,6 +436,35 @@ const transformNotificationsSettings = (notificationsSettings, relevantEventType
   return notificationsObject;
 };
 
+const transformStaticRoute = (route) => {
+  const params = {
+    addr: route.destination,
+    via: route.gateway,
+    dev_id: route.ifname || undefined,
+    metric: route.metric ? parseInt(route.metric, 10) : undefined,
+    redistributeViaOSPF: route.redistributeViaOSPF,
+    redistributeViaBGP: route.redistributeViaBGP,
+    onLink: route.onLink
+  };
+
+  if (route?.conditions?.length > 0) {
+    params.condition = {
+      addr: route.conditions[0].destination,
+      type: route.conditions[0].type,
+      via: {}
+    };
+
+    const { devId, tunnelId } = route.conditions[0].via;
+    if (devId) {
+      params.condition.via.dev_id = devId;
+    } else if (tunnelId) {
+      params.condition.via['tunnel-id'] = tunnelId;
+    }
+  }
+
+  return params;
+};
+
 module.exports = {
   transformInterfaces,
   transformRoutingFilters,
@@ -411,5 +474,7 @@ module.exports = {
   transformVxlanConfig,
   transformLte,
   transformVrrp,
-  transformNotificationsSettings
+  transformNotificationsSettings,
+  transformAdvancedRoutingConfig,
+  transformStaticRoute
 };

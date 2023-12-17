@@ -47,6 +47,7 @@ const tcpClampingHeaderSize = configs.get('tcpClampingHeaderSize', 'number');
 const { transformBGP } = require('./jobParameters');
 const organizations = require('../models/organizations');
 const notificationsMgr = require('../notifications/notifications')();
+const { validateOSPFArea } = require('../models/validators');
 
 const intersectIfcLabels = (ifcLabelsA, ifcLabelsB) => {
   const intersection = [];
@@ -621,7 +622,7 @@ const applyTunnelAdd = async (devices, user, data) => {
   }
   // If ospfCost is not defined, use the default cost
   advancedOptions.ospfCost = Number(advancedOptions.ospfCost || defaultTunnelOspfCost);
-  const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
+  const { mtu, mssClamp, ospfCost, ospfArea, routing } = advancedOptions || {};
 
   if (mtu !== undefined && mtu !== '' && (isNaN(mtu) || mtu < 500 || mtu > 1500)) {
     logger.error('Wrong MTU value when creating tunnels', { params: { mtu } });
@@ -636,6 +637,11 @@ const applyTunnelAdd = async (devices, user, data) => {
   if (isNaN(ospfCost) || ospfCost <= 0) {
     logger.error('Wrong OSPF cost when creating tunnels', { params: { ospfCost } });
     throw new Error('OSPF cost must be a positive numeric value or empty');
+  }
+
+  if (ospfArea && !validateOSPFArea(ospfArea)) {
+    logger.error('Wrong OSPF area when creating tunnels', { params: { ospfArea } });
+    throw new Error('OSPF area must be a valid area');
   }
 
   if (topology !== 'hubAndSpoke' && topology !== 'fullMesh') {
@@ -1351,7 +1357,7 @@ const addTunnel = async (
   const tunnelKeys = encryptionMethod === 'psk' ? generateRandomKeys() : null;
 
   // Advanced tunnel options
-  const { mtu, mssClamp, ospfCost, routing } = advancedOptions || {};
+  const { mtu, mssClamp, ospfCost, ospfArea, routing } = advancedOptions || {};
 
   // check if need to create the tunnel as pending
   let isPending = false;
@@ -1398,7 +1404,7 @@ const addTunnel = async (
       pendingReason: pendingReason,
       encryptionMethod,
       tunnelKeys,
-      advancedOptions: { mtu, mssClamp, ospfCost, routing },
+      advancedOptions: { mtu, mssClamp, ospfCost, ospfArea, routing },
       peer: peer ? peer._id : null,
       notificationsSettings: notificationsSettings
     },
@@ -1647,17 +1653,19 @@ const delTunnel = async (tunnel, user, org, updateOps) => {
   // Check if tunnel used by any static route
   // const organization = await organizations.findOne({ _id: org }).lean();
   const { ip1, ip2 } = generateTunnelParams(num, org.tunnelRange);
-  const tunnelUsedByStaticRoute =
-    (Array.isArray(deviceA.staticroutes) &&
-    deviceA.staticroutes.some(s => [ip1, ip2].includes(s.gateway))) ||
-    (!peer && (Array.isArray(deviceB.staticroutes) &&
-    deviceB.staticroutes.some(s => [ip1, ip2].includes(s.gateway))));
+  [...(deviceA?.staticroutes ?? []), ...(deviceB?.staticroutes ?? [])].forEach(s => {
+    if ([ip1, ip2].includes(s.gateway)) {
+      throw new Error(
+        'Some static routes defined via removed tunnel, please remove static routes first'
+      );
+    }
 
-  if (tunnelUsedByStaticRoute) {
-    throw new Error(
-      'Some static routes defined via removed tunnel, please remove static routes first'
-    );
-  };
+    if ((s.conditions ?? []).some(c => c?.via?.tunnelId === tunnel.num)) {
+      throw new Error(
+        'A conditional static routes defined via removed tunnel, please remove static routes first'
+      );
+    }
+  });
 
   updateOps.push({
     updateOne: {
@@ -1999,7 +2007,7 @@ const prepareTunnelParams = (
     deviceBIntf && deviceBIntf.mtu ? deviceBIntf.mtu : 1500
   ) - packetHeaderSize;
 
-  let { mtu, ospfCost, mssClamp, routing } = advancedOptions;
+  let { mtu, ospfCost, ospfArea, mssClamp, routing } = advancedOptions;
   if (!mtu) {
     mtu = (globalTunnelMtu > 0) ? globalTunnelMtu : minMtu;
   }
@@ -2039,6 +2047,9 @@ const prepareTunnelParams = (
     }
     if (ospfCost) {
       paramsDeviceA.peer['ospf-cost'] = ospfCost;
+    }
+    if (ospfArea) {
+      paramsDeviceA.peer['ospf-area'] = ospfArea;
     }
   } else {
     const isDevBSupportsVxlanPort = isDevSupportsVxlanPort(majorVersionB, minorVersionB);
@@ -2102,6 +2113,10 @@ const prepareTunnelParams = (
     if (ospfCost) {
       paramsDeviceA['loopback-iface']['ospf-cost'] = ospfCost;
       paramsDeviceB['loopback-iface']['ospf-cost'] = ospfCost;
+    }
+    if (ospfArea) {
+      paramsDeviceA['loopback-iface']['ospf-area'] = ospfArea;
+      paramsDeviceB['loopback-iface']['ospf-area'] = ospfArea;
     }
 
     if (routing === 'bgp') {

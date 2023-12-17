@@ -34,6 +34,12 @@ const statusEnums = [
   'uninstallation failed'
 ];
 
+const RoutingCommandsCli = {
+  type: String,
+  default: '',
+  required: false
+};
+
 /**
  * Interfaces Database Schema
  */
@@ -313,7 +319,7 @@ const interfacesSchema = new Schema({
       required: true,
       validate: {
         validator: validators.validateOSPFArea,
-        message: 'area should be a valid number'
+        message: 'Area should be a valid number'
       }
     },
     keyId: {
@@ -427,7 +433,33 @@ const staticroutesSchema = new Schema({
     type: Boolean,
     default: false
   },
-  ...pendingSchema
+  ...pendingSchema,
+  conditions: [{
+    destination: {
+      type: String,
+      validate: {
+        validator: val => !val || validators.validateIPv4WithMask(val),
+        message: 'Monitoring destination should be a valid ipv4 with mask type'
+      }
+    },
+    type: {
+      type: String,
+      enum: ['', 'route-not-exist', 'route-exist']
+    },
+    via: {
+      devId: {
+        type: String,
+        maxlength: [50, 'devId length must be at most 50'],
+        validate: {
+          validator: validators.validateDevId,
+          message: 'devId should be a valid devId address'
+        }
+      },
+      tunnelId: {
+        type: Number
+      }
+    }
+  }]
 }, {
   timestamps: true
 });
@@ -689,7 +721,8 @@ const deviceRoutingFilterRuleSchema = new Schema({
   priority: {
     type: Number,
     required: true
-  }
+  },
+  custom: RoutingCommandsCli
 });
 
 /**
@@ -877,7 +910,8 @@ const BGPNeighborSchema = new Schema({
     default: 1,
     min: [1, 'multiHop should be a number between 1 - 255'],
     max: [255, 'multiHop should be a number between 1 - 255']
-  }
+  },
+  custom: RoutingCommandsCli
 }, {
   timestamps: true
 });
@@ -1106,6 +1140,7 @@ const deviceSchema = new Schema({
       type: Boolean,
       default: true
     },
+    custom: RoutingCommandsCli,
     neighbors: [BGPNeighborSchema]
   },
   ospf: {
@@ -1136,7 +1171,11 @@ const deviceSchema = new Schema({
     redistributeBgp: {
       type: Boolean,
       default: true
-    }
+    },
+    custom: RoutingCommandsCli
+  },
+  advancedRouting: {
+    custom: RoutingCommandsCli
   },
   routingFilters: {
     type: [deviceRoutingFiltersSchema]

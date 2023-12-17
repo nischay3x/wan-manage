@@ -60,10 +60,12 @@ const {
   transformInterfaces,
   transformRoutingFilters,
   transformOSPF,
+  transformAdvancedRoutingConfig,
   transformVxlanConfig,
   transformBGP,
   transformDHCP,
-  transformLte
+  transformLte,
+  transformStaticRoute
 } = require('./jobParameters');
 
 const modifyBGPParams = ['neighbors', 'networks', 'redistributeOspf'];
@@ -276,53 +278,47 @@ const prepareModificationMessages = (messageParams, device, newDevice) => {
     }
   }
 
+  if (has(messageParams, 'modify_advanced_routing_config')) {
+    const { remove, add } = messageParams.modify_advanced_routing_config;
+
+    if (remove) {
+      requests.push({
+        entity: 'agent',
+        message: 'remove-routing-general',
+        params: { ...remove }
+      });
+    }
+
+    if (add) {
+      requests.push({
+        entity: 'agent',
+        message: 'add-routing-general',
+        params: { ...add }
+      });
+    }
+  }
+
   if (has(messageParams, 'modify_routes')) {
-    const routeRequests = messageParams.modify_routes.routes.flatMap(item => {
-      let items = [];
-      if (item.old_route !== '') {
-        items.push({
+    const { remove, add } = messageParams.modify_routes;
+
+    if (remove.length > 0) {
+      requests.push(...remove.map(params => {
+        return {
           entity: 'agent',
           message: 'remove-route',
-          params: {
-            addr: item.addr,
-            via: item.old_route,
-            dev_id: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined,
-            redistributeViaOSPF: item.redistributeViaOSPF,
-            redistributeViaBGP: item.redistributeViaBGP,
-            onLink: item.onLink
-          }
-        });
-      }
-      if (item.new_route !== '') {
-        items.push({
+          params: params
+        };
+      }));
+    }
+
+    if (add.length > 0) {
+      requests.push(...add.map(params => {
+        return {
           entity: 'agent',
           message: 'add-route',
-          params: {
-            addr: item.addr,
-            via: item.new_route,
-            dev_id: item.devId || undefined,
-            metric: item.metric ? parseInt(item.metric, 10) : undefined,
-            redistributeViaOSPF: item.redistributeViaOSPF,
-            redistributeViaBGP: item.redistributeViaBGP,
-            onLink: item.onLink
-          }
-        });
-      }
-
-      items = items.map((item) => {
-        if (item.params && item.params.devId) {
-          item.params.dev_id = item.params.devId;
-          delete item.params.devId;
-        }
-        return item;
-      });
-
-      return items;
-    });
-
-    if (routeRequests) {
-      requests.push(...routeRequests);
+          params: params
+        };
+      }));
     }
   }
 
@@ -863,35 +859,16 @@ const setTunnelsPendingInDB = (tunnelIDs, org, flag) => {
  * @return {Object}            an object containing an array of routes
  */
 const prepareModifyRoutes = (origDevice, newDevice) => {
-  // Handle changes in default route
-  const routes = [];
-
   // Handle changes in static routes
   // Extract only relevant fields from static routes database entries
   const [newStaticRoutes, origStaticRoutes] = [
 
     newDevice.staticroutes.filter(r => !r.isPending).map(route => {
-      return ({
-        destination: route.destination,
-        gateway: route.gateway,
-        ifname: route.ifname,
-        metric: route.metric,
-        redistributeViaOSPF: route.redistributeViaOSPF,
-        redistributeViaBGP: route.redistributeViaBGP,
-        onLink: route.onLink
-      });
+      return transformStaticRoute(route);
     }),
 
     origDevice.staticroutes.filter(r => !r.isPending).map(route => {
-      return ({
-        destination: route.destination,
-        gateway: route.gateway,
-        ifname: route.ifname,
-        metric: route.metric,
-        redistributeViaOSPF: route.redistributeViaOSPF,
-        redistributeViaBGP: route.redistributeViaBGP,
-        onLink: route.onLink
-      });
+      return transformStaticRoute(route);
     })
   ];
 
@@ -899,7 +876,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
   // Add all static routes that do not exist in the
   // original routes array and remove all static routes
   // that do not appear in the new routes array
-  const [routesToAdd, routesToRemove] = [
+  const [addStaticRoutes, removeStaticRoutes] = [
     differenceWith(
       newStaticRoutes,
       origStaticRoutes,
@@ -916,32 +893,7 @@ const prepareModifyRoutes = (origDevice, newDevice) => {
     )
   ];
 
-  routesToRemove.forEach(route => {
-    routes.push({
-      addr: route.destination,
-      old_route: route.gateway,
-      new_route: '',
-      devId: route.ifname || undefined,
-      metric: route.metric || undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP,
-      onLink: route.onLink
-    });
-  });
-  routesToAdd.forEach(route => {
-    routes.push({
-      addr: route.destination,
-      new_route: route.gateway,
-      old_route: '',
-      devId: route.ifname || undefined,
-      metric: route.metric || undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP,
-      onLink: route.onLink
-    });
-  });
-
-  return { routes: routes };
+  return { add: addStaticRoutes, remove: removeStaticRoutes };
 };
 
 /**
@@ -1042,6 +994,37 @@ const prepareModifyOSPF = (origDevice, newDevice) => {
 
   // if there is a change, send pair of remove-ospf and add-ospf
   return { remove: origOSPF, add: newOSPF };
+};
+
+/**
+ * Creates add/remove-routing-general jobs
+ * @param  {Object} origDevice device object before changes in the database
+ * @param  {Object} newDevice  device object after changes in the database
+ * @return {Object}            an object containing add and remove ospf parameters
+ */
+const prepareModifyAdvancedRouting = (origDevice, newDevice) => {
+  const [origAdvancedRouting, newAdvancedRouting] = [
+    transformAdvancedRoutingConfig(origDevice?.advancedRouting ?? {}),
+    transformAdvancedRoutingConfig(newDevice?.advancedRouting ?? {})
+  ];
+
+  if (isEqual(origAdvancedRouting, newAdvancedRouting)) {
+    return { remove: null, add: null };
+  }
+
+  // if newAdvancedRouting is with empty values - send only remove-routing-general
+  if (!Object.keys(omitBy(newAdvancedRouting, val => val === '')).length) {
+    return { remove: origAdvancedRouting, add: null };
+  }
+
+  // if origAdvancedRouting is with empty values - send only add-routing-general
+  if (!Object.keys(omitBy(origAdvancedRouting, val => val === '')).length) {
+    return { remove: null, add: newAdvancedRouting };
+  }
+
+  // if there is a change,
+  // send pair of remove-routing-general and add-routing-general
+  return { remove: origAdvancedRouting, add: newAdvancedRouting };
 };
 
 /**
@@ -1166,8 +1149,10 @@ const apply = async (device, user, data) => {
   data.ignoreTasks ??= [];
 
   // Create the default/static routes modification parameters
-  const modifyRoutes = prepareModifyRoutes(device[0], data.newDevice);
-  if (modifyRoutes.routes.length > 0) modifyParams.modify_routes = modifyRoutes;
+  const { remove: removeRoutes, add: addRoutes } = prepareModifyRoutes(device[0], data.newDevice);
+  if (removeRoutes.length > 0 || addRoutes.length > 0) {
+    modifyParams.modify_routes = { remove: removeRoutes, add: addRoutes };
+  }
 
   // Create DHCP modification parameters
   const modifyDHCP = await prepareModifyDHCP(device[0], data.newDevice);
@@ -1180,6 +1165,16 @@ const apply = async (device, user, data) => {
   const { remove: removeOSPF, add: addOSPF } = prepareModifyOSPF(device[0], data.newDevice);
   if (removeOSPF || addOSPF) {
     modifyParams.modify_ospf = { remove: removeOSPF, add: addOSPF };
+  }
+
+  // Create general routing modification parameters
+  const { remove: removeGeneralRoutingConf, add: addGeneralRoutingConf } =
+    prepareModifyAdvancedRouting(device[0], data.newDevice);
+  if (removeGeneralRoutingConf || addGeneralRoutingConf) {
+    modifyParams.modify_advanced_routing_config = {
+      remove: removeGeneralRoutingConf,
+      add: addGeneralRoutingConf
+    };
   }
 
   // Create BGP modification parameters
@@ -1448,6 +1443,7 @@ const apply = async (device, user, data) => {
       has(modifyParams, 'modify_router') ||
       has(modifyParams, 'modify_interfaces') ||
       has(modifyParams, 'modify_ospf') ||
+      has(modifyParams, 'modify_advanced_routing_config') ||
       has(modifyParams, 'modify_routing_filters') ||
       has(modifyParams, 'modify_bgp') ||
       has(modifyParams, 'modify_firewall') ||
@@ -1574,7 +1570,8 @@ const sync = async (deviceId, orgId) => {
       ospf: 1,
       bgp: 1,
       routingFilters: 1,
-      versions: 1
+      versions: 1,
+      advancedRouting: 1
     }
   )
     .lean()
@@ -1583,7 +1580,7 @@ const sync = async (deviceId, orgId) => {
     .populate('org');
 
   const {
-    interfaces, staticroutes, dhcp, ospf, bgp, routingFilters, versions, _id
+    interfaces, staticroutes, dhcp, ospf, bgp, advancedRouting, routingFilters, versions, _id
   } = device;
 
   const majorVersion = getMajorVersion(versions.agent);
@@ -1649,6 +1646,18 @@ const sync = async (deviceId, orgId) => {
     });
   }
 
+  // IMPORTANT: routing data should be before static routes!
+  let advancedRoutingData = transformAdvancedRoutingConfig(advancedRouting);
+  // remove empty values because they are optional
+  advancedRoutingData = omitBy(advancedRoutingData, val => val === '');
+  if (!isEmpty(advancedRoutingData)) {
+    deviceConfRequests.push({
+      entity: 'agent',
+      message: 'add-routing-general',
+      params: advancedRoutingData
+    });
+  }
+
   // Prepare add-routing-filter message
   const routingFiltersData = transformRoutingFilters(routingFilters, versions.agent);
   routingFiltersData.forEach(entry => {
@@ -1673,27 +1682,15 @@ const sync = async (deviceId, orgId) => {
 
   // Prepare add-route message
   Array.isArray(staticroutes) && staticroutes.forEach(route => {
-    const { ifname, gateway, destination, metric, isPending } = route;
-
     // skip pending routes
-    if (isPending) {
+    if (route.isPending) {
       return;
     }
-
-    const params = {
-      addr: destination,
-      via: gateway,
-      dev_id: ifname || undefined,
-      metric: metric ? parseInt(metric, 10) : undefined,
-      redistributeViaOSPF: route.redistributeViaOSPF,
-      redistributeViaBGP: route.redistributeViaBGP,
-      onLink: route.onLink
-    };
 
     deviceConfRequests.push({
       entity: 'agent',
       message: 'add-route',
-      params: params
+      params: transformStaticRoute(route)
     });
   });
 
@@ -1780,6 +1777,7 @@ const _isNeedToSkipModifyJob = (messageParams, modifiedIfcsMap, device) => {
     !has(messageParams, 'modify_routes') &&
     !has(messageParams, 'modify_dhcp_config') &&
     !has(messageParams, 'modify_ospf') &&
+    !has(messageParams, 'modify_advanced_routing_config') &&
     !has(messageParams, 'modify_bgp') &&
     !has(messageParams, 'modify_routing_filters') &&
     !has(messageParams, 'modify_lte') &&

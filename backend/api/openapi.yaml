@@ -10914,6 +10914,8 @@ components:
             outboundFilter: routingFilterName
             sendCommunity: both
             multiHop: 1
+          custom:
+           - command: ip prefix-list NAME permit 172.16.2.0/24
         cpuInfo:
           powerSaving: true
           vppCores: 3
@@ -10961,6 +10963,11 @@ components:
           type: array
         bgp:
           $ref: '#/components/schemas/BgpConfigs'
+        advancedRouting:
+          type: object
+          properties:
+            custom:
+              $ref: '#/components/schemas/RoutingCommandsCLI'
         routingFilters:
           items:
             $ref: '#/components/schemas/RoutingFilter'
@@ -11579,7 +11586,12 @@ components:
           type: string
         priority:
           type: integer
+        custom:
+          $ref: '#/components/schemas/RoutingCommandsCLI'
       type: object
+    RoutingCommandsCLI:
+      example: redistribute static
+      type: string
     BgpConfigs:
       example:
         enable: true
@@ -11616,6 +11628,8 @@ components:
           items:
             $ref: '#/components/schemas/BgpNeighbor'
           type: array
+        custom:
+          $ref: '#/components/schemas/RoutingCommandsCLI'
       type: object
     BgpNeighbor:
       example:
@@ -11653,6 +11667,8 @@ components:
           type: number
           minimum: 1
           maximum: 255
+        custom:
+          $ref: '#/components/schemas/RoutingCommandsCLI'
       type: object
     OspfConfigs:
       example:
@@ -11673,6 +11689,8 @@ components:
         redistributeBgp:
           type: boolean
           description: If to redistribute to OSPF routes that learned by BGP
+        custom:
+          $ref: '#/components/schemas/RoutingCommandsCLI'
       type: object
     CoordsConfigs:
       example:
@@ -12257,6 +12275,11 @@ components:
         gateway: gateway
         metric: metric
         redistributeViaOSPF: true
+        redistributeViaBGP: false
+        conditions:
+          destination: 5.5.5.5/5
+          via:
+            devId: pci:0000:00:03.00
       properties:
         _id:
           maxLength: 24
@@ -12277,9 +12300,30 @@ components:
           description: Route metric
           type: string
         redistributeViaOSPF:
-          description: Indicates whether the path is redistributed using OSPF. 
+          description: Indicates whether the route should be redistributed via OSPF.
             Note that the "true" value will return if in the OSPF Global Settings, the redistribution option is enabled for all static routes
           type: boolean
+        redistributeViaBGP:
+          description: Indicates whether the route should be redistributed via BGP
+          type: boolean
+        conditions:
+          type: object
+          properties:
+            destination:
+              type: string
+            type:
+              type: string
+              enum:
+                - ''
+                - route-exist
+                - route-not-exist
+            via:
+              type: object
+              properties:
+                devId:
+                  type: string
+                tunnelId:
+                  type: number
       type: object
     StaticRoute:
       example:
@@ -12289,6 +12333,11 @@ components:
         metric: metric
         status: "completed"
         redistributeViaOSPF: true
+        redistributeViaBGP: false
+        conditions:
+          destination: 5.5.5.5/5
+          via:
+            devId: pci:0000:00:03.00
       properties:
         _id:
           type: string
@@ -12311,9 +12360,26 @@ components:
           description: Route status
           type: string
         redistributeViaOSPF:
-          description: Indicates whether the path is redistributed using OSPF.
+          description: Indicates whether the route should be redistributed via OSPF.
             Note that the "true" value will return if in the OSPF Global Settings, the redistribution option is enabled for all static routes
           type: boolean
+        redistributeViaBGP:
+          description: Indicates whether the route should be redistributed via BGP
+          type: boolean
+        conditions:
+          type: array
+          items:
+            type: object
+            properties:
+              destination:
+                type: string
+              via:
+                type: object
+                properties:
+                  devId:
+                    type: string
+                  tunnelId:
+                    type: number
       type: object
     DhcpMacAssign:
       example:
