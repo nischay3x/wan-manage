@@ -763,7 +763,10 @@ const validateStaticRouteConditions = (route, device, tunnels) => {
 
   // allow all values to be empty
   if (!destinationProvided && !typeProvided && !devIdProvided && !tunnelProvided) {
-    return { valid: true, err: null };
+    return {
+      valid: false,
+      err: `Condition for static route (${staticRouteDescr}) has empty values`
+    };
   };
 
   // We know that not all values are empty. So check if one of them is not provided
