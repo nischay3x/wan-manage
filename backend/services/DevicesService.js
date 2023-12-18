@@ -2294,10 +2294,14 @@ class DevicesService {
 
       // If the change made to the device fields requires a change on the
       // device itself, add a 'modify' job to the device's queue.
-      const modifyDevResult = await dispatcher.apply([origDevice], 'modify', user, {
-        org: orgList[0],
-        newDevice: updDevice
-      });
+      const wasApproved = origDevice.isApproved;
+      // if the device was not approved before then send a full sync job with updated parameters
+      const method = wasApproved ? 'modify' : 'sync';
+      const opDevices = wasApproved ? [origDevice]
+        : [{ ...updDevice.toObject(), org: orgList[0] }];
+      const applyData = wasApproved ? { org: orgList[0], newDevice: updDevice } : null;
+
+      const modifyDevResult = await dispatcher.apply(opDevices, method, user, applyData);
 
       if (isNeedToReleasePendingTunnels) {
         const released = await releasePublicAddrLimiterBlockage(updDevice);
