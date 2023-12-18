@@ -69,14 +69,6 @@ const apply = async (devices, user, data) => {
       }
       continue;
     }
-    if (device.sync?.state !== 'synced') {
-      const err = 'Device must be synced';
-      logger.warn('Start command failed', { params: { device, err } });
-      if (!errors.includes(err)) {
-        errors.push(err);
-      }
-      continue;
-    }
 
     // Set the device state to "pending". Device state will
     // be updated again when the device sends periodic message
