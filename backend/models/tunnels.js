@@ -19,6 +19,7 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const mongoConns = require('../mongoConns.js')();
 const { pendingSchema } = require('./schemas/pendingSchema');
+const validators = require('./validators');
 
 // Tunnels params schema
 const tunnelKeysSchema = new Schema({
@@ -63,6 +64,15 @@ const tunnelAdvancedOptionsSchema = new Schema({
   ospfCost: {
     type: String,
     default: ''
+  },
+  // OSPF area
+  ospfArea: {
+    type: String,
+    default: '',
+    validate: {
+      validator: validators.validateOSPFArea,
+      message: 'area should be a valid number'
+    }
   },
   routing: {
     type: String,

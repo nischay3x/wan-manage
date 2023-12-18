@@ -798,12 +798,7 @@ describe('validateWiFiInterfaceConfiguration', () => {
 
 describe('validateStaticRoute', () => {
   let device;
-  const route = {
-    destination: '1.1.1.1',
-    gateway: '192.168.100.2',
-    ifname: 'pci:0000:00:01.00',
-    metric: '10'
-  };
+  let route;
   const tunnels = [{ num: 2 }];
 
   const successObject = {
@@ -816,6 +811,13 @@ describe('validateStaticRoute', () => {
   };
 
   beforeEach(() => {
+    route = {
+      destination: '1.1.1.1',
+      gateway: '192.168.100.2',
+      ifname: 'pci:0000:00:01.00',
+      metric: '10'
+    };
+
     device = {
       org: {
         tunnelRange: '10.100.0.0'
@@ -878,6 +880,20 @@ describe('validateStaticRoute', () => {
     expect(result).toMatchObject(successObject);
   });
 
+  it('Should be an invalid static route config if gateway is not provided', () => {
+    route.gateway = '';
+    failureObject.err = 'Gateway is required in a static route';
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid static route config if destination is not provided', () => {
+    route.destination = '';
+    failureObject.err = 'Destination is required in a static route';
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
   it('Should be an invalid static route config if unknown interface used', () => {
     route.ifname = 'pci:0000:00:03.00';
     failureObject.err = `Static route interface not found '${route.ifname}'`;
@@ -909,6 +925,141 @@ describe('validateStaticRoute', () => {
     route.gateway = '10.100.0.1';
     failureObject.err =
       `Static route gateway ${route.gateway} not overlapped with any interface or tunnel`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  // conditional static routes
+  it('Should be an invalid route if conditions is not an array', () => {
+    route.conditions = 'test';
+    failureObject.err = 'Static route conditions must be an array';
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid route if conditions is an empty array', () => {
+    route.conditions = [];
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid route if conditions has multiple entries', () => {
+    route.conditions = [{}, {}];
+    failureObject.err = 'Multiple conditions for static route is not supported yet';
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid route if conditions has empty values', () => {
+    route.conditions = [{
+      destination: '',
+      type: '',
+      via: { devId: '', tunnelId: '' }
+    }];
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid route if only destination is empty', () => {
+    route.conditions = [{
+      destination: '',
+      type: 'route-not-exists',
+      via: { devId: 'pci', tunnelId: '3' }
+    }];
+    const staticRouteDescr = `${route.destination} via ${route.gateway}`;
+    failureObject.err = `Partial condition for static route (${staticRouteDescr}) is not allowed`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid route if only type is empty', () => {
+    route.conditions = [{
+      destination: '4.4.4.4/32',
+      type: '',
+      via: { devId: 'pci', tunnelId: '3' }
+    }];
+    const staticRouteDescr = `${route.destination} via ${route.gateway}`;
+    failureObject.err = `Partial condition for static route (${staticRouteDescr}) is not allowed`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid route if only via is empty', () => {
+    route.conditions = [{
+      destination: '4.4.4.4/32',
+      type: 'route-exists',
+      via: { }
+    }];
+    const staticRouteDescr = `${route.destination} via ${route.gateway}`;
+    failureObject.err = `Partial condition for static route (${staticRouteDescr}) is not allowed`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid route if devId and tunnelId provided in "via"', () => {
+    route.conditions = [{
+      destination: '4.4.4.4/32',
+      type: 'route-exists',
+      via: { devId: 'test', tunnelId: 'test' }
+    }];
+    const staticRouteDescr = `${route.destination} via ${route.gateway}`;
+    failureObject.err = `Static route (${staticRouteDescr}) condition unsupported "via" value`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid route if destination is not valid IP', () => {
+    route.conditions = [{
+      destination: 'test',
+      type: 'route-exists',
+      via: { devId: 'pci:0000:00:01.00' }
+    }];
+    const staticRouteDescr = `${route.destination} via ${route.gateway}`;
+    failureObject.err = `Static route (${staticRouteDescr}) condition "destination" has invalid IP address`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be a valid conditional route id devId found', () => {
+    route.conditions = [{
+      destination: '4.4.4.4/32',
+      type: 'route-exists',
+      via: { devId: 'pci:0000:00:01.00' }
+    }];
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be a valid conditional route if tunnelId found', () => {
+    route.conditions = [{
+      destination: '4.4.4.4/32',
+      type: 'route-exists',
+      via: { tunnelId: 2 }
+    }];
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(successObject);
+  });
+
+  it('Should be an invalid conditional route if devId is not found', () => {
+    route.conditions = [{
+      destination: '4.4.4.4/32',
+      type: 'route-exists',
+      via: { devId: 'pci:0000:00:07.00' }
+    }];
+    const staticRouteDescr = `${route.destination} via ${route.gateway}`;
+    failureObject.err = `Static route (${staticRouteDescr}) condition interface pci:0000:00:07.00 is not found`;
+    const result = validateStaticRoute(device, tunnels, route);
+    expect(result).toMatchObject(failureObject);
+  });
+
+  it('Should be an invalid conditional route if tunnelId is not found', () => {
+    route.conditions = [{
+      destination: '4.4.4.4/32',
+      type: 'route-exists',
+      via: { tunnelId: 1 }
+    }];
+    const staticRouteDescr = `${route.destination} via ${route.gateway}`;
+    failureObject.err = `Static route (${staticRouteDescr}) condition tunnel number 1 is not found`;
     const result = validateStaticRoute(device, tunnels, route);
     expect(result).toMatchObject(failureObject);
   });

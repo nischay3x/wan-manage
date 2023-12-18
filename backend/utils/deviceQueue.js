@@ -310,7 +310,9 @@ class DeviceQueues {
       // the pause/resume process clears the current job in the kue worker's memory
       // which causes not assigning the 'complete' status and 'TTL exceeded' failure
       // hence there should be a delay to prevent unnecessary pause/resume process
-      const jobTimeout = configs.get('jobTimeout', 'number');
+      // also the waiting pause timeout should be always less than the job timeout
+      // to prevent processing the next job if the current one is failed
+      const waitPauseTimeout = configs.get('jobTimeout', 'number') / 2;
       const pause = () => {
         if (this.deviceQueues[deviceId].waitPause) {
           this.deviceQueues[deviceId].context.pause(0, (err) => {
@@ -331,7 +333,7 @@ class DeviceQueues {
         if (count > 0) {
           logger.debug('Active jobs exist, queue pause is delayed',
             { params: { deviceId, count }, count, queue: this.deviceQueues[deviceId] });
-          setTimeout(pause, jobTimeout);
+          setTimeout(pause, waitPauseTimeout);
         } else {
           pause();
         };

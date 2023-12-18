@@ -1152,7 +1152,10 @@ class Connections {
       logger.error('Failed to receive info from device', {
         params: { device: machineId, err: err.message }
       });
-      this.deviceDisconnect(machineId);
+      // the next connection should not be broken by timeout error of the previous one
+      if (err.message !== 'Send Timeout') {
+        this.deviceDisconnect(machineId);
+      }
     }
   }
 
