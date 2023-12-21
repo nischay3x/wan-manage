@@ -778,8 +778,8 @@ class Connections {
           }
 
           if (!i.isAssigned || i.deviceType === 'pppoe') {
-            // if LTE unassigned and disabled, don't override metric. keep the auto metric
-            if (i.deviceType !== 'lte' || i?.configuration?.enable) {
+            // don't update metric for LTE interface. Metric is a flexiManage static configuration
+            if (i.deviceType !== 'lte') {
               updInterface.metric = updatedConfig.metric;
             }
             if (updatedConfig.mtu) {
