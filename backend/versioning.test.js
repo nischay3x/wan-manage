@@ -21,7 +21,8 @@ const {
   isSemVer,
   isVppVersion,
   verifyAgentVersion,
-  routerVersionsCompatible
+  routerVersionsCompatible,
+  isVersionGreaterEquals
 } = require('./versioning');
 const { checkDeviceVersion } = require('./routes/connect');
 const configs = require('./configs')();
@@ -229,6 +230,35 @@ describe('checkDeviceVersion', () => {
 
     expect(next).toHaveBeenCalledTimes(1);
     expect(next).toBeCalledWith();
+  });
+
+  describe('isVersionGreaterEquals', () => {
+    // Check:
+    // 1. same version
+    // 2. Diff in major
+    // 3. Diff in minor
+    // 4. Diff in patch
+    it.each`
+          versionA    | versionB      | result
+          ${'6.3.20'} | ${'6.3.20'}   | ${true}
+
+          ${'6.3.20'} | ${'5.3.20'}   | ${true}
+          ${'6.3.20'} | ${'7.3.20'}   | ${false}
+
+          ${'6.3.20'} | ${'6.2.20'}   | ${true}
+          ${'6.3.20'} | ${'6.4.20'}   | ${false}
+
+          ${'6.3.20'} | ${'6.3.19'}   | ${true}
+          ${'6.3.20'} | ${'6.3.21'}   | ${false}
+
+          ${''}       | ${'6.3.21'}   | ${undefined}
+          ${'6.3.20'} | ${''}         | ${undefined}
+
+          ${'6.3'}    | ${'6.3.21'}   | ${undefined}
+          ${'6.3.21'} | ${'6.3'}      | ${undefined}
+   `('Should return $result if versionA is $versionA and versionB is $versionB', ({ versionA, versionB, result }) => {
+      expect(isVersionGreaterEquals(versionA, versionB)).toEqual(result);
+    });
   });
 
   // Disable this check as it require mongo access

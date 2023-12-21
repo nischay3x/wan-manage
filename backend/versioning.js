@@ -33,6 +33,30 @@ const getMinorVersion = (versionString) => {
   return parseInt(versionString.split('.')[1], 10);
 };
 
+const isVersionGreaterEquals = (versionA, versionB) => {
+  if (!versionA || !versionB) {
+    return undefined;
+  }
+
+  const source = versionA.split('.').map(Number);
+  const target = versionB.split('.').map(Number);
+
+  if (source.length !== 3 || target.length !== 3) {
+    return undefined;
+  }
+
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] > target[i]) {
+      return true;
+    } else if (source[i] < target[i]) {
+      return false;
+    }
+  }
+
+  // Both version are equal
+  return true;
+};
+
 const mgmtMajorVersion = getMajorVersion(mgmtVersion);
 
 const isSemVer = (version) => {
@@ -106,6 +130,7 @@ const verifyAgentVersion = (version) => {
 module.exports = {
   getMajorVersion: getMajorVersion,
   getMinorVersion: getMinorVersion,
+  isVersionGreaterEquals,
   isAgentVersionCompatible: isAgentVersionCompatible,
   isSemVer: isSemVer,
   isVppVersion: isVppVersion,

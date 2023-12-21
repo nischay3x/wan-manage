@@ -950,14 +950,16 @@ describe('validateStaticRoute', () => {
     expect(result).toMatchObject(failureObject);
   });
 
-  it('Should be a valid route if conditions has empty values', () => {
+  it('Should be an invalid route if condition has empty values', () => {
     route.conditions = [{
       destination: '',
       type: '',
       via: { devId: '', tunnelId: '' }
     }];
     const result = validateStaticRoute(device, tunnels, route);
-    expect(result).toMatchObject(successObject);
+    const staticRouteDescr = `${route.destination} via ${route.gateway}`;
+    failureObject.err = `Condition for static route (${staticRouteDescr}) has empty values`;
+    expect(result).toMatchObject(failureObject);
   });
 
   it('Should be an invalid route if only destination is empty', () => {

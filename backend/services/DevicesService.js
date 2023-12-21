@@ -69,7 +69,7 @@ const publicAddrInfoLimiter = require('../deviceLogic/publicAddressLimiter');
 const applications = require('../models/applications');
 const Vrrp = require('../models/vrrp');
 const applicationStore = require('../models/applicationStore');
-const { getMajorVersion, getMinorVersion } = require('../versioning');
+const { getMajorVersion, getMinorVersion, isVersionGreaterEquals } = require('../versioning');
 const createError = require('http-errors');
 const jwt = require('jsonwebtoken');
 const { getAgentBroker } = require('../utils/httpUtils');
@@ -2125,6 +2125,16 @@ class DevicesService {
 
             return s;
           });
+
+          if (deviceRequest?.advancedRouting?.custom) {
+            const advancedRoutingVersion = '6.3.30';
+            if (!isVersionGreaterEquals(origDevice.versions.agent, advancedRoutingVersion)) {
+              throw createError(
+                400,
+                `Upgrade to ${advancedRoutingVersion} for advanced routing`
+              );
+            }
+          }
 
           const staticRoutesUniqueKeys = {};
           for (const route of deviceRequest.staticroutes) {
