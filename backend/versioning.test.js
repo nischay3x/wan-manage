@@ -250,6 +250,12 @@ describe('checkDeviceVersion', () => {
 
           ${'6.3.20'} | ${'6.3.19'}   | ${true}
           ${'6.3.20'} | ${'6.3.21'}   | ${false}
+
+          ${''}       | ${'6.3.21'}   | ${undefined}
+          ${'6.3.20'} | ${''}         | ${undefined}
+
+          ${'6.3'}    | ${'6.3.21'}   | ${undefined}
+          ${'6.3.21'} | ${'6.3'}      | ${undefined}
    `('Should return $result if versionA is $versionA and versionB is $versionB', ({ versionA, versionB, result }) => {
       expect(isVersionGreaterEquals(versionA, versionB)).toEqual(result);
     });

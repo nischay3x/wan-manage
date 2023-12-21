@@ -34,12 +34,16 @@ const getMinorVersion = (versionString) => {
 };
 
 const isVersionGreaterEquals = (versionA, versionB) => {
-  if (versionA === versionB) {
-    return true;
+  if (!versionA || !versionB) {
+    return undefined;
   }
 
   const source = versionA.split('.').map(Number);
   const target = versionB.split('.').map(Number);
+
+  if (source.length !== 3 || target.length !== 3) {
+    return undefined;
+  }
 
   for (let i = 0; i < source.length; i++) {
     if (source[i] > target[i]) {
@@ -49,7 +53,8 @@ const isVersionGreaterEquals = (versionA, versionB) => {
     }
   }
 
-  return false;
+  // Both version are equal
+  return true;
 };
 
 const mgmtMajorVersion = getMajorVersion(mgmtVersion);
