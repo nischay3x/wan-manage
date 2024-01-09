@@ -271,6 +271,7 @@ describe('Initialization', () => {
       (jobid, res) => {
         logger.verbose('Job completed, res=' + JSON.stringify(res));
         expect(res).toBe(true);
+        done();
       }
     );
     logger.verbose('Job ID = ' + job.id);
@@ -281,6 +282,5 @@ describe('Initialization', () => {
     c = await deviceQueues.getOPendingJobsCount('DDD');
     expect(c).toBe(0);
     deviceQueues.resumeQueue('CCC');
-    done();
   });
 });
