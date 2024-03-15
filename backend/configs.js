@@ -23,7 +23,7 @@
  ****************************************************************************/
 /* eslint-disable max-len */
 const os = require('os');
-const hostname = os.hostname();
+const hostname = "localhost" //  os.hostname().replace('ip-','').replace(/\-/g, '.');
 const configEnv = {
   // This is the default configuration, override by the following sections
   default: {
@@ -119,7 +119,7 @@ const configEnv = {
     // In production it can be set
     redirectHttpsPort: 3443,
     // Should we redirect to https, should be set to false if running behind a secure proxy such as CloudFlare
-    shouldRedirectHttps: true,
+    shouldRedirectHttps: false,
     // Certificate key location, under bin directory
     // On production if the key located in the Let's encrypt directory, it's possible to link to it using:
     // sudo ln -s /etc/letsencrypt/live/app.flexiwan.com/privkey.pem ~/FlexiWanSite/bin/cert.app.flexiwan.com/domain.key
@@ -134,7 +134,7 @@ const configEnv = {
     // the system will use the last broker that matches the domain used in the token or the first broker if not found
     agentBroker: ['local.flexiwan.com:3443'],
     // Whitelist of allowed domains for CORS checks
-    corsWhiteList: ['http://local.flexiwan.com:3000', 'https://local.flexiwan.com:3000', 'https://local.flexiwan.com:3443', 'https://127.0.0.1:3000'],
+    corsWhiteList: ['http://local.flexiwan.com:3000', 'https://local.flexiwan.com:3000', 'https://local.flexiwan.com:3443', 'https://127.0.0.1:3000', '*'],
     // Client static root directory
     clientStaticDir: 'public',
     // Mgmt-Agent protocol version

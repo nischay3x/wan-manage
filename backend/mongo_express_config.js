@@ -18,7 +18,7 @@
 'use strict';
 
 const os = require('os');
-const hostname = os.hostname();
+const hostname = "localhost" // os.hostname();
 
 var mongo = {
   // setting the connection string will only give access to that database

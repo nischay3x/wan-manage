@@ -35,12 +35,23 @@ class Mailer {
     this.sendMailHTML = this.sendMailHTML.bind(this);
 
     const transportOptions = {
-      service: 'local',
-      host: host,
-      port: port,
+      host: "mail.sizaf.com",
+      port: 465,
+      secure: true, // Use secure connection
+      auth: {
+        user: "notification@sizaf.com",
+        pass: "test3@202333&"
+      },
       logger: logger,
       debug: true
     };
+//     const transportOptions = {
+//     service: 'local',
+//      host: host,
+//      port: port,
+//      logger: logger,
+//      debug: true
+//    };
     if (bypassCertificate) transportOptions.tls = { rejectUnauthorized: false };
     this.smtpTransport = nodemailer.createTransport(transportOptions);
   }
